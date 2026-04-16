@@ -1,6 +1,5 @@
-import { create } from 'zustand';
-import type { User } from '@/lib/types';
-import { mockUser } from '@/lib/mock-data';
+import { create } from "zustand";
+import type { User } from "@/types";
 
 interface UserState extends User {
   isFirstVisit: boolean;
@@ -9,8 +8,16 @@ interface UserState extends User {
 }
 
 export const useUserStore = create<UserState>((set) => ({
-  ...mockUser,
+  name: "",
+  email: "",
+  travelPreferences: [],
+  budget: 0,
+  destination: "",
+  travelDays: 1,
+  preferredTransport: "",
+  travelPace: "moderate",
+  interests: [],
   isFirstVisit: true,
-  updateProfile: (updates) => set((s) => ({ ...s, ...updates })),
-  setFirstVisit: (first) => set({ isFirstVisit: first }),
+  updateProfile: (updates) => set((state) => ({ ...state, ...updates })),
+  setFirstVisit: (isFirstVisit) => set({ isFirstVisit }),
 }));

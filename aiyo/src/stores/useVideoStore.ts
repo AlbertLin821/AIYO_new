@@ -1,29 +1,62 @@
-import { create } from 'zustand';
-import type { Video } from '@/lib/types';
-import { mockVideos } from '@/lib/mock-data';
+import { create } from "zustand";
+import type { VideoRecommendation } from "@/types";
+
+export type SummaryDiagnostics = {
+  transcriptSource: "youtube" | "fallback-description" | "fallback-synthetic";
+  summarySource?:
+    | "ollama-transcript"
+    | "ollama-description-fallback"
+    | "ollama-synthetic-fallback";
+  segmentSource?: "transcript-chunks" | "description-fallback" | "synthetic-fallback";
+  mapsProvenance?: "google-geocoding" | "catalog-fallback" | "mixed";
+  geocodeWarnings?: string[];
+};
 
 interface VideoState {
-  videos: Video[];
-  selectedVideo: Video | null;
+  videos: VideoRecommendation[];
+  selectedVideo: VideoRecommendation | null;
   searchQuery: string;
+  recommendationSource: "youtube-data-api" | "mock-fallback" | null;
+  summaryDiagnostics: SummaryDiagnostics | null;
   isSearching: boolean;
-  isAnalyzing: boolean;
-  setVideos: (videos: Video[]) => void;
-  setSelectedVideo: (video: Video | null) => void;
+  isSummarizing: boolean;
+  errorMessage: string | null;
+  setVideos: (videos: VideoRecommendation[]) => void;
+  upsertVideo: (video: VideoRecommendation) => void;
+  setSelectedVideo: (video: VideoRecommendation | null) => void;
   setSearchQuery: (query: string) => void;
+  setRecommendationSource: (source: "youtube-data-api" | "mock-fallback" | null) => void;
+  setSummaryDiagnostics: (value: SummaryDiagnostics | null) => void;
   setIsSearching: (searching: boolean) => void;
-  setIsAnalyzing: (analyzing: boolean) => void;
+  setIsSummarizing: (summarizing: boolean) => void;
+  setErrorMessage: (message: string | null) => void;
 }
 
 export const useVideoStore = create<VideoState>((set) => ({
-  videos: mockVideos,
+  videos: [],
   selectedVideo: null,
-  searchQuery: '',
+  searchQuery: "",
+  recommendationSource: null,
+  summaryDiagnostics: null,
   isSearching: false,
-  isAnalyzing: false,
+  isSummarizing: false,
+  errorMessage: null,
   setVideos: (videos) => set({ videos }),
-  setSelectedVideo: (video) => set({ selectedVideo: video }),
-  setSearchQuery: (query) => set({ searchQuery: query }),
-  setIsSearching: (searching) => set({ isSearching: searching }),
-  setIsAnalyzing: (analyzing) => set({ isAnalyzing: analyzing }),
+  upsertVideo: (video) =>
+    set((state) => {
+      const existingIndex = state.videos.findIndex((item) => item.id === video.id);
+      if (existingIndex === -1) {
+        return { videos: [video, ...state.videos] };
+      }
+      const videos = [...state.videos];
+      videos[existingIndex] = video;
+      return { videos };
+    }),
+  setSelectedVideo: (selectedVideo) => set({ selectedVideo }),
+  setSearchQuery: (searchQuery) => set({ searchQuery }),
+  setRecommendationSource: (recommendationSource) => set({ recommendationSource }),
+  setSummaryDiagnostics: (summaryDiagnostics) => set({ summaryDiagnostics }),
+  setIsSearching: (isSearching) => set({ isSearching }),
+  setIsSummarizing: (isSummarizing) => set({ isSummarizing }),
+  setErrorMessage: (errorMessage) => set({ errorMessage }),
 }));

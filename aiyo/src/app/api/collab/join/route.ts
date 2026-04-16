@@ -1,27 +1,65 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
+import { createError, createSuccess } from "@/lib/api-response";
+import { prisma } from "@/lib/prisma";
+import { requireSessionUser } from "@/server/auth";
+import { upsertPresence } from "@/server/data/appStateService";
 
-// POST /api/collab/join
-// Mock: join a collaboration session via invite code
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function POST(request: Request) {
-  const body = await request.json();
-  const { inviteCode } = body;
+  try {
+    const { userId } = await requireSessionUser();
+    const body = (await request.json()) as { inviteCode?: string };
+    const inviteCode = body.inviteCode?.trim();
 
-  await new Promise((r) => setTimeout(r, 300));
+    if (!inviteCode || inviteCode.length < 4) {
+      return NextResponse.json(
+        createError("invalid_request", "Invite code must be at least 4 characters."),
+        { status: 400 },
+      );
+    }
 
-  if (!inviteCode || inviteCode.length < 4) {
+    const room = await prisma.collaborationRoom.findUnique({
+      where: { inviteCode },
+      include: {
+        trip: true,
+        presences: true,
+      },
+    });
+
+    if (!room) {
+      return NextResponse.json(
+        createError("not_found", "Invite code was not found."),
+        { status: 404 },
+      );
+    }
+
+    await upsertPresence({
+      roomId: room.id,
+      userId,
+      activeSection: "collaboration",
+      selectedEntityId: room.tripId,
+    });
+
     return NextResponse.json(
-      { success: false, error: '無效的邀請碼' },
-      { status: 400 }
+      createSuccess({
+        tripId: room.tripId,
+        tripName: room.trip.title,
+        role: room.trip.userId === userId ? "owner" : "editor",
+        members: room.presences.length,
+      }),
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message === "unauthorized") {
+      return NextResponse.json(
+        createError("unauthorized", "Authentication required."),
+        { status: 401 },
+      );
+    }
+    return NextResponse.json(
+      createError("internal_error", "Failed to join collaboration session."),
+      { status: 500 },
     );
   }
-
-  return NextResponse.json({
-    success: true,
-    data: {
-      tripId: 'trip_mock_' + Date.now(),
-      tripName: '東京五天四夜之旅',
-      role: 'editor',
-      members: 5,
-    },
-  });
 }

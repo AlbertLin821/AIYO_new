@@ -1,33 +1,45 @@
-import { create } from 'zustand';
-import type { CollabMember, StickyCommentData, EditingPresence } from '@/lib/types';
-import { mockCollabMembers, mockStickyComments, mockPresence } from '@/lib/mock-data';
+import { create } from "zustand";
+import type { CollabMember, CollaborationPresenceState, EditingPresence, StickyCommentData } from "@/types";
 
 interface CollabState {
+  roomId: string | null;
   members: CollabMember[];
   comments: StickyCommentData[];
   presence: EditingPresence[];
   inviteCode: string;
   shareLink: string;
+  connectionStatus: "idle" | "connecting" | "connected" | "reconnecting" | "disconnected";
+  setCollaboration: (state: CollaborationPresenceState) => void;
+  setConnectionStatus: (status: CollabState["connectionStatus"]) => void;
   addComment: (comment: StickyCommentData) => void;
   removeComment: (id: string) => void;
-  updateMemberRole: (id: string, role: CollabMember['role']) => void;
+  updateMemberRole: (id: string, role: CollabMember["role"]) => void;
   removeMember: (id: string) => void;
 }
 
 export const useCollabStore = create<CollabState>((set) => ({
-  members: mockCollabMembers,
-  comments: mockStickyComments,
-  presence: mockPresence,
-  inviteCode: 'AIYO-TK5D-2024',
-  shareLink: 'https://aiyo.app/join/AIYO-TK5D-2024',
-  addComment: (comment) =>
-    set((s) => ({ comments: [...s.comments, comment] })),
-  removeComment: (id) =>
-    set((s) => ({ comments: s.comments.filter((c) => c.id !== id) })),
+  roomId: null,
+  members: [],
+  comments: [],
+  presence: [],
+  inviteCode: "",
+  shareLink: "",
+  connectionStatus: "idle",
+  setCollaboration: (state) =>
+    set({
+      roomId: state.roomId,
+      members: state.members,
+      comments: state.comments,
+      presence: state.presence,
+      inviteCode: state.inviteCode,
+      shareLink: state.shareLink,
+    }),
+  setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
+  addComment: (comment) => set((state) => ({ comments: [...state.comments, comment] })),
+  removeComment: (id) => set((state) => ({ comments: state.comments.filter((comment) => comment.id !== id) })),
   updateMemberRole: (id, role) =>
-    set((s) => ({
-      members: s.members.map((m) => (m.id === id ? { ...m, role } : m)),
+    set((state) => ({
+      members: state.members.map((member) => (member.id === id ? { ...member, role } : member)),
     })),
-  removeMember: (id) =>
-    set((s) => ({ members: s.members.filter((m) => m.id !== id) })),
+  removeMember: (id) => set((state) => ({ members: state.members.filter((member) => member.id !== id) })),
 }));

@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String                  @id @default(cuid())
+  email          String                  @unique
+  name           String?
+  image          String?
+  emailVerified  DateTime?
+  passwordHash   String?                 @db.Text
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  profile        Profile?
+  trips          Trip[]
+  chatMessages   ChatMessage[]
+  comments       Comment[]
+  presences      CollaborationPresence[]
+  accounts       Account[]
+  sessions       Session[]
+
+  @@map("users")
+}
+
+model Profile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  budget      Int?
+  destination String?
+  preferences Json?
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model Trip {
+  id          String        @id @default(cuid())
+  userId      String
+  title       String
+  destination String?
+  days        Int
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items       TripItem[]
+  pins        MapPin[]
+  chatMessages ChatMessage[]
+  room        CollaborationRoom?
+
+  @@index([userId, updatedAt])
+  @@map("trips")
+}
+
+model TripItem {
+  id          String   @id @default(cuid())
+  tripId      String
+  day         Int
+  title       String
+  description String?
+  timeSlot    String?
+  location    String?
+  latitude    Float?
+  longitude   Float?
+  order       Int
+  trip        Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, day, order])
+  @@map("trip_items")
+}
+
+model MapPin {
+  id               String   @id @default(cuid())
+  tripId           String
+  label            String
+  lat              Float
+  lng              Float
+  description      String?
+  address          String?
+  linkedTripItemId String?
+  dayNumber        Int?
+  trip             Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+  @@map("map_pins")
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  tripId    String?
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trip      Trip?    @relation(fields: [tripId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([tripId, createdAt])
+  @@map("chat_messages")
+}
+
+model CollaborationRoom {
+  id         String                  @id @default(cuid())
+  tripId      String                  @unique
+  inviteCode  String                  @unique
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  trip        Trip                    @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  comments    Comment[]
+  presences   CollaborationPresence[]
+
+  @@map("collaboration_rooms")
+}
+
+model Comment {
+  id        String            @id @default(cuid())
+  roomId     String
+  authorId   String
+  content    String
+  createdAt  DateTime          @default(now())
+  room       CollaborationRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  author     User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, createdAt])
+  @@map("comments")
+}
+
+model CollaborationPresence {
+  id               String            @id @default(cuid())
+  roomId            String
+  userId            String
+  activeSection     String?
+  selectedEntityId  String?
+  online            Boolean           @default(true)
+  lastSeenAt        DateTime          @default(now())
+  room              CollaborationRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([roomId, lastSeenAt])
+  @@map("collaboration_presence")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
