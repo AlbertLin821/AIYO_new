@@ -1,0 +1,137 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+:root {
+  --background: #FFF8F0;
+  --foreground: #2D3748;
+  --primary: #7C9CBF;
+  --primary-light: #a3bdd6;
+  --primary-dark: #5a7fa8;
+  --secondary: #F4A7B9;
+  --secondary-light: #f8c4d0;
+  --tertiary: #B8D8BA;
+  --tertiary-light: #d4ebd5;
+  --lavender: #C3B1E1;
+  --lavender-light: #ddd0ed;
+  --peach: #FFDAB9;
+  --peach-light: #ffe8d0;
+  --cream: #FFF8F0;
+  --surface: #FFFFFF;
+  --surface-hover: #fefcf9;
+  --muted: #718096;
+  --muted-light: #A0AEC0;
+  --border: #E8E0D8;
+  --border-light: #F0EBE5;
+  --danger: #E57373;
+  --shadow-color: 220 20% 70%;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-light: var(--primary-light);
+  --color-primary-dark: var(--primary-dark);
+  --color-secondary: var(--secondary);
+  --color-secondary-light: var(--secondary-light);
+  --color-tertiary: var(--tertiary);
+  --color-tertiary-light: var(--tertiary-light);
+  --color-lavender: var(--lavender);
+  --color-lavender-light: var(--lavender-light);
+  --color-peach: var(--peach);
+  --color-peach-light: var(--peach-light);
+  --color-cream: var(--cream);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-muted: var(--muted);
+  --color-muted-light: var(--muted-light);
+  --color-border: var(--border);
+  --color-border-light: var(--border-light);
+  --color-danger: var(--danger);
+  --font-sans: 'Inter', 'Noto Sans TC', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', 'Noto Sans TC', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-light);
+}
+
+/* Smooth transitions */
+.transition-theme {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Glass effect */
+.glass {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Soft card shadow */
+.shadow-soft {
+  box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.06), 0 4px 16px -4px rgba(0, 0, 0, 0.08);
+}
+
+.shadow-soft-lg {
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.08), 0 8px 24px -4px rgba(0, 0, 0, 0.1);
+}
+
+/* Voice animation */
+@keyframes voicePulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.15); opacity: 0.7; }
+}
+
+@keyframes voiceWave {
+  0%, 100% { height: 8px; }
+  50% { height: 24px; }
+}
+
+.voice-pulse {
+  animation: voicePulse 1.5s ease-in-out infinite;
+}
+
+/* Cursor blink */
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.cursor-blink {
+  animation: cursorBlink 1s ease-in-out infinite;
+}
+
+/* Map grid pattern */
+.map-grid {
+  background-image:
+    linear-gradient(rgba(124, 156, 191, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124, 156, 191, 0.08) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
