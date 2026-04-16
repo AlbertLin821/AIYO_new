@@ -1,30 +1,32 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useUIStore } from '@/stores/useUIStore';
-import { useTripStore } from '@/stores/useTripStore';
-import { useUserStore } from '@/stores/useUserStore';
-import { motion, AnimatePresence } from 'framer-motion';
-import { MapPin, CalendarDays, Sparkles, X } from 'lucide-react';
+import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { CalendarDays, MapPin, Sparkles, X } from "lucide-react";
+import { zhTW as t } from "@/locales/zh-TW";
+import { useTripStore } from "@/stores/useTripStore";
+import { useUIStore } from "@/stores/useUIStore";
+import { useUserStore } from "@/stores/useUserStore";
 
 export default function OnboardingModal() {
   const { showOnboarding, setShowOnboarding } = useUIStore();
   const { setDestination, setDays } = useTripStore();
   const { setFirstVisit } = useUserStore();
-  const [dest, setDest] = useState('');
-  const [days, setDaysLocal] = useState('');
+  const [destinationInput, setDestinationInput] = useState("");
+  const [daysInput, setDaysInput] = useState("");
 
-  const handleStart = () => {
-    if (dest) setDestination(dest);
-    if (days) setDays(parseInt(days) || 5);
+  function finish(skip: boolean) {
+    if (!skip) {
+      if (destinationInput.trim()) {
+        setDestination(destinationInput.trim());
+      }
+      if (daysInput.trim()) {
+        setDays(parseInt(daysInput, 10) || 5);
+      }
+    }
     setFirstVisit(false);
     setShowOnboarding(false);
-  };
-
-  const handleSkip = () => {
-    setFirstVisit(false);
-    setShowOnboarding(false);
-  };
+  }
 
   return (
     <AnimatePresence>
@@ -35,97 +37,83 @@ export default function OnboardingModal() {
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
         >
-          {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="absolute inset-0 bg-foreground/20 backdrop-blur-sm"
-            onClick={handleSkip}
+            onClick={() => finish(true)}
           />
 
-          {/* Modal Content */}
           <motion.div
             initial={{ opacity: 0, scale: 0.92, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 20 }}
             transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-            className="relative w-full max-w-lg bg-surface rounded-3xl shadow-soft-lg overflow-hidden"
+            className="relative w-full max-w-lg overflow-hidden rounded-3xl bg-surface shadow-soft-lg"
           >
-            {/* Close button */}
             <button
-              onClick={handleSkip}
-              className="absolute top-4 right-4 p-1.5 rounded-full text-muted hover:text-foreground hover:bg-border-light transition-colors cursor-pointer z-10"
+              onClick={() => finish(true)}
+              className="absolute right-4 top-4 z-10 cursor-pointer rounded-full p-1.5 text-muted transition-colors hover:bg-border-light hover:text-foreground"
             >
               <X className="size-4" />
             </button>
 
-            {/* Decorative top gradient */}
             <div className="h-2 bg-gradient-to-r from-primary via-lavender to-secondary" />
 
             <div className="p-8 pt-6">
-              {/* Header */}
-              <div className="text-center mb-8">
-                <div className="inline-flex items-center justify-center size-14 rounded-2xl bg-gradient-to-br from-primary/15 to-lavender/15 mb-4">
+              <div className="mb-8 text-center">
+                <div className="mb-4 inline-flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 to-lavender/15">
                   <Sparkles className="size-7 text-primary" />
                 </div>
-                <h2 className="text-2xl font-bold text-foreground mb-2">
-                  歡迎來到 AIYO ✈️
-                </h2>
-                <p className="text-muted text-sm leading-relaxed">
-                  讓我們一起開始規劃你的夢想旅程吧！<br />
-                  告訴我一些基本資訊，AI 會幫你量身打造行程
-                </p>
+                <h2 className="mb-2 text-2xl font-bold text-foreground">{t.onboarding.welcomeTitle}</h2>
+                <p className="text-sm leading-relaxed text-muted">{t.onboarding.welcomeBody}</p>
               </div>
 
-              {/* Form */}
               <div className="flex flex-col gap-5">
-                {/* Destination */}
                 <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-foreground mb-2">
+                  <label className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
                     <MapPin className="size-4 text-secondary" />
-                    你想去哪裡？
+                    {t.onboarding.destination}
                   </label>
                   <input
                     type="text"
-                    value={dest}
-                    onChange={(e) => setDest(e.target.value)}
-                    placeholder="例如：東京、京都、首爾..."
-                    className="w-full px-4 py-3 rounded-xl border border-border bg-cream/50 text-foreground placeholder:text-muted-light focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all text-sm"
+                    value={destinationInput}
+                    onChange={(event) => setDestinationInput(event.target.value)}
+                    placeholder={t.onboarding.destinationPh}
+                    className="w-full rounded-xl border border-border bg-cream/50 px-4 py-3 text-sm text-foreground transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
                   />
                 </div>
 
-                {/* Days */}
                 <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-foreground mb-2">
+                  <label className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
                     <CalendarDays className="size-4 text-primary" />
-                    想去幾天？
+                    {t.onboarding.tripDays}
                   </label>
                   <input
                     type="number"
-                    value={days}
-                    onChange={(e) => setDaysLocal(e.target.value)}
-                    placeholder="例如：5"
+                    value={daysInput}
+                    onChange={(event) => setDaysInput(event.target.value)}
+                    placeholder={t.onboarding.daysPlaceholder}
                     min={1}
                     max={30}
-                    className="w-full px-4 py-3 rounded-xl border border-border bg-cream/50 text-foreground placeholder:text-muted-light focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all text-sm"
+                    className="w-full rounded-xl border border-border bg-cream/50 px-4 py-3 text-sm text-foreground transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
                   />
                 </div>
               </div>
 
-              {/* Actions */}
-              <div className="flex items-center justify-between mt-8">
+              <div className="mt-8 flex items-center justify-between">
                 <button
-                  onClick={handleSkip}
-                  className="text-sm text-muted hover:text-foreground transition-colors cursor-pointer px-3 py-2 rounded-lg hover:bg-border-light"
+                  onClick={() => finish(true)}
+                  className="cursor-pointer rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-border-light hover:text-foreground"
                 >
-                  我不知道，先看看 →
+                  {t.onboarding.skip}
                 </button>
                 <button
-                  onClick={handleStart}
-                  className="px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white rounded-xl font-medium text-sm hover:shadow-md transition-all duration-200 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                  onClick={() => finish(false)}
+                  className="cursor-pointer rounded-xl bg-gradient-to-r from-primary to-primary-dark px-6 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]"
                 >
-                  開始規劃 ✨
+                  {t.onboarding.start}
                 </button>
               </div>
             </div>

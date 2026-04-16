@@ -1,15 +1,19 @@
-'use client';
+"use client";
 
-import { useUIStore } from '@/stores/useUIStore';
-import Sidebar from './Sidebar';
-import OnboardingModal from '../onboarding/OnboardingModal';
-import { motion } from 'framer-motion';
+import { motion } from "framer-motion";
+import OnboardingModal from "@/components/onboarding/OnboardingModal";
+import ToastViewport from "@/components/system/ToastViewport";
+import Sidebar from "@/components/layout/Sidebar";
+import { PersistenceBootstrap } from "@/services/persistence";
+import { useUIStore } from "@/stores/useUIStore";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
+  const sidebarCollapsed = useUIStore((state) => state.sidebarCollapsed);
 
   return (
     <div className="min-h-screen bg-background">
+      <PersistenceBootstrap />
+      <ToastViewport />
       <Sidebar />
       <OnboardingModal />
       <motion.main

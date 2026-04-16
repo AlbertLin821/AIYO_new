@@ -1,23 +1,118 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { Search, Link2, Loader2 } from 'lucide-react';
-import { useVideoStore } from '@/stores/useVideoStore';
+import { useState } from "react";
+import { Link2, Loader2, Search } from "lucide-react";
+import { zhTW as t } from "@/locales/zh-TW";
+import { useTripStore } from "@/stores/useTripStore";
+import { useToastStore } from "@/stores/useToastStore";
+import { useVideoStore } from "@/stores/useVideoStore";
+import { fetchVideoRecommendations, summarizeVideo } from "@/services/videoClient";
 
 export default function VideoSearchBar() {
-  const [input, setInput] = useState('');
-  const { isSearching, setIsSearching } = useVideoStore();
+  const [input, setInput] = useState("");
+  const tripDestination = useTripStore((state) => state.destination);
+  const pushToast = useToastStore((state) => state.pushToast);
+  const {
+    isSearching,
+    isSummarizing,
+    setIsSearching,
+    setIsSummarizing,
+    setVideos,
+    upsertVideo,
+    setSelectedVideo,
+    setErrorMessage,
+    setSearchQuery,
+    setRecommendationSource,
+    setSummaryDiagnostics,
+  } = useVideoStore();
 
-  const handleSearch = () => {
-    if (!input.trim()) return;
-    setIsSearching(true);
-    // Mock search with delay
-    setTimeout(() => {
+  const trimmed = input.trim();
+  const isUrl =
+    trimmed.startsWith("http") ||
+    trimmed.startsWith("www") ||
+    trimmed.includes("youtube.com") ||
+    trimmed.includes("youtu.be");
+
+  async function handleSearch() {
+    if (!trimmed) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setSearchQuery(trimmed);
+
+    try {
+      if (isUrl) {
+        setIsSummarizing(true);
+        const result = await summarizeVideo({
+          url: trimmed,
+          destination: tripDestination,
+        });
+        upsertVideo(result.video);
+        setSelectedVideo(result.video);
+        setSummaryDiagnostics({
+          transcriptSource: result.transcriptSource,
+          summarySource: result.summarySource,
+          segmentSource: result.segmentSource,
+          mapsProvenance: result.mapsProvenance,
+          geocodeWarnings: result.geocodeWarnings,
+        });
+        if (result.transcriptSource !== "youtube") {
+          pushToast({
+            variant: "warning",
+            title: t.video.fallbackSummaryTitle,
+            description: result.fallbackReason || t.video.fallbackSummaryDesc,
+          });
+        }
+        if (result.mapsProvenance === "catalog-fallback") {
+          pushToast({
+            variant: "warning",
+            title: t.video.mapCoordsTitle,
+            description: result.geocodeWarnings?.[0] || t.video.mapCoordsDesc,
+          });
+        }
+        if (result.mapsProvenance === "mixed") {
+          pushToast({
+            variant: "warning",
+            title: t.video.mapCoordsTitle,
+            description: t.video.mapsMixed,
+          });
+        }
+      } else {
+        setIsSearching(true);
+        setSummaryDiagnostics(null);
+        const outcome = await fetchVideoRecommendations({
+          keyword: trimmed,
+          limit: 6,
+        });
+        setVideos(outcome.videos);
+        setRecommendationSource(outcome.source);
+        if (outcome.source === "mock-fallback") {
+          pushToast({
+            variant: "warning",
+            title: t.video.mockVideosTitle,
+            description: outcome.fallbackReason || t.video.mockVideosDesc,
+          });
+        }
+      }
+    } catch (error) {
+      const description =
+        error instanceof Error ? error.message : t.video.requestFailedGeneric;
+      setErrorMessage(description);
+      pushToast({
+        variant: "error",
+        title: t.video.requestFailed,
+        description,
+        actionLabel: t.common.retry,
+        action: () => void handleSearch(),
+      });
+    } finally {
       setIsSearching(false);
-    }, 1500);
-  };
+      setIsSummarizing(false);
+    }
+  }
 
-  const isUrl = input.startsWith('http') || input.startsWith('www') || input.includes('youtube.com') || input.includes('youtu.be');
+  const isBusy = isSearching || isSummarizing;
 
   return (
     <div className="w-full max-w-2xl mx-auto">
@@ -29,32 +124,30 @@ export default function VideoSearchBar() {
           <input
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-            placeholder="貼上 YouTube 連結或搜尋旅遊關鍵字..."
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => event.key === "Enter" && void handleSearch()}
+            placeholder={t.video.searchPlaceholder}
             className="w-full pl-11 pr-4 py-3.5 rounded-2xl border border-border bg-surface text-foreground placeholder:text-muted-light focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all text-sm shadow-soft"
           />
         </div>
         <button
-          onClick={handleSearch}
-          disabled={isSearching || !input.trim()}
+          onClick={() => void handleSearch()}
+          disabled={isBusy || !trimmed}
           className="px-5 py-3.5 bg-gradient-to-r from-primary to-primary-dark text-white rounded-2xl font-medium text-sm hover:shadow-md transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2"
         >
-          {isSearching ? (
+          {isBusy ? (
             <>
               <Loader2 className="size-4 animate-spin" />
-              分析中
+              {isUrl ? t.video.summarizing : t.video.searching}
             </>
           ) : isUrl ? (
-            '分析影片'
+            t.video.summarize
           ) : (
-            '搜尋'
+            t.video.search
           )}
         </button>
       </div>
-      <p className="text-xs text-muted mt-2 text-center">
-        支援 YouTube 連結分析或關鍵字搜尋旅遊影片
-      </p>
+      <p className="text-xs text-muted mt-2 text-center">{t.video.searchHelper}</p>
     </div>
   );
 }

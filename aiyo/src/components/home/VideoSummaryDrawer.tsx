@@ -1,12 +1,26 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import type { Video } from '@/lib/types';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, MapPin, Clock, Plus, Map as MapIcon, Play, ExternalLink, Check, Loader2 } from 'lucide-react';
-import { useMapStore } from '@/stores/useMapStore';
-import { useTripStore } from '@/stores/useTripStore';
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  AlertCircle,
+  Check,
+  ExternalLink,
+  Loader2,
+  Map as MapIcon,
+  MapPin,
+  Play,
+  Plus,
+  X,
+} from "lucide-react";
+import type { Video } from "@/types";
+import { zhTW as t } from "@/locales/zh-TW";
+import { buildPinsFromLocations } from "@/services/mapSync";
+import { useMapStore } from "@/stores/useMapStore";
+import { useToastStore } from "@/stores/useToastStore";
+import { useTripStore } from "@/stores/useTripStore";
+import { useVideoStore } from "@/stores/useVideoStore";
 
 interface VideoSummaryDrawerProps {
   video: Video | null;
@@ -14,48 +28,131 @@ interface VideoSummaryDrawerProps {
   onClose: () => void;
 }
 
-export default function VideoSummaryDrawer({ video, open, onClose }: VideoSummaryDrawerProps) {
+export default function VideoSummaryDrawer({
+  video,
+  open,
+  onClose,
+}: VideoSummaryDrawerProps) {
   const router = useRouter();
-  const { addPins } = useMapStore();
-  const { itinerary, addDay, addItineraryItem } = useTripStore();
+  const addPins = useMapStore((state) => state.addPins);
+  const addDay = useTripStore((state) => state.addDay);
+  const addItineraryItem = useTripStore((state) => state.addItineraryItem);
+  const itinerary = useTripStore((state) => state.itinerary);
+  const summaryDiagnostics = useVideoStore((state) => state.summaryDiagnostics);
+  const pushToast = useToastStore((state) => state.pushToast);
   const [toast, setToast] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
 
-  if (!video) return null;
+  const summaryParagraphs = useMemo(
+    () =>
+      (video?.summary || "")
+        .split(/(?<=[.!?])\s+/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    [video?.summary],
+  );
 
-  const handleSyncToMap = () => {
+  const embedUrl = useMemo(
+    () =>
+      video?.videoId
+        ? `https://www.youtube.com/embed/${video.videoId}?rel=0&modestbranding=1`
+        : null,
+    [video?.videoId],
+  );
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [video?.id]);
+
+  if (!video) {
+    return null;
+  }
+
+  const activeVideo = video;
+
+  function showToastMessage(message: string) {
+    setToast(message);
+    window.setTimeout(() => setToast(null), 1800);
+  }
+
+  async function handleSyncToMap() {
+    if (activeVideo.extractedLocations.length === 0) {
+      pushToast({
+        variant: "warning",
+        title: "沒有可同步的地點",
+        description: "請先使用有擷取出景點的影片摘要，再同步到地圖。",
+      });
+      return;
+    }
+
     setSyncing(true);
-    addPins(video.extractedLocations);
-    setTimeout(() => {
-      setSyncing(false);
-      onClose();
-      router.push('/map');
-    }, 600);
-  };
+    const pins = buildPinsFromLocations(activeVideo.extractedLocations, "video");
+    const googleCount = activeVideo.extractedLocations.filter(
+      (location) => location.resolvedFrom === "google-geocode",
+    ).length;
+    const catalogCount = activeVideo.extractedLocations.filter(
+      (location) =>
+        location.resolvedFrom === "llm" ||
+        location.resolvedFrom === "heuristic" ||
+        location.resolvedFrom === "title-poi",
+    ).length;
+    const lowConfidenceCount = activeVideo.extractedLocations.filter(
+      (location) => (location.confidence ?? 0) < 0.45 || location.verified === false,
+    ).length;
 
-  const handleAddToItinerary = () => {
+    addPins(pins);
+    setSyncing(false);
+    showToastMessage(t.drawer.toastMap);
+    const warnTail = summaryDiagnostics?.geocodeWarnings?.length
+      ? `。提示：${summaryDiagnostics.geocodeWarnings.slice(0, 2).join("；")}`
+      : "";
+    const lowTail =
+      lowConfidenceCount > 0
+        ? `（其中 ${lowConfidenceCount} 個信心偏低，已排在後段標示）`
+        : "";
+    pushToast({
+      variant: "success",
+      title: `已加入 ${pins.length} 個地點到地圖`,
+      description: `Google 驗證 ${googleCount} 個，地名對照 ${catalogCount} 個${lowTail}${warnTail}`,
+    });
+    onClose();
+    router.push("/map");
+  }
+
+  async function handleAddToItinerary() {
+    if (activeVideo.extractedLocations.length === 0) {
+      pushToast({
+        variant: "warning",
+        title: "沒有可加入行程的地點",
+        description: "請先摘要一支有景點資訊的影片，再加入行程。",
+      });
+      return;
+    }
+
     setAdding(true);
-    const newDayNum = itinerary.length + 1;
+    const targetDayNumber = itinerary.length + 1;
     addDay();
-    video.extractedLocations.forEach((loc, i) => {
-      addItineraryItem(newDayNum, {
-        id: `vid_${video.id}_${i}_${Date.now()}`,
-        time: `${(9 + i * 2).toString().padStart(2, '0')}:00`,
-        title: loc.name,
-        type: 'attraction',
-        notes: loc.description,
-        location: loc,
+
+    activeVideo.extractedLocations.forEach((location, index) => {
+      addItineraryItem(targetDayNumber, {
+        id: `video_${activeVideo.id}_${index}`,
+        dayNumber: targetDayNumber,
+        time: `${String(9 + index * 2).padStart(2, "0")}:00`,
+        title: location.name,
+        type: index === 1 ? "restaurant" : "attraction",
+        notes: location.description,
+        location,
+        source: "video",
       });
     });
-    setToast('✅ 已將影片景點加入行程！');
-    setTimeout(() => {
-      setAdding(false);
-      setToast(null);
-      onClose();
-      router.push('/itinerary');
-    }, 1500);
-  };
+
+    setAdding(false);
+    showToastMessage(t.drawer.toastItinerary);
+    onClose();
+    router.push("/itinerary");
+  }
 
   return (
     <AnimatePresence>
@@ -65,82 +162,282 @@ export default function VideoSummaryDrawer({ video, open, onClose }: VideoSummar
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-foreground/10 z-40"
+            className="fixed inset-0 z-40 bg-foreground/10"
             onClick={onClose}
           />
+
           <motion.div
-            initial={{ x: '100%' }}
+            initial={{ x: "100%" }}
             animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="fixed right-0 top-0 h-screen w-full max-w-lg bg-surface z-50 shadow-soft-lg flex flex-col"
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", damping: 30, stiffness: 300 }}
+            className="fixed right-0 top-0 z-50 flex h-screen w-full max-w-lg flex-col bg-surface shadow-soft-lg"
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border-light">
-              <h2 className="font-semibold text-foreground">影片分析</h2>
-              <button onClick={onClose} className="p-1.5 rounded-full text-muted hover:text-foreground hover:bg-border-light transition-colors cursor-pointer">
+            <div className="flex items-center justify-between border-b border-border-light px-6 py-4">
+              <div className="flex flex-col gap-2">
+                <h2 className="font-semibold text-foreground">{t.drawer.title}</h2>
+                {summaryDiagnostics && (
+                  <div className="flex flex-wrap gap-2">
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-primary">
+                      {summaryDiagnostics.transcriptSource === "youtube"
+                        ? t.video.transcriptYoutube
+                        : t.video.transcriptFallback}
+                    </span>
+                    {summaryDiagnostics.mapsProvenance === "catalog-fallback" && (
+                      <span className="rounded-full bg-secondary/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/80">
+                        {t.video.mapsCatalog}
+                      </span>
+                    )}
+                    {summaryDiagnostics.mapsProvenance === "google-geocoding" && (
+                      <span className="rounded-full bg-tertiary/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/80">
+                        {t.video.mapsGoogle}
+                      </span>
+                    )}
+                    {summaryDiagnostics.mapsProvenance === "mixed" && (
+                      <span className="rounded-full bg-tertiary/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/80">
+                        {t.video.mapsMixed}
+                      </span>
+                    )}
+                    {process.env.NODE_ENV !== "production" && summaryDiagnostics.summarySource && (
+                      <span className="rounded-full bg-border-light px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/70">
+                        {summaryDiagnostics.summarySource}
+                      </span>
+                    )}
+                    {process.env.NODE_ENV !== "production" && summaryDiagnostics.segmentSource && (
+                      <span className="rounded-full bg-border-light px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/70">
+                        {summaryDiagnostics.segmentSource}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={onClose}
+                className="cursor-pointer rounded-full p-1.5 text-muted transition-colors hover:bg-border-light hover:text-foreground"
+              >
                 <X className="size-5" />
               </button>
             </div>
+
             <div className="flex-1 overflow-y-auto">
-              <div className="aspect-video bg-gradient-to-br from-foreground/5 to-foreground/10 flex items-center justify-center relative">
-                <div className="size-16 rounded-full bg-white/90 shadow-lg flex items-center justify-center cursor-pointer hover:scale-105 transition-transform">
-                  <Play className="size-7 text-primary ml-1" fill="currentColor" />
+              <div className="relative aspect-video overflow-hidden bg-gradient-to-br from-foreground/5 to-foreground/10">
+                {embedUrl ? (
+                  <iframe
+                    src={embedUrl}
+                    title={activeVideo.title}
+                    className="absolute inset-0 h-full w-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    allowFullScreen
+                  />
+                ) : activeVideo.thumbnail && !imageFailed ? (
+                  <img
+                    src={activeVideo.thumbnail}
+                    alt={activeVideo.title}
+                    className="absolute inset-0 h-full w-full object-cover"
+                    onError={() => setImageFailed(true)}
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-foreground/60">
+                    <AlertCircle className="size-6" />
+                    <span className="text-xs font-medium">影片無法嵌入播放</span>
+                  </div>
+                )}
+
+                {!embedUrl && (
+                  <div className="relative z-10 flex h-full items-center justify-center">
+                    <div className="flex size-16 items-center justify-center rounded-full bg-white/90 shadow-lg">
+                      <Play className="ml-1 size-7 text-primary" fill="currentColor" />
+                    </div>
+                  </div>
+                )}
+
+                <div className="absolute bottom-3 right-3 rounded-md bg-foreground/70 px-2 py-1 text-xs text-white">
+                  {activeVideo.duration}
                 </div>
-                <div className="absolute bottom-3 right-3 px-2 py-1 bg-foreground/70 text-white text-xs rounded-md">{video.duration}</div>
               </div>
-              <div className="p-6 flex flex-col gap-6">
+
+              <div className="flex flex-col gap-6 p-6">
                 <div>
-                  <h3 className="font-bold text-lg text-foreground leading-snug mb-2">{video.title}</h3>
+                  <h3 className="mb-2 text-lg font-bold leading-snug text-foreground">
+                    {activeVideo.title}
+                  </h3>
                   <div className="flex items-center gap-2 text-xs text-muted">
-                    <ExternalLink className="size-3" /><span>{video.source}</span><span>•</span><span>{video.duration}</span>
+                    <ExternalLink className="size-3" />
+                    <span>{activeVideo.source}</span>
+                    <span>&bull;</span>
+                    <span>{activeVideo.duration}</span>
+                  </div>
+                  <div className="mt-3">
+                    <a
+                      href={activeVideo.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 text-xs font-medium text-primary hover:text-primary-dark"
+                    >
+                      <ExternalLink className="size-3" />
+                      在 YouTube 開啟影片
+                    </a>
                   </div>
                 </div>
+
                 <div>
-                  <h4 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">📝 摘要</h4>
-                  <p className="text-sm text-muted leading-relaxed">{video.summary}</p>
+                  <h4 className="mb-2 text-sm font-semibold text-foreground">{t.drawer.summary}</h4>
+                  <div className="space-y-2">
+                    {summaryParagraphs.length > 0 ? (
+                      summaryParagraphs.map((paragraph, index) => (
+                        <p
+                          key={`${activeVideo.id}_summary_${index}`}
+                          className="text-sm leading-relaxed text-muted"
+                        >
+                          {paragraph}
+                        </p>
+                      ))
+                    ) : (
+                      <p className="text-sm leading-relaxed text-muted">{activeVideo.summary}</p>
+                    )}
+                  </div>
                 </div>
+
                 <div>
-                  <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2"><Clock className="size-4 text-primary" />時間戳記</h4>
+                  <h4 className="mb-3 text-sm font-semibold text-foreground">
+                    {t.drawer.keySegments}
+                  </h4>
                   <div className="flex flex-col gap-1.5">
-                    {video.timestamps.map((ts, i) => (
-                      <button key={i} className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-primary/8 transition-colors text-left cursor-pointer group">
-                        <span className="text-xs font-mono text-primary bg-primary/10 px-2 py-0.5 rounded-md min-w-[52px] text-center">{ts.time}</span>
-                        <span className="text-sm text-muted group-hover:text-foreground transition-colors">{ts.label}</span>
-                      </button>
-                    ))}
+                    {activeVideo.summarySegments && activeVideo.summarySegments.length > 0
+                      ? activeVideo.summarySegments.map((segment) => (
+                          <div key={segment.id} className="rounded-xl bg-primary/5 px-3 py-3">
+                            <div className="flex items-start gap-3">
+                              <span className="min-w-[52px] rounded-md bg-primary/10 px-2 py-0.5 text-center font-mono text-xs text-primary">
+                                {segment.startLabel || segment.timestamp}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                {segment.title && (
+                                  <p className="text-sm font-medium text-foreground">
+                                    {segment.title}
+                                  </p>
+                                )}
+                                <p className="mt-1 text-sm text-muted">
+                                  {segment.summary || segment.text}
+                                </p>
+                                {segment.locationHints && segment.locationHints.length > 0 && (
+                                  <div className="mt-2 flex flex-wrap gap-1.5">
+                                    {segment.locationHints.map((hint) => (
+                                      <span
+                                        key={`${segment.id}_${hint}`}
+                                        className="rounded-full bg-secondary/15 px-2 py-0.5 text-[10px] text-foreground/80"
+                                      >
+                                        {hint}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      : activeVideo.timestamps.map((timestamp) => (
+                          <div
+                            key={`${activeVideo.id}_${timestamp.time}`}
+                            className="flex items-center gap-3 rounded-xl bg-primary/5 px-3 py-2"
+                          >
+                            <span className="min-w-[52px] rounded-md bg-primary/10 px-2 py-0.5 text-center font-mono text-xs text-primary">
+                              {timestamp.time}
+                            </span>
+                            <span className="text-sm text-muted">{timestamp.label}</span>
+                          </div>
+                        ))}
                   </div>
                 </div>
+
                 <div>
-                  <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                    <MapPin className="size-4 text-secondary" />抽取景點
-                    <span className="text-xs text-muted font-normal">({video.extractedLocations.length} 個)</span>
+                  <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <MapPin className="size-4 text-secondary" />
+                    {t.drawer.extractedLocations}
                   </h4>
                   <div className="flex flex-col gap-2">
-                    {video.extractedLocations.map((loc, i) => (
-                      <div key={i} className="flex items-start gap-3 px-3 py-2.5 rounded-xl bg-cream/50 border border-border-light">
-                        <div className="size-8 rounded-lg bg-secondary/15 flex items-center justify-center flex-shrink-0 mt-0.5"><MapPin className="size-4 text-secondary" /></div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground">{loc.name}</p>
-                          <p className="text-xs text-muted mt-0.5">{loc.description}</p>
+                    {activeVideo.extractedLocations.map((location) => (
+                      <div
+                        key={`${activeVideo.id}_${location.name}`}
+                        className="flex items-start gap-3 rounded-xl border border-border-light bg-cream/50 px-3 py-2.5"
+                      >
+                        <div className="mt-0.5 flex size-8 flex-shrink-0 items-center justify-center rounded-lg bg-secondary/15">
+                          <MapPin className="size-4 text-secondary" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-foreground">{location.name}</p>
+                          <p className="mt-0.5 text-xs text-muted">{location.description}</p>
+                          {location.resolvedFrom && (
+                            <p className="mt-1 text-[10px] text-muted">
+                              {location.resolvedFrom === "google-geocode"
+                                ? t.video.mapsGoogle
+                                : location.resolvedFrom === "title-poi"
+                                  ? t.video.mapsTitlePoi
+                                  : t.video.mapsCatalog}
+                              {location.verified === false ||
+                              (location.confidence !== undefined && location.confidence < 0.45)
+                                ? ` · ${t.video.locationLowConfidence}`
+                                : ""}
+                            </p>
+                          )}
+                          {location.address && (
+                            <p className="mt-1 text-[10px] text-muted">{location.address}</p>
+                          )}
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
+
                 <div className="flex flex-col gap-2 pb-4">
-                  <button onClick={handleAddToItinerary} disabled={adding} className="flex items-center justify-center gap-2 w-full py-3 bg-gradient-to-r from-primary to-primary-dark text-white rounded-xl font-medium text-sm hover:shadow-md transition-all cursor-pointer hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed">
-                    {adding ? <><Loader2 className="size-4 animate-spin" />加入中...</> : <><Plus className="size-4" />加入行程</>}
+                  <button
+                    onClick={() => void handleAddToItinerary()}
+                    disabled={adding}
+                    className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-primary-dark py-3 text-sm font-medium text-white transition-all hover:scale-[1.01] hover:shadow-md active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {adding ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        {t.drawer.createDayLoading}
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="size-4" />
+                        {t.drawer.createDay}
+                      </>
+                    )}
                   </button>
-                  <button onClick={handleSyncToMap} disabled={syncing} className="flex items-center justify-center gap-2 w-full py-3 bg-tertiary/15 text-foreground rounded-xl font-medium text-sm hover:bg-tertiary/25 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed">
-                    {syncing ? <><Loader2 className="size-4 animate-spin" />同步中...</> : <><MapIcon className="size-4" />同步到地圖</>}
+
+                  <button
+                    onClick={() => void handleSyncToMap()}
+                    disabled={syncing}
+                    className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-tertiary/15 py-3 text-sm font-medium text-foreground transition-all hover:bg-tertiary/25 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {syncing ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        {t.drawer.syncMapLoading}
+                      </>
+                    ) : (
+                      <>
+                        <MapIcon className="size-4" />
+                        {t.drawer.syncMap}
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
             </div>
           </motion.div>
+
           {toast && (
-            <motion.div initial={{ opacity: 0, y: 20, x: '-50%' }} animate={{ opacity: 1, y: 0, x: '-50%' }} className="fixed bottom-8 left-1/2 z-[60] px-5 py-3 bg-foreground text-white rounded-2xl shadow-lg text-sm font-medium flex items-center gap-2">
-              <Check className="size-4 text-tertiary" />{toast}
+            <motion.div
+              initial={{ opacity: 0, y: 20, x: "-50%" }}
+              animate={{ opacity: 1, y: 0, x: "-50%" }}
+              className="fixed bottom-8 left-1/2 z-[60] flex items-center gap-2 rounded-2xl bg-foreground px-5 py-3 text-sm font-medium text-white shadow-lg"
+            >
+              <Check className="size-4 text-tertiary" />
+              {toast}
             </motion.div>
           )}
         </>

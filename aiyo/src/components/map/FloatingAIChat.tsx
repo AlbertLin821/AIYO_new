@@ -1,61 +1,111 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useUIStore } from '@/stores/useUIStore';
-import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, X, Send, Sparkles } from 'lucide-react';
+import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { MessageCircle, Send, Sparkles, X } from "lucide-react";
+import { zhTW as t } from "@/locales/zh-TW";
+import { sendChatMessage } from "@/services/aiClient";
+import { useChatStore } from "@/stores/useChatStore";
+import { useMapStore } from "@/stores/useMapStore";
+import { useToastStore } from "@/stores/useToastStore";
+import { useTripStore } from "@/stores/useTripStore";
+import { useUIStore } from "@/stores/useUIStore";
+import type { ChatMessage } from "@/types";
 
 const quickReplies = [
-  '推薦附近餐廳',
-  '加一個咖啡廳',
-  '調整交通方式',
-  '修改行程順序',
+  t.floatingChat.quick1,
+  t.floatingChat.quick2,
+  t.floatingChat.quick3,
+  t.floatingChat.quick4,
 ];
 
-interface MiniMessage {
-  role: 'user' | 'ai';
-  text: string;
+function buildUserMessage(message: string): ChatMessage {
+  return {
+    id: `user_${Date.now()}`,
+    role: "user",
+    content: message,
+    timestamp: new Date().toLocaleTimeString("zh-TW", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+  };
 }
 
 export default function FloatingAIChat() {
   const { chatBubbleOpen, setChatBubbleOpen } = useUIStore();
-  const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState<MiniMessage[]>([
-    { role: 'ai', text: '嗨！需要我幫你調整行程嗎？😊' },
-  ]);
+  const panelOpen = useMapStore((state) => state.panelOpen);
+  const {
+    messages,
+    appendMessage,
+    isSending,
+    setIsSending,
+    errorMessage,
+    setErrorMessage,
+  } = useChatStore();
+  const tripStore = useTripStore();
+  const pushToast = useToastStore((state) => state.pushToast);
+  const [message, setMessage] = useState("");
+  const rightOffset = panelOpen ? "min(404px, calc(100vw - 22rem))" : "24px";
 
-  const handleSend = () => {
-    if (!message.trim()) return;
-    setMessages((prev) => [...prev, { role: 'user' as const, text: message }]);
-    setMessage('');
-    // Mock AI reply
-    setTimeout(() => {
-      setMessages((prev) => [
-        ...prev,
-        { role: 'ai' as const, text: '好的！讓我看看附近有什麼不錯的選擇... 🤔\n\n我推薦「% Arabica」咖啡廳，距離你下一個景點只有步行5分鐘！' },
-      ]);
-    }, 1200);
-  };
+  async function handleSend(nextMessage?: string) {
+    const content = (nextMessage || message).trim();
+    if (!content || isSending) {
+      return;
+    }
+
+    const userMessage = buildUserMessage(content);
+    appendMessage(userMessage);
+    setMessage("");
+    setErrorMessage(null);
+    setIsSending(true);
+
+    try {
+      const response = await sendChatMessage({
+        message: content,
+        context: {
+          destination: tripStore.destination,
+          days: tripStore.days,
+          budget: tripStore.budget,
+          itinerary: tripStore.itinerary,
+        },
+      });
+      appendMessage(response.reply);
+    } catch (error) {
+      const description =
+        error instanceof Error ? error.message : t.chat.requestFailedGeneric;
+      setErrorMessage(description);
+      pushToast({
+        variant: "error",
+        title: t.chat.requestFailed,
+        description,
+        actionLabel: t.common.retry,
+        action: () => void handleSend(content),
+      });
+    } finally {
+      setIsSending(false);
+    }
+  }
 
   return (
-    <div className="absolute bottom-6 right-6 z-30">
+    <div
+      className="absolute bottom-6 z-30 transition-[right] duration-300"
+      style={{ right: rightOffset }}
+    >
       <AnimatePresence>
         {chatBubbleOpen && (
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="absolute bottom-16 right-0 w-80 bg-surface rounded-2xl shadow-soft-lg overflow-hidden border border-border-light"
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            className="absolute bottom-16 right-0 w-96 bg-surface rounded-2xl shadow-soft-lg overflow-hidden border border-border-light"
           >
-            {/* Chat Header */}
             <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-primary/10 to-lavender/10 border-b border-border-light">
               <div className="flex items-center gap-2">
                 <div className="size-6 rounded-full bg-gradient-to-br from-primary to-lavender flex items-center justify-center">
                   <Sparkles className="size-3 text-white" />
                 </div>
-                <span className="text-sm font-semibold text-foreground">AI 助手</span>
-                <div className="size-1.5 rounded-full bg-tertiary" />
+                <span className="text-sm font-semibold text-foreground">{t.floatingChat.title}</span>
               </div>
               <button
                 onClick={() => setChatBubbleOpen(false)}
@@ -65,34 +115,44 @@ export default function FloatingAIChat() {
               </button>
             </div>
 
-            {/* Messages */}
-            <div className="h-64 overflow-y-auto p-3 flex flex-col gap-2.5">
-              {messages.map((msg, i) => (
+            <div className="h-72 overflow-y-auto p-3 flex flex-col gap-2.5">
+              {messages.length === 0 && !isSending && !errorMessage && (
+                <div className="rounded-xl border border-dashed border-border-light bg-cream/40 px-3 py-6 text-center text-xs text-muted">
+                  <p className="font-medium text-foreground">{t.floatingChat.emptyTitle}</p>
+                  <p className="mt-1 leading-relaxed">{t.floatingChat.emptyHint}</p>
+                </div>
+              )}
+              {messages.map((chatMessage) => (
                 <div
-                  key={i}
-                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  key={chatMessage.id}
+                  className={`flex ${
+                    chatMessage.role === "user" ? "justify-end" : "justify-start"
+                  }`}
                 >
                   <div
                     className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed ${
-                      msg.role === 'user'
-                        ? 'bg-primary text-white rounded-br-md'
-                        : 'bg-cream border border-border-light text-foreground rounded-bl-md'
+                      chatMessage.role === "user"
+                        ? "bg-primary text-white rounded-br-md"
+                        : "bg-cream border border-border-light text-foreground rounded-bl-md"
                     }`}
                   >
-                    <p className="whitespace-pre-wrap">{msg.text}</p>
+                    <p className="whitespace-pre-wrap">{chatMessage.content}</p>
                   </div>
                 </div>
               ))}
+              {isSending && <div className="text-xs text-muted">{t.floatingChat.aiThinking}</div>}
+              {errorMessage && (
+                <div className="rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger">
+                  {errorMessage}
+                </div>
+              )}
             </div>
 
-            {/* Quick Replies */}
             <div className="px-3 pb-2 flex gap-1.5 flex-wrap">
               {quickReplies.map((reply) => (
                 <button
                   key={reply}
-                  onClick={() => {
-                    setMessage(reply);
-                  }}
+                  onClick={() => setMessage(reply)}
                   className="px-2.5 py-1 bg-primary/8 text-primary text-[11px] rounded-full hover:bg-primary/15 transition-colors cursor-pointer"
                 >
                   {reply}
@@ -100,20 +160,19 @@ export default function FloatingAIChat() {
               ))}
             </div>
 
-            {/* Input */}
             <div className="px-3 pb-3">
               <div className="flex items-center gap-2 bg-cream/50 rounded-xl border border-border-light px-3 py-1.5">
                 <input
                   type="text"
                   value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                  placeholder="輸入訊息..."
+                  onChange={(event) => setMessage(event.target.value)}
+                  onKeyDown={(event) => event.key === "Enter" && void handleSend()}
+                  placeholder={t.floatingChat.placeholder}
                   className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-light focus:outline-none py-1"
                 />
                 <button
-                  onClick={handleSend}
-                  disabled={!message.trim()}
+                  onClick={() => void handleSend()}
+                  disabled={!message.trim() || isSending}
                   className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:opacity-30"
                 >
                   <Send className="size-4" />
@@ -124,22 +183,17 @@ export default function FloatingAIChat() {
         )}
       </AnimatePresence>
 
-      {/* Floating Bubble Button */}
       <motion.button
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => setChatBubbleOpen(!chatBubbleOpen)}
         className={`size-12 rounded-full shadow-soft-lg flex items-center justify-center cursor-pointer transition-colors ${
           chatBubbleOpen
-            ? 'bg-primary text-white'
-            : 'bg-surface text-primary hover:bg-primary/5 border border-border-light'
+            ? "bg-primary text-white"
+            : "bg-surface text-primary hover:bg-primary/5 border border-border-light"
         }`}
       >
-        {chatBubbleOpen ? (
-          <X className="size-5" />
-        ) : (
-          <MessageCircle className="size-5" />
-        )}
+        <MessageCircle className="size-5" />
       </motion.button>
     </div>
   );
