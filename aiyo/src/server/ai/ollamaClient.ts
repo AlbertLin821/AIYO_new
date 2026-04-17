@@ -8,6 +8,8 @@ export interface OllamaMessage {
 interface OllamaChatOptions {
   messages: OllamaMessage[];
   format?: "json";
+  model?: string;
+  task?: "default" | "trip-plan" | "travel-chat" | "video-summary" | "location-filter";
 }
 
 export class OllamaRequestError extends Error {
@@ -17,9 +19,27 @@ export class OllamaRequestError extends Error {
   }
 }
 
+function resolveModelForTask(
+  task: OllamaChatOptions["task"],
+  explicitModel?: string,
+): string {
+  if (explicitModel?.trim()) {
+    return explicitModel.trim();
+  }
+  if (task === "video-summary" && serverConfig.ollamaSummaryModel) {
+    return serverConfig.ollamaSummaryModel;
+  }
+  if (task === "location-filter" && serverConfig.ollamaLocationModel) {
+    return serverConfig.ollamaLocationModel;
+  }
+  return serverConfig.ollamaModel;
+}
+
 export async function chatWithOllama({
   messages,
   format,
+  model,
+  task = "default",
 }: OllamaChatOptions): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), serverConfig.ollamaTimeoutMs);
@@ -31,7 +51,7 @@ export async function chatWithOllama({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: serverConfig.ollamaModel,
+        model: resolveModelForTask(task, model),
         stream: false,
         format,
         messages,

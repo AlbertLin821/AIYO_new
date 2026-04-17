@@ -420,6 +420,7 @@ export function mergeAndDedupeExtractions(names: string[]): PlaceNameExtraction[
 export function extractPlacesFromTranscriptAndSummary(input: {
   summary: string;
   segmentTexts: string[];
+  transcriptTexts: string[];
   llmLocationNames: string[];
   destinationHint?: string;
   /** 影片標題：用於比對實際景點關鍵詞。 */
@@ -428,8 +429,12 @@ export function extractPlacesFromTranscriptAndSummary(input: {
   const titleDerived = extractAttractionNamesFromVideoTitle(input.videoTitle || "");
   const titleNormSet = new Set(titleDerived.map((n) => normalizeToken(n)));
 
-  const blob = [input.summary, ...input.segmentTexts].join("\n");
-  const heuristic = extractPlaceCandidates(blob);
+  const blob = [input.summary, ...input.segmentTexts, ...input.transcriptTexts].join("\n");
+  const heuristic = mergeAndDedupeExtractions([
+    ...extractPlaceCandidates(input.summary),
+    ...input.segmentTexts.flatMap((segment) => extractPlaceCandidates(segment)),
+    ...input.transcriptTexts.flatMap((segment) => extractPlaceCandidates(segment)),
+  ]).map((entry) => entry.displayName);
   const candidates = mergeAndDedupeExtractions([
     ...titleDerived,
     ...input.llmLocationNames,
@@ -444,15 +449,22 @@ export function extractPlacesFromTranscriptAndSummary(input: {
       const llmHit = input.llmLocationNames.some(
         (name) => normalizeToken(name) === normalized,
       );
-      const occurrenceCount = input.segmentTexts.filter((segment) =>
+      const segmentOccurrenceCount = input.segmentTexts.filter((segment) =>
         segment.toLowerCase().includes(candidate.displayName.toLowerCase()),
       ).length;
+      const transcriptOccurrenceCount = input.transcriptTexts.filter((segment) =>
+        segment.toLowerCase().includes(candidate.displayName.toLowerCase()),
+      ).length;
+      const summaryHit = input.summary.toLowerCase().includes(candidate.displayName.toLowerCase());
       const patternScore =
         (titlePoiHit ? 6 : 0) +
         (llmHit ? 3 : 0) +
         (Boolean(ALIAS[normalized]) ? 3 : 0) +
         (hasPlaceSignal(candidate.displayName) ? 2 : 0) +
-        (occurrenceCount > 1 ? 1 : 0) +
+        (summaryHit ? 2 : 0) +
+        (segmentOccurrenceCount > 0 ? 2 : 0) +
+        (transcriptOccurrenceCount > 0 ? 2 : 0) +
+        (segmentOccurrenceCount + transcriptOccurrenceCount > 1 ? 1 : 0) +
         (candidate.displayName.split(/\s+/).length >= 2 ? 1 : 0);
 
       const source: PlaceCandidate["source"] = titlePoiHit

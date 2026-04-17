@@ -1,6 +1,6 @@
 import { OllamaRequestError, chatWithOllama } from "@/server/ai/ollamaClient";
-import { buildVideoSummaryPrompt } from "@/server/ai/promptBuilder";
-import { parseVideoSummaryResponse } from "@/server/ai/responseParser";
+import { buildLocationFilteringPrompt, buildVideoSummaryPrompt } from "@/server/ai/promptBuilder";
+import { parseLocationFilterResponse, parseVideoSummaryResponse } from "@/server/ai/responseParser";
 import {
   extractAttractionNamesFromVideoTitle,
   extractPlaceCandidates,
@@ -9,7 +9,6 @@ import {
 } from "@/server/geo/extractLocations";
 import { resolvePlaceExtractionsHybrid } from "@/server/geo/geocodeService";
 import {
-  buildGeneratedTranscript,
   extractYouTubeVideoId,
   fetchYouTubeMetadata,
   fetchYouTubeTranscript,
@@ -88,36 +87,6 @@ function looksGenericSummary(summary: string): boolean {
   return genericSignals.some((signal) => normalized.includes(signal));
 }
 
-function buildTranscriptFallback(input: {
-  title: string;
-  description: string;
-  destination?: string;
-}): {
-  entries: TranscriptEntry[];
-  transcriptSource: VideoSummaryDebugMeta["transcriptSource"];
-  fallbackReason?: string;
-} {
-  const descriptionSentences = input.description
-    .split(/(?<=[.!?])\s+/)
-    .map((sentence) => sentence.trim())
-    .filter(Boolean);
-
-  const entries = buildGeneratedTranscript({
-    metadata: { title: input.title, description: input.description },
-    destination: input.destination,
-  });
-
-  return {
-    entries,
-    transcriptSource:
-      descriptionSentences.length > 0 ? "fallback-description" : "fallback-synthetic",
-    fallbackReason:
-      descriptionSentences.length > 0
-        ? "無法取得逐字稿，已改以影片說明文字產生替代逐字稿。"
-        : "無法取得逐字稿，已改以系統產生的替代逐字稿。",
-  };
-}
-
 function chunkTranscriptEntries(entries: TranscriptEntry[]): TranscriptChunk[] {
   const chunks: TranscriptChunk[] = [];
   const maxChars = 780;
@@ -192,7 +161,7 @@ function chunkTranscriptByNativeChapters(
         timestamp: chapter.timestamp,
         startSeconds: chapter.startSeconds,
         endSeconds,
-        text: text || chapter.title,
+        text,
         title: chapter.title,
       };
     })
@@ -310,6 +279,7 @@ async function summarizeTranscriptWithOllama(input: {
     try {
       const raw = await chatWithOllama({
         format: "json",
+        task: "video-summary",
         messages: [
           { role: "system", content: "Return valid JSON only." },
           {
@@ -357,6 +327,50 @@ async function summarizeTranscriptWithOllama(input: {
   };
 }
 
+async function filterLocationsWithOllama(input: {
+  title: string;
+  destination?: string;
+  summary: string;
+  segmentTexts: string[];
+  transcriptTexts: string[];
+  candidateLocations: string[];
+}): Promise<string[]> {
+  if (input.candidateLocations.length === 0) {
+    return [];
+  }
+
+  try {
+    const raw = await chatWithOllama({
+      format: "json",
+      task: "location-filter",
+      messages: [
+        { role: "system", content: "Return valid JSON only." },
+        {
+          role: "user",
+          content: buildLocationFilteringPrompt({
+            title: input.title,
+            destination: input.destination,
+            summary: input.summary,
+            segmentTexts: input.segmentTexts,
+            transcriptChunks: input.transcriptTexts,
+            candidateLocations: input.candidateLocations,
+          }),
+        },
+      ],
+    });
+    const parsed = parseLocationFilterResponse(raw);
+    if (parsed.parseFailed || parsed.acceptedLocations.length === 0) {
+      return input.candidateLocations;
+    }
+    return parsed.acceptedLocations;
+  } catch (error) {
+    if (!(error instanceof OllamaRequestError)) {
+      throw error;
+    }
+    return input.candidateLocations;
+  }
+}
+
 function toTimestamps(segments: VideoSummarySegment[]): Timestamp[] {
   return segments.map((segment) => ({
     time: segment.timestamp,
@@ -385,22 +399,56 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
   }
 
   const transcriptResult = await fetchYouTubeTranscript(resolvedVideoId);
-  const transcriptFallback =
-    transcriptResult.entries.length > 0
-      ? null
-      : buildTranscriptFallback({
-          title: metadata.title,
-          description: metadata.description,
-          destination: input.destination,
-        });
 
-  const transcriptEntries = transcriptResult.entries.length
-    ? transcriptResult.entries
-    : transcriptFallback?.entries || [];
-  const transcriptSource =
-    transcriptResult.entries.length > 0
-      ? "youtube"
-      : transcriptFallback?.transcriptSource || "fallback-synthetic";
+  if (transcriptResult.entries.length === 0) {
+    const unavailableReason = "無法取得逐字稿，暫時無法產生精準摘要。";
+    const video: VideoRecommendation = {
+      id: metadata.id,
+      videoId: metadata.videoId,
+      title: metadata.title,
+      thumbnail: metadata.thumbnail,
+      url: metadata.url,
+      duration: metadata.duration,
+      summary: "",
+      description: metadata.description,
+      source: metadata.source,
+      channelTitle: metadata.channelTitle,
+      publishedAt: metadata.publishedAt,
+      timestamps: [],
+      summarySegments: [],
+      extractedLocations: [],
+    };
+
+    const unavailableResult: VideoSummaryResult = {
+      source: "youtube-summary-service",
+      transcriptSource: "none",
+      summarySource: "unavailable",
+      segmentSource: "unavailable",
+      title: metadata.title,
+      summary: "",
+      segments: [],
+      extractedLocations: [],
+      summaryUnavailable: true,
+      unavailableReason,
+      fallbackReason: transcriptResult.fallbackReason || unavailableReason,
+      video,
+      debug: {
+        transcriptSource: "none",
+        summarySource: "unavailable",
+        segmentSource: "unavailable",
+      },
+    };
+
+    videoSummaryCache.set(resolvedVideoId, {
+      expiresAt: Date.now() + VIDEO_SUMMARY_CACHE_MS,
+      result: unavailableResult,
+    });
+
+    return unavailableResult;
+  }
+
+  const transcriptEntries = transcriptResult.entries;
+  const transcriptSource = "youtube" as const;
 
   const nativeChapterChunks =
     metadata.chapters.length > 1
@@ -420,30 +468,39 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
       })
     : null;
 
-  const summarySource: VideoSummaryDebugMeta["summarySource"] =
-    transcriptSource === "youtube"
-      ? "ollama-transcript"
-      : transcriptSource === "fallback-description"
-        ? "ollama-description-fallback"
-        : "ollama-synthetic-fallback";
-  const segmentSource: VideoSummaryDebugMeta["segmentSource"] =
-    transcriptSource === "youtube"
-      ? "transcript-chunks"
-      : transcriptSource === "fallback-description"
-        ? "description-fallback"
-        : "synthetic-fallback";
+  const summarySource: VideoSummaryDebugMeta["summarySource"] = "ollama-transcript";
+  const segmentSource: VideoSummaryDebugMeta["segmentSource"] = "transcript-chunks";
 
   const summary = ollamaSummary?.summary || heuristicSummary;
   const segments = ollamaSummary?.segments?.length ? ollamaSummary.segments : heuristicSegments;
   const extractedLocationsFromSummary =
     ollamaSummary?.extractedLocations?.length ? ollamaSummary.extractedLocations : [];
+  const transcriptTexts = chunks.map((chunk) => chunk.text);
+  const modelFilteredLocations = await filterLocationsWithOllama({
+    title: metadata.title,
+    destination: input.destination,
+    summary,
+    segmentTexts: segments.map((segment) => segment.text),
+    transcriptTexts,
+    candidateLocations: mergeAndDedupeExtractions([
+      ...extractAttractionNamesFromVideoTitle(metadata.title),
+      ...extractedLocationsFromSummary,
+      ...segments.flatMap((segment) => segment.locationHints || []),
+      ...transcriptTexts.flatMap((text) => extractPlaceCandidates(text)),
+      ...extractPlaceCandidates(summary),
+    ]).map((entry) => entry.displayName),
+  });
 
-  const transcriptBlob = [summary, ...segments.map((segment) => segment.text)].join("\n");
+  const transcriptBlob = [summary, ...segments.map((segment) => segment.text), ...transcriptTexts].join("\n");
 
   const placeExtractions = extractPlacesFromTranscriptAndSummary({
     summary,
     segmentTexts: segments.map((segment) => segment.text),
-    llmLocationNames: extractedLocationsFromSummary,
+    transcriptTexts,
+    llmLocationNames: mergeAndDedupeExtractions([
+      ...extractedLocationsFromSummary,
+      ...modelFilteredLocations,
+    ]).map((entry) => entry.displayName),
     destinationHint: input.destination,
     videoTitle: metadata.title,
   }).slice(0, 16);
@@ -484,9 +541,6 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
   };
 
   const fallbackMessages = [
-    transcriptResult.entries.length === 0
-      ? transcriptFallback?.fallbackReason || transcriptResult.fallbackReason
-      : undefined,
     ollamaSummary?.parseFailed
       ? "模型摘要過於泛泛或 JSON 異常，已改用逐字稿規則式摘要。"
       : undefined,

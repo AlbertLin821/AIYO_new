@@ -4,7 +4,7 @@ import {
   buildVideoRecommendationSearchQuery,
   isTravelRelatedVideo,
 } from "@/server/providers/travelVideoFilter";
-import { searchYouTubeVideos } from "@/server/providers/youtubeProvider";
+import { searchYouTubeVideos, type VideoSearchDebugInfo } from "@/server/providers/youtubeProvider";
 import type { VideoRecommendation } from "@/types";
 
 interface RecommendationInput {
@@ -17,6 +17,7 @@ export type VideoRecommendationOutcome = {
   videos: VideoRecommendation[];
   source: "youtube-data-api" | "mock-fallback";
   fallbackReason?: string;
+  debug?: VideoSearchDebugInfo;
 };
 
 function scoreVideo(video: VideoRecommendation, input: RecommendationInput): number {
@@ -67,7 +68,7 @@ function rankFallbackVideos(input: RecommendationInput): VideoRecommendation[] {
       ),
     )
     .sort((left, right) => right.score - left.score)
-    .slice(0, Math.max(1, Math.min(input.limit || 6, 12)))
+    .slice(0, Math.max(1, Math.min(input.limit || 10, 12)))
     .map((entry) => entry.video);
 }
 
@@ -81,6 +82,19 @@ export async function getVideoRecommendations(
       videos: rankFallbackVideos(input),
       source: "mock-fallback",
       fallbackReason: reason,
+      debug: {
+        rawInput:
+          buildVideoRecommendationSearchQuery({
+            keyword: input.keyword,
+            destination: input.destination,
+          }) || "",
+        searchQueries: [],
+        executedQueries: [],
+        regionCode: "TW",
+        relevanceLanguage: "zh-Hant",
+        selectedStrategy: "high-intent",
+        fallbackReasons: [reason],
+      },
     };
   }
 
@@ -90,6 +104,7 @@ export async function getVideoRecommendations(
       return {
         videos: providerResult.videos,
         source: "youtube-data-api",
+        debug: providerResult.debug,
       };
     }
 
@@ -101,12 +116,14 @@ export async function getVideoRecommendations(
         videos: rankFallbackVideos(input),
         source: "mock-fallback",
         fallbackReason: reason,
+        debug: providerResult.debug,
       };
     }
     return {
       videos: [],
       source: "youtube-data-api",
       fallbackReason: reason,
+      debug: providerResult.debug,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown YouTube API error.";
@@ -116,12 +133,38 @@ export async function getVideoRecommendations(
         videos: rankFallbackVideos(input),
         source: "mock-fallback",
         fallbackReason: message,
+        debug: {
+          rawInput:
+            buildVideoRecommendationSearchQuery({
+              keyword: input.keyword,
+              destination: input.destination,
+            }) || "",
+          searchQueries: [],
+          executedQueries: [],
+          regionCode: "TW",
+          relevanceLanguage: "zh-Hant",
+          selectedStrategy: "high-intent",
+          fallbackReasons: [message],
+        },
       };
     }
     return {
       videos: [],
       source: "youtube-data-api",
       fallbackReason: message,
+      debug: {
+        rawInput:
+          buildVideoRecommendationSearchQuery({
+            keyword: input.keyword,
+            destination: input.destination,
+          }) || "",
+        searchQueries: [],
+        executedQueries: [],
+        regionCode: "TW",
+        relevanceLanguage: "zh-Hant",
+        selectedStrategy: "high-intent",
+        fallbackReasons: [message],
+      },
     };
   }
 }

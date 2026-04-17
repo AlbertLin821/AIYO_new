@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Loader2, Mic } from "lucide-react";
 import { zhTW as t } from "@/locales/zh-TW";
+import { applyPlanningUpdateToStores, extractPlanningUpdateFromText } from "@/lib/planningContext";
 import { generatePlanFromVoice } from "@/services/aiClient";
 import { buildPinsFromTripPlan } from "@/services/mapSync";
 import { useChatStore } from "@/stores/useChatStore";
@@ -12,6 +13,8 @@ import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
 import { useUIStore } from "@/stores/useUIStore";
 import { useUserStore } from "@/stores/useUserStore";
+
+const VOICE_PLAN_REQUEST_TIMEOUT_MS = 28_000;
 
 type SpeechRecognitionAlternativeLike = {
   transcript: string;
@@ -76,6 +79,11 @@ export default function VoicePlanningButton() {
   const isMountedRef = useRef(true);
   const lastTranscriptRef = useRef("");
   const voiceStateRef = useRef(voiceState);
+  const voiceRequestIdRef = useRef(0);
+  const recognitionCancelledRef = useRef(false);
+  const planningAbortControllerRef = useRef<AbortController | null>(null);
+  const planningAbortReasonRef = useRef<"cancel" | "superseded" | "timeout" | null>(null);
+  const planningTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     voiceStateRef.current = voiceState;
@@ -84,11 +92,49 @@ export default function VoicePlanningButton() {
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
+      abortPlanningRequest("cancel");
       recognitionRef.current?.stop();
     };
   }, []);
 
+  function clearPlanningRequest() {
+    if (planningTimeoutRef.current !== null) {
+      window.clearTimeout(planningTimeoutRef.current);
+      planningTimeoutRef.current = null;
+    }
+    planningAbortControllerRef.current = null;
+    planningAbortReasonRef.current = null;
+  }
+
+  function abortPlanningRequest(reason: "cancel" | "superseded" | "timeout") {
+    if (planningTimeoutRef.current !== null) {
+      window.clearTimeout(planningTimeoutRef.current);
+      planningTimeoutRef.current = null;
+    }
+    const controller = planningAbortControllerRef.current;
+    if (controller && !controller.signal.aborted) {
+      planningAbortReasonRef.current = reason;
+      controller.abort();
+    }
+  }
+
   async function submitTranscript(transcript: string) {
+    abortPlanningRequest("superseded");
+    applyPlanningUpdateToStores(extractPlanningUpdateFromText(transcript));
+
+    const requestId = (voiceRequestIdRef.current += 1);
+    const controller = new AbortController();
+
+    planningAbortControllerRef.current = controller;
+    planningAbortReasonRef.current = null;
+    planningTimeoutRef.current = window.setTimeout(() => {
+      if (requestId !== voiceRequestIdRef.current || controller.signal.aborted) {
+        return;
+      }
+      planningAbortReasonRef.current = "timeout";
+      controller.abort();
+    }, VOICE_PLAN_REQUEST_TIMEOUT_MS);
+
     voiceStateRef.current = "processing";
     setVoiceState("processing");
 
@@ -100,8 +146,20 @@ export default function VoicePlanningButton() {
         budget: tripStore.budget,
         interests: userStore.interests,
         transportPreference: userStore.preferredTransport,
+      }, {
+        signal: controller.signal,
+        timeoutMs: VOICE_PLAN_REQUEST_TIMEOUT_MS,
       });
 
+      if (!isMountedRef.current || requestId !== voiceRequestIdRef.current) {
+        return;
+      }
+
+      useUserStore.getState().updateProfile({
+        destination: useTripStore.getState().destination,
+        travelDays: useTripStore.getState().days,
+        budget: useTripStore.getState().budget,
+      });
       tripStore.replaceTripPlan(plan, {
         destination: tripStore.destination,
         days: tripStore.days,
@@ -132,6 +190,15 @@ export default function VoicePlanningButton() {
         ),
       });
     } catch (error) {
+      if (!isMountedRef.current || requestId !== voiceRequestIdRef.current) {
+        return;
+      }
+
+      const abortReason = planningAbortReasonRef.current;
+      if (controller.signal.aborted && abortReason && abortReason !== "timeout") {
+        return;
+      }
+
       const description =
         error instanceof Error ? error.message : t.voice.failedGenericNetwork;
       pushToast({
@@ -140,15 +207,21 @@ export default function VoicePlanningButton() {
         description,
       });
     } finally {
-      if (isMountedRef.current) {
+      if (isMountedRef.current && requestId === voiceRequestIdRef.current) {
+        clearPlanningRequest();
+        voiceStateRef.current = "idle";
         setVoiceState("idle");
       }
     }
   }
 
   function stopRecognition() {
+    recognitionCancelledRef.current = true;
     recognitionRef.current?.stop();
     recognitionRef.current = null;
+    abortPlanningRequest("cancel");
+    clearPlanningRequest();
+    voiceRequestIdRef.current += 1;
     voiceStateRef.current = "idle";
     setVoiceState("idle");
   }
@@ -170,6 +243,7 @@ export default function VoicePlanningButton() {
     }
 
     const recognition = new RecognitionCtor();
+    recognitionCancelledRef.current = false;
     lastTranscriptRef.current = "";
     recognition.lang = "zh-TW";
     recognition.interimResults = true;
@@ -196,6 +270,11 @@ export default function VoicePlanningButton() {
 
     recognition.onerror = (event) => {
       recognitionRef.current = null;
+      recognitionCancelledRef.current = false;
+      voiceRequestIdRef.current += 1;
+      abortPlanningRequest("cancel");
+      clearPlanningRequest();
+      voiceStateRef.current = "idle";
       setVoiceState("idle");
       pushToast({
         variant: "error",
@@ -209,6 +288,10 @@ export default function VoicePlanningButton() {
 
     recognition.onend = () => {
       recognitionRef.current = null;
+      if (recognitionCancelledRef.current) {
+        recognitionCancelledRef.current = false;
+        return;
+      }
       if (voiceStateRef.current === "processing") {
         return;
       }
@@ -217,6 +300,7 @@ export default function VoicePlanningButton() {
         return;
       }
 
+      voiceStateRef.current = "idle";
       setVoiceState("idle");
       pushToast({
         variant: "info",

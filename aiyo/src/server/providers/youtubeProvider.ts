@@ -1,12 +1,24 @@
 import { serverConfig } from "@/server/config";
 import {
+  buildExpandedTravelSearchQueries,
   buildTravelBiasedSearchQuery,
   buildVideoRecommendationSearchQuery,
+  isLowIntentShortFormVideo,
   isLoosePlaceRelatedVideo,
   isTravelRelatedVideo,
-  scoreVideoPlaceTravelRank,
+  scoreSearchResultQuality,
 } from "@/server/providers/travelVideoFilter";
 import type { VideoRecommendation } from "@/types";
+
+export interface VideoSearchDebugInfo {
+  rawInput: string;
+  searchQueries: string[];
+  executedQueries: string[];
+  regionCode: string;
+  relevanceLanguage: string;
+  selectedStrategy: "high-intent" | "literal-fallback";
+  fallbackReasons: string[];
+}
 
 export interface TranscriptEntry {
   timestamp: string;
@@ -186,6 +198,11 @@ export function extractYouTubeVideoId(url?: string): string | null {
 async function fetchMappedVideosForQuery(
   searchQuery: string,
   maxResults: number,
+  opts?: {
+    regionCode?: string;
+    relevanceLanguage?: string;
+    videoCaption?: "closedCaption" | "any";
+  },
 ): Promise<
   | { ok: true; videos: VideoRecommendation[] }
   | { ok: false; message: string }
@@ -200,6 +217,9 @@ async function fetchMappedVideosForQuery(
     maxResults,
     q: searchQuery,
     key: serverConfig.youtubeApiKey,
+    regionCode: opts?.regionCode ?? "TW",
+    relevanceLanguage: opts?.relevanceLanguage ?? "zh-Hant",
+    videoCaption: opts?.videoCaption === "closedCaption" ? "closedCaption" : undefined,
   })}`;
 
   const searchResult = await fetchGoogleJson<{
@@ -322,12 +342,25 @@ export async function searchYouTubeVideos(input: SearchInput): Promise<{
   videos: VideoRecommendation[];
   provider: "youtube-data-api" | "mock";
   fallbackReason?: string;
+  debug: VideoSearchDebugInfo;
 }> {
   if (!serverConfig.youtubeApiKey) {
     return {
       videos: [],
       provider: "mock",
       fallbackReason: "YOUTUBE_API_KEY is not configured.",
+      debug: {
+        rawInput: buildVideoRecommendationSearchQuery({
+          keyword: input.keyword,
+          destination: input.destination,
+        }),
+        searchQueries: [],
+        executedQueries: [],
+        regionCode: "TW",
+        relevanceLanguage: "zh-Hant",
+        selectedStrategy: "high-intent",
+        fallbackReasons: ["YOUTUBE_API_KEY is not configured."],
+      },
     };
   }
 
@@ -340,11 +373,27 @@ export async function searchYouTubeVideos(input: SearchInput): Promise<{
       videos: [],
       provider: "mock",
       fallbackReason: "Search query is empty (keyword or destination required).",
+      debug: {
+        rawInput: "",
+        searchQueries: [],
+        executedQueries: [],
+        regionCode: "TW",
+        relevanceLanguage: "zh-Hant",
+        selectedStrategy: "high-intent",
+        fallbackReasons: ["Search query is empty (keyword or destination required)."],
+      },
     };
   }
 
   const limit = Math.max(1, Math.min(input.limit || 6, 10));
   const searchFetchCount = Math.min(30, Math.max(limit * 4, 16));
+  const searchOpts = {
+    regionCode: "TW",
+    relevanceLanguage: "zh-Hant",
+    videoCaption: "closedCaption" as const,
+  };
+  const fallbackReasons: string[] = [];
+  const executedQueries: string[] = [];
 
   const metaFor = (v: VideoRecommendation) => ({
     title: v.title,
@@ -354,47 +403,125 @@ export async function searchYouTubeVideos(input: SearchInput): Promise<{
 
   const buildPool = (mapped: VideoRecommendation[]): VideoRecommendation[] => {
     const strictFiltered = mapped.filter((video) =>
+      !isLowIntentShortFormVideo({
+        ...metaFor(video),
+        durationSeconds: parseDisplayDurationToSeconds(video.duration),
+      }) &&
       isTravelRelatedVideo(metaFor(video), rawUserQuery),
     );
     if (strictFiltered.length > 0) {
       return strictFiltered;
     }
-    return mapped.filter((video) => isLoosePlaceRelatedVideo(metaFor(video), rawUserQuery));
+    fallbackReasons.push("Strict travel filter produced too few results; falling back to loose place filter.");
+    return mapped.filter(
+      (video) =>
+        !isLowIntentShortFormVideo({
+          ...metaFor(video),
+          durationSeconds: parseDisplayDurationToSeconds(video.duration),
+        }) && isLoosePlaceRelatedVideo(metaFor(video), rawUserQuery),
+    );
   };
 
-  const biased = await fetchMappedVideosForQuery(
-    buildTravelBiasedSearchQuery(rawUserQuery),
-    searchFetchCount,
-  );
+  const mergeDedupe = (items: VideoRecommendation[]): VideoRecommendation[] => {
+    const seen = new Map<string, VideoRecommendation>();
+    for (const v of items) {
+      const key = v.videoId || v.id;
+      if (!seen.has(key)) {
+        seen.set(key, v);
+      }
+    }
+    return Array.from(seen.values());
+  };
 
-  if (!biased.ok) {
-    return {
-      videos: [],
-      provider: "mock",
-      fallbackReason: biased.message,
-    };
-  }
+  const primaryQueries = buildExpandedTravelSearchQueries(rawUserQuery);
+  const collected: VideoRecommendation[] = [];
 
-  let mapped = biased.videos;
-  let pool = buildPool(mapped);
-
-  if (pool.length === 0 && mapped.length > 0) {
-    const literal = await fetchMappedVideosForQuery(rawUserQuery.trim(), searchFetchCount);
-    if (literal.ok && literal.videos.length > 0) {
-      mapped = literal.videos;
-      pool = buildPool(mapped);
+  for (const q of primaryQueries) {
+    executedQueries.push(q);
+    const batch = await fetchMappedVideosForQuery(q, searchFetchCount, searchOpts);
+    if (batch.ok) {
+      collected.push(...batch.videos);
+    } else {
+      fallbackReasons.push(`${q}: ${batch.message}`);
+    }
+    if (collected.length >= limit * 6) {
+      break;
     }
   }
 
-  pool.sort(
-    (a, b) =>
-      scoreVideoPlaceTravelRank(metaFor(b), rawUserQuery) -
-      scoreVideoPlaceTravelRank(metaFor(a), rawUserQuery),
-  );
+  let mapped = mergeDedupe(collected);
+  let pool = buildPool(mapped);
+
+  if (pool.length < limit) {
+    executedQueries.push(rawUserQuery.trim());
+    const literal = await fetchMappedVideosForQuery(
+      rawUserQuery.trim(),
+      searchFetchCount,
+      { ...searchOpts, videoCaption: "any" },
+    );
+    if (literal.ok && literal.videos.length > 0) {
+      mapped = mergeDedupe([...mapped, ...literal.videos]);
+      pool = buildPool(mapped);
+      fallbackReasons.push("Added literal query fallback to backfill high-intent search results.");
+    } else if (!literal.ok) {
+      fallbackReasons.push(`Literal fallback failed: ${literal.message}`);
+    }
+  }
+
+  if (pool.length === 0 && mapped.length > 0) {
+    fallbackReasons.push("No videos passed travel filters; returning scored mapped results.");
+    pool = mapped;
+  }
+
+  pool = pool.filter((video) => {
+    const durationSeconds = parseDisplayDurationToSeconds(video.duration);
+    return !isLowIntentShortFormVideo({
+      ...metaFor(video),
+      durationSeconds,
+    });
+  });
+
+  pool.sort((a, b) => {
+    const aDurationSeconds = parseDisplayDurationToSeconds(a.duration);
+    const bDurationSeconds = parseDisplayDurationToSeconds(b.duration);
+    return (
+      scoreSearchResultQuality(
+        {
+          ...metaFor(b),
+          durationSeconds: bDurationSeconds,
+          publishedAt: b.publishedAt,
+          transcriptLikelyAvailable: (bDurationSeconds ?? 0) >= 180,
+        },
+        rawUserQuery,
+      ) -
+      scoreSearchResultQuality(
+        {
+          ...metaFor(a),
+          durationSeconds: aDurationSeconds,
+          publishedAt: a.publishedAt,
+          transcriptLikelyAvailable: (aDurationSeconds ?? 0) >= 180,
+        },
+        rawUserQuery,
+      )
+    );
+  });
 
   const videos = pool.slice(0, limit);
 
-  return { videos, provider: "youtube-data-api" };
+  return {
+    videos,
+    provider: "youtube-data-api",
+    debug: {
+      rawInput: rawUserQuery,
+      searchQueries: primaryQueries,
+      executedQueries,
+      regionCode: searchOpts.regionCode,
+      relevanceLanguage: searchOpts.relevanceLanguage,
+      selectedStrategy:
+        executedQueries.length > primaryQueries.length ? "literal-fallback" : "high-intent",
+      fallbackReasons,
+    },
+  };
 }
 
 export async function fetchYouTubeMetadata(input: {
@@ -586,7 +713,7 @@ async function tryFetchTimedTextXml(videoId: string): Promise<string | null> {
 
 export async function fetchYouTubeTranscript(videoId: string): Promise<{
   entries: TranscriptEntry[];
-  source: "youtube" | "generated";
+  source: "youtube" | "none";
   fallbackReason?: string;
 }> {
   try {
@@ -610,13 +737,13 @@ export async function fetchYouTubeTranscript(videoId: string): Promise<{
 
     return {
       entries: [],
-      source: "generated",
+      source: "none",
       fallbackReason: "No transcript track was available for this video.",
     };
   } catch (error) {
     return {
       entries: [],
-      source: "generated",
+      source: "none",
       fallbackReason: error instanceof Error ? error.message : "Transcript request failed.",
     };
   }

@@ -3,6 +3,7 @@ import { apiGet, apiPost, apiPut } from "@/services/apiClient";
 import { useChatStore } from "@/stores/useChatStore";
 import { useCollabStore } from "@/stores/useCollabStore";
 import { useMapStore } from "@/stores/useMapStore";
+import { getSyncMutationSource } from "@/stores/syncMutationSource";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
 import { useUserStore } from "@/stores/useUserStore";
@@ -143,10 +144,15 @@ class SyncService {
           remoteUpdatedAt,
         });
       } else {
+        const tripSnapshotSource = source === "realtime" ? "realtime" : "bootstrap";
         this.isApplyingRemote = true;
         try {
-          useTripStore.getState().setRemoteTrip(snapshot.trip, snapshot.profile.budget);
-          useMapStore.getState().setPins(snapshot.trip.pins);
+          useTripStore.getState().setRemoteTrip(
+            snapshot.trip,
+            snapshot.profile.budget,
+            tripSnapshotSource,
+          );
+          useMapStore.getState().setPins(snapshot.trip.pins, tripSnapshotSource);
           this.lastSyncedPayloadKey = remoteKey;
           this.log("remote snapshot applied", { source, updatedAt: remoteUpdatedAt });
         } finally {
@@ -155,7 +161,11 @@ class SyncService {
       }
     }
 
-    useChatStore.getState().mergeRemoteMessages(snapshot.chatMessages);
+    if (source === "realtime") {
+      useChatStore.getState().mergeRemoteMessages(snapshot.chatMessages);
+    } else {
+      useChatStore.getState().setMessages(snapshot.chatMessages);
+    }
 
     if (snapshot.collaboration) {
       useCollabStore.getState().setCollaboration(snapshot.collaboration);
@@ -175,7 +185,7 @@ class SyncService {
     };
 
     if (JSON.stringify(currentProfile) !== JSON.stringify(snapshot.profile)) {
-      useUserStore.getState().updateProfile(snapshot.profile);
+      useUserStore.setState((state) => ({ ...state, ...snapshot.profile }));
       useUserStore.getState().setFirstVisit(false);
     }
 
@@ -223,6 +233,13 @@ class SyncService {
     if (!this.hydrated || this.isApplyingRemote) {
       return;
     }
+    if (getSyncMutationSource() !== "local-user-edit") {
+      this.log("skip non-local trip sync trigger", {
+        source,
+        mutationSource: getSyncMutationSource(),
+      });
+      return;
+    }
     this.log("schedule trip sync", { source });
     this.debouncedTripSync();
   }
@@ -268,8 +285,8 @@ class SyncService {
 
       this.isApplyingRemote = true;
       try {
-        useTripStore.getState().setRemoteTrip(savedTrip, previousTrip.budget);
-        useMapStore.getState().setPins(savedTrip.pins);
+        useTripStore.getState().setRemoteTrip(savedTrip, previousTrip.budget, "server-ack");
+        useMapStore.getState().setPins(savedTrip.pins, "server-ack");
         this.lastSyncedPayloadKey = this.getPayloadKey(savedTrip);
       } finally {
         this.isApplyingRemote = false;

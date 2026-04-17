@@ -31,10 +31,10 @@ function toUserProfile(input: {
     name: input.name || input.email.split("@")[0],
     email: input.email,
     travelPreferences: preferences.interests || [],
-    budget: input.budget || 0,
+    budget: input.budget ?? 0,
     destination: input.destination?.trim() || "",
-    travelDays: 3,
-    preferredTransport: preferences.preferredTransport || "Train",
+    travelDays: 1,
+    preferredTransport: preferences.preferredTransport?.trim() || "",
     travelPace: preferences.pace || "moderate",
     interests: preferences.interests || [],
   };
@@ -52,6 +52,31 @@ function serializeChatMessages(
       minute: "2-digit",
     }),
   }));
+}
+
+function sanitizeBootstrapTrip(input: {
+  trip: PersistedTripPayload;
+  profile: User;
+  chatMessages: ChatMessage[];
+}): PersistedTripPayload {
+  const hasItinerary = input.trip.itinerary.some((day) => day.items.length > 0);
+  const hasPins = input.trip.pins.length > 0;
+  const hasStructuredTrip = hasItinerary || hasPins || input.trip.days > 1;
+  const hasProfileContext =
+    Boolean(input.profile.destination.trim()) ||
+    input.profile.travelDays > 1 ||
+    input.profile.budget > 0;
+
+  if (hasStructuredTrip || hasProfileContext || input.chatMessages.length > 0) {
+    return input.trip;
+  }
+
+  return {
+    ...input.trip,
+    title: "",
+    destination: "",
+    days: 1,
+  };
 }
 
 function serializeTrip(trip: {
@@ -147,11 +172,11 @@ export async function ensureProfile(userId: string) {
     await prisma.profile.create({
       data: {
         userId,
-        budget: 50000,
+        budget: null,
         destination: null,
         preferences: {
-          interests: ["food", "shopping"],
-          preferredTransport: "Train",
+          interests: [],
+          preferredTransport: "",
           pace: "moderate",
         },
       },
@@ -172,26 +197,12 @@ export async function ensureCurrentTrip(userId: string) {
     return existing;
   }
 
-  const user = await ensureProfile(userId);
-  const dest = user.profile?.destination?.trim();
   return prisma.trip.create({
     data: {
       userId,
-      title: dest ? `${dest} 行程草稿` : "我的行程草稿",
-      destination: dest || null,
-      days: 3,
-      items: {
-        create: [
-          {
-            day: 1,
-            title: "Plan your first stop",
-            description: "Start filling in the itinerary.",
-            timeSlot: "09:00",
-            location: dest || null,
-            order: 1,
-          },
-        ],
-      },
+      title: "",
+      destination: null,
+      days: 1,
     },
     include: { items: true, pins: true },
   });
@@ -224,6 +235,20 @@ export async function getBootstrapPayload(userId: string): Promise<BootstrapPayl
     take: 50,
   });
 
+  const profile = toUserProfile({
+    name: user.name,
+    email: user.email,
+    preferences: user.profile?.preferences,
+    budget: user.profile?.budget,
+    destination: user.profile?.destination,
+  });
+  const chatMessages = serializeChatMessages(messages);
+  const tripPayload = sanitizeBootstrapTrip({
+    trip: serializeTrip({ ...trip, items: trip.items, pins: trip.pins }),
+    profile,
+    chatMessages,
+  });
+
   return {
     user: {
       id: user.id,
@@ -231,15 +256,9 @@ export async function getBootstrapPayload(userId: string): Promise<BootstrapPayl
       name: user.name,
       image: user.image,
     },
-    profile: toUserProfile({
-      name: user.name,
-      email: user.email,
-      preferences: user.profile?.preferences,
-      budget: user.profile?.budget,
-      destination: user.profile?.destination,
-    }),
-    trip: serializeTrip({ ...trip, items: trip.items, pins: trip.pins }),
-    chatMessages: serializeChatMessages(messages),
+    profile,
+    trip: tripPayload,
+    chatMessages,
     collaboration: serializeCollaboration(room),
   };
 }
@@ -247,7 +266,7 @@ export async function getBootstrapPayload(userId: string): Promise<BootstrapPayl
 export async function updateProfile(userId: string, input: Partial<User>) {
   const preferences = {
     interests: input.interests || input.travelPreferences || [],
-    preferredTransport: input.preferredTransport || "Train",
+    preferredTransport: input.preferredTransport?.trim() || "",
     pace: input.travelPace || "moderate",
   };
 

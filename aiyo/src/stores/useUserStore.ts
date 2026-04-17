@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { withSyncMutationSource } from "@/stores/syncMutationSource";
 import type { User } from "@/types";
 
 interface UserState extends User {
@@ -18,6 +19,9 @@ export const useUserStore = create<UserState>((set) => ({
   travelPace: "moderate",
   interests: [],
   isFirstVisit: true,
-  updateProfile: (updates) => set((state) => ({ ...state, ...updates })),
+  updateProfile: (updates) =>
+    withSyncMutationSource("local-user-edit", () => {
+      set((state) => ({ ...state, ...updates }));
+    }),
   setFirstVisit: (isFirstVisit) => set({ isFirstVisit }),
 }));

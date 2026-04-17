@@ -10,13 +10,14 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const destination = searchParams.get("destination") || undefined;
     const keyword = searchParams.get("keyword") || undefined;
-    const limit = Number(searchParams.get("limit") || 6);
+    const limit = Number(searchParams.get("limit") || 10);
 
     const outcome = await getVideoRecommendations({ destination, keyword, limit });
     return NextResponse.json(
       createSuccess(outcome.videos, {
         source: outcome.source,
         fallbackReason: outcome.fallbackReason,
+        debug: outcome.debug,
       }),
     );
   } catch (error) {
@@ -43,6 +44,7 @@ export async function POST(request: Request) {
       createSuccess(outcome.videos, {
         source: outcome.source,
         fallbackReason: outcome.fallbackReason,
+        debug: outcome.debug,
       }),
     );
   } catch (error) {

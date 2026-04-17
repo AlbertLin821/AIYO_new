@@ -2,10 +2,21 @@ import { isApiError } from "@/lib/api-response";
 import type { ApiResponse } from "@/types";
 import type { VideoRecommendation, VideoSummaryResult } from "@/types";
 
+export type VideoSearchDebugInfo = {
+  rawInput: string;
+  searchQueries: string[];
+  executedQueries: string[];
+  regionCode: string;
+  relevanceLanguage: string;
+  selectedStrategy: "high-intent" | "literal-fallback";
+  fallbackReasons: string[];
+};
+
 export type VideoRecommendationsClientResult = {
   videos: VideoRecommendation[];
   source: "youtube-data-api" | "mock-fallback";
   fallbackReason?: string;
+  debug?: VideoSearchDebugInfo;
 };
 
 async function parseJson<T>(response: Response): Promise<T> {
@@ -46,6 +57,23 @@ export async function fetchVideoRecommendations(input: {
   }
 
   const source = payload.meta?.source;
+  const debug =
+    payload.meta?.debug && typeof payload.meta.debug === "object"
+      ? (payload.meta.debug as VideoSearchDebugInfo)
+      : undefined;
+
+  if (process.env.NODE_ENV !== "production" && debug) {
+    console.info("[video-search]", {
+      rawInput: debug.rawInput,
+      searchQueries: debug.searchQueries,
+      executedQueries: debug.executedQueries,
+      regionCode: debug.regionCode,
+      relevanceLanguage: debug.relevanceLanguage,
+      selectedStrategy: debug.selectedStrategy,
+      fallbackReasons: debug.fallbackReasons,
+    });
+  }
+
   return {
     videos: payload.data,
     source:
@@ -56,6 +84,7 @@ export async function fetchVideoRecommendations(input: {
       typeof payload.meta?.fallbackReason === "string"
         ? payload.meta.fallbackReason
         : undefined,
+    debug,
   };
 }
 
