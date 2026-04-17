@@ -128,8 +128,8 @@ export function buildVideoSummaryPrompt(input: {
 }): string {
   return [
     "You summarize travel videos and extract itinerary-ready place hints.",
-    "Use transcript chunks as the primary source of truth.",
-    "Only use the description as supporting metadata when transcript context is incomplete.",
+    "Use transcript chunks as the sole source for summary and segment text; do not invent details from the title or description alone.",
+    "Only use the description as supporting metadata when a transcript chunk is clearly incomplete for that time range.",
     "Return valid JSON only. Do not wrap the JSON in markdown.",
     'Use this exact shape: { "title": string, "summary": string, "segments": [{ "timestamp": string, "startSeconds": number, "endSeconds": number, "title": string, "text": string, "locationHints": string[] }], "extractedLocations": string[] }',
     `Video title: ${input.title}`,
@@ -150,6 +150,30 @@ export function buildVideoSummaryPrompt(input: {
     input.retryMode
       ? "- The previous answer was too generic or malformed. Be concrete and transcript-grounded."
       : "- Avoid generic phrases like 'destination planning context' or 'trip overview' unless the transcript explicitly says so.",
+  ].join("\n");
+}
+
+export function buildLocationFilteringPrompt(input: {
+  title: string;
+  destination?: string;
+  summary: string;
+  segmentTexts: string[];
+  transcriptChunks: string[];
+  candidateLocations: string[];
+}): string {
+  return [
+    "You filter travel-video location candidates.",
+    "Keep only specific real places, attractions, districts, stations, markets, temples, parks, museums, neighborhoods, or named food streets.",
+    "Reject generic phrases, entire countries, vague areas, and non-place concepts.",
+    "Use transcript chunks, summary text, and key-moment text together.",
+    "Return valid JSON only.",
+    'Use this exact shape: { "acceptedLocations": string[], "rejectedLocations": string[] }',
+    `Video title: ${input.title}`,
+    `Destination hint: ${input.destination || "unknown"}`,
+    `Summary: ${input.summary || "none"}`,
+    `Key moments: ${input.segmentTexts.join(" | ") || "none"}`,
+    `Transcript chunks: ${input.transcriptChunks.join(" | ") || "none"}`,
+    `Candidate locations: ${input.candidateLocations.join(" | ") || "none"}`,
   ].join("\n");
 }
 

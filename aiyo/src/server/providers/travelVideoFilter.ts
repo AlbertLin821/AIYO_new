@@ -182,6 +182,24 @@ export function buildTravelBiasedSearchQuery(userQuery: string): string {
   return `${base} ${TRAVEL_QUERY_SUFFIX}`.trim();
 }
 
+/** 高旅遊意圖查詢（主搜尋流程），以核心地名或首段詞為錨點。 */
+export function buildHighIntentSearchQueries(userQuery: string): string[] {
+  const raw = userQuery.trim();
+  if (!raw) {
+    return [];
+  }
+  const cores = getCorePlaceTokens(raw);
+  const firstToken = raw
+    .split(/[\s\u3000,，]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)[0];
+  const anchor = (cores[0] || firstToken || raw).trim();
+  if (anchor.length < 1) {
+    return [];
+  }
+  return [`${anchor} 旅遊`, `${anchor} 自由行`, `${anchor} 景點`, `${anchor} 攻略`];
+}
+
 export type TravelVideoMeta = {
   title: string;
   description: string;
@@ -280,6 +298,19 @@ export function scoreVideoPlaceTravelRank(
     }
   }
 
+  const rawTitle = meta.title || "";
+  if (
+    core.length > 0 &&
+    core.some((token) => rawTitle.includes(token)) &&
+    /旅遊|景點|自由行|攻略/.test(rawTitle)
+  ) {
+    score += 8;
+  }
+  const channelLower = (meta.channelTitle || "").toLowerCase();
+  if (/旅遊|旅行|travel|vlog|走跳|玩樂|trip|tour/i.test(channelLower)) {
+    score += 3;
+  }
+
   const comb = `${meta.title}\n${meta.description || ""}`;
   if (TRAVEL_POSITIVE.test(comb)) {
     score += 4;
@@ -319,4 +350,116 @@ export function isLoosePlaceRelatedVideo(
     return false;
   }
   return true;
+}
+
+const SEARCH_INTENT_SUFFIXES = [
+  "旅遊",
+  "景點",
+  "美食",
+  "自由行",
+  "攻略",
+  "travel vlog",
+];
+
+const LOW_VALUE_PATTERNS = [
+  /#shorts/i,
+  /\bshorts?\b/i,
+  /\bnews\b/i,
+  /直播/i,
+  /新聞/i,
+  /廣告/i,
+  /promo/i,
+];
+
+export function buildExpandedTravelSearchQueries(userQuery: string): string[] {
+  const raw = userQuery.trim();
+  if (!raw) {
+    return [];
+  }
+
+  const anchor = (getCorePlaceTokens(raw)[0] || raw).trim();
+  const expanded = SEARCH_INTENT_SUFFIXES.map((suffix) => `${anchor} ${suffix}`.trim());
+
+  return Array.from(
+    new Set([
+      ...expanded,
+      buildTravelBiasedSearchQuery(raw),
+      raw,
+    ]),
+  ).filter(Boolean);
+}
+
+export function isLowIntentShortFormVideo(meta: TravelVideoMeta & { durationSeconds?: number | null }): boolean {
+  const combined = `${meta.title}\n${meta.description}\n${meta.channelTitle || ""}`;
+  if (LOW_VALUE_PATTERNS.some((pattern) => pattern.test(combined))) {
+    return true;
+  }
+  if (typeof meta.durationSeconds === "number" && meta.durationSeconds > 0 && meta.durationSeconds < 120) {
+    return true;
+  }
+  return false;
+}
+
+export function scoreSearchResultQuality(
+  meta: TravelVideoMeta & {
+    durationSeconds?: number | null;
+    publishedAt?: string;
+    transcriptLikelyAvailable?: boolean;
+  },
+  originalQuery: string,
+): number {
+  const combined = `${meta.title}\n${meta.description}\n${meta.channelTitle || ""}`;
+  let score = scoreVideoPlaceTravelRank(meta, originalQuery);
+
+  if (isTravelRelatedVideo(meta, originalQuery)) {
+    score += 12;
+  }
+  if (/旅遊|景點|美食|自由行|攻略|vlog|travel|itinerary|food/i.test(meta.title)) {
+    score += 8;
+  }
+  if (/美食|food|cafe|night market|street food/i.test(combined)) {
+    score += 3;
+  }
+  if (/旅遊|travel|trip|vlog|explore|自由行/i.test(meta.channelTitle || "")) {
+    score += 4;
+  }
+
+  if (typeof meta.durationSeconds === "number") {
+    if (meta.durationSeconds >= 6 * 60 && meta.durationSeconds <= 45 * 60) {
+      score += 6;
+    } else if (meta.durationSeconds >= 2 * 60) {
+      score += 2;
+    } else {
+      score -= 12;
+    }
+  }
+
+  if (meta.transcriptLikelyAvailable) {
+    score += 4;
+  }
+
+  if (meta.publishedAt) {
+    const publishedAtMs = Date.parse(meta.publishedAt);
+    if (Number.isFinite(publishedAtMs)) {
+      const ageDays = Math.max(0, (Date.now() - publishedAtMs) / 86_400_000);
+      if (ageDays <= 365) {
+        score += 8;
+      } else if (ageDays <= 365 * 2) {
+        score += 5;
+      } else if (ageDays <= 365 * 4) {
+        score += 2;
+      } else if (ageDays > 365 * 6) {
+        score -= 4;
+      }
+    }
+  }
+
+  if (isLowIntentShortFormVideo(meta)) {
+    score -= 18;
+  }
+  if (/news|新聞|直播|廣告|promo|press/i.test(combined)) {
+    score -= 16;
+  }
+
+  return score;
 }

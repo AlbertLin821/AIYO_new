@@ -225,6 +225,39 @@ export function parseVideoSummaryResponse(
   return { ...fallback, parseFailed: true };
 }
 
+export function parseLocationFilterResponse(raw: string): {
+  acceptedLocations: string[];
+  rejectedLocations: string[];
+  parseFailed: boolean;
+} {
+  const jsonBlock = extractJsonBlock(raw);
+  if (!jsonBlock) {
+    return { acceptedLocations: [], rejectedLocations: [], parseFailed: true };
+  }
+
+  try {
+    const parsed = JSON.parse(jsonBlock) as {
+      acceptedLocations?: string[];
+      rejectedLocations?: string[];
+    };
+    return {
+      acceptedLocations: sanitizeLocationNames(
+        Array.isArray(parsed.acceptedLocations)
+          ? parsed.acceptedLocations.map((value) => String(value))
+          : [],
+      ),
+      rejectedLocations: sanitizeLocationNames(
+        Array.isArray(parsed.rejectedLocations)
+          ? parsed.rejectedLocations.map((value) => String(value))
+          : [],
+      ),
+      parseFailed: false,
+    };
+  } catch {
+    return { acceptedLocations: [], rejectedLocations: [], parseFailed: true };
+  }
+}
+
 export function parseChatResponse(raw: string): ChatResponsePayload {
   const content = raw.trim() || "暫時無法產生有用的回覆。";
   const reply: ChatMessage = {

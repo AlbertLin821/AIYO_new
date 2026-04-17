@@ -13,9 +13,11 @@ import {
   AIYO_MAPS_AUTH_FAILURE_EVENT,
   loadGoogleMapsApi,
 } from "@/services/googleMapsLoader";
+import { derivePlanningSnapshot } from "@/lib/planningContext";
 import { useMapStore } from "@/stores/useMapStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
+import { useUserStore } from "@/stores/useUserStore";
 import type { MapPin as MapPinType } from "@/types";
 import { zhTW as t } from "@/locales/zh-TW";
 
@@ -177,8 +179,10 @@ function MockMapFallback({
 }
 
 export default function MapView() {
-  const destination = useTripStore((state) => state.destination);
-  const itinerary = useTripStore((state) => state.itinerary);
+  const tripStore = useTripStore();
+  const userStore = useUserStore();
+  const destination = tripStore.destination;
+  const itinerary = tripStore.itinerary;
   const { pins, selectedPinId, setSelectedPinId } = useMapStore();
   const pushToast = useToastStore((state) => state.pushToast);
   const useGoogleSdk = Boolean(GOOGLE_MAPS_API_KEY) && !FORCE_MOCK_MAP;
@@ -195,6 +199,18 @@ export default function MapView() {
     () => pins.find((pin) => pin.id === selectedPinId) || null,
     [pins, selectedPinId],
   );
+  const planningSnapshot = useMemo(
+    () =>
+      derivePlanningSnapshot({
+        trip: tripStore,
+        user: userStore,
+        pinCount: pins.length,
+      }),
+    [pins.length, tripStore, userStore],
+  );
+  const mapHeaderTitle = planningSnapshot.hasDestination
+    ? planningSnapshot.destination
+    : "尚未開始規劃";
 
   useEffect(() => {
     if (FORCE_MOCK_MAP) {
@@ -482,12 +498,12 @@ export default function MapView() {
           )}
         </div>
       ) : (
-        <MockMapFallback pins={pins} selectedPinId={selectedPinId} setSelectedPinId={setSelectedPinId} destination={destination} />
+        <MockMapFallback pins={pins} selectedPinId={selectedPinId} setSelectedPinId={setSelectedPinId} destination={mapHeaderTitle} />
       )}
 
       <div className="absolute left-4 top-4 z-10 flex items-center gap-2 rounded-xl bg-surface/90 px-3 py-1.5 text-xs font-medium text-foreground shadow-soft backdrop-blur-sm">
         <MapPin className="size-3 text-secondary" />
-        {destination}
+        {mapHeaderTitle}
         <span className="text-muted">
           - {pins.length} {t.map.pinsCount}
         </span>

@@ -56,12 +56,14 @@ export default function VideoSearchBar() {
           segmentSource: result.segmentSource,
           mapsProvenance: result.mapsProvenance,
           geocodeWarnings: result.geocodeWarnings,
+          summaryUnavailable: result.summaryUnavailable,
+          unavailableReason: result.unavailableReason,
         });
-        if (result.transcriptSource !== "youtube") {
+        if (result.summaryUnavailable) {
           pushToast({
-            variant: "warning",
-            title: t.video.fallbackSummaryTitle,
-            description: result.fallbackReason || t.video.fallbackSummaryDesc,
+            variant: "info",
+            title: t.video.summaryUnavailableTitle,
+            description: result.unavailableReason || t.video.summaryUnavailableDesc,
           });
         }
         if (result.mapsProvenance === "catalog-fallback") {
@@ -83,7 +85,7 @@ export default function VideoSearchBar() {
         setSummaryDiagnostics(null);
         const outcome = await fetchVideoRecommendations({
           keyword: trimmed,
-          limit: 6,
+          limit: 10,
         });
         setVideos(outcome.videos);
         setRecommendationSource(outcome.source);

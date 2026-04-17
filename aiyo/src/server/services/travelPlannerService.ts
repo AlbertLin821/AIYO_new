@@ -53,6 +53,7 @@ export async function generateTripPlan(request: TripPlanRequest): Promise<TripPl
 
   const raw = await chatWithOllama({
     format: "json",
+    task: "trip-plan",
     messages: requestMessages,
   });
 
@@ -65,6 +66,7 @@ export async function generateTripPlan(request: TripPlanRequest): Promise<TripPl
 
     const retriedRaw = await chatWithOllama({
       format: "json",
+      task: "trip-plan",
       messages: [
         requestMessages[0],
         {
@@ -80,6 +82,7 @@ export async function generateTripPlan(request: TripPlanRequest): Promise<TripPl
 
 export async function buildMapPlanningNotes(request: TripPlanRequest): Promise<string> {
   return chatWithOllama({
+    task: "travel-chat",
     messages: [
       {
         role: "system",
@@ -101,6 +104,7 @@ export async function chatWithTravelAssistant(input: {
   const language = detectResponseLanguage(input.message);
   const prompt = buildChatPrompt(input.message, input.context);
   const raw = await chatWithOllama({
+    task: "travel-chat",
     messages: [
       { role: "system", content: prompt.system },
       ...normalizeHistory(input.context, language),

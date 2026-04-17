@@ -2,14 +2,17 @@ import { create } from "zustand";
 import type { VideoRecommendation } from "@/types";
 
 export type SummaryDiagnostics = {
-  transcriptSource: "youtube" | "fallback-description" | "fallback-synthetic";
+  transcriptSource: "youtube" | "fallback-description" | "fallback-synthetic" | "none";
   summarySource?:
     | "ollama-transcript"
     | "ollama-description-fallback"
-    | "ollama-synthetic-fallback";
-  segmentSource?: "transcript-chunks" | "description-fallback" | "synthetic-fallback";
+    | "ollama-synthetic-fallback"
+    | "unavailable";
+  segmentSource?: "transcript-chunks" | "description-fallback" | "synthetic-fallback" | "unavailable";
   mapsProvenance?: "google-geocoding" | "catalog-fallback" | "mixed";
   geocodeWarnings?: string[];
+  summaryUnavailable?: boolean;
+  unavailableReason?: string;
 };
 
 interface VideoState {

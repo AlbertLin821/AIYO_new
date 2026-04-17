@@ -8,19 +8,24 @@ import { syncService } from "@/services/syncService";
 import { useChatStore } from "@/stores/useChatStore";
 import { useCollabStore } from "@/stores/useCollabStore";
 import { useMapStore } from "@/stores/useMapStore";
+import { EMPTY_TRIP_STATE, useTripStore } from "@/stores/useTripStore";
+import { getSyncMutationSource, withSyncMutationSource } from "@/stores/syncMutationSource";
 import { useToastStore } from "@/stores/useToastStore";
-import { useTripStore } from "@/stores/useTripStore";
 import { useUIStore } from "@/stores/useUIStore";
 import { useUserStore } from "@/stores/useUserStore";
 
 export default function AppDataBridge() {
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const collabRoomId = useCollabStore((state) => state.roomId);
   const pushToast = useToastStore((state) => state.pushToast);
   const initializedRef = useRef(false);
+  const userKey =
+    status === "authenticated"
+      ? (session?.user?.id || session?.user?.email || "guest")
+      : null;
 
   useEffect(() => {
-    if (status !== "authenticated" || initializedRef.current) {
+    if (status !== "authenticated" || !userKey || initializedRef.current) {
       return;
     }
 
@@ -35,7 +40,6 @@ export default function AppDataBridge() {
         }
         syncService.applyBootstrap(snapshot, {
           source: "initial-bootstrap",
-          forceTrip: true,
         });
         syncService.startRealtime(snapshot.collaboration?.roomId || null);
       })
@@ -43,17 +47,10 @@ export default function AppDataBridge() {
         const message = error instanceof Error ? error.message : "";
         if (message.includes("Authentication required") || message.includes("unauthorized")) {
           clearPersistedState();
-          useChatStore.getState().clearMessages();
-          useMapStore.getState().clearPins();
-          useTripStore.setState({
-            tripId: null,
-            title: "",
-            destination: "",
-            days: 1,
-            budget: 0,
-            itinerary: [],
-            planSummary: "",
-            lastUpdatedAt: null,
+          withSyncMutationSource("bootstrap", () => {
+            useChatStore.getState().clearMessages();
+            useMapStore.getState().clearPins();
+            useTripStore.setState(EMPTY_TRIP_STATE);
           });
           useCollabStore.setState({
             roomId: null,
@@ -91,6 +88,9 @@ export default function AppDataBridge() {
       });
 
     const unsubscribeTrip = useTripStore.subscribe((state, previousState) => {
+      if (getSyncMutationSource() !== "local-user-edit") {
+        return;
+      }
       if (
         state.tripId !== previousState.tripId ||
         state.title !== previousState.title ||
@@ -105,6 +105,9 @@ export default function AppDataBridge() {
     });
 
     const unsubscribeMap = useMapStore.subscribe((state, previousState) => {
+      if (getSyncMutationSource() !== "local-user-edit") {
+        return;
+      }
       if (JSON.stringify(state.pins) !== JSON.stringify(previousState.pins)) {
         syncService.scheduleTripSync("map-store");
       }
@@ -117,7 +120,7 @@ export default function AppDataBridge() {
       syncService.stopRealtime();
       initializedRef.current = false;
     };
-  }, [pushToast, status]);
+  }, [pushToast, status, userKey]);
 
   useEffect(() => {
     if (status !== "authenticated" || !collabRoomId) {

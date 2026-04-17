@@ -4,12 +4,18 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { MessageCircle, Send, Sparkles, X } from "lucide-react";
 import { zhTW as t } from "@/locales/zh-TW";
+import {
+  applyPlanningUpdateToStores,
+  derivePlanningSnapshot,
+  extractPlanningUpdateFromText,
+} from "@/lib/planningContext";
 import { sendChatMessage } from "@/services/aiClient";
 import { useChatStore } from "@/stores/useChatStore";
 import { useMapStore } from "@/stores/useMapStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
 import { useUIStore } from "@/stores/useUIStore";
+import { useUserStore } from "@/stores/useUserStore";
 import type { ChatMessage } from "@/types";
 
 const quickReplies = [
@@ -43,15 +49,29 @@ export default function FloatingAIChat() {
     setErrorMessage,
   } = useChatStore();
   const tripStore = useTripStore();
+  const userStore = useUserStore();
   const pushToast = useToastStore((state) => state.pushToast);
   const [message, setMessage] = useState("");
   const rightOffset = panelOpen ? "min(404px, calc(100vw - 22rem))" : "24px";
+  const planningSnapshot = derivePlanningSnapshot({
+    trip: tripStore,
+    user: userStore,
+    pinCount: useMapStore.getState().pins.length,
+  });
 
   async function handleSend(nextMessage?: string) {
     const content = (nextMessage || message).trim();
     if (!content || isSending) {
       return;
     }
+
+    applyPlanningUpdateToStores(extractPlanningUpdateFromText(content));
+
+    const nextPlanningSnapshot = derivePlanningSnapshot({
+      trip: useTripStore.getState(),
+      user: useUserStore.getState(),
+      pinCount: useMapStore.getState().pins.length,
+    });
 
     const userMessage = buildUserMessage(content);
     appendMessage(userMessage);
@@ -63,10 +83,10 @@ export default function FloatingAIChat() {
       const response = await sendChatMessage({
         message: content,
         context: {
-          destination: tripStore.destination,
-          days: tripStore.days,
-          budget: tripStore.budget,
-          itinerary: tripStore.itinerary,
+          destination: nextPlanningSnapshot.destination,
+          days: nextPlanningSnapshot.days,
+          budget: nextPlanningSnapshot.budget,
+          itinerary: useTripStore.getState().itinerary,
         },
       });
       appendMessage(response.reply);
@@ -119,7 +139,11 @@ export default function FloatingAIChat() {
               {messages.length === 0 && !isSending && !errorMessage && (
                 <div className="rounded-xl border border-dashed border-border-light bg-cream/40 px-3 py-6 text-center text-xs text-muted">
                   <p className="font-medium text-foreground">{t.floatingChat.emptyTitle}</p>
-                  <p className="mt-1 leading-relaxed">{t.floatingChat.emptyHint}</p>
+                  <p className="mt-1 leading-relaxed">
+                    {planningSnapshot.hasPlanningContext
+                      ? t.floatingChat.emptyHint
+                      : "尚未開始規劃，先告訴我目的地、天數或預算。"}
+                  </p>
                 </div>
               )}
               {messages.map((chatMessage) => (

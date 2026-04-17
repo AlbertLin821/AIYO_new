@@ -160,12 +160,13 @@ export interface VideoSummarySegment {
 }
 
 export interface VideoSummaryDebugMeta {
-  transcriptSource: "youtube" | "fallback-description" | "fallback-synthetic";
+  transcriptSource: "youtube" | "fallback-description" | "fallback-synthetic" | "none";
   summarySource:
     | "ollama-transcript"
     | "ollama-description-fallback"
-    | "ollama-synthetic-fallback";
-  segmentSource: "transcript-chunks" | "description-fallback" | "synthetic-fallback";
+    | "ollama-synthetic-fallback"
+    | "unavailable";
+  segmentSource: "transcript-chunks" | "description-fallback" | "synthetic-fallback" | "unavailable";
 }
 
 export interface VideoRecommendation {
@@ -200,6 +201,9 @@ export interface VideoSummaryResult {
   mapsProvenance?: "google-geocoding" | "catalog-fallback" | "mixed";
   geocodeWarnings?: string[];
   fallbackReason?: string;
+  /** 無逐字稿等情況，不提供精準摘要 */
+  summaryUnavailable?: boolean;
+  unavailableReason?: string;
   video: VideoRecommendation;
   debug?: VideoSummaryDebugMeta;
 }

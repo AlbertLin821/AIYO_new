@@ -181,7 +181,9 @@ export default function VideoSummaryDrawer({
                     <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-primary">
                       {summaryDiagnostics.transcriptSource === "youtube"
                         ? t.video.transcriptYoutube
-                        : t.video.transcriptFallback}
+                        : summaryDiagnostics.transcriptSource === "none"
+                          ? t.video.transcriptNone
+                          : t.video.transcriptFallback}
                     </span>
                     {summaryDiagnostics.mapsProvenance === "catalog-fallback" && (
                       <span className="rounded-full bg-secondary/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/80">
@@ -284,7 +286,12 @@ export default function VideoSummaryDrawer({
                 <div>
                   <h4 className="mb-2 text-sm font-semibold text-foreground">{t.drawer.summary}</h4>
                   <div className="space-y-2">
-                    {summaryParagraphs.length > 0 ? (
+                    {summaryDiagnostics?.summaryUnavailable ? (
+                      <p className="rounded-xl border border-border-light bg-cream/40 px-3 py-3 text-sm leading-relaxed text-muted">
+                        {summaryDiagnostics.unavailableReason ||
+                          "無法取得逐字稿，暫時無法產生精準摘要。"}
+                      </p>
+                    ) : summaryParagraphs.length > 0 ? (
                       summaryParagraphs.map((paragraph, index) => (
                         <p
                           key={`${activeVideo.id}_summary_${index}`}
@@ -304,7 +311,11 @@ export default function VideoSummaryDrawer({
                     {t.drawer.keySegments}
                   </h4>
                   <div className="flex flex-col gap-1.5">
-                    {activeVideo.summarySegments && activeVideo.summarySegments.length > 0
+                    {summaryDiagnostics?.summaryUnavailable ? (
+                      <p className="text-sm text-muted">
+                        無逐字稿時無法產生重點片段時間軸內文。
+                      </p>
+                    ) : activeVideo.summarySegments && activeVideo.summarySegments.length > 0
                       ? activeVideo.summarySegments.map((segment) => (
                           <div key={segment.id} className="rounded-xl bg-primary/5 px-3 py-3">
                             <div className="flex items-start gap-3">

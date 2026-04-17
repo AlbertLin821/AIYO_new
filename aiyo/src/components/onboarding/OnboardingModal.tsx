@@ -11,7 +11,7 @@ import { useUserStore } from "@/stores/useUserStore";
 export default function OnboardingModal() {
   const { showOnboarding, setShowOnboarding } = useUIStore();
   const { setDestination, setDays } = useTripStore();
-  const { setFirstVisit } = useUserStore();
+  const { setFirstVisit, updateProfile } = useUserStore();
   const [destinationInput, setDestinationInput] = useState("");
   const [daysInput, setDaysInput] = useState("");
 
@@ -19,9 +19,12 @@ export default function OnboardingModal() {
     if (!skip) {
       if (destinationInput.trim()) {
         setDestination(destinationInput.trim());
+        updateProfile({ destination: destinationInput.trim() });
       }
       if (daysInput.trim()) {
-        setDays(parseInt(daysInput, 10) || 5);
+        const parsedDays = parseInt(daysInput, 10) || 5;
+        setDays(parsedDays);
+        updateProfile({ travelDays: parsedDays });
       }
     }
     setFirstVisit(false);

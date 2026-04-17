@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
 import {
   CalendarDays,
@@ -13,6 +14,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { zhTW as t } from "@/locales/zh-TW";
+import { applyPlanningUpdateToStores, derivePlanningSnapshot, extractPlanningUpdateFromText } from "@/lib/planningContext";
 import { sendChatMessage } from "@/services/aiClient";
 import { useChatStore } from "@/stores/useChatStore";
 import { useToastStore } from "@/stores/useToastStore";
@@ -34,6 +36,7 @@ function buildUserMessage(content: string): ChatMessage {
 }
 
 export default function ChatPage() {
+  const { status } = useSession();
   const [input, setInput] = useState("");
   const { messages, appendMessage, isSending, setIsSending, errorMessage, setErrorMessage } =
     useChatStore();
@@ -46,7 +49,7 @@ export default function ChatPage() {
     { icon: MapPin, label: t.chat.tagDestination },
     { icon: CalendarDays, label: t.chat.tagDays },
     { icon: DollarSign, label: t.chat.tagBudget },
-    { icon: Heart, label: t.chat.tagInterests },
+    { icon: Heart, label: "\u884c\u7a0b" },
   ];
 
   async function handleSend(rawInput?: string) {
@@ -54,6 +57,13 @@ export default function ChatPage() {
     if (!message || isSending) {
       return;
     }
+
+    applyPlanningUpdateToStores(extractPlanningUpdateFromText(message));
+
+    const planningSnapshot = derivePlanningSnapshot({
+      trip: useTripStore.getState(),
+      user: useUserStore.getState(),
+    });
 
     appendMessage(buildUserMessage(message));
     setInput("");
@@ -64,15 +74,15 @@ export default function ChatPage() {
       const response = await sendChatMessage({
         message,
         context: {
-          destination: tripStore.destination,
-          days: tripStore.days,
-          budget: tripStore.budget,
-          itinerary: tripStore.itinerary,
+          destination: planningSnapshot.destination,
+          days: planningSnapshot.days,
+          budget: planningSnapshot.budget,
+          itinerary: useTripStore.getState().itinerary,
           preferences: {
-            interests: userStore.interests,
-            pace: userStore.travelPace,
-            transportPreference: userStore.preferredTransport,
-            budget: tripStore.budget,
+            interests: useUserStore.getState().interests,
+            pace: useUserStore.getState().travelPace,
+            transportPreference: useUserStore.getState().preferredTransport,
+            budget: planningSnapshot.budget,
           },
         },
       });
@@ -110,12 +120,26 @@ export default function ChatPage() {
     }, 400);
   }
 
+  const planningSnapshot = derivePlanningSnapshot({
+    trip: tripStore,
+    user: userStore,
+  });
+
   const extractedValues = [
-    tripStore.destination,
-    `${tripStore.days} ${t.chat.daysUnit}`,
-    `${t.chat.currencyPrefix}${tripStore.budget.toLocaleString()}`,
-    userStore.interests.join(", "),
+    planningSnapshot.hasDestination ? planningSnapshot.destination : t.chat.valueUnset,
+    planningSnapshot.hasPlannedDays
+      ? `${planningSnapshot.days} ${t.chat.daysUnit}`
+      : t.chat.valueUnset,
+    planningSnapshot.hasBudget
+      ? `${t.chat.currencyPrefix}${planningSnapshot.budget.toLocaleString()}`
+      : t.chat.valueUnset,
+    planningSnapshot.hasItinerary
+      ? `${planningSnapshot.plannedStopCount} \u500b\u5df2\u898f\u5283\u505c\u9760\u9ede`
+      : t.chat.valueUnset,
   ];
+
+  const emptyChatHint =
+    status === "authenticated" ? t.chat.emptyHintAuthed : t.chat.emptyHintGuest;
 
   return (
     <div className="h-screen flex">
@@ -136,7 +160,7 @@ export default function ChatPage() {
           {messages.length === 0 && !isSending && !errorMessage && (
             <div className="rounded-2xl border border-dashed border-border-light bg-cream/40 px-4 py-8 text-center text-sm text-muted">
               <p className="font-medium text-foreground">{t.chat.emptyTitle}</p>
-              <p className="mt-2 text-xs">{t.chat.emptyHint}</p>
+              <p className="mt-2 text-xs">{emptyChatHint}</p>
             </div>
           )}
 
@@ -252,23 +276,30 @@ export default function ChatPage() {
           {t.chat.contextTitle}
         </h3>
 
-        <div className="flex flex-col gap-3">
-          {tagConfigs.map((tag, index) => {
-            const Icon = tag.icon;
-            return (
-              <div
-                key={tag.label}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-primary/5"
-              >
-                <Icon className="size-4 flex-shrink-0 text-primary" />
-                <div>
-                  <p className="text-[11px] text-muted">{tag.label}</p>
-                  <p className="text-sm font-medium">{extractedValues[index]}</p>
+        {planningSnapshot.hasPlanningContext ? (
+          <div className="flex flex-col gap-3">
+            {tagConfigs.map((tag, index) => {
+              const Icon = tag.icon;
+              return (
+                <div
+                  key={tag.label}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-primary/5"
+                >
+                  <Icon className="size-4 flex-shrink-0 text-primary" />
+                  <div>
+                    <p className="text-[11px] text-muted">{tag.label}</p>
+                    <p className="text-sm font-medium">{extractedValues[index]}</p>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-border-light bg-cream/30 px-4 py-6 text-center">
+            <p className="text-sm font-medium text-foreground">{t.chat.contextEmptyTitle}</p>
+            <p className="mt-2 text-xs text-muted leading-relaxed">{t.chat.contextEmptyBody}</p>
+          </div>
+        )}
 
         <div className="mt-6 p-4 bg-gradient-to-br from-lavender/10 to-primary/10 rounded-2xl border border-lavender/15">
           <h4 className="text-sm font-semibold text-foreground mb-2">{t.chat.planningNoteTitle}</h4>

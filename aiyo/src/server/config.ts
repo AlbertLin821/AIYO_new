@@ -24,6 +24,8 @@ export const serverConfig = {
   appName: readString("NEXT_PUBLIC_APP_NAME", "AIYO"),
   ollamaBaseUrl: readString("OLLAMA_BASE_URL", "http://localhost:11434"),
   ollamaModel: readString("OLLAMA_MODEL", "gemma3:4b"),
+  ollamaSummaryModel: readString("OLLAMA_SUMMARY_MODEL", ""),
+  ollamaLocationModel: readString("OLLAMA_LOCATION_MODEL", ""),
   ollamaTimeoutMs: readNumber("OLLAMA_TIMEOUT_MS", 45000),
   enableMockVideoProvider: readBoolean("ENABLE_MOCK_VIDEO_PROVIDER", false),
   enableMockMaps: readBoolean("ENABLE_MOCK_MAPS", false),

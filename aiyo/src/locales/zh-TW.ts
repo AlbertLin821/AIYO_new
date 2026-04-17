@@ -11,6 +11,7 @@ export const zhTW = {
     postFailed: "請求失敗，請稍後再試。",
     getFailed: "讀取失敗，請稍後再試。",
     putFailed: "更新失敗，請稍後再試。",
+    planTimeout: "AI 規劃逾時，請稍後再試。",
   },
   nav: {
     home: "首頁",
@@ -47,6 +48,7 @@ export const zhTW = {
     summarizing: "摘要中",
     searchHelper: "貼上連結會進入摘要流程；輸入關鍵字會更新推薦卡片。",
     transcriptYoutube: "YouTube 逐字稿",
+    transcriptNone: "無逐字稿",
     transcriptFallback: "後援摘要",
     mapsCatalog: "地名對照",
     mapsTitlePoi: "影片標題景點",
@@ -58,6 +60,8 @@ export const zhTW = {
     fallbackSummaryTitle: "後援摘要",
     fallbackSummaryDesc:
       "無法載入真實逐字稿；摘要改以後援文字產生。",
+    summaryUnavailableTitle: "無法產生精準摘要",
+    summaryUnavailableDesc: "未取得影片逐字稿，無法產生精準摘要與重點片段。",
     mapCoordsTitle: "地圖座標",
     mapCoordsDesc:
       "座標使用內部對照表，因地理編碼不可用或未比對到結果。",
@@ -119,7 +123,11 @@ export const zhTW = {
     voiceUnavailable:
       "瀏覽器語音輸入尚未連接；請改用文字輸入，或於裝置啟用麥克風後再試。",
     emptyTitle: "開始描述你的旅行需求",
-    emptyHint: "登入後對話會儲存於雲端。",
+    emptyHintGuest: "登入後對話會儲存於雲端。",
+    emptyHintAuthed: "你的對話會自動同步並儲存。",
+    contextEmptyTitle: "尚未開始規劃",
+    contextEmptyBody: "開始對話或於地圖編輯後，這裡會顯示目的地、天數與預算等脈絡。",
+    valueUnset: "尚未設定",
     pageTitle: "AI 行程對話",
     pageSubtitle: "可請求調整路線、天數編排或預算，並帶入目前行程脈絡。",
     placeholder: "請描述想調整的路線、預算或節奏",

@@ -1,6 +1,8 @@
 import { apiPost } from "@/services/apiClient";
 import type { ChatContext, ChatResponsePayload, TripPlanRequest, TripPlanResult } from "@/types";
 
+const VOICE_PLAN_TIMEOUT_MS = 28_000;
+
 export async function sendChatMessage(input: {
   message: string;
   context?: ChatContext;
@@ -19,6 +21,9 @@ export async function generatePlanFromVoice(input: {
   budget?: number;
   interests?: string[];
   transportPreference?: string;
-}) {
-  return apiPost<typeof input, TripPlanResult>("/api/ai/plan", input);
+}, options?: { signal?: AbortSignal; timeoutMs?: number }) {
+  return apiPost<typeof input, TripPlanResult>("/api/ai/plan", input, {
+    timeoutMs: options?.timeoutMs ?? VOICE_PLAN_TIMEOUT_MS,
+    signal: options?.signal,
+  });
 }

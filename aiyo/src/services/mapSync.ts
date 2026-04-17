@@ -14,16 +14,21 @@ export function buildPinsFromLocations(
   locations: LocationReference[],
   source: MapPin["source"] = "video",
 ): MapPin[] {
-  const ordered = [...locations].sort((a, b) => {
-    const va = a.verified ? 1 : 0;
-    const vb = b.verified ? 1 : 0;
-    if (va !== vb) {
-      return vb - va;
-    }
-    const ca = a.confidence ?? 0;
-    const cb = b.confidence ?? 0;
-    return cb - ca;
-  });
+  const ordered = [...locations]
+    .sort((a, b) => {
+      const va = a.verified ? 1 : 0;
+      const vb = b.verified ? 1 : 0;
+      if (va !== vb) {
+        return vb - va;
+      }
+      const ca = a.confidence ?? 0;
+      const cb = b.confidence ?? 0;
+      return cb - ca;
+    })
+    .filter((location, index, all) => {
+      const normalized = location.name.trim().toLowerCase();
+      return all.findIndex((entry) => entry.name.trim().toLowerCase() === normalized) === index;
+    });
 
   return ordered.map((location, index) => ({
     id: `${source}_${location.name}_${index}`.replace(/\s+/g, "_").toLowerCase(),
