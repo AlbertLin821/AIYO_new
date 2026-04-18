@@ -85,6 +85,13 @@ function serializeTrip(trip: {
   destination: string | null;
   days: number;
   updatedAt: Date;
+  itineraryDays: Array<{
+    id: string;
+    dayNumber: number;
+    theme: string | null;
+    summary: string | null;
+    sortOrder: number;
+  }>;
   items: Array<{
     id: string;
     day: number;
@@ -108,6 +115,19 @@ function serializeTrip(trip: {
   }>;
 }): PersistedTripPayload {
   const grouped = new Map<number, PersistedTripPayload["itinerary"][number]>();
+  const orderedDays = [...trip.itineraryDays].sort(
+    (left, right) => left.sortOrder - right.sortOrder || left.dayNumber - right.dayNumber,
+  );
+
+  for (const day of orderedDays) {
+    grouped.set(day.dayNumber, {
+      dayNumber: day.dayNumber,
+      theme: day.theme || `Day ${day.dayNumber}`,
+      summary: day.summary || undefined,
+      items: [],
+    });
+  }
+
   for (const item of trip.items.sort((left, right) => left.day - right.day || left.order - right.order)) {
     if (!grouped.has(item.day)) {
       grouped.set(item.day, {
@@ -126,14 +146,14 @@ function serializeTrip(trip: {
       notes: item.description || undefined,
       location:
         item.location && item.latitude != null && item.longitude != null
-        ? {
-            name: item.location,
-            lat: item.latitude,
-            lng: item.longitude,
-            description: item.description || `${item.location} stop`,
-            address: item.location,
-          }
-        : undefined,
+          ? {
+              name: item.location,
+              lat: item.latitude,
+              lng: item.longitude,
+              description: item.description || `${item.location} stop`,
+              address: item.location,
+            }
+          : undefined,
       source: "manual",
     });
   }
@@ -190,7 +210,7 @@ export async function ensureCurrentTrip(userId: string) {
   const existing = await prisma.trip.findFirst({
     where: { userId },
     orderBy: { updatedAt: "desc" },
-    include: { items: true, pins: true },
+    include: { itineraryDays: true, items: true, pins: true },
   });
 
   if (existing) {
@@ -203,8 +223,16 @@ export async function ensureCurrentTrip(userId: string) {
       title: "",
       destination: null,
       days: 1,
+      itineraryDays: {
+        create: {
+          dayNumber: 1,
+          sortOrder: 0,
+          theme: "Day 1",
+          summary: null,
+        },
+      },
     },
-    include: { items: true, pins: true },
+    include: { itineraryDays: true, items: true, pins: true },
   });
 }
 
@@ -244,7 +272,12 @@ export async function getBootstrapPayload(userId: string): Promise<BootstrapPayl
   });
   const chatMessages = serializeChatMessages(messages);
   const tripPayload = sanitizeBootstrapTrip({
-    trip: serializeTrip({ ...trip, items: trip.items, pins: trip.pins }),
+    trip: serializeTrip({
+      ...trip,
+      itineraryDays: trip.itineraryDays,
+      items: trip.items,
+      pins: trip.pins,
+    }),
     profile,
     chatMessages,
   });
@@ -309,13 +342,13 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
         update: {
           title: input.title,
           destination: input.destination,
-          days: input.days,
+          days: Math.max(1, input.itinerary.length || input.days),
         },
         create: {
           userId,
           title: input.title,
           destination: input.destination,
-          days: input.days,
+          days: Math.max(1, input.itinerary.length || input.days),
         },
       })
     : await prisma.trip.create({
@@ -323,14 +356,37 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
           userId,
           title: input.title,
           destination: input.destination,
-          days: input.days,
+          days: Math.max(1, input.itinerary.length || input.days),
         },
       });
 
+  await prisma.tripDay.deleteMany({ where: { tripId: trip.id } });
   await prisma.tripItem.deleteMany({ where: { tripId: trip.id } });
   await prisma.mapPin.deleteMany({ where: { tripId: trip.id } });
 
-  const items = input.itinerary.flatMap((day) =>
+  const normalizedDays =
+    input.itinerary.length > 0
+      ? input.itinerary
+      : [
+          {
+            dayNumber: 1,
+            theme: "Day 1",
+            summary: undefined,
+            items: [],
+          },
+        ];
+
+  await prisma.tripDay.createMany({
+    data: normalizedDays.map((day, index) => ({
+      tripId: trip.id,
+      dayNumber: day.dayNumber,
+      theme: day.theme || null,
+      summary: day.summary || null,
+      sortOrder: index,
+    })),
+  });
+
+  const items = normalizedDays.flatMap((day) =>
     day.items.map((item, index) => ({
       tripId: trip.id,
       day: day.dayNumber,
@@ -365,7 +421,7 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
 
   const freshTrip = await prisma.trip.findUniqueOrThrow({
     where: { id: trip.id },
-    include: { items: true, pins: true },
+    include: { itineraryDays: true, items: true, pins: true },
   });
 
   await ensureCollaborationRoom(trip.id);

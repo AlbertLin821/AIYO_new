@@ -34,6 +34,15 @@ export interface YouTubeChapter {
   endSeconds?: number;
 }
 
+export interface TranscriptFetchResult {
+  entries: TranscriptEntry[];
+  source: "youtube" | "none";
+  fallbackReason?: string;
+  captionLanguage?: string;
+  captionKind?: "manual" | "asr";
+  captionSource?: "watch-page-captions" | "timedtext";
+}
+
 interface SearchInput {
   destination?: string;
   keyword?: string;
@@ -53,6 +62,27 @@ interface YouTubeMetadata {
   source: string;
   chapters: YouTubeChapter[];
 }
+
+interface CaptionTrack {
+  baseUrl?: string;
+  languageCode?: string;
+  kind?: string;
+  vssId?: string;
+  name?: {
+    simpleText?: string;
+    runs?: Array<{ text?: string }>;
+  };
+}
+
+const CAPTION_LANGUAGE_PRIORITY = [
+  "zh-TW",
+  "zh-Hant",
+  "zh-HK",
+  "zh-CN",
+  "zh-Hans",
+  "ja",
+  "en",
+] as const;
 
 function toQuery(params: Record<string, string | number | undefined>) {
   const query = new URLSearchParams();
@@ -634,6 +664,16 @@ function decodeTranscriptText(text: string): string {
     .trim();
 }
 
+function readCaptionTrackName(track: CaptionTrack): string {
+  if (track.name?.simpleText) {
+    return track.name.simpleText;
+  }
+  return (track.name?.runs || [])
+    .map((run) => run.text || "")
+    .join("")
+    .trim();
+}
+
 function parseTranscriptXml(xml: string): TranscriptEntry[] {
   const entries: TranscriptEntry[] = [];
   const regex = /<text start="([^"]+)" dur="([^"]+)"[^>]*>([\s\S]*?)<\/text>/g;
@@ -655,22 +695,70 @@ function parseTranscriptXml(xml: string): TranscriptEntry[] {
   return entries;
 }
 
-function findCaptionBaseUrl(html: string): string | null {
+function normalizeLanguageCode(code?: string): string {
+  return (code || "").trim();
+}
+
+function getLanguagePriority(code?: string): number {
+  const normalized = normalizeLanguageCode(code);
+  if (!normalized) {
+    return CAPTION_LANGUAGE_PRIORITY.length + 20;
+  }
+  const exactIndex = CAPTION_LANGUAGE_PRIORITY.findIndex((item) => item === normalized);
+  if (exactIndex >= 0) {
+    return exactIndex;
+  }
+  const base = normalized.toLowerCase().split("-")[0];
+  if (base === "zh") {
+    return 1;
+  }
+  if (base === "ja") {
+    return 5;
+  }
+  if (base === "en") {
+    return 6;
+  }
+  return CAPTION_LANGUAGE_PRIORITY.length + 10;
+}
+
+function isAsrTrack(track: CaptionTrack): boolean {
+  return track.kind === "asr" || /a\./i.test(track.vssId || "") || /auto/i.test(readCaptionTrackName(track));
+}
+
+function selectCaptionTrack(tracks: CaptionTrack[]): CaptionTrack | null {
+  if (tracks.length === 0) {
+    return null;
+  }
+
+  const ranked = [...tracks].sort((left, right) => {
+    const languageDiff = getLanguagePriority(left.languageCode) - getLanguagePriority(right.languageCode);
+    if (languageDiff !== 0) {
+      return languageDiff;
+    }
+    const asrDiff = Number(isAsrTrack(left)) - Number(isAsrTrack(right));
+    if (asrDiff !== 0) {
+      return asrDiff;
+    }
+    return normalizeLanguageCode(left.languageCode).localeCompare(normalizeLanguageCode(right.languageCode));
+  });
+
+  return ranked[0] || null;
+}
+
+function extractCaptionTracks(html: string): CaptionTrack[] {
   const playerMatch = html.match(/ytInitialPlayerResponse\s*=\s*(\{[\s\S]*?\});/);
   if (playerMatch?.[1]) {
     try {
       const playerResponse = JSON.parse(playerMatch[1]) as {
         captions?: {
           playerCaptionsTracklistRenderer?: {
-            captionTracks?: Array<{ baseUrl?: string; languageCode?: string }>;
+            captionTracks?: CaptionTrack[];
           };
         };
       };
-      const tracks = playerResponse.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
-      const englishTrack = tracks.find((track) => track.languageCode?.startsWith("en"));
-      return englishTrack?.baseUrl || tracks[0]?.baseUrl || null;
+      return playerResponse.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
     } catch {
-      return null;
+      return [];
     }
   }
 
@@ -679,66 +767,142 @@ function findCaptionBaseUrl(html: string): string | null {
     try {
       const captions = JSON.parse(captionsMatch[1]) as {
         playerCaptionsTracklistRenderer?: {
-          captionTracks?: Array<{ baseUrl?: string; languageCode?: string }>;
+          captionTracks?: CaptionTrack[];
         };
       };
-      const tracks = captions.playerCaptionsTracklistRenderer?.captionTracks || [];
-      const englishTrack = tracks.find((track) => track.languageCode?.startsWith("en"));
-      return englishTrack?.baseUrl || tracks[0]?.baseUrl || null;
+      return captions.playerCaptionsTracklistRenderer?.captionTracks || [];
     } catch {
-      return null;
+      return [];
     }
   }
 
-  return null;
+  return [];
 }
 
-async function tryFetchTimedTextXml(videoId: string): Promise<string | null> {
-  const urls = [
-    `https://www.youtube.com/api/timedtext?v=${encodeURIComponent(videoId)}&lang=en`,
-    `https://www.youtube.com/api/timedtext?v=${encodeURIComponent(videoId)}&lang=en&fmt=srv3`,
-  ];
-  for (const url of urls) {
-    try {
-      const text = await fetchText(url);
-      if (text && text.includes("<text")) {
-        return text;
-      }
-    } catch {
-      continue;
-    }
-  }
-  return null;
-}
-
-export async function fetchYouTubeTranscript(videoId: string): Promise<{
-  entries: TranscriptEntry[];
-  source: "youtube" | "none";
-  fallbackReason?: string;
+async function tryFetchTimedTextXml(
+  videoId: string,
+  tracks: CaptionTrack[],
+): Promise<{
+  xml: string | null;
+  language?: string;
+  kind?: "manual" | "asr";
+  source?: "timedtext";
 }> {
+  const candidateTracks = tracks.length > 0 ? [...tracks].sort((left, right) => {
+    const languageDiff = getLanguagePriority(left.languageCode) - getLanguagePriority(right.languageCode);
+    if (languageDiff !== 0) {
+      return languageDiff;
+    }
+    return Number(isAsrTrack(left)) - Number(isAsrTrack(right));
+  }) : CAPTION_LANGUAGE_PRIORITY.map((languageCode) => ({ languageCode }));
+
+  const attempted = new Set<string>();
+
+  for (const track of candidateTracks) {
+    const language = normalizeLanguageCode(track.languageCode) || "en";
+    const urls = [
+      `https://www.youtube.com/api/timedtext?v=${encodeURIComponent(videoId)}&lang=${encodeURIComponent(language)}`,
+      `https://www.youtube.com/api/timedtext?v=${encodeURIComponent(videoId)}&lang=${encodeURIComponent(language)}&fmt=srv3`,
+      isAsrTrack(track)
+        ? `https://www.youtube.com/api/timedtext?v=${encodeURIComponent(videoId)}&lang=${encodeURIComponent(language)}&kind=asr`
+        : "",
+      isAsrTrack(track)
+        ? `https://www.youtube.com/api/timedtext?v=${encodeURIComponent(videoId)}&lang=${encodeURIComponent(language)}&kind=asr&fmt=srv3`
+        : "",
+    ].filter(Boolean);
+
+    for (const url of urls) {
+      if (attempted.has(url)) {
+        continue;
+      }
+      attempted.add(url);
+      try {
+        const text = await fetchText(url);
+        if (text && text.includes("<text")) {
+          return {
+            xml: text,
+            language,
+            kind: isAsrTrack(track) ? "asr" : "manual",
+            source: "timedtext",
+          };
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  for (const language of CAPTION_LANGUAGE_PRIORITY) {
+    const urls = [
+      `https://www.youtube.com/api/timedtext?v=${encodeURIComponent(videoId)}&lang=${encodeURIComponent(language)}`,
+      `https://www.youtube.com/api/timedtext?v=${encodeURIComponent(videoId)}&lang=${encodeURIComponent(language)}&fmt=srv3`,
+      `https://www.youtube.com/api/timedtext?v=${encodeURIComponent(videoId)}&lang=${encodeURIComponent(language)}&kind=asr`,
+      `https://www.youtube.com/api/timedtext?v=${encodeURIComponent(videoId)}&lang=${encodeURIComponent(language)}&kind=asr&fmt=srv3`,
+    ];
+    for (const url of urls) {
+      if (attempted.has(url)) {
+        continue;
+      }
+      attempted.add(url);
+      try {
+        const text = await fetchText(url);
+        if (text && text.includes("<text")) {
+          return {
+            xml: text,
+            language,
+            kind: url.includes("kind=asr") ? "asr" : "manual",
+            source: "timedtext",
+          };
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return { xml: null };
+}
+
+export async function fetchYouTubeTranscript(videoId: string): Promise<TranscriptFetchResult> {
   try {
-    const html = await fetchText(`https://www.youtube.com/watch?v=${videoId}&hl=en`);
-    const baseUrl = findCaptionBaseUrl(html);
-    if (baseUrl) {
-      const transcriptXml = await fetchText(baseUrl);
+    const html = await fetchText(`https://www.youtube.com/watch?v=${videoId}&hl=zh-TW`);
+    const tracks = extractCaptionTracks(html);
+    const selectedTrack = selectCaptionTrack(tracks);
+    if (selectedTrack?.baseUrl) {
+      const transcriptXml = await fetchText(selectedTrack.baseUrl);
       const entries = parseTranscriptXml(transcriptXml);
       if (entries.length > 0) {
-        return { entries, source: "youtube" };
+        return {
+          entries,
+          source: "youtube",
+          captionLanguage: normalizeLanguageCode(selectedTrack.languageCode) || undefined,
+          captionKind: isAsrTrack(selectedTrack) ? "asr" : "manual",
+          captionSource: "watch-page-captions",
+        };
       }
     }
 
-    const timedXml = await tryFetchTimedTextXml(videoId);
-    if (timedXml) {
-      const timedEntries = parseTranscriptXml(timedXml);
+    const timed = await tryFetchTimedTextXml(videoId, tracks);
+    if (timed.xml) {
+      const timedEntries = parseTranscriptXml(timed.xml);
       if (timedEntries.length > 0) {
-        return { entries: timedEntries, source: "youtube" };
+        return {
+          entries: timedEntries,
+          source: "youtube",
+          captionLanguage: timed.language,
+          captionKind: timed.kind,
+          captionSource: timed.source,
+        };
       }
     }
 
     return {
       entries: [],
       source: "none",
-      fallbackReason: "No transcript track was available for this video.",
+      fallbackReason: "No usable caption track was available for this video.",
+      captionLanguage: normalizeLanguageCode(selectedTrack?.languageCode) || undefined,
+      captionKind: selectedTrack ? (isAsrTrack(selectedTrack) ? "asr" : "manual") : undefined,
+      captionSource: selectedTrack ? "watch-page-captions" : undefined,
     };
   } catch (error) {
     return {
