@@ -167,6 +167,9 @@ export interface VideoSummaryDebugMeta {
     | "ollama-synthetic-fallback"
     | "unavailable";
   segmentSource: "transcript-chunks" | "description-fallback" | "synthetic-fallback" | "unavailable";
+  captionLanguage?: string;
+  captionKind?: "manual" | "asr";
+  captionSource?: "watch-page-captions" | "timedtext";
 }
 
 export interface VideoRecommendation {

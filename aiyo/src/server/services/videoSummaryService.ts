@@ -146,9 +146,7 @@ function chunkTranscriptByNativeChapters(
           ? chapter.endSeconds
           : chapters[index + 1]?.startSeconds ?? chapter.startSeconds + 180;
       const chapterEntries = entries.filter(
-        (entry) =>
-          entry.startSeconds >= chapter.startSeconds &&
-          entry.startSeconds < endSeconds,
+        (entry) => entry.startSeconds >= chapter.startSeconds && entry.startSeconds < endSeconds,
       );
       const text = chapterEntries
         .map((entry) => entry.text)
@@ -211,7 +209,7 @@ function buildHeuristicSummary(chunks: TranscriptChunk[], destination?: string):
     return candidateSentences.join(" ");
   }
 
-  return `影片介紹${destination || "目的地"}的實用景點、時間安排與路線建議。`;
+  return `${destination || "This video"} focuses on a travel route, but the transcript detail was too sparse for a richer heuristic summary.`;
 }
 
 function alignSegmentsWithChunks(
@@ -436,6 +434,9 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
         transcriptSource: "none",
         summarySource: "unavailable",
         segmentSource: "unavailable",
+        captionLanguage: transcriptResult.captionLanguage,
+        captionKind: transcriptResult.captionKind,
+        captionSource: transcriptResult.captionSource,
       },
     };
 
@@ -563,6 +564,9 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
       transcriptSource,
       summarySource,
       segmentSource,
+      captionLanguage: transcriptResult.captionLanguage,
+      captionKind: transcriptResult.captionKind,
+      captionSource: transcriptResult.captionSource,
     },
   };
 

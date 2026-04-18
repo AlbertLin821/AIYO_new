@@ -81,8 +81,8 @@ export default function VideoSummaryDrawer({
     if (activeVideo.extractedLocations.length === 0) {
       pushToast({
         variant: "warning",
-        title: "沒有可同步的地點",
-        description: "請先使用有擷取出景點的影片摘要，再同步到地圖。",
+        title: "目前沒有可同步的地點",
+        description: "這支影片還沒有可驗證的地點結果可同步到地圖。",
       });
       return;
     }
@@ -106,16 +106,14 @@ export default function VideoSummaryDrawer({
     setSyncing(false);
     showToastMessage(t.drawer.toastMap);
     const warnTail = summaryDiagnostics?.geocodeWarnings?.length
-      ? `。提示：${summaryDiagnostics.geocodeWarnings.slice(0, 2).join("；")}`
+      ? ` 未完全解析：${summaryDiagnostics.geocodeWarnings.slice(0, 2).join("、")}`
       : "";
     const lowTail =
-      lowConfidenceCount > 0
-        ? `（其中 ${lowConfidenceCount} 個信心偏低，已排在後段標示）`
-        : "";
+      lowConfidenceCount > 0 ? ` 另有 ${lowConfidenceCount} 個低信心點位待人工確認。` : "";
     pushToast({
       variant: "success",
-      title: `已加入 ${pins.length} 個地點到地圖`,
-      description: `Google 驗證 ${googleCount} 個，地名對照 ${catalogCount} 個${lowTail}${warnTail}`,
+      title: `已同步 ${pins.length} 個地點到地圖`,
+      description: `Google 驗證 ${googleCount} 個，候選資料庫 ${catalogCount} 個。${lowTail}${warnTail}`,
     });
     onClose();
     router.push("/map");
@@ -125,8 +123,8 @@ export default function VideoSummaryDrawer({
     if (activeVideo.extractedLocations.length === 0) {
       pushToast({
         variant: "warning",
-        title: "沒有可加入行程的地點",
-        description: "請先摘要一支有景點資訊的影片，再加入行程。",
+        title: "目前沒有可加入行程的地點",
+        description: "這支影片還沒有抽出可用地點，暫時無法建立新的一天。",
       });
       return;
     }
@@ -210,6 +208,16 @@ export default function VideoSummaryDrawer({
                         {summaryDiagnostics.segmentSource}
                       </span>
                     )}
+                    {process.env.NODE_ENV !== "production" && summaryDiagnostics.captionLanguage && (
+                      <span className="rounded-full bg-border-light px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/70">
+                        {`caption:${summaryDiagnostics.captionLanguage}`}
+                      </span>
+                    )}
+                    {process.env.NODE_ENV !== "production" && summaryDiagnostics.captionKind && (
+                      <span className="rounded-full bg-border-light px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/70">
+                        {summaryDiagnostics.captionKind}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -242,7 +250,7 @@ export default function VideoSummaryDrawer({
                 ) : (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-foreground/60">
                     <AlertCircle className="size-6" />
-                    <span className="text-xs font-medium">影片無法嵌入播放</span>
+                    <span className="text-xs font-medium">無法載入影片預覽</span>
                   </div>
                 )}
 
@@ -312,52 +320,54 @@ export default function VideoSummaryDrawer({
                   </h4>
                   <div className="flex flex-col gap-1.5">
                     {summaryDiagnostics?.summaryUnavailable ? (
-                      <p className="text-sm text-muted">
-                        無逐字稿時無法產生重點片段時間軸內文。
-                      </p>
-                    ) : activeVideo.summarySegments && activeVideo.summarySegments.length > 0
-                      ? activeVideo.summarySegments.map((segment) => (
-                          <div key={segment.id} className="rounded-xl bg-primary/5 px-3 py-3">
-                            <div className="flex items-start gap-3">
-                              <span className="min-w-[52px] rounded-md bg-primary/10 px-2 py-0.5 text-center font-mono text-xs text-primary">
-                                {segment.startLabel || segment.timestamp}
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                {segment.title && (
-                                  <p className="text-sm font-medium text-foreground">
-                                    {segment.title}
-                                  </p>
-                                )}
-                                <p className="mt-1 text-sm text-muted">
-                                  {segment.summary || segment.text}
+                      <p className="text-sm text-muted">無法取得逐字稿，暫時無法產生精準片段。</p>
+                    ) : activeVideo.summarySegments && activeVideo.summarySegments.length > 0 ? (
+                      activeVideo.summarySegments.map((segment) => (
+                        <div key={segment.id} className="rounded-xl bg-primary/5 px-3 py-3">
+                          <div className="flex items-start gap-3">
+                            <span className="min-w-[52px] rounded-md bg-primary/10 px-2 py-0.5 text-center font-mono text-xs text-primary">
+                              {segment.startLabel || segment.timestamp}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              {segment.title && (
+                                <p className="text-sm font-medium text-foreground">
+                                  {segment.title}
                                 </p>
-                                {segment.locationHints && segment.locationHints.length > 0 && (
-                                  <div className="mt-2 flex flex-wrap gap-1.5">
-                                    {segment.locationHints.map((hint) => (
-                                      <span
-                                        key={`${segment.id}_${hint}`}
-                                        className="rounded-full bg-secondary/15 px-2 py-0.5 text-[10px] text-foreground/80"
-                                      >
-                                        {hint}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
+                              )}
+                              <p className="mt-1 text-sm text-muted">
+                                {segment.summary || segment.text}
+                              </p>
+                              {segment.locationHints && segment.locationHints.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                  {segment.locationHints.map((hint) => (
+                                    <span
+                                      key={`${segment.id}_${hint}`}
+                                      className="rounded-full bg-secondary/15 px-2 py-0.5 text-[10px] text-foreground/80"
+                                    >
+                                      {hint}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           </div>
-                        ))
-                      : activeVideo.timestamps.map((timestamp) => (
-                          <div
-                            key={`${activeVideo.id}_${timestamp.time}`}
-                            className="flex items-center gap-3 rounded-xl bg-primary/5 px-3 py-2"
-                          >
-                            <span className="min-w-[52px] rounded-md bg-primary/10 px-2 py-0.5 text-center font-mono text-xs text-primary">
-                              {timestamp.time}
-                            </span>
-                            <span className="text-sm text-muted">{timestamp.label}</span>
-                          </div>
-                        ))}
+                        </div>
+                      ))
+                    ) : activeVideo.timestamps.length > 0 ? (
+                      activeVideo.timestamps.map((timestamp) => (
+                        <div
+                          key={`${activeVideo.id}_${timestamp.time}`}
+                          className="flex items-center gap-3 rounded-xl bg-primary/5 px-3 py-2"
+                        >
+                          <span className="min-w-[52px] rounded-md bg-primary/10 px-2 py-0.5 text-center font-mono text-xs text-primary">
+                            {timestamp.time}
+                          </span>
+                          <span className="text-sm text-muted">{timestamp.label}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-muted">目前沒有可顯示的重點片段。</p>
+                    )}
                   </div>
                 </div>
 
@@ -367,36 +377,44 @@ export default function VideoSummaryDrawer({
                     {t.drawer.extractedLocations}
                   </h4>
                   <div className="flex flex-col gap-2">
-                    {activeVideo.extractedLocations.map((location) => (
-                      <div
-                        key={`${activeVideo.id}_${location.name}`}
-                        className="flex items-start gap-3 rounded-xl border border-border-light bg-cream/50 px-3 py-2.5"
-                      >
-                        <div className="mt-0.5 flex size-8 flex-shrink-0 items-center justify-center rounded-lg bg-secondary/15">
-                          <MapPin className="size-4 text-secondary" />
+                    {activeVideo.extractedLocations.length > 0 ? (
+                      activeVideo.extractedLocations.map((location) => (
+                        <div
+                          key={`${activeVideo.id}_${location.name}`}
+                          className="flex items-start gap-3 rounded-xl border border-border-light bg-cream/50 px-3 py-2.5"
+                        >
+                          <div className="mt-0.5 flex size-8 flex-shrink-0 items-center justify-center rounded-lg bg-secondary/15">
+                            <MapPin className="size-4 text-secondary" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-foreground">{location.name}</p>
+                            <p className="mt-0.5 text-xs text-muted">{location.description}</p>
+                            {location.resolvedFrom && (
+                              <p className="mt-1 text-[10px] text-muted">
+                                {location.resolvedFrom === "google-geocode"
+                                  ? t.video.mapsGoogle
+                                  : location.resolvedFrom === "title-poi"
+                                    ? t.video.mapsTitlePoi
+                                    : t.video.mapsCatalog}
+                                {location.verified === false ||
+                                (location.confidence !== undefined && location.confidence < 0.45)
+                                  ? ` 繚 ${t.video.locationLowConfidence}`
+                                  : ""}
+                              </p>
+                            )}
+                            {location.address && (
+                              <p className="mt-1 text-[10px] text-muted">{location.address}</p>
+                            )}
+                          </div>
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-foreground">{location.name}</p>
-                          <p className="mt-0.5 text-xs text-muted">{location.description}</p>
-                          {location.resolvedFrom && (
-                            <p className="mt-1 text-[10px] text-muted">
-                              {location.resolvedFrom === "google-geocode"
-                                ? t.video.mapsGoogle
-                                : location.resolvedFrom === "title-poi"
-                                  ? t.video.mapsTitlePoi
-                                  : t.video.mapsCatalog}
-                              {location.verified === false ||
-                              (location.confidence !== undefined && location.confidence < 0.45)
-                                ? ` · ${t.video.locationLowConfidence}`
-                                : ""}
-                            </p>
-                          )}
-                          {location.address && (
-                            <p className="mt-1 text-[10px] text-muted">{location.address}</p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                      ))
+                    ) : (
+                      <p className="text-sm text-muted">
+                        {summaryDiagnostics?.summaryUnavailable
+                          ? "無法取得逐字稿，暫時無法抽出可靠地點。"
+                          : "目前沒有抽出可用地點。"}
+                      </p>
+                    )}
                   </div>
                 </div>
 

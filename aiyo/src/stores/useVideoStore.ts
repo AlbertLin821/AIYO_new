@@ -9,6 +9,9 @@ export type SummaryDiagnostics = {
     | "ollama-synthetic-fallback"
     | "unavailable";
   segmentSource?: "transcript-chunks" | "description-fallback" | "synthetic-fallback" | "unavailable";
+  captionLanguage?: string;
+  captionKind?: "manual" | "asr";
+  captionSource?: "watch-page-captions" | "timedtext";
   mapsProvenance?: "google-geocoding" | "catalog-fallback" | "mixed";
   geocodeWarnings?: string[];
   summaryUnavailable?: boolean;

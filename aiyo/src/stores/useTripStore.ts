@@ -9,9 +9,9 @@ export const EMPTY_TRIP_STATE = {
   destination: "",
   days: 1,
   budget: 0,
-  itinerary: [],
+  itinerary: [] as TripPlanDay[],
   planSummary: "",
-  lastUpdatedAt: null,
+  lastUpdatedAt: null as string | null,
 };
 
 interface TripState {
@@ -121,8 +121,8 @@ export const useTripStore = create<TripState>((set) => ({
             ...state.itinerary,
             {
               dayNumber: nextDay,
-              theme: `第 ${nextDay} 天`,
-              summary: "從這裡開始安排當日行程。",
+              theme: `Day ${nextDay}`,
+              summary: "尚未安排內容",
               items: [],
             },
           ],
