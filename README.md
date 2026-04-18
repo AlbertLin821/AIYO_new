@@ -1,31 +1,68 @@
 # AIYO_new
 
-`AIYO_new` 目前分成兩層：
+`AIYO_new` is the current working repository for the AIYO application.
+The active app lives in `aiyo/`, and the root folder provides shared docs plus the local Docker setup used for team development.
 
-- `docs/`：遷移分析、架構說明、實作報告
-- `aiyo/`：實際執行的 Next.js 應用（含 BFF API、Ollama、Prisma、NextAuth）
+## Repository layout
 
-## 專案結構
+- `aiyo/`: main Next.js application, Prisma schema, seed scripts, and app-level docs
+- `docs/`: architecture notes, migration notes, implementation reports, and Docker migration guidance
+- `docker-compose.yml`: local development services for this repo
 
-- `AIYO_new/README.md`：總覽與部署啟動指引（本文件）
-- `AIYO_new/aiyo/README.md`：應用層細節
-- `AIYO_new/docs/`：架構與遷移文件
+## Stack
 
-## 部署與啟動（本機開發）
+- Next.js 16 App Router
+- React 19
+- TypeScript
+- Prisma + PostgreSQL
+- NextAuth
+- Ollama
 
-### 1) 進入應用目錄
+## Team quick start
+
+### 1. Prerequisites
+
+Install these on your machine first:
+
+- Node.js 20+
+- npm
+- Docker Desktop
+- Ollama
+
+### 2. Start PostgreSQL
+
+From the repository root:
+
+```bash
+docker compose up -d postgres
+```
+
+If you also want the optional local tools:
+
+```bash
+docker compose up -d
+```
+
+This repo's compose file creates the development database `aiyo_new_db` automatically.
+
+### 3. Configure the app
+
+Move into the app directory and create local env files:
 
 ```bash
 cd aiyo
-```
-
-### 2) 建立環境變數檔
-
-```bash
 cp .env.example .env.local
 ```
 
-最少需要確認以下變數：
+If Prisma commands cannot see `DATABASE_URL`, also create `.env` with the same database connection string as `.env.local`.
+
+Default local database URL:
+
+```env
+DATABASE_URL=postgresql://aiyo:aiyo_password@localhost:5432/aiyo_new_db?schema=public
+```
+
+Required environment variables:
 
 - `DATABASE_URL`
 - `NEXTAUTH_URL`
@@ -33,78 +70,79 @@ cp .env.example .env.local
 - `OLLAMA_BASE_URL`
 - `OLLAMA_MODEL`
 
-### 3) 啟動 PostgreSQL
+Optional environment variables:
 
-可重用既有 `AIYO` 的 Docker Compose 服務：
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `YOUTUBE_API_KEY`
+- `GOOGLE_MAPS_API_KEY`
+- `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`
+- `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID`
 
-```bash
-cd ../..
-cd AIYO
-docker compose -f docker-compose.yml up -d postgres
-```
+### 4. Install dependencies and initialize the database
 
-首次建立專用資料庫：
-
-```bash
-docker exec aiyo-postgres psql -U aiyo -d postgres -c "CREATE DATABASE aiyo_new_db;"
-```
-
-### 4) 回到應用目錄並初始化資料庫
+From `AIYO_new/aiyo`:
 
 ```bash
-cd ../AIYO_new/aiyo
 npm install
 npm run prisma:generate
-npx prisma db execute --file prisma/migrations/20260416_phase3_init/migration.sql --schema prisma/schema.prisma
+npx prisma migrate deploy
 npm run db:seed
 ```
 
-### 5) 啟動 Ollama
+If `prisma migrate deploy` fails on a fresh local machine, apply migrations manually in order:
+
+```bash
+npx prisma db execute --file prisma/migrations/20260416_000001_phase3_init/migration.sql --schema prisma/schema.prisma
+npx prisma db execute --file prisma/migrations/20260416_000002_add_password_hash/migration.sql --schema prisma/schema.prisma
+npx prisma db execute --file prisma/migrations/20260417_000003_add_trip_days/migration.sql --schema prisma/schema.prisma
+```
+
+### 5. Start Ollama
 
 ```bash
 ollama serve
-ollama pull gemma3:4b
+ollama pull <your-model>
 ```
 
-### 6) 啟動開發伺服器
+Set `OLLAMA_MODEL` to the same model you pulled. The current default in `aiyo/.env.example` is `gemma4:26b`.
+
+### 6. Start the app
+
+From `AIYO_new/aiyo`:
 
 ```bash
 npm run dev
 ```
 
-開啟 `http://localhost:3000`。
+Open `http://localhost:3000`.
 
-## 部署與啟動（正式模式）
+## Daily development notes
 
-在 `AIYO_new/aiyo` 目錄執行：
+- Treat `AIYO_new/docker-compose.yml` as the only supported shared Docker setup for this repo.
+- Do not depend on `../AIYO/docker-compose.yml` for onboarding or day-to-day work.
+- PostgreSQL is required for normal development.
+- `pgadmin` and `redis` are available in the compose file, but the app setup flow only requires PostgreSQL unless your task specifically needs the others.
 
-```bash
-npm install
-npm run build
-npm run start
-```
+## Main app capabilities
 
-正式模式同樣需要可用的：
+- AI chat and trip planning routes
+- PostgreSQL persistence through Prisma
+- NextAuth with Google OAuth and credentials login
+- Collaboration room comments, presence, and realtime stream endpoints
+- Video recommendation and summarization flows
+- Google Maps and YouTube integration paths with fallback flags
 
-- PostgreSQL
-- Ollama（或你指定的相容模型服務）
-- 完整 `.env.local` 設定
+## Key documents
 
-## 快速檢查
+- `aiyo/README.md`: app-level setup and route overview
+- `docs/docker_dev_migration.md`: Docker migration notes for existing local machines
+- `docs/architecture.md`: architecture summary
+- `docs/implementation_report.md`: implementation report
+- `docs/aiyo_migration_analysis.md`: migration analysis from the legacy repo
+- `aiyo/docs/phase3_production_upgrade_report.md`: latest app upgrade notes
 
-啟動後可先驗證：
+## Notes for existing contributors
 
-- 首頁可正常載入
-- `POST /api/ai/chat` 可回應
-- `POST /api/ai/plan` 可產生行程
-- 個人頁/行程頁在登入狀態可正常讀寫
-
-## 重要文件
-
-- 遷移分析：`docs/aiyo_migration_analysis.md`
-- 架構說明：`docs/architecture.md`
-- 實作報告：`docs/implementation_report.md`
-
-## 程式碼位置
-
-本次遷移的應用程式碼集中在 `aiyo/`。
+If your local machine is still using containers created from the legacy `AIYO` repository, do not assume that setup is shareable.
+Before asking teammates to follow your environment, migrate your local workflow to `AIYO_new/docker-compose.yml`.

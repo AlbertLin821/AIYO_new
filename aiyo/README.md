@@ -34,23 +34,17 @@ Prisma CLI reads `.env` by default. If you run Prisma commands (migrate/seed) an
 npm install
 ```
 
-3. Start PostgreSQL. You can reuse the legacy compose file:
+3. Start PostgreSQL from the `AIYO_new` root:
 
 ```bash
-cd ../..
-cd AIYO
-docker compose -f docker-compose.yml up -d postgres
+cd ..
+docker compose up -d postgres
 ```
 
-4. Create the dedicated database once:
+4. Back in `AIYO_new/aiyo`, generate Prisma client, apply schema, and seed:
 
 ```bash
-docker exec aiyo-postgres psql -U aiyo -d postgres -c "CREATE DATABASE aiyo_new_db;"
-```
-
-5. Back in `AIYO_new/aiyo`, generate Prisma client, apply schema, and seed:
-
-```bash
+cd aiyo
 npm run prisma:generate
 npx prisma migrate deploy
 npm run db:seed
@@ -63,14 +57,14 @@ npx prisma db execute --file prisma/migrations/20260416_000001_phase3_init/migra
 npx prisma db execute --file prisma/migrations/20260416_000002_add_password_hash/migration.sql --schema prisma/schema.prisma
 ```
 
-6. Start Ollama:
+5. Start Ollama:
 
 ```bash
 ollama serve
 ollama pull gemma3:4b
 ```
 
-7. Start the app:
+6. Start the app:
 
 ```bash
 npm run dev
