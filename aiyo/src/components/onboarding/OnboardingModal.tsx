@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CalendarDays, MapPin, Sparkles, X } from "lucide-react";
+import { CalendarDays, MapPin, RefreshCw, Sparkles, X } from "lucide-react";
 import { zhTW as t } from "@/locales/zh-TW";
+import { fetchVideoRecommendations } from "@/services/videoClient";
 import { useTripStore } from "@/stores/useTripStore";
 import { useUIStore } from "@/stores/useUIStore";
 import { useUserStore } from "@/stores/useUserStore";
+import type { VideoRecommendation } from "@/types";
 
 export default function OnboardingModal() {
   const { showOnboarding, setShowOnboarding } = useUIStore();
@@ -14,6 +16,31 @@ export default function OnboardingModal() {
   const { setFirstVisit, updateProfile } = useUserStore();
   const [destinationInput, setDestinationInput] = useState("");
   const [daysInput, setDaysInput] = useState("");
+  const [recommendedVideos, setRecommendedVideos] = useState<VideoRecommendation[]>([]);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+
+  async function loadRecommendations() {
+    setLoadingRecommendations(true);
+    try {
+      const result = await fetchVideoRecommendations({
+        destination: destinationInput.trim() || undefined,
+        days: daysInput.trim() ? Number(daysInput) : undefined,
+        preferences: destinationInput.trim() ? ["美食", "景點", "懶人包"] : undefined,
+        limit: 6,
+      });
+      setRecommendedVideos(result.videos);
+    } catch {
+      setRecommendedVideos([]);
+    } finally {
+      setLoadingRecommendations(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadRecommendations();
+    // The initial empty state intentionally loads six Taiwan-city fallback videos.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function finish(skip: boolean) {
     if (!skip) {
@@ -102,6 +129,44 @@ export default function OnboardingModal() {
                     max={30}
                     className="w-full rounded-xl border border-border bg-cream/50 px-4 py-3 text-sm text-foreground transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
                   />
+                </div>
+              </div>
+
+              <div className="mt-6 rounded-2xl border border-border-light bg-cream/30 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">推薦旅遊影片</p>
+                    <p className="mt-1 text-xs text-muted">
+                      未輸入資料時顯示台灣六都；輸入目的地後會依偏好調整。
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void loadRecommendations()}
+                    disabled={loadingRecommendations}
+                    className="rounded-lg p-2 text-primary hover:bg-primary/10 disabled:opacity-50"
+                    aria-label="重新推薦"
+                  >
+                    <RefreshCw className={`size-4 ${loadingRecommendations ? "animate-spin" : ""}`} />
+                  </button>
+                </div>
+                <div className="grid max-h-52 gap-2 overflow-y-auto sm:grid-cols-2">
+                  {recommendedVideos.map((video) => (
+                    <button
+                      key={video.id}
+                      type="button"
+                      onClick={() => window.open(video.url, "_blank", "noopener,noreferrer")}
+                      className="rounded-xl border border-border-light bg-surface px-3 py-2 text-left hover:border-primary/30 hover:bg-primary/5"
+                    >
+                      <p className="line-clamp-2 text-xs font-medium text-foreground">{video.title}</p>
+                      <p className="mt-1 text-[11px] text-muted">{video.relevanceReason}</p>
+                    </button>
+                  ))}
+                  {!loadingRecommendations && recommendedVideos.length === 0 && (
+                    <p className="col-span-full rounded-xl border border-dashed border-border-light px-3 py-4 text-center text-xs text-muted">
+                      暫時沒有推薦影片。
+                    </p>
+                  )}
                 </div>
               </div>
 

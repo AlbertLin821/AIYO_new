@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
 import {
@@ -36,6 +37,7 @@ function buildUserMessage(content: string): ChatMessage {
 }
 
 export default function ChatPage() {
+  const router = useRouter();
   const { status } = useSession();
   const [input, setInput] = useState("");
   const { messages, appendMessage, isSending, setIsSending, errorMessage, setErrorMessage } =
@@ -281,16 +283,18 @@ export default function ChatPage() {
             {tagConfigs.map((tag, index) => {
               const Icon = tag.icon;
               return (
-                <div
+                <button
+                  type="button"
                   key={tag.label}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-primary/5"
+                  onClick={() => router.push(index === 3 ? "/itinerary" : "/profile")}
+                  className="flex w-full min-w-0 items-center gap-3 rounded-xl bg-primary/5 px-3 py-2.5 text-left transition-colors hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/30"
                 >
                   <Icon className="size-4 flex-shrink-0 text-primary" />
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-[11px] text-muted">{tag.label}</p>
-                    <p className="text-sm font-medium">{extractedValues[index]}</p>
+                    <p className="truncate text-sm font-medium text-foreground">{extractedValues[index]}</p>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>

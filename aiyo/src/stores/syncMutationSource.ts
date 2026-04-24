@@ -4,8 +4,7 @@ export type SyncMutationSource =
   | "local-user-edit"
   | "server-ack";
 
-let depth = 0;
-let stack: SyncMutationSource[] = [];
+const stack: SyncMutationSource[] = [];
 
 export function getSyncMutationSource(): SyncMutationSource | null {
   if (stack.length === 0) {
@@ -15,13 +14,11 @@ export function getSyncMutationSource(): SyncMutationSource | null {
 }
 
 export function withSyncMutationSource<T>(source: SyncMutationSource, fn: () => T): T {
-  depth += 1;
   stack.push(source);
   try {
     return fn();
   } finally {
     stack.pop();
-    depth -= 1;
   }
 }
 

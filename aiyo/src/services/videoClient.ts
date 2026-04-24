@@ -26,6 +26,8 @@ async function parseJson<T>(response: Response): Promise<T> {
 export async function fetchVideoRecommendations(input: {
   destination?: string;
   keyword?: string;
+  days?: number;
+  preferences?: string[];
   limit?: number;
 }): Promise<VideoRecommendationsClientResult> {
   const params = new URLSearchParams();
@@ -34,6 +36,12 @@ export async function fetchVideoRecommendations(input: {
   }
   if (input.keyword) {
     params.set("keyword", input.keyword);
+  }
+  if (input.days) {
+    params.set("days", String(input.days));
+  }
+  if (input.preferences?.length) {
+    params.set("preferences", input.preferences.join(","));
   }
   if (input.limit) {
     params.set("limit", String(input.limit));

@@ -10,9 +10,11 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const destination = searchParams.get("destination") || undefined;
     const keyword = searchParams.get("keyword") || undefined;
+    const days = searchParams.get("days") ? Number(searchParams.get("days")) : undefined;
+    const preferences = searchParams.get("preferences")?.split(",").map((item) => item.trim()).filter(Boolean);
     const limit = Number(searchParams.get("limit") || 10);
 
-    const outcome = await getVideoRecommendations({ destination, keyword, limit });
+    const outcome = await getVideoRecommendations({ destination, keyword, days, preferences, limit });
     return NextResponse.json(
       createSuccess(outcome.videos, {
         source: outcome.source,
@@ -37,6 +39,11 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       destination?: string;
       keyword?: string;
+      days?: number;
+      preferences?: string[];
+      travelStyle?: string;
+      budget?: string;
+      companions?: string[];
       limit?: number;
     };
     const outcome = await getVideoRecommendations(body);

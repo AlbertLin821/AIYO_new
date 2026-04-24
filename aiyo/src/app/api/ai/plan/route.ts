@@ -41,6 +41,7 @@ function inferDestinationFromTranscript(transcript: string): string {
 
 export async function POST(request: Request) {
   try {
+    const { userId } = await requireSessionUser();
     const body = (await request.json()) as Partial<TripPlanRequest> & {
       transcript?: string;
       interests?: string[];
@@ -77,25 +78,26 @@ export async function POST(request: Request) {
 
     const result = await generateTripPlan(tripRequest);
 
-    try {
-      const { userId } = await requireSessionUser();
-      const currentTrip = await ensureCurrentTrip(userId);
-      await saveTripPayload(userId, {
-        tripId: currentTrip.id,
-        title: `${destination} 行程`,
-        destination,
-        days,
-        budget,
-        itinerary: result.days,
-        pins: buildPinsFromTripPlan(result.days),
-        updatedAt: new Date().toISOString(),
-      });
-    } catch {
-      // Planner remains functional even if the user is not authenticated.
-    }
+    const currentTrip = await ensureCurrentTrip(userId);
+    await saveTripPayload(userId, {
+      tripId: currentTrip.id,
+      title: `${destination} 行程`,
+      destination,
+      days,
+      budget,
+      itinerary: result.days,
+      pins: buildPinsFromTripPlan(result.days),
+      updatedAt: new Date().toISOString(),
+    });
 
     return NextResponse.json(createSuccess(result));
   } catch (error) {
+    if (error instanceof Error && error.message === "unauthorized") {
+      return NextResponse.json(
+        createError("unauthorized", "Authentication required."),
+        { status: 401 },
+      );
+    }
     if (error instanceof OllamaRequestError) {
       return NextResponse.json(
         createError("ollama_error", `Ollama 連線或模型回應失敗：${error.message}`, error.details),
