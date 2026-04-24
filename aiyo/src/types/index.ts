@@ -169,7 +169,7 @@ export interface VideoSummaryDebugMeta {
   segmentSource: "transcript-chunks" | "description-fallback" | "synthetic-fallback" | "unavailable";
   captionLanguage?: string;
   captionKind?: "manual" | "asr";
-  captionSource?: "watch-page-captions" | "timedtext";
+  captionSource?: "watch-page-captions" | "timedtext" | "youtube-transcript-package";
 }
 
 export interface VideoRecommendation {

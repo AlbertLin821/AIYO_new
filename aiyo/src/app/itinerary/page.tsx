@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -37,6 +37,19 @@ import { sortItineraries, type ItineraryListItem, type ItinerarySortOption } fro
 import { canCollaborator } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { zhTW as t } from "@/locales/zh-TW";
+import {
+  addTripCollaborator,
+  createItineraryFolder,
+  deleteItineraryFolder,
+  listItineraryFolders,
+  listTripCollaborators,
+  moveTripToFolder,
+  removeTripCollaborator,
+  updateItineraryFolder,
+  updateTripCollaboratorRole,
+  type ItineraryFolderDto,
+  type TripCollaboratorDto,
+} from "@/services/itineraryClient";
 import { buildPinsFromTripPlan } from "@/services/mapSync";
 import { useCollabStore } from "@/stores/useCollabStore";
 import { useMapStore } from "@/stores/useMapStore";
@@ -176,7 +189,7 @@ export default function ItineraryPage() {
     reorderItineraryItem,
   } = useTripStore();
   const setPins = useMapStore((state) => state.setPins);
-  const { members, inviteCode, shareLink } = useCollabStore();
+  const { inviteCode, shareLink } = useCollabStore();
   const [addingToDay, setAddingToDay] = useState<number | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [newTime, setNewTime] = useState("10:00");
@@ -186,6 +199,14 @@ export default function ItineraryPage() {
   const [shareOpen, setShareOpen] = useState(false);
   const [folderFilter, setFolderFilter] = useState<string>("all");
   const [sortOption, setSortOption] = useState<ItinerarySortOption>("updatedAt_desc");
+  const [folders, setFolders] = useState<ItineraryFolderDto[]>([]);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [folderError, setFolderError] = useState<string | null>(null);
+  const [collaborators, setCollaborators] = useState<TripCollaboratorDto[]>([]);
+  const [collabEmail, setCollabEmail] = useState("");
+  const [collabRole, setCollabRole] = useState<"editor" | "viewer">("viewer");
+  const [collabError, setCollabError] = useState<string | null>(null);
   const itemIdCounter = useRef(0);
 
   const sensors = useSensors(
@@ -261,6 +282,100 @@ export default function ItineraryPage() {
     addDay();
   }
 
+  async function refreshFolders() {
+    if (status !== "authenticated") {
+      return;
+    }
+    try {
+      setFolderError(null);
+      setFolders(await listItineraryFolders());
+    } catch (error) {
+      setFolderError(error instanceof Error ? error.message : "無法載入資料夾。");
+    }
+  }
+
+  async function refreshCollaborators() {
+    if (status !== "authenticated" || !tripId) {
+      return;
+    }
+    try {
+      setCollabError(null);
+      setCollaborators(await listTripCollaborators(tripId));
+    } catch (error) {
+      setCollabError(error instanceof Error ? error.message : "無法載入協作者。");
+    }
+  }
+
+  useEffect(() => {
+    void refreshFolders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
+
+  useEffect(() => {
+    if (shareOpen) {
+      void refreshCollaborators();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shareOpen, tripId]);
+
+  async function handleCreateFolder() {
+    if (!newFolderName.trim()) {
+      return;
+    }
+    const folder = await createItineraryFolder({
+      name: newFolderName.trim(),
+      sortOrder: folders.length,
+    });
+    setFolders((items) => [...items, folder]);
+    setNewFolderName("");
+  }
+
+  async function handleRenameFolder(folder: ItineraryFolderDto) {
+    const name = window.prompt("重新命名資料夾", folder.name)?.trim();
+    if (!name || name === folder.name) {
+      return;
+    }
+    const updated = await updateItineraryFolder(folder.id, { name });
+    setFolders((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+  }
+
+  async function handleDeleteFolder(folder: ItineraryFolderDto) {
+    if (!window.confirm(`刪除「${folder.name}」？行程會移出資料夾，不會被刪除。`)) {
+      return;
+    }
+    await deleteItineraryFolder(folder.id);
+    setFolders((items) => items.filter((item) => item.id !== folder.id));
+    if (currentFolderId === folder.id) {
+      setCurrentFolderId(null);
+    }
+    if (folderFilter === folder.id) {
+      setFolderFilter("all");
+    }
+  }
+
+  async function handleMoveCurrentTrip(folderId: string | null) {
+    if (!tripId || !requireAuthenticated("/itinerary")) {
+      return;
+    }
+    await moveTripToFolder(tripId, folderId);
+    setCurrentFolderId(folderId);
+  }
+
+  async function handleAddCollaborator() {
+    if (!tripId || !collabEmail.trim()) {
+      return;
+    }
+    const collaborator = await addTripCollaborator(tripId, {
+      email: collabEmail.trim(),
+      role: collabRole,
+    });
+    setCollaborators((items) => [
+      ...items.filter((item) => item.userId !== collaborator.userId),
+      collaborator,
+    ]);
+    setCollabEmail("");
+  }
+
   function handleRemoveItem(dayNumber: number, itemId: string) {
     if (!requireAuthenticated("/itinerary")) {
       return;
@@ -268,10 +383,10 @@ export default function ItineraryPage() {
     removeItineraryItem(dayNumber, itemId);
   }
 
-  const folders = [
+  const folderOptions = [
     { id: "all", name: "全部行程" },
-    { id: "taiwan", name: "台灣城市" },
-    { id: "overseas", name: "海外旅遊" },
+    { id: "unfiled", name: "未分類" },
+    ...folders,
   ];
 
   const itineraryCards: ItineraryListItem[] = [
@@ -280,7 +395,7 @@ export default function ItineraryPage() {
       title: title || `${destination || "未命名"} 行程`,
       destination: destination || "尚未設定",
       days,
-      folderId: "taiwan",
+      folderId: currentFolderId || undefined,
       createdAt: lastUpdatedAt || new Date().toISOString(),
       updatedAt: lastUpdatedAt || new Date().toISOString(),
     },
@@ -289,7 +404,7 @@ export default function ItineraryPage() {
       title: "台北三日遊",
       destination: "台北",
       days: 3,
-      folderId: "taiwan",
+      folderId: folders[0]?.id,
       createdAt: "2026-01-05T10:00:00.000Z",
       updatedAt: "2026-04-12T10:00:00.000Z",
     },
@@ -298,7 +413,7 @@ export default function ItineraryPage() {
       title: "台中美食兩日遊",
       destination: "台中",
       days: 2,
-      folderId: "taiwan",
+      folderId: folders[0]?.id,
       createdAt: "2026-02-10T10:00:00.000Z",
       updatedAt: "2026-03-18T10:00:00.000Z",
     },
@@ -307,16 +422,19 @@ export default function ItineraryPage() {
       title: "日本東京五日遊",
       destination: "東京",
       days: 5,
-      folderId: "overseas",
+      folderId: folders[1]?.id,
       createdAt: "2026-03-01T10:00:00.000Z",
       updatedAt: "2026-03-20T10:00:00.000Z",
     },
   ];
   const visibleItineraries = sortItineraries(
-    itineraryCards.filter((item) => folderFilter === "all" || item.folderId === folderFilter),
+    itineraryCards.filter((item) =>
+      folderFilter === "all" ||
+      (folderFilter === "unfiled" ? !item.folderId : item.folderId === folderFilter),
+    ),
     sortOption,
   );
-  const currentRole = members.find((member) => member.role === "owner")?.role || "owner";
+  const currentRole = collaborators.find((member) => member.role === "owner")?.role || "owner";
   const canManageShare = canCollaborator(currentRole, "managePermissions");
 
   return (
@@ -378,7 +496,7 @@ export default function ItineraryPage() {
               onChange={(event) => setFolderFilter(event.target.value)}
               className="rounded-xl border border-border bg-cream/40 px-3 py-2 text-xs text-foreground"
             >
-              {folders.map((folder) => (
+              {folderOptions.map((folder) => (
                 <option key={folder.id} value={folder.id}>
                   {folder.name}
                 </option>
@@ -397,6 +515,59 @@ export default function ItineraryPage() {
             </select>
           </div>
         </div>
+        <div className="mb-4 grid gap-3 md:grid-cols-[1fr_auto]">
+          <input
+            value={newFolderName}
+            onChange={(event) => setNewFolderName(event.target.value)}
+            placeholder="建立新資料夾，例如：台灣旅遊"
+            className="rounded-xl border border-border bg-cream/40 px-3 py-2 text-xs text-foreground placeholder:text-muted-light"
+          />
+          <button
+            type="button"
+            onClick={() => void handleCreateFolder()}
+            disabled={status !== "authenticated" || !newFolderName.trim()}
+            className="rounded-xl bg-primary px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            建立資料夾
+          </button>
+        </div>
+        {folderError && (
+          <p className="mb-3 rounded-xl border border-danger/20 bg-danger/10 px-3 py-2 text-xs text-danger">
+            {folderError}
+          </p>
+        )}
+        {folders.length > 0 && (
+          <div className="mb-4 flex flex-wrap gap-2">
+            {folders.map((folder) => (
+              <div key={folder.id} className="inline-flex items-center gap-2 rounded-full bg-primary/5 px-3 py-1.5 text-xs">
+                <span>{folder.name}</span>
+                <button type="button" onClick={() => void handleRenameFolder(folder)} className="text-primary hover:text-primary-dark">
+                  改名
+                </button>
+                <button type="button" onClick={() => void handleDeleteFolder(folder)} className="text-danger hover:text-danger">
+                  刪除
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {tripId && (
+          <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-muted">
+            <span>目前行程資料夾</span>
+            <select
+              value={currentFolderId || ""}
+              onChange={(event) => void handleMoveCurrentTrip(event.target.value || null)}
+              className="rounded-xl border border-border bg-cream/40 px-3 py-2 text-foreground"
+            >
+              <option value="">未分類</option>
+              {folders.map((folder) => (
+                <option key={folder.id} value={folder.id}>
+                  {folder.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {visibleItineraries.map((item) => (
             <button
@@ -444,10 +615,49 @@ export default function ItineraryPage() {
                 <div>
                   <p className="mb-2 text-xs text-muted">目前協作者</p>
                   <div className="space-y-2">
-                    {members.length ? members.map((member) => (
-                      <div key={member.id} className="flex items-center justify-between rounded-xl bg-primary/5 px-3 py-2">
-                        <span className="text-sm text-foreground">{member.name}</span>
-                        <span className="text-xs text-muted">{member.role}</span>
+                    {collaborators.length ? collaborators.map((member) => (
+                      <div key={member.userId} className="flex items-center justify-between gap-3 rounded-xl bg-primary/5 px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm text-foreground">{member.user.name || member.user.email}</p>
+                          <p className="truncate text-[11px] text-muted">{member.user.email}</p>
+                        </div>
+                        {canManageShare && member.role !== "owner" ? (
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={member.role}
+                              onChange={(event) =>
+                                void updateTripCollaboratorRole(
+                                  member.tripId,
+                                  member.userId,
+                                  event.target.value as "editor" | "viewer",
+                                ).then((updated) =>
+                                  setCollaborators((items) =>
+                                    items.map((item) => (item.userId === updated.userId ? updated : item)),
+                                  ),
+                                )
+                              }
+                              className="rounded-lg border border-border bg-surface px-2 py-1 text-xs"
+                            >
+                              <option value="editor">editor</option>
+                              <option value="viewer">viewer</option>
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void removeTripCollaborator(member.tripId, member.userId).then(() =>
+                                  setCollaborators((items) =>
+                                    items.filter((item) => item.userId !== member.userId),
+                                  ),
+                                )
+                              }
+                              className="text-xs text-danger"
+                            >
+                              移除
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted">{member.role}</span>
+                        )}
                       </div>
                     )) : (
                       <p className="rounded-xl border border-dashed border-border-light px-3 py-4 text-center text-sm text-muted">
@@ -456,6 +666,36 @@ export default function ItineraryPage() {
                     )}
                   </div>
                 </div>
+                {canManageShare && (
+                  <div className="rounded-xl border border-border-light bg-cream/30 p-3">
+                    <p className="mb-2 text-xs text-muted">邀請使用者</p>
+                    <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+                      <input
+                        value={collabEmail}
+                        onChange={(event) => setCollabEmail(event.target.value)}
+                        placeholder="user@example.com"
+                        className="rounded-lg border border-border bg-surface px-3 py-2 text-xs"
+                      />
+                      <select
+                        value={collabRole}
+                        onChange={(event) => setCollabRole(event.target.value as "editor" | "viewer")}
+                        className="rounded-lg border border-border bg-surface px-3 py-2 text-xs"
+                      >
+                        <option value="editor">editor</option>
+                        <option value="viewer">viewer</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => void handleAddCollaborator()}
+                        disabled={!collabEmail.trim()}
+                        className="rounded-lg bg-primary px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
+                      >
+                        邀請
+                      </button>
+                    </div>
+                    {collabError && <p className="mt-2 text-xs text-danger">{collabError}</p>}
+                  </div>
+                )}
                 <div className="rounded-xl bg-cream/40 px-3 py-3 text-xs text-muted">
                   {canManageShare
                     ? "owner 可以邀請、移除協作者並管理權限。"

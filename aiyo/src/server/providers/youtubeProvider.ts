@@ -40,7 +40,7 @@ export interface TranscriptFetchResult {
   fallbackReason?: string;
   captionLanguage?: string;
   captionKind?: "manual" | "asr";
-  captionSource?: "watch-page-captions" | "timedtext";
+  captionSource?: "watch-page-captions" | "timedtext" | "youtube-transcript-package";
 }
 
 interface SearchInput {
@@ -894,6 +894,30 @@ export async function fetchYouTubeTranscript(videoId: string): Promise<Transcrip
           captionSource: timed.source,
         };
       }
+    }
+
+    try {
+      const { YoutubeTranscript } = await import("youtube-transcript");
+      const packageEntries = await YoutubeTranscript.fetchTranscript(videoId);
+      const entries = packageEntries
+        .map((entry) => ({
+          timestamp: formatSeconds(entry.offset > 10_000 ? entry.offset / 1000 : entry.offset),
+          startSeconds: entry.offset > 10_000 ? entry.offset / 1000 : entry.offset,
+          durationSeconds: entry.duration > 10_000 ? entry.duration / 1000 : entry.duration,
+          text: decodeTranscriptText(entry.text),
+        }))
+        .filter((entry) => entry.text);
+      if (entries.length > 0) {
+        return {
+          entries,
+          source: "youtube",
+          captionSource: "youtube-transcript-package",
+          captionLanguage: packageEntries.find((entry) => entry.lang)?.lang,
+          captionKind: "manual",
+        };
+      }
+    } catch {
+      // Keep the explicit no-transcript response below.
     }
 
     return {

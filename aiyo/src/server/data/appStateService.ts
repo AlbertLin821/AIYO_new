@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { requireTripAccess } from "@/server/tripAccess";
 import type {
   BootstrapPayload,
   ChatMessage,
@@ -336,6 +337,10 @@ export async function updateProfile(userId: string, input: Partial<User>) {
 }
 
 export async function saveTripPayload(userId: string, input: PersistedTripPayload) {
+  if (input.tripId) {
+    await requireTripAccess(userId, input.tripId, "edit");
+  }
+
   const trip = input.tripId
     ? await prisma.trip.upsert({
         where: { id: input.tripId },

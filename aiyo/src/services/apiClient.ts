@@ -112,3 +112,36 @@ export async function apiPut<TRequest, TResponse>(
     );
   }
 }
+
+export async function apiPatch<TRequest, TResponse>(
+  path: string,
+  body: TRequest,
+): Promise<TResponse> {
+  try {
+    const response = await fetch(path, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    return parseResponse<TResponse>(response);
+  } catch (error) {
+    throw new Error(
+      error instanceof Error ? error.message : t.api.putFailed,
+    );
+  }
+}
+
+export async function apiDelete<TResponse>(path: string): Promise<TResponse> {
+  try {
+    const response = await fetch(path, {
+      method: "DELETE",
+    });
+    return parseResponse<TResponse>(response);
+  } catch (error) {
+    throw new Error(
+      error instanceof Error ? error.message : t.api.postFailed,
+    );
+  }
+}

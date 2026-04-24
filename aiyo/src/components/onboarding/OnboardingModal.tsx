@@ -10,6 +10,25 @@ import { useUIStore } from "@/stores/useUIStore";
 import { useUserStore } from "@/stores/useUserStore";
 import type { VideoRecommendation } from "@/types";
 
+const fallbackRecommendedVideos: VideoRecommendation[] = [
+  "台北", "新北", "桃園", "台中", "台南", "高雄",
+].map((city) => ({
+  id: `fallback_${city}`,
+  videoId: `fallback_${city}`,
+  title: `${city}旅遊景點美食懶人包`,
+  url: `https://www.youtube.com/results?search_query=${encodeURIComponent(`${city} 旅遊 景點 vlog`)}`,
+  thumbnail: "",
+  duration: "00:00",
+  summary: `${city}旅遊推薦`,
+  description: `${city} 旅遊 景點 vlog`,
+  source: "client-fallback",
+  relevanceReason: `六都空白狀態推薦：${city}旅遊入門影片。`,
+  timestamps: [],
+  extractedLocations: [],
+  summarySegments: [],
+  listProvenance: "mock-fallback",
+}));
+
 export default function OnboardingModal() {
   const { showOnboarding, setShowOnboarding } = useUIStore();
   const { setDestination, setDays } = useTripStore();
@@ -30,7 +49,7 @@ export default function OnboardingModal() {
       });
       setRecommendedVideos(result.videos);
     } catch {
-      setRecommendedVideos([]);
+      setRecommendedVideos(fallbackRecommendedVideos);
     } finally {
       setLoadingRecommendations(false);
     }
@@ -154,6 +173,7 @@ export default function OnboardingModal() {
                   {recommendedVideos.map((video) => (
                     <button
                       key={video.id}
+                      data-testid="recommended-video"
                       type="button"
                       onClick={() => window.open(video.url, "_blank", "noopener,noreferrer")}
                       className="rounded-xl border border-border-light bg-surface px-3 py-2 text-left hover:border-primary/30 hover:bg-primary/5"

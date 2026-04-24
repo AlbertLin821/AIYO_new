@@ -11,7 +11,7 @@ export type SummaryDiagnostics = {
   segmentSource?: "transcript-chunks" | "description-fallback" | "synthetic-fallback" | "unavailable";
   captionLanguage?: string;
   captionKind?: "manual" | "asr";
-  captionSource?: "watch-page-captions" | "timedtext";
+  captionSource?: "watch-page-captions" | "timedtext" | "youtube-transcript-package";
   mapsProvenance?: "google-geocoding" | "catalog-fallback" | "mixed";
   geocodeWarnings?: string[];
   summaryUnavailable?: boolean;

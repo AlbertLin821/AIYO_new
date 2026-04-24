@@ -18,6 +18,8 @@ model User {
   updatedAt      DateTime                @updatedAt
   profile        Profile?
   trips          Trip[]
+  itineraryFolders ItineraryFolder[]
+  tripCollaborations TripCollaborator[]
   chatMessages   ChatMessage[]
   comments       Comment[]
   presences      CollaborationPresence[]
@@ -41,20 +43,56 @@ model Profile {
 model Trip {
   id          String        @id @default(cuid())
   userId      String
+  folderId    String?
   title       String
   destination String?
   days        Int
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder      ItineraryFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
   itineraryDays TripDay[]
   items       TripItem[]
   pins        MapPin[]
   chatMessages ChatMessage[]
   room        CollaborationRoom?
+  collaborators TripCollaborator[]
 
   @@index([userId, updatedAt])
+  @@index([folderId])
   @@map("trips")
+}
+
+model ItineraryFolder {
+  id        String   @id @default(cuid())
+  name      String
+  sortOrder Int      @default(0)
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trips     Trip[]
+
+  @@index([userId])
+  @@map("itinerary_folders")
+}
+
+model TripCollaborator {
+  id        String   @id @default(cuid())
+  tripId    String
+  userId    String
+  role      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, userId])
+  @@index([tripId])
+  @@index([userId])
+  @@map("trip_collaborators")
 }
 
 model TripDay {
