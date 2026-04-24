@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   CalendarDays,
@@ -9,8 +11,10 @@ import {
   GripVertical,
   MapPin,
   Plus,
+  Share2,
   Train,
   Trash2,
+  Users,
   X,
 } from "lucide-react";
 import {
@@ -29,9 +33,12 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { sortItineraries, type ItineraryListItem, type ItinerarySortOption } from "@/lib/itinerary-sort";
+import { canCollaborator } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { zhTW as t } from "@/locales/zh-TW";
 import { buildPinsFromTripPlan } from "@/services/mapSync";
+import { useCollabStore } from "@/stores/useCollabStore";
 import { useMapStore } from "@/stores/useMapStore";
 import { useTripStore } from "@/stores/useTripStore";
 import type { TripPlanDay, TripPlanItem } from "@/types";
@@ -153,8 +160,12 @@ function SortableActivityItem({
 }
 
 export default function ItineraryPage() {
+  const router = useRouter();
+  const { status } = useSession();
   const {
     itinerary,
+    tripId,
+    title,
     destination,
     days,
     budget,
@@ -165,12 +176,17 @@ export default function ItineraryPage() {
     reorderItineraryItem,
   } = useTripStore();
   const setPins = useMapStore((state) => state.setPins);
+  const { members, inviteCode, shareLink } = useCollabStore();
   const [addingToDay, setAddingToDay] = useState<number | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [newTime, setNewTime] = useState("10:00");
   const [newType, setNewType] = useState<TripPlanItem["type"]>("attraction");
   const [newNotes, setNewNotes] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [folderFilter, setFolderFilter] = useState<string>("all");
+  const [sortOption, setSortOption] = useState<ItinerarySortOption>("updatedAt_desc");
+  const itemIdCounter = useRef(0);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -182,11 +198,15 @@ export default function ItineraryPage() {
   );
 
   function handleAddItem(dayNumber: number) {
+    if (!requireAuthenticated(`/itinerary`)) {
+      return;
+    }
     if (!newTitle.trim()) {
       return;
     }
+    itemIdCounter.current += 1;
     addItineraryItem(dayNumber, {
-      id: `item_new_${Date.now()}`,
+      id: `item_new_${dayNumber}_${itemIdCounter.current}`,
       dayNumber,
       time: newTime,
       title: newTitle.trim(),
@@ -206,6 +226,9 @@ export default function ItineraryPage() {
     dayNumber: number,
     items: TripPlanItem[],
   ) {
+    if (!requireAuthenticated("/itinerary")) {
+      return;
+    }
     const { active, over } = event;
     if (over && active.id !== over.id) {
       const oldIndex = items.findIndex((item) => item.id === active.id);
@@ -215,10 +238,86 @@ export default function ItineraryPage() {
   }
 
   function syncToMap() {
+    if (!requireAuthenticated(`/itinerary`)) {
+      return;
+    }
     setSyncing(true);
     setPins(buildPinsFromTripPlan(itinerary));
     window.setTimeout(() => setSyncing(false), 300);
   }
+
+  function requireAuthenticated(redirectPath: string) {
+    if (status === "authenticated") {
+      return true;
+    }
+    router.push(`/login?redirect=${encodeURIComponent(redirectPath)}`);
+    return false;
+  }
+
+  function handleAddDay() {
+    if (!requireAuthenticated("/itinerary")) {
+      return;
+    }
+    addDay();
+  }
+
+  function handleRemoveItem(dayNumber: number, itemId: string) {
+    if (!requireAuthenticated("/itinerary")) {
+      return;
+    }
+    removeItineraryItem(dayNumber, itemId);
+  }
+
+  const folders = [
+    { id: "all", name: "全部行程" },
+    { id: "taiwan", name: "台灣城市" },
+    { id: "overseas", name: "海外旅遊" },
+  ];
+
+  const itineraryCards: ItineraryListItem[] = [
+    {
+      id: tripId || "current-trip",
+      title: title || `${destination || "未命名"} 行程`,
+      destination: destination || "尚未設定",
+      days,
+      folderId: "taiwan",
+      createdAt: lastUpdatedAt || new Date().toISOString(),
+      updatedAt: lastUpdatedAt || new Date().toISOString(),
+    },
+    {
+      id: "sample-taipei",
+      title: "台北三日遊",
+      destination: "台北",
+      days: 3,
+      folderId: "taiwan",
+      createdAt: "2026-01-05T10:00:00.000Z",
+      updatedAt: "2026-04-12T10:00:00.000Z",
+    },
+    {
+      id: "sample-taichung",
+      title: "台中美食兩日遊",
+      destination: "台中",
+      days: 2,
+      folderId: "taiwan",
+      createdAt: "2026-02-10T10:00:00.000Z",
+      updatedAt: "2026-03-18T10:00:00.000Z",
+    },
+    {
+      id: "sample-tokyo",
+      title: "日本東京五日遊",
+      destination: "東京",
+      days: 5,
+      folderId: "overseas",
+      createdAt: "2026-03-01T10:00:00.000Z",
+      updatedAt: "2026-03-20T10:00:00.000Z",
+    },
+  ];
+  const visibleItineraries = sortItineraries(
+    itineraryCards.filter((item) => folderFilter === "all" || item.folderId === folderFilter),
+    sortOption,
+  );
+  const currentRole = members.find((member) => member.role === "owner")?.role || "owner";
+  const canManageShare = canCollaborator(currentRole, "managePermissions");
 
   return (
     <div className="min-h-screen p-6 lg:p-8 max-w-5xl mx-auto">
@@ -243,13 +342,22 @@ export default function ItineraryPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={syncToMap}
+              disabled={status !== "authenticated"}
               className="px-4 py-2 bg-primary/10 text-primary rounded-xl text-sm font-medium hover:bg-primary/20 transition-colors cursor-pointer"
             >
               {syncing ? t.itineraryPage.syncing : t.itineraryPage.syncMap}
             </button>
             <button
-              onClick={addDay}
-              className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:bg-primary-dark transition-colors cursor-pointer flex items-center gap-2 hover:shadow-md"
+              onClick={() => setShareOpen(true)}
+              className="px-4 py-2 bg-surface border border-border-light text-foreground rounded-xl text-sm font-medium hover:bg-cream/50 transition-colors cursor-pointer flex items-center gap-2"
+            >
+              <Share2 className="size-4" />
+              分享
+            </button>
+            <button
+              onClick={handleAddDay}
+              disabled={status !== "authenticated"}
+              className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:bg-primary-dark transition-colors cursor-pointer flex items-center gap-2 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus className="size-4" />
               {t.itineraryPage.addDay}
@@ -257,6 +365,107 @@ export default function ItineraryPage() {
           </div>
         </div>
       </motion.div>
+
+      <div className="mb-8 rounded-2xl border border-border-light bg-surface p-4 shadow-soft">
+        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">我的多個行程</h2>
+            <p className="mt-1 text-xs text-muted">依資料夾與排序方式瀏覽目前與範例行程。</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <select
+              value={folderFilter}
+              onChange={(event) => setFolderFilter(event.target.value)}
+              className="rounded-xl border border-border bg-cream/40 px-3 py-2 text-xs text-foreground"
+            >
+              {folders.map((folder) => (
+                <option key={folder.id} value={folder.id}>
+                  {folder.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={sortOption}
+              onChange={(event) => setSortOption(event.target.value as ItinerarySortOption)}
+              className="rounded-xl border border-border bg-cream/40 px-3 py-2 text-xs text-foreground"
+            >
+              <option value="updatedAt_desc">最近編輯</option>
+              <option value="createdAt_desc">最新建立</option>
+              <option value="destination_asc">地點 A-Z</option>
+              <option value="days_asc">天數少到多</option>
+              <option value="title_asc">名稱 A-Z</option>
+            </select>
+          </div>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {visibleItineraries.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => item.id === (tripId || "current-trip") && window.scrollTo({ top: 0, behavior: "smooth" })}
+              className="rounded-xl border border-border-light bg-cream/30 p-4 text-left transition-colors hover:border-primary/30 hover:bg-primary/5"
+            >
+              <p className="text-sm font-semibold text-foreground">{item.title}</p>
+              <p className="mt-1 text-xs text-muted">{item.destination} · {item.days} 天</p>
+              <p className="mt-3 text-[11px] text-muted">
+                最近編輯 {new Date(item.updatedAt).toLocaleDateString("zh-TW")}
+              </p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {shareOpen && (
+          <motion.div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/20 p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-soft-lg" initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }}>
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="flex items-center gap-2 font-semibold text-foreground">
+                  <Users className="size-4 text-primary" />
+                  分享 / 協作
+                </h2>
+                <button type="button" onClick={() => setShareOpen(false)} className="rounded-lg p-1 text-muted hover:bg-border-light">
+                  <X className="size-4" />
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <p className="mb-2 text-xs text-muted">分享連結</p>
+                  <div className="rounded-xl border border-border bg-cream/40 px-3 py-2 text-xs text-muted">
+                    {shareLink || `/collaborate?tripId=${tripId || "current"}`}
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-2 text-xs text-muted">邀請代碼</p>
+                  <div className="rounded-xl border border-border bg-cream/40 px-3 py-2 font-mono text-sm">
+                    {inviteCode || "尚未建立"}
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-2 text-xs text-muted">目前協作者</p>
+                  <div className="space-y-2">
+                    {members.length ? members.map((member) => (
+                      <div key={member.id} className="flex items-center justify-between rounded-xl bg-primary/5 px-3 py-2">
+                        <span className="text-sm text-foreground">{member.name}</span>
+                        <span className="text-xs text-muted">{member.role}</span>
+                      </div>
+                    )) : (
+                      <p className="rounded-xl border border-dashed border-border-light px-3 py-4 text-center text-sm text-muted">
+                        目前沒有其他協作者。
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-cream/40 px-3 py-3 text-xs text-muted">
+                  {canManageShare
+                    ? "owner 可以邀請、移除協作者並管理權限。"
+                    : "目前角色只能檢視或編輯，不能管理權限。"}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="flex flex-col gap-6">
         {itinerary.length === 0 && (
@@ -266,7 +475,8 @@ export default function ItineraryPage() {
             <p className="mt-2 text-xs text-muted">{t.itineraryPage.emptyStateHint}</p>
             <button
               type="button"
-              onClick={addDay}
+              onClick={handleAddDay}
+              disabled={status !== "authenticated"}
               className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-dark cursor-pointer"
             >
               <Plus className="size-4" />
@@ -318,7 +528,7 @@ export default function ItineraryPage() {
                         dayNumber={day.dayNumber}
                         itemIndex={index}
                         itemsLength={day.items.length}
-                        removeItineraryItem={removeItineraryItem}
+                        removeItineraryItem={handleRemoveItem}
                       />
                     ))}
                   </div>
@@ -409,6 +619,9 @@ export default function ItineraryPage() {
               {addingToDay !== day.dayNumber && (
                 <button
                   onClick={() => {
+                    if (!requireAuthenticated("/itinerary")) {
+                      return;
+                    }
                     setAddingToDay(day.dayNumber);
                     setNewTitle("");
                     setNewNotes("");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -43,7 +43,8 @@ export default function VideoSummaryDrawer({
   const [toast, setToast] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [imageFailed, setImageFailed] = useState(false);
+  const [failedImageVideoId, setFailedImageVideoId] = useState<string | null>(null);
+  const videoId = video?.videoId;
 
   const summaryParagraphs = useMemo(
     () =>
@@ -56,21 +57,18 @@ export default function VideoSummaryDrawer({
 
   const embedUrl = useMemo(
     () =>
-      video?.videoId
-        ? `https://www.youtube.com/embed/${video.videoId}?rel=0&modestbranding=1`
+      videoId
+        ? `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`
         : null,
-    [video?.videoId],
+    [videoId],
   );
-
-  useEffect(() => {
-    setImageFailed(false);
-  }, [video?.id]);
 
   if (!video) {
     return null;
   }
 
   const activeVideo = video;
+  const imageFailed = failedImageVideoId === activeVideo.id;
 
   function showToastMessage(message: string) {
     setToast(message);
@@ -245,7 +243,7 @@ export default function VideoSummaryDrawer({
                     src={activeVideo.thumbnail}
                     alt={activeVideo.title}
                     className="absolute inset-0 h-full w-full object-cover"
-                    onError={() => setImageFailed(true)}
+                    onError={() => setFailedImageVideoId(activeVideo.id)}
                   />
                 ) : (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-foreground/60">
