@@ -9,6 +9,18 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_ENABLE_MOCK_MAPS:
       process.env.NEXT_PUBLIC_ENABLE_MOCK_MAPS || process.env.ENABLE_MOCK_MAPS || "",
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "i.ytimg.com",
+      },
+      {
+        protocol: "https",
+        hostname: "img.youtube.com",
+      },
+    ],
+  },
   turbopack: {
     root: path.join(__dirname),
   },

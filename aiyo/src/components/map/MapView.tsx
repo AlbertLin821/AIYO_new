@@ -181,7 +181,6 @@ function MockMapFallback({
 export default function MapView() {
   const tripStore = useTripStore();
   const userStore = useUserStore();
-  const destination = tripStore.destination;
   const itinerary = tripStore.itinerary;
   const { pins, selectedPinId, setSelectedPinId } = useMapStore();
   const pushToast = useToastStore((state) => state.pushToast);

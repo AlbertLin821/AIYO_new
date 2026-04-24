@@ -278,7 +278,6 @@ export function scoreVideoPlaceTravelRank(
   originalQuery: string,
 ): number {
   const title = (meta.title || "").toLowerCase();
-  const desc = (meta.description || "").slice(0, 800).toLowerCase();
   const core = getCorePlaceTokens(originalQuery.trim());
   let score = 0;
 

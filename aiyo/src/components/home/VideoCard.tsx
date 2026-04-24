@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { AlertCircle, Clock, ExternalLink, Play } from "lucide-react";
 import type { Video } from "@/types";
@@ -37,11 +38,12 @@ export default function VideoCard({ video, index, onClick }: VideoCardProps) {
         className={`relative aspect-video bg-gradient-to-br ${gradients[index % gradients.length]} flex items-center justify-center`}
       >
         {showThumbnail ? (
-          <img
+          <Image
             src={video.thumbnail}
             alt={video.title}
-            className="absolute inset-0 h-full w-full object-cover"
-            loading="lazy"
+            fill
+            sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+            className="object-cover"
             onError={() => setImageFailed(true)}
           />
         ) : (

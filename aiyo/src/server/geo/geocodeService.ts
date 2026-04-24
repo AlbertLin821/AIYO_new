@@ -2,7 +2,6 @@ import { serverConfig } from "@/server/config";
 import {
   mergeAndDedupeExtractions,
   type PlaceCandidate,
-  type PlaceNameExtraction,
 } from "@/server/geo/extractLocations";
 import { resolveLocationReference } from "@/server/geo/locationCatalog";
 import type { LocationReference } from "@/types";

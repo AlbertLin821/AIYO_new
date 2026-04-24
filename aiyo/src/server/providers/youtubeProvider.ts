@@ -1,7 +1,6 @@
 import { serverConfig } from "@/server/config";
 import {
   buildExpandedTravelSearchQueries,
-  buildTravelBiasedSearchQuery,
   buildVideoRecommendationSearchQuery,
   isLowIntentShortFormVideo,
   isLoosePlaceRelatedVideo,

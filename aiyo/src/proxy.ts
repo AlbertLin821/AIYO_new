@@ -13,3 +13,4 @@ export const config = {
     "/collaborate/:path*",
   ],
 };
+

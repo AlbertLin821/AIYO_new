@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -239,10 +240,12 @@ export default function VideoSummaryDrawer({
                     allowFullScreen
                   />
                 ) : activeVideo.thumbnail && !imageFailed ? (
-                  <img
+                  <Image
                     src={activeVideo.thumbnail}
                     alt={activeVideo.title}
-                    className="absolute inset-0 h-full w-full object-cover"
+                    fill
+                    sizes="(min-width: 1024px) 33vw, 100vw"
+                    className="object-cover"
                     onError={() => setFailedImageVideoId(activeVideo.id)}
                   />
                 ) : (
