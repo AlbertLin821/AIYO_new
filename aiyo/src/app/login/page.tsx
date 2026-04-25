@@ -147,11 +147,11 @@ function LoginPageContent() {
   const primaryAction = mode === "login" ? handleCredentialsLogin : handleRegister;
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-6 lg:p-8">
+    <div className="flex min-h-screen items-center justify-center px-4 py-8 sm:p-6 lg:p-8">
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md rounded-3xl border border-border-light bg-surface p-8 shadow-soft-lg"
+        className="w-full max-w-md rounded-3xl border border-border-light bg-surface p-5 shadow-soft-lg sm:p-8"
       >
         <div className="mb-7 text-center">
           <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-lavender text-white">

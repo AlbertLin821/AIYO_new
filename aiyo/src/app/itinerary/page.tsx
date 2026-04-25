@@ -114,6 +114,7 @@ function SortableActivityItem({
   return (
     <div
       ref={setNodeRef}
+      data-testid="activity-card"
       style={style}
       className={cn(
         "flex items-start gap-3 px-4 py-3 rounded-xl border-l-4 hover:bg-cream/40 transition-colors group bg-surface",
@@ -163,6 +164,9 @@ function SortableActivityItem({
       </div>
 
       <button
+        type="button"
+        data-testid="activity-delete-button"
+        aria-label={`刪除活動 ${item.title}`}
         onClick={() => removeItineraryItem(dayNumber, item.id)}
         className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer opacity-0 group-hover:opacity-100 relative z-20"
       >
@@ -193,6 +197,7 @@ export default function ItineraryPage() {
   const [addingToDay, setAddingToDay] = useState<number | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [newTime, setNewTime] = useState("10:00");
+  const [newLocation, setNewLocation] = useState("");
   const [newType, setNewType] = useState<TripPlanItem["type"]>("attraction");
   const [newNotes, setNewNotes] = useState("");
   const [syncing, setSyncing] = useState(false);
@@ -233,10 +238,20 @@ export default function ItineraryPage() {
       title: newTitle.trim(),
       type: newType,
       notes: newNotes.trim() || undefined,
+      location: newLocation.trim()
+        ? {
+            name: newLocation.trim(),
+            lat: 0,
+            lng: 0,
+            description: newNotes.trim() || newLocation.trim(),
+            address: newLocation.trim(),
+          }
+        : undefined,
       source: "manual",
     });
     setNewTitle("");
     setNewTime("10:00");
+    setNewLocation("");
     setNewType("attraction");
     setNewNotes("");
     setAddingToDay(null);
@@ -798,6 +813,7 @@ export default function ItineraryPage() {
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <input
+                          data-testid="activity-title-input"
                           value={newTitle}
                           onChange={(event) => setNewTitle(event.target.value)}
                           placeholder={t.itineraryPage.activityTitlePh}
@@ -812,6 +828,7 @@ export default function ItineraryPage() {
                         <div className="flex items-center gap-2">
                           <Clock className="size-4 text-muted" />
                           <input
+                            data-testid="activity-time-input"
                             type="time"
                             value={newTime}
                             onChange={(event) => setNewTime(event.target.value)}
@@ -833,6 +850,19 @@ export default function ItineraryPage() {
                         </select>
                       </div>
                       <input
+                        data-testid="activity-location-input"
+                        value={newLocation}
+                        onChange={(event) => setNewLocation(event.target.value)}
+                        placeholder="地點，例如：台南市中西區"
+                        className="px-3 py-2 rounded-xl border border-border bg-surface text-sm text-foreground placeholder:text-muted-light focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            handleAddItem(day.dayNumber);
+                          }
+                        }}
+                      />
+                      <input
+                        data-testid="activity-notes-input"
                         value={newNotes}
                         onChange={(event) => setNewNotes(event.target.value)}
                         placeholder={t.itineraryPage.notesPh}
@@ -844,6 +874,7 @@ export default function ItineraryPage() {
                         }}
                       />
                       <button
+                        data-testid="activity-save-button"
                         onClick={() => handleAddItem(day.dayNumber)}
                         disabled={!newTitle.trim()}
                         className="flex items-center justify-center gap-2 py-2.5 bg-primary text-white rounded-xl text-sm font-medium hover:bg-primary-dark transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
@@ -858,12 +889,14 @@ export default function ItineraryPage() {
 
               {addingToDay !== day.dayNumber && (
                 <button
+                  data-testid="add-activity-button"
                   onClick={() => {
                     if (!requireAuthenticated("/itinerary")) {
                       return;
                     }
                     setAddingToDay(day.dayNumber);
                     setNewTitle("");
+                    setNewLocation("");
                     setNewNotes("");
                   }}
                   className="flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-border hover:border-primary/40 hover:bg-primary/5 text-muted hover:text-primary text-sm transition-all cursor-pointer mt-1"

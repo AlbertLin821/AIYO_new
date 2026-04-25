@@ -40,7 +40,7 @@ export default function Sidebar() {
       initial={false}
       animate={{ width: sidebarCollapsed ? 72 : 240 }}
       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-      className="fixed left-0 top-0 z-40 h-screen bg-surface border-r border-border-light flex flex-col shadow-soft"
+      className="fixed left-0 top-0 z-40 hidden h-screen flex-col border-r border-border-light bg-surface shadow-soft lg:flex"
     >
       <div className="flex items-center gap-3 px-4 h-16 border-b border-border-light">
         <div className="flex items-center justify-center size-10 rounded-xl bg-gradient-to-br from-primary to-lavender text-white flex-shrink-0">

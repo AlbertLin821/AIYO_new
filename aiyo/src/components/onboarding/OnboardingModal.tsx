@@ -81,12 +81,14 @@ export default function OnboardingModal() {
     <AnimatePresence>
       {showOnboarding && (
         <motion.div
+          data-testid="onboarding-root"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
         >
           <motion.div
+            data-testid="onboarding-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -95,6 +97,10 @@ export default function OnboardingModal() {
           />
 
           <motion.div
+            data-testid="onboarding-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="onboarding-title"
             initial={{ opacity: 0, scale: 0.92, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 20 }}
@@ -102,6 +108,8 @@ export default function OnboardingModal() {
             className="relative w-full max-w-lg overflow-hidden rounded-3xl bg-surface shadow-soft-lg"
           >
             <button
+              data-testid="onboarding-close-button"
+              aria-label="關閉 onboarding"
               onClick={() => finish(true)}
               className="absolute right-4 top-4 z-10 cursor-pointer rounded-full p-1.5 text-muted transition-colors hover:bg-border-light hover:text-foreground"
             >
@@ -115,7 +123,7 @@ export default function OnboardingModal() {
                 <div className="mb-4 inline-flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 to-lavender/15">
                   <Sparkles className="size-7 text-primary" />
                 </div>
-                <h2 className="mb-2 text-2xl font-bold text-foreground">{t.onboarding.welcomeTitle}</h2>
+                <h2 id="onboarding-title" className="mb-2 text-2xl font-bold text-foreground">{t.onboarding.welcomeTitle}</h2>
                 <p className="text-sm leading-relaxed text-muted">{t.onboarding.welcomeBody}</p>
               </div>
 
@@ -192,12 +200,14 @@ export default function OnboardingModal() {
 
               <div className="mt-8 flex items-center justify-between">
                 <button
+                  data-testid="onboarding-skip-button"
                   onClick={() => finish(true)}
                   className="cursor-pointer rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-border-light hover:text-foreground"
                 >
                   {t.onboarding.skip}
                 </button>
                 <button
+                  data-testid="onboarding-complete-button"
                   onClick={() => finish(false)}
                   className="cursor-pointer rounded-xl bg-gradient-to-r from-primary to-primary-dark px-6 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]"
                 >
