@@ -34,12 +34,21 @@ Prisma CLI reads `.env` by default. If you run Prisma commands (migrate/seed) an
 npm install
 ```
 
-3. Start PostgreSQL from the `AIYO_new` root:
+3. Start Docker services from the `AIYO_new` root:
 
 ```bash
 cd ..
-docker compose up -d postgres
+docker compose up -d --build
 ```
+
+Container names:
+
+- `aiyo-new-app`
+- `aiyo-new-postgres`
+- `aiyo-new-redis`
+- `aiyo-new-pgadmin`
+
+The app container runs `prisma migrate deploy` before `next start`. You can verify app-to-database connectivity at `http://localhost:3000/api/health`.
 
 4. Back in `AIYO_new/aiyo`, generate Prisma client, apply schema, and seed:
 

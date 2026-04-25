@@ -296,7 +296,7 @@ export async function getVideoRecommendations(
 
     const reason =
       providerResult.fallbackReason || "YouTube Data API 未回傳可用結果。";
-    console.warn(`[videoRecommendationService] No YouTube results: ${reason}`);
+    console.info(`[videoRecommendationService] No YouTube results: ${reason}`);
     if (serverConfig.enableMockVideoProvider || providerResult.provider === "mock") {
       return {
         videos: rankTaiwanCityFallbackVideos(input).length

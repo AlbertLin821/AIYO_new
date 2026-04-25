@@ -97,6 +97,12 @@ export const authOptions: NextAuthOptions = {
   providers,
   logger: {
     error(code, metadata) {
+      if (code === "CLIENT_FETCH_ERROR" && process.env.NODE_ENV !== "production") {
+        console.debug("[auth:debug]", code, {
+          hasMetadata: Boolean(metadata),
+        });
+        return;
+      }
       console.error("[auth:error]", code, {
         name: metadata instanceof Error ? metadata.name : undefined,
         message: metadata instanceof Error ? metadata.message : undefined,

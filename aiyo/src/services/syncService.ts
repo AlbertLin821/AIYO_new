@@ -6,6 +6,7 @@ import { useMapStore } from "@/stores/useMapStore";
 import { getSyncMutationSource } from "@/stores/syncMutationSource";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
+import { useUIStore } from "@/stores/useUIStore";
 import { useUserStore } from "@/stores/useUserStore";
 import type {
   BootstrapPayload,
@@ -186,8 +187,9 @@ class SyncService {
 
     if (JSON.stringify(currentProfile) !== JSON.stringify(snapshot.profile)) {
       useUserStore.setState((state) => ({ ...state, ...snapshot.profile }));
-      useUserStore.getState().setFirstVisit(false);
     }
+    useUserStore.getState().setFirstVisit(false);
+    useUIStore.setState({ showOnboarding: false });
 
     this.hydrated = true;
   }

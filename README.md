@@ -29,18 +29,27 @@ Install these on your machine first:
 - Docker Desktop
 - Ollama
 
-### 2. Start PostgreSQL
+### 2. Start Docker services
 
 From the repository root:
 
 ```bash
-docker compose up -d postgres
+docker compose up -d --build
 ```
 
-If you also want the optional local tools:
+This starts the full local Docker stack:
+
+- `aiyo-new-app`: Next.js app and backend API on `http://localhost:3000`
+- `aiyo-new-postgres`: PostgreSQL + pgvector on `localhost:5432`
+- `aiyo-new-redis`: Redis on `localhost:6379`
+- `aiyo-new-pgadmin`: pgAdmin on `http://localhost:5050`
+
+The app container waits for PostgreSQL and Redis, runs `prisma migrate deploy`, then starts `next start`.
+
+Verify the backend/database path:
 
 ```bash
-docker compose up -d
+curl http://localhost:3000/api/health
 ```
 
 This repo's compose file creates the development database `aiyo_new_db` automatically.
@@ -122,7 +131,7 @@ Open `http://localhost:3000`.
 - Treat `AIYO_new/docker-compose.yml` as the only supported shared Docker setup for this repo.
 - Do not depend on `../AIYO/docker-compose.yml` for onboarding or day-to-day work.
 - PostgreSQL is required for normal development.
-- `pgadmin` and `redis` are available in the compose file, but the app setup flow only requires PostgreSQL unless your task specifically needs the others.
+- `pgadmin` and `redis` are available in the compose file; the app container depends on PostgreSQL and Redis healthchecks.
 
 ## Main app capabilities
 
