@@ -18,6 +18,7 @@ export type ItineraryListItem = {
   updatedAt: string;
   createdAt: string;
   folderId?: string;
+  folderName?: string;
 };
 
 function compareString(left: string, right: string) {
@@ -38,5 +39,47 @@ export function sortItineraries<T extends ItineraryListItem>(
       return (Date.parse(left[field]) - Date.parse(right[field])) * multiplier;
     }
     return compareString(String(left[field] || ""), String(right[field] || "")) * multiplier;
+  });
+}
+
+function normalizeSearchText(value: string): string {
+  return value.trim().toLocaleLowerCase("zh-Hant");
+}
+
+function formatDateForSearch(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return [
+    date.toISOString().slice(0, 10),
+    date.toLocaleDateString("zh-TW"),
+    date.getFullYear().toString(),
+    `${date.getMonth() + 1}/${date.getDate()}`,
+  ].join(" ");
+}
+
+export function filterItineraries<T extends ItineraryListItem>(
+  itineraries: T[],
+  query: string,
+): T[] {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) {
+    return itineraries;
+  }
+
+  return itineraries.filter((item) => {
+    const searchable = [
+      item.title,
+      item.destination,
+      item.folderName || "",
+      `${item.days} 天`,
+      formatDateForSearch(item.createdAt),
+      formatDateForSearch(item.updatedAt),
+    ]
+      .join(" ")
+      .toLocaleLowerCase("zh-Hant");
+
+    return searchable.includes(normalizedQuery);
   });
 }

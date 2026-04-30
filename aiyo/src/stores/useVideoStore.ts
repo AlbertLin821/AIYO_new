@@ -5,6 +5,7 @@ export type SummaryDiagnostics = {
   transcriptSource: "youtube" | "fallback-description" | "fallback-synthetic" | "none";
   summarySource?:
     | "ollama-transcript"
+    | "heuristic-transcript-fallback"
     | "ollama-description-fallback"
     | "ollama-synthetic-fallback"
     | "unavailable";

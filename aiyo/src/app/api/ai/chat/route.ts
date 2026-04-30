@@ -4,7 +4,7 @@ import { OllamaRequestError } from "@/server/ai/ollamaClient";
 import { requireSessionUser } from "@/server/auth";
 import { ensureCurrentTrip, saveChatMessage } from "@/server/data/appStateService";
 import { chatWithTravelAssistant } from "@/server/services/travelPlannerService";
-import type { ChatContext } from "@/types";
+import type { ChatContext, ChatMessage } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +13,7 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as {
       message?: string;
+      messages?: ChatMessage[];
       context?: ChatContext;
     };
 
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
 
     const response = await chatWithTravelAssistant({
       message: body.message.trim(),
+      messages: body.messages,
       context: body.context,
     });
 

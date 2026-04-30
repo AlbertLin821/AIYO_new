@@ -1,10 +1,17 @@
 import { apiPost } from "@/services/apiClient";
-import type { ChatContext, ChatResponsePayload, TripPlanRequest, TripPlanResult } from "@/types";
+import type {
+  ChatContext,
+  ChatMessage,
+  ChatResponsePayload,
+  TripPlanRequest,
+  TripPlanResult,
+} from "@/types";
 
 const VOICE_PLAN_TIMEOUT_MS = 28_000;
 
 export async function sendChatMessage(input: {
   message: string;
+  messages?: ChatMessage[];
   context?: ChatContext;
 }) {
   return apiPost<typeof input, ChatResponsePayload>("/api/ai/chat", input);

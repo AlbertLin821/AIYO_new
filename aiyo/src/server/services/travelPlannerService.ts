@@ -6,7 +6,13 @@ import {
   detectResponseLanguage,
 } from "@/server/ai/promptBuilder";
 import { parseTripPlanResponse, StructuredOutputError } from "@/server/ai/responseParser";
-import type { ChatContext, ChatResponsePayload, TripPlanRequest, TripPlanResult } from "@/types";
+import type {
+  ChatContext,
+  ChatMessage,
+  ChatResponsePayload,
+  TripPlanRequest,
+  TripPlanResult,
+} from "@/types";
 
 function normalizeHistory(
   context?: ChatContext,
@@ -36,6 +42,20 @@ function normalizeHistory(
             : `Current itinerary context:\n${itinerarySummary}`,
     },
   ];
+}
+
+function normalizeConversationHistory(messages?: ChatMessage[]): OllamaMessage[] {
+  if (!messages?.length) {
+    return [];
+  }
+
+  return messages
+    .filter((message) => message.role === "user" || message.role === "assistant" || message.role === "ai")
+    .slice(-8)
+    .map((message) => ({
+      role: message.role === "user" ? "user" : "assistant",
+      content: message.content,
+    }));
 }
 
 export async function generateTripPlan(request: TripPlanRequest): Promise<TripPlanResult> {
@@ -99,6 +119,7 @@ export async function buildMapPlanningNotes(request: TripPlanRequest): Promise<s
 
 export async function chatWithTravelAssistant(input: {
   message: string;
+  messages?: ChatMessage[];
   context?: ChatContext;
 }): Promise<ChatResponsePayload> {
   const language = detectResponseLanguage(input.message);
@@ -108,6 +129,7 @@ export async function chatWithTravelAssistant(input: {
     messages: [
       { role: "system", content: prompt.system },
       ...normalizeHistory(input.context, language),
+      ...normalizeConversationHistory(input.messages),
       { role: "user", content: prompt.user },
     ],
   });

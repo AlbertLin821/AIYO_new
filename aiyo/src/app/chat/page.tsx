@@ -8,9 +8,11 @@ import {
   CalendarDays,
   DollarSign,
   Heart,
+  History,
   Loader2,
   MapPin,
   Mic,
+  Plus,
   Send,
   Sparkles,
 } from "lucide-react";
@@ -40,8 +42,18 @@ export default function ChatPage() {
   const router = useRouter();
   const { status } = useSession();
   const [input, setInput] = useState("");
-  const { messages, appendMessage, isSending, setIsSending, errorMessage, setErrorMessage } =
-    useChatStore();
+  const {
+    conversations,
+    activeConversationId,
+    messages,
+    createConversation,
+    selectConversation,
+    appendMessage,
+    isSending,
+    setIsSending,
+    errorMessage,
+    setErrorMessage,
+  } = useChatStore();
   const tripStore = useTripStore();
   const userStore = useUserStore();
   const { voiceState, setVoiceState } = useUIStore();
@@ -67,6 +79,7 @@ export default function ChatPage() {
       user: useUserStore.getState(),
     });
 
+    const previousMessages = useChatStore.getState().messages;
     appendMessage(buildUserMessage(message));
     setInput("");
     setErrorMessage(null);
@@ -75,6 +88,7 @@ export default function ChatPage() {
     try {
       const response = await sendChatMessage({
         message,
+        messages: previousMessages.slice(-10),
         context: {
           destination: planningSnapshot.destination,
           days: planningSnapshot.days,
@@ -145,18 +159,99 @@ export default function ChatPage() {
 
   return (
     <div className="h-screen flex">
+      <aside className="hidden w-72 shrink-0 flex-col border-r border-border-light bg-surface/70 p-4 md:flex">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <History className="size-4 text-primary" />
+              對話紀錄
+            </h2>
+            <p className="mt-1 text-xs text-muted">新增對話並切換歷史紀錄。</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              createConversation();
+              setInput("");
+            }}
+            className="flex size-9 items-center justify-center rounded-xl bg-primary text-white transition-colors hover:bg-primary-dark"
+            aria-label="新增對話"
+          >
+            <Plus className="size-4" />
+          </button>
+        </div>
+
+        <div className="flex flex-1 flex-col gap-2 overflow-y-auto">
+          {conversations.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border-light bg-cream/40 px-4 py-6 text-center text-xs text-muted">
+              尚無歷史對話。送出第一則訊息後會自動建立。
+            </div>
+          ) : (
+            conversations.map((conversation) => (
+              <button
+                type="button"
+                key={conversation.id}
+                onClick={() => selectConversation(conversation.id)}
+                className={`rounded-2xl border px-3 py-3 text-left transition-colors ${
+                  conversation.id === activeConversationId
+                    ? "border-primary/40 bg-primary/10"
+                    : "border-border-light bg-surface hover:bg-cream/50"
+                }`}
+              >
+                <p className="truncate text-sm font-medium text-foreground">{conversation.title}</p>
+                <p className="mt-1 text-[11px] text-muted">
+                  {conversation.messages.length} 則訊息 ·{" "}
+                  {new Date(conversation.updatedAt).toLocaleDateString("zh-TW")}
+                </p>
+              </button>
+            ))
+          )}
+        </div>
+      </aside>
+
       <div className="flex-1 flex flex-col">
         <div className="px-6 py-4 border-b border-border-light">
-          <div className="flex items-center gap-3">
-            <div className="size-10 rounded-xl bg-gradient-to-br from-lavender to-primary flex items-center justify-center">
-              <Sparkles className="size-5 text-white" />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="size-10 rounded-xl bg-gradient-to-br from-lavender to-primary flex items-center justify-center">
+                <Sparkles className="size-5 text-white" />
+              </div>
+              <div>
+                <h1 className="font-semibold text-foreground">{t.chat.pageTitle}</h1>
+                <p className="text-xs text-muted">{t.chat.pageSubtitle}</p>
+              </div>
             </div>
-            <div>
-              <h1 className="font-semibold text-foreground">{t.chat.pageTitle}</h1>
-              <p className="text-xs text-muted">{t.chat.pageSubtitle}</p>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                createConversation();
+                setInput("");
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-border-light bg-surface px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-cream/60 md:hidden"
+            >
+              <Plus className="size-3.5" />
+              新增對話
+            </button>
           </div>
         </div>
+        {conversations.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto border-b border-border-light px-4 py-3 md:hidden">
+            {conversations.map((conversation) => (
+              <button
+                type="button"
+                key={conversation.id}
+                onClick={() => selectConversation(conversation.id)}
+                className={`shrink-0 rounded-full border px-3 py-1.5 text-xs ${
+                  conversation.id === activeConversationId
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-border-light bg-surface text-muted"
+                }`}
+              >
+                {conversation.title}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-4">
           {messages.length === 0 && !isSending && !errorMessage && (

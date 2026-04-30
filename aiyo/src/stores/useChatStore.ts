@@ -1,10 +1,26 @@
 import { create } from "zustand";
+import { withSyncMutationSource } from "@/stores/syncMutationSource";
 import type { ChatMessage } from "@/types";
 
+export interface ChatConversation {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: ChatMessage[];
+}
+
+const REMOTE_CONVERSATION_ID = "remote-current-trip";
+
 interface ChatState {
+  conversations: ChatConversation[];
+  activeConversationId: string | null;
   messages: ChatMessage[];
   isSending: boolean;
   errorMessage: string | null;
+  createConversation: () => string;
+  selectConversation: (conversationId: string) => void;
+  deleteConversation: (conversationId: string) => void;
   setMessages: (messages: ChatMessage[]) => void;
   mergeRemoteMessages: (messages: ChatMessage[]) => void;
   appendMessage: (message: ChatMessage) => void;
@@ -21,25 +37,180 @@ function isEphemeralMessage(message: ChatMessage): boolean {
   return /^(chat_user_|user_|voice_user_)/.test(message.id);
 }
 
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function deriveConversationTitle(messages: ChatMessage[], fallback = "新的對話"): string {
+  const firstUserMessage = messages.find((message) => message.role === "user");
+  const content = (firstUserMessage?.content || messages[0]?.content || fallback).trim();
+  return content.length > 22 ? `${content.slice(0, 22)}...` : content;
+}
+
+function createEmptyConversation(): ChatConversation {
+  const createdAt = nowIso();
+  return {
+    id: `conversation_${Date.now()}`,
+    title: "新的對話",
+    createdAt,
+    updatedAt: createdAt,
+    messages: [],
+  };
+}
+
+function upsertRemoteConversation(
+  conversations: ChatConversation[],
+  remoteMessages: ChatMessage[],
+): ChatConversation[] {
+  const updatedAt = nowIso();
+  const existing = conversations.find((conversation) => conversation.id === REMOTE_CONVERSATION_ID);
+  const remoteConversation: ChatConversation = {
+    id: REMOTE_CONVERSATION_ID,
+    title: deriveConversationTitle(remoteMessages, "目前行程對話"),
+    createdAt: existing?.createdAt || updatedAt,
+    updatedAt,
+    messages: remoteMessages,
+  };
+
+  return [
+    remoteConversation,
+    ...conversations.filter((conversation) => conversation.id !== REMOTE_CONVERSATION_ID),
+  ];
+}
+
 export const useChatStore = create<ChatState>((set) => ({
+  conversations: [],
+  activeConversationId: null,
   messages: [],
   isSending: false,
   errorMessage: null,
-  setMessages: (messages) => set({ messages }),
+  createConversation: () => {
+    const conversation = createEmptyConversation();
+    withSyncMutationSource("local-user-edit", () => {
+      set((state) => ({
+        conversations: [conversation, ...state.conversations],
+        activeConversationId: conversation.id,
+        messages: [],
+        errorMessage: null,
+      }));
+    });
+    return conversation.id;
+  },
+  selectConversation: (conversationId) =>
+    set((state) => {
+      const conversation = state.conversations.find((item) => item.id === conversationId);
+      if (!conversation) {
+        return state;
+      }
+      return {
+        activeConversationId: conversation.id,
+        messages: conversation.messages,
+        errorMessage: null,
+      };
+    }),
+  deleteConversation: (conversationId) =>
+    withSyncMutationSource("local-user-edit", () => {
+      set((state) => {
+        const conversations = state.conversations.filter((item) => item.id !== conversationId);
+        const nextActive =
+          state.activeConversationId === conversationId
+            ? conversations[0]?.id || null
+            : state.activeConversationId;
+        const activeConversation = conversations.find((item) => item.id === nextActive);
+        return {
+          conversations,
+          activeConversationId: nextActive,
+          messages: activeConversation?.messages || [],
+        };
+      });
+    }),
+  setMessages: (messages) =>
+    set((state) => {
+      const conversations = upsertRemoteConversation(state.conversations, messages);
+      const activeConversationId = state.activeConversationId || REMOTE_CONVERSATION_ID;
+      const activeConversation = conversations.find((item) => item.id === activeConversationId);
+      return {
+        conversations,
+        activeConversationId,
+        messages: activeConversation?.messages || messages,
+      };
+    }),
   mergeRemoteMessages: (messages) =>
     set((state) => {
       const remoteSignatures = new Set(messages.map(messageSignature));
-      const pendingLocal = state.messages.filter(
+      const remoteConversation = state.conversations.find(
+        (conversation) => conversation.id === REMOTE_CONVERSATION_ID,
+      );
+      const pendingLocal = (remoteConversation?.messages || []).filter(
         (message) =>
           isEphemeralMessage(message) && !remoteSignatures.has(messageSignature(message)),
       );
-      return { messages: [...messages, ...pendingLocal] };
+      const mergedMessages = [...messages, ...pendingLocal];
+      const conversations = upsertRemoteConversation(state.conversations, mergedMessages);
+      const activeConversation = conversations.find(
+        (conversation) => conversation.id === state.activeConversationId,
+      );
+      return {
+        conversations,
+        messages:
+          state.activeConversationId === REMOTE_CONVERSATION_ID
+            ? mergedMessages
+            : activeConversation?.messages || state.messages,
+      };
     }),
   appendMessage: (message) =>
-    set((state) => ({
-      messages: [...state.messages, message],
-    })),
+    withSyncMutationSource("local-user-edit", () => {
+      set((state) => ({
+        ...(() => {
+          const activeId = state.activeConversationId || createEmptyConversation().id;
+          const existingConversation =
+            state.conversations.find((conversation) => conversation.id === activeId) ||
+            ({
+              ...createEmptyConversation(),
+              id: activeId,
+            } satisfies ChatConversation);
+          const messages = [...existingConversation.messages, message];
+          const updatedConversation: ChatConversation = {
+            ...existingConversation,
+            title:
+              existingConversation.title === "新的對話"
+                ? deriveConversationTitle(messages)
+                : existingConversation.title,
+            updatedAt: nowIso(),
+            messages,
+          };
+          return {
+            conversations: [
+              updatedConversation,
+              ...state.conversations.filter((conversation) => conversation.id !== activeId),
+            ],
+            activeConversationId: activeId,
+            messages,
+          };
+        })(),
+      }));
+    }),
   setIsSending: (isSending) => set({ isSending }),
   setErrorMessage: (errorMessage) => set({ errorMessage }),
-  clearMessages: () => set({ messages: [] }),
+  clearMessages: () =>
+    withSyncMutationSource("local-user-edit", () => {
+      set((state) => {
+        if (!state.activeConversationId) {
+          return { messages: [] };
+        }
+        return {
+          messages: [],
+          conversations: state.conversations.map((conversation) =>
+            conversation.id === state.activeConversationId
+              ? {
+                  ...conversation,
+                  title: "新的對話",
+                  updatedAt: nowIso(),
+                  messages: [],
+                }
+              : conversation,
+          ),
+        };
+      });
+    }),
 }));

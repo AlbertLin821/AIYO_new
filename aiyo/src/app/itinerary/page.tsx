@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -11,6 +11,7 @@ import {
   GripVertical,
   MapPin,
   Plus,
+  Search,
   Share2,
   Train,
   Trash2,
@@ -33,7 +34,12 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { sortItineraries, type ItineraryListItem, type ItinerarySortOption } from "@/lib/itinerary-sort";
+import {
+  filterItineraries,
+  sortItineraries,
+  type ItineraryListItem,
+  type ItinerarySortOption,
+} from "@/lib/itinerary-sort";
 import { canCollaborator } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { zhTW as t } from "@/locales/zh-TW";
@@ -204,6 +210,8 @@ export default function ItineraryPage() {
   const [shareOpen, setShareOpen] = useState(false);
   const [folderFilter, setFolderFilter] = useState<string>("all");
   const [sortOption, setSortOption] = useState<ItinerarySortOption>("updatedAt_desc");
+  const [itinerarySearch, setItinerarySearch] = useState("");
+  const deferredItinerarySearch = useDeferredValue(itinerarySearch);
   const [folders, setFolders] = useState<ItineraryFolderDto[]>([]);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState("");
@@ -411,6 +419,7 @@ export default function ItineraryPage() {
       destination: destination || "尚未設定",
       days,
       folderId: currentFolderId || undefined,
+      folderName: folders.find((folder) => folder.id === currentFolderId)?.name,
       createdAt: lastUpdatedAt || new Date().toISOString(),
       updatedAt: lastUpdatedAt || new Date().toISOString(),
     },
@@ -420,6 +429,7 @@ export default function ItineraryPage() {
       destination: "台北",
       days: 3,
       folderId: folders[0]?.id,
+      folderName: folders[0]?.name,
       createdAt: "2026-01-05T10:00:00.000Z",
       updatedAt: "2026-04-12T10:00:00.000Z",
     },
@@ -429,6 +439,7 @@ export default function ItineraryPage() {
       destination: "台中",
       days: 2,
       folderId: folders[0]?.id,
+      folderName: folders[0]?.name,
       createdAt: "2026-02-10T10:00:00.000Z",
       updatedAt: "2026-03-18T10:00:00.000Z",
     },
@@ -438,14 +449,18 @@ export default function ItineraryPage() {
       destination: "東京",
       days: 5,
       folderId: folders[1]?.id,
+      folderName: folders[1]?.name,
       createdAt: "2026-03-01T10:00:00.000Z",
       updatedAt: "2026-03-20T10:00:00.000Z",
     },
   ];
   const visibleItineraries = sortItineraries(
-    itineraryCards.filter((item) =>
-      folderFilter === "all" ||
-      (folderFilter === "unfiled" ? !item.folderId : item.folderId === folderFilter),
+    filterItineraries(
+      itineraryCards.filter((item) =>
+        folderFilter === "all" ||
+        (folderFilter === "unfiled" ? !item.folderId : item.folderId === folderFilter),
+      ),
+      deferredItinerarySearch,
     ),
     sortOption,
   );
@@ -502,8 +517,8 @@ export default function ItineraryPage() {
       <div className="mb-8 rounded-2xl border border-border-light bg-surface p-4 shadow-soft">
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-foreground">我的多個行程</h2>
-            <p className="mt-1 text-xs text-muted">依資料夾與排序方式瀏覽目前與範例行程。</p>
+            <h2 className="text-sm font-semibold text-foreground">我的行程資料夾</h2>
+            <p className="mt-1 text-xs text-muted">像資料夾一樣管理每次行程，可依時間、名稱、地點或關鍵字搜尋。</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <select
@@ -529,6 +544,15 @@ export default function ItineraryPage() {
               <option value="title_asc">名稱 A-Z</option>
             </select>
           </div>
+        </div>
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-border bg-cream/40 px-3 py-2">
+          <Search className="size-4 text-muted" />
+          <input
+            value={itinerarySearch}
+            onChange={(event) => setItinerarySearch(event.target.value)}
+            placeholder="搜尋時間、名稱、目的地、資料夾或關鍵字"
+            className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-light focus:outline-none"
+          />
         </div>
         <div className="mb-4 grid gap-3 md:grid-cols-[1fr_auto]">
           <input
@@ -593,11 +617,19 @@ export default function ItineraryPage() {
             >
               <p className="text-sm font-semibold text-foreground">{item.title}</p>
               <p className="mt-1 text-xs text-muted">{item.destination} · {item.days} 天</p>
+              <p className="mt-2 inline-flex rounded-full bg-primary/8 px-2 py-0.5 text-[11px] text-primary">
+                {item.folderName || "未分類"}
+              </p>
               <p className="mt-3 text-[11px] text-muted">
                 最近編輯 {new Date(item.updatedAt).toLocaleDateString("zh-TW")}
               </p>
             </button>
           ))}
+          {visibleItineraries.length === 0 && (
+            <div className="col-span-full rounded-xl border border-dashed border-border-light bg-cream/30 px-4 py-8 text-center text-sm text-muted">
+              找不到符合條件的行程。
+            </div>
+          )}
         </div>
       </div>
 

@@ -1,4 +1,44 @@
 services:
+  app-dev:
+    build:
+      context: ./aiyo
+      dockerfile: Dockerfile
+    container_name: aiyo-new-app-dev
+    env_file:
+      - ./aiyo/.env
+    environment:
+      DATABASE_URL: postgresql://aiyo:aiyo_password@postgres:5432/aiyo_new_db?schema=public
+      NEXTAUTH_URL: http://localhost:3000
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "3000:3000"
+    command: sh -c "npx prisma migrate deploy && npm run dev"
+    volumes:
+      - ./aiyo:/app
+      - /app/node_modules
+      - /app/.next
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles: ["dev"]
+
   app:
     build:
       context: ./aiyo
