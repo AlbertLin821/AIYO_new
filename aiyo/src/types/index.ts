@@ -214,6 +214,8 @@ export interface VideoSummaryResult {
 
 export interface CollaborativeComment {
   id: string;
+  /** 留言作者使用者 id，供前端判斷是否顯示刪除 */
+  authorId?: string;
   author: string;
   authorAvatar?: string;
   content: string;
@@ -326,4 +328,13 @@ export interface BootstrapPayload {
   trip: PersistedTripPayload | null;
   chatMessages: ChatMessage[];
   collaboration: CollaborationPresenceState | null;
+}
+
+export interface MemoryRecord {
+  id: string;
+  memory: string;
+  user_id?: string;
+  metadata?: Record<string, unknown> | null;
+  created_at?: string;
+  updated_at?: string;
 }

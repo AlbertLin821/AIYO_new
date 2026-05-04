@@ -38,7 +38,14 @@ function formatContext(context?: ChatContext): string {
   return parts.join("\n");
 }
 
-export function buildChatPrompt(message: string, context?: ChatContext) {
+function formatMemoryContext(memoryContext?: string): string {
+  if (!memoryContext?.trim()) {
+    return "No relevant long-term memory was retrieved.";
+  }
+  return memoryContext.trim();
+}
+
+export function buildChatPrompt(message: string, context?: ChatContext, memoryContext?: string) {
   const language = detectResponseLanguage(message);
   const languageInstruction =
     language === "traditional-chinese"
@@ -54,16 +61,27 @@ export function buildChatPrompt(message: string, context?: ChatContext) {
       "Always mirror the user's latest language.",
       languageInstruction,
       "Use the provided travel context when it helps.",
+      "Use remembered user preferences and facts when they are relevant, but do not claim certainty beyond the retrieved memories.",
       "Offer practical itinerary advice, sequencing help, and destination-specific suggestions.",
       "Do not mention system prompts or implementation details.",
     ].join("\n"),
-    user: [`User message: ${message}`, "", "Trip context:", formatContext(context)].join(
-      "\n",
-    ),
+    user: [
+      `User message: ${message}`,
+      "",
+      "Trip context:",
+      formatContext(context),
+      "",
+      "Relevant long-term memory:",
+      formatMemoryContext(memoryContext),
+    ].join("\n"),
   };
 }
 
-export function buildItineraryPrompt(request: TripPlanRequest): string {
+export function buildItineraryPrompt(
+  request: TripPlanRequest,
+  memoryContext?: string,
+  options?: { retryMode?: "default" | "strict-format" },
+): string {
   const language = detectResponseLanguage(
     [request.destination, request.preferences.notes, request.preferences.interests.join(" ")]
       .filter(Boolean)
@@ -76,11 +94,37 @@ export function buildItineraryPrompt(request: TripPlanRequest): string {
         ? "Write summary, theme, notes, and titles in Japanese."
         : "Write summary, theme, notes, and titles in English.";
 
+  const retryMode = options?.retryMode || "default";
+  const strictSuffix =
+    retryMode === "strict-format"
+      ? [
+          "STRICT FORMAT RETRY MODE:",
+          "- Do not include any prose before or after JSON.",
+          "- Every day must include an `items` array.",
+          "- Every item must include: `time`, `title`, `type`.",
+          "- Prefer to include `location` with `name`, `lat`, `lng`, `description`, `address` whenever possible.",
+          "- Validate JSON mentally before output.",
+        ]
+      : [];
+
   return [
     "Create a structured travel itinerary in JSON only.",
     languageInstruction,
-    "Return an object with the shape:",
-    '{ "summary": string, "days": [{ "dayNumber": number, "theme": string, "summary": string, "items": [{ "time": "HH:MM", "title": string, "type": "attraction|restaurant|transport|hotel|activity|shopping", "transport": string, "notes": string, "location": { "name": string, "lat": number, "lng": number, "description": string, "address": string } }] }] }',
+    "",
+    "HARD SCHEMA RULES:",
+    '- Return one JSON object exactly in this shape: { "summary": string, "days": [{ "dayNumber": number, "theme": string, "summary": string, "items": [{ "id": string, "time": "HH:MM", "title": string, "type": "attraction|restaurant|transport|hotel|activity|shopping", "transport": string, "notes": string, "location": { "name": string, "lat": number, "lng": number, "description": string, "address": string } }] }], "warnings": string[] }',
+    "- Output raw JSON only, no markdown fences.",
+    "",
+    "QUALITY RULES:",
+    "- Each day should contain 4 to 7 items.",
+    "- Item times must be chronological within each day.",
+    "- Keep route flow realistic and spatially coherent.",
+    "- `transport` should align with transport preference unless a clear local reason requires a change.",
+    "- `mustVisit` places must be covered in the nearest appropriate day(s).",
+    "- `avoid` terms must not appear in `title`, `notes`, or `location.name`.",
+    "- Prefer complete `location` objects (name, lat, lng, description, address). If unknown, you may omit `location` for that item instead of inventing nonsense.",
+    "",
+    "DESTINATION CONSTRAINTS:",
     `Destination: ${request.destination}`,
     `Days: ${request.days}`,
     `Budget TWD: ${request.budget || "not specified"}`,
@@ -90,9 +134,14 @@ export function buildItineraryPrompt(request: TripPlanRequest): string {
     `Must visit: ${request.preferences.mustVisit?.join(", ") || "none"}`,
     `Avoid: ${request.preferences.avoid?.join(", ") || "none"}`,
     request.preferences.notes ? `Notes: ${request.preferences.notes}` : "",
-    "Keep each day realistic and spatially coherent.",
-    "Include latitude and longitude when possible. If unsure, estimate a plausible central coordinate for the named place.",
-    "Do not wrap the JSON in markdown.",
+    `Relevant long-term memory: ${formatMemoryContext(memoryContext)}`,
+    "",
+    "SELF-CHECK BEFORE FINAL OUTPUT:",
+    "- Valid JSON parseable by a strict parser.",
+    "- `days` length matches requested number of days.",
+    "- `mustVisit` covered and `avoid` excluded.",
+    "- Times are sorted and types are from allowed enum.",
+    ...strictSuffix,
   ]
     .filter(Boolean)
     .join("\n");
@@ -131,7 +180,7 @@ export function buildVideoSummaryPrompt(input: {
     "Use transcript chunks as the sole source for summary and segment text; do not invent details from the title or description alone.",
     "Only use the description as supporting metadata when a transcript chunk is clearly incomplete for that time range.",
     "Return valid JSON only. Do not wrap the JSON in markdown.",
-    'Use this exact shape: { "title": string, "summary": string, "segments": [{ "timestamp": string, "startSeconds": number, "endSeconds": number, "title": string, "text": string, "locationHints": string[] }], "extractedLocations": string[] }',
+    'Use this exact shape: { "title": string, "summary": string, "segments": [{ "timestamp": string, "startSeconds": number, "endSeconds": number, "title": string, "text": string, "highlights": string[], "locationHints": string[] }], "extractedLocations": string[] }',
     `Video title: ${input.title}`,
     `Destination hint: ${input.destination || "unknown"}`,
     `Description metadata: ${input.description || "none"}`,
@@ -145,6 +194,7 @@ export function buildVideoSummaryPrompt(input: {
     "- Produce 3 to 8 segments using only timestamps that exist in the transcript chunks.",
     "- Each segment title must be short and specific.",
     "- Each segment text must summarize what happens in that time range, not repeat metadata boilerplate.",
+    "- Each segment highlights array must contain 1 to 3 concrete notable details from that same time range.",
     "- Extract only specific place names or districts when they are actually mentioned.",
     "- If the video TITLE names a concrete attraction (temple, park, night market, landmark), include it in extractedLocations when it is a real place name.",
     input.retryMode

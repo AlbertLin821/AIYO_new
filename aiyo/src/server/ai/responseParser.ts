@@ -17,6 +17,12 @@ export class StructuredOutputError extends Error {
   }
 }
 
+export interface TripPlanParseDiagnostics {
+  parseMode: "direct" | "repaired" | "normalized";
+  repairStage: "none" | "json_repair" | "normalized_repair";
+  issues: Array<"json_missing" | "json_invalid" | "normalized" | "must_visit_uncovered" | "avoid_pollution">;
+}
+
 export function extractJsonBlock(raw: string): string | null {
   const trimmed = raw.trim();
   if (!trimmed) {
@@ -96,60 +102,241 @@ function repairJsonLikeString(input: string): string {
     .replace(/[\u2018\u2019]/g, "'");
 }
 
-function parseTripPlanJson(input: string, request: TripPlanRequest): TripPlanResult | null {
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function toArray<T>(value: T | T[] | undefined | null): T[] {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (value === undefined || value === null) {
+    return [];
+  }
+  return [value];
+}
+
+function mapItemType(raw: string): TripItemType {
+  const normalized = raw.trim().toLowerCase();
+  const aliases: Record<string, TripItemType> = {
+    attraction: "attraction",
+    sightseeing: "attraction",
+    landmark: "attraction",
+    food: "restaurant",
+    meal: "restaurant",
+    restaurant: "restaurant",
+    dining: "restaurant",
+    commute: "transport",
+    transfer: "transport",
+    transport: "transport",
+    hotel: "hotel",
+    stay: "hotel",
+    activity: "activity",
+    event: "activity",
+    shopping: "shopping",
+    market: "shopping",
+  };
+  return aliases[normalized] || normalizeTripItemType(raw);
+}
+
+function normalizeTimeValue(raw: string | undefined, fallbackHour: number): string {
+  if (!raw?.trim()) {
+    return `${String(Math.max(0, Math.min(23, fallbackHour))).padStart(2, "0")}:00`;
+  }
+  const cleaned = raw.trim().replace(".", ":");
+  const match = cleaned.match(/^(\d{1,2})(?::(\d{1,2}))?$/);
+  if (!match) {
+    return `${String(Math.max(0, Math.min(23, fallbackHour))).padStart(2, "0")}:00`;
+  }
+  const hh = Math.max(0, Math.min(23, Number(match[1])));
+  const mm = Math.max(0, Math.min(59, Number(match[2] || "0")));
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+}
+
+function timeToMinutes(value: string): number {
+  const [h, m] = value.split(":").map((part) => Number(part));
+  if (!Number.isFinite(h) || !Number.isFinite(m)) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+  return h * 60 + m;
+}
+
+function normalizeLocation(
+  input: unknown,
+  fallbackName: string,
+  fallbackDescription: string,
+): LocationReference | undefined {
+  const location = coerceLocation(input, fallbackName, fallbackDescription);
+  if (!location) {
+    return undefined;
+  }
+  if (Math.abs(location.lat) > 90 || Math.abs(location.lng) > 180) {
+    return undefined;
+  }
+  return location;
+}
+
+function checkAvoidPollution(
+  item: { title: string; notes?: string; location?: LocationReference },
+  avoidTerms: string[],
+): boolean {
+  if (!avoidTerms.length) {
+    return false;
+  }
+  const haystacks = [
+    item.title.toLowerCase(),
+    (item.notes || "").toLowerCase(),
+    (item.location?.name || "").toLowerCase(),
+  ];
+  return avoidTerms.some((term) => {
+    const needle = term.trim().toLowerCase();
+    return needle.length > 0 && haystacks.some((hay) => hay.includes(needle));
+  });
+}
+
+function parseTripPlanJson(
+  input: string,
+  request: TripPlanRequest,
+  mode: "direct" | "repaired",
+): { result: TripPlanResult; diagnostics: TripPlanParseDiagnostics } | null {
   const parsed = JSON.parse(input) as {
     summary?: string;
     days?: Array<Record<string, unknown>>;
+    warnings?: unknown;
   };
 
-  if (!Array.isArray(parsed.days) || parsed.days.length === 0) {
+  const root = toRecord(parsed);
+  const rawDays = toArray(
+    (root.days as unknown) ?? root.day ?? root.itinerary ?? root.planDays,
+  ).map((entry) => toRecord(entry));
+
+  if (rawDays.length === 0) {
     return null;
   }
 
-  const days: TripPlanDay[] = parsed.days.map((day, dayIndex) => {
-    const items = Array.isArray(day.items) ? day.items : [];
-    return {
-      dayNumber: Number(day.dayNumber) || dayIndex + 1,
-      theme: day.theme ? String(day.theme) : `第 ${dayIndex + 1} 天`,
-      summary: day.summary ? String(day.summary) : undefined,
-      items: items.map((item, itemIndex) => {
-        const record = item as Record<string, unknown>;
+  const usedDayNumbers = new Set<number>();
+  const warnings = new Set<string>(
+    toArray(parsed.warnings)
+      .map((warning) => String(warning).trim())
+      .filter(Boolean),
+  );
+  const issues: TripPlanParseDiagnostics["issues"] = [];
+  let normalized = false;
+
+  const days: TripPlanDay[] = rawDays.map((day, dayIndex) => {
+    const aliasDayNumber =
+      Number(day.dayNumber ?? day.day ?? day.dayNo ?? day.day_index) || dayIndex + 1;
+    const dedupedDayNumber = usedDayNumbers.has(aliasDayNumber)
+      ? dayIndex + 1
+      : aliasDayNumber;
+    usedDayNumbers.add(dedupedDayNumber);
+    if (dedupedDayNumber !== aliasDayNumber) {
+      normalized = true;
+    }
+
+    const rawItems = toArray(
+      (day.items as unknown) ?? day.activities ?? day.stops ?? day.events,
+    ).map((entry) => toRecord(entry));
+    if (!Array.isArray(day.items)) {
+      normalized = true;
+    }
+
+    const items = rawItems.map((record, itemIndex) => {
         const title = String(record.title || `行程點 ${itemIndex + 1}`);
-        return {
-          id: String(record.id || "").trim() || `ai_${dayIndex + 1}_${itemIndex + 1}`,
-          dayNumber: Number(day.dayNumber) || dayIndex + 1,
-          time: String(record.time || "09:00"),
+        const locationInput = record.location || record.place || record.poi;
+        const normalizedItem = {
+          id:
+            String(record.id || "").trim() ||
+            `ai_${dedupedDayNumber}_${itemIndex + 1}_${title.toLowerCase().replace(/[^a-z0-9\u3400-\u9fff]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 32) || "item"}`,
+          dayNumber: dedupedDayNumber,
+          time: normalizeTimeValue(
+            record.time ? String(record.time) : undefined,
+            9 + itemIndex * 2,
+          ),
           title,
-          type: normalizeTripItemType(String(record.type || "attraction")),
+          type: mapItemType(String(record.type || record.category || "attraction")),
           transport: record.transport ? String(record.transport) : undefined,
-          notes: record.notes ? String(record.notes) : undefined,
-          location: coerceLocation(
-            record.location,
+          notes: String(record.notes || record.desc || record.description || "").trim() || undefined,
+          location: normalizeLocation(
+            locationInput,
             title,
             `${request.destination} · ${title}`,
           ),
-          source: "ai",
+          source: "ai" as const,
         };
-      }),
+        if (!record.time || !record.type || !record.id) {
+          normalized = true;
+        }
+        return normalizedItem;
+      });
+
+    const sortedItems = [...items].sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time));
+    if (sortedItems.some((item, index) => item.id !== items[index]?.id)) {
+      normalized = true;
+    }
+
+    return {
+      dayNumber: dedupedDayNumber,
+      theme: day.theme ? String(day.theme) : `第 ${dedupedDayNumber} 天`,
+      summary: day.summary ? String(day.summary) : undefined,
+      items: sortedItems,
     };
   });
 
+  const mustVisitTerms = (request.preferences.mustVisit || [])
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  const allTitles = days.flatMap((day) => day.items.map((item) => item.title.toLowerCase()));
+  const uncoveredMustVisit = mustVisitTerms.filter(
+    (term) => !allTitles.some((title) => title.includes(term)),
+  );
+  if (uncoveredMustVisit.length > 0) {
+    warnings.add(`QUALITY:MUST_VISIT_UNCOVERED:${uncoveredMustVisit.join("|")}`);
+    issues.push("must_visit_uncovered");
+  }
+
+  const avoidTerms = (request.preferences.avoid || [])
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const pollutedItems = days
+    .flatMap((day) => day.items)
+    .filter((item) => checkAvoidPollution(item, avoidTerms));
+  if (pollutedItems.length > 0) {
+    warnings.add(`QUALITY:AVOID_POLLUTION:${pollutedItems.length}`);
+    issues.push("avoid_pollution");
+  }
+
+  if (normalized) {
+    issues.push("normalized");
+  }
+
   return {
-    summary:
-      parsed.summary?.trim() ||
-      `${request.destination} ${request.days} 日行程規劃概要。`,
-    days,
+    result: {
+      summary:
+        parsed.summary?.trim() ||
+        `${request.destination} ${request.days} 日行程規劃概要。`,
+      days,
+      warnings: warnings.size > 0 ? [...warnings] : undefined,
+    },
+    diagnostics: {
+      parseMode: normalized ? "normalized" : mode,
+      repairStage: mode === "repaired" ? "json_repair" : normalized ? "normalized_repair" : "none",
+      issues,
+    },
   };
 }
 
-export function parseTripPlanResponse(raw: string, request: TripPlanRequest): TripPlanResult {
+export function parseTripPlanResponse(
+  raw: string,
+  request: TripPlanRequest,
+): { result: TripPlanResult; diagnostics: TripPlanParseDiagnostics } {
   const jsonBlock = extractJsonBlock(raw);
   if (!jsonBlock) {
     throw new StructuredOutputError("MODEL_OUTPUT_JSON_MISSING");
   }
 
   try {
-    const direct = parseTripPlanJson(jsonBlock, request);
+    const direct = parseTripPlanJson(jsonBlock, request, "direct");
     if (direct) {
       return direct;
     }
@@ -158,7 +345,7 @@ export function parseTripPlanResponse(raw: string, request: TripPlanRequest): Tr
   }
 
   try {
-    const repaired = parseTripPlanJson(repairJsonLikeString(jsonBlock), request);
+    const repaired = parseTripPlanJson(repairJsonLikeString(jsonBlock), request, "repaired");
     if (repaired) {
       return repaired;
     }
@@ -196,6 +383,12 @@ export function parseVideoSummaryResponse(
                 ? segment.locationHints.map((value) => String(value))
                 : [],
             ),
+            highlights: Array.isArray(segment.highlights)
+              ? segment.highlights
+                  .map((value) => String(value).trim())
+                  .filter((value) => value.length > 1 && value.length < 160)
+                  .slice(0, 3)
+              : undefined,
             startLabel: String(segment.timestamp || fallback.segments[index]?.timestamp || "00:00"),
             startSeconds: Number(
               segment.startSeconds ?? fallback.segments[index]?.startSeconds ?? 0,

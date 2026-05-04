@@ -6,6 +6,7 @@ import { Globe, Lock, Mail, KeyRound, UserPlus, LogIn } from "lucide-react";
 import { getProviders, signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiPost } from "@/services/apiClient";
+import { zhTW as t } from "@/locales/zh-TW";
 
 function mapAuthError(code: string | null | undefined): string | null {
   if (!code) {
@@ -280,7 +281,13 @@ function LoginPageContent() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-background px-4">
+          <p className="text-sm text-muted">{t.login.suspenseFallback}</p>
+        </div>
+      }
+    >
       <LoginPageContent />
     </Suspense>
   );

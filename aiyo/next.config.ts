@@ -1,13 +1,44 @@
 import path from "node:path";
+import { loadEnvConfig } from "@next/env";
 import type { NextConfig } from "next";
 
+const repoRoot = path.join(__dirname);
+loadEnvConfig(repoRoot, process.env.NODE_ENV !== "production");
+
+const mapsKey =
+  (
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
+    process.env.GOOGLE_MAPS_API_KEY ||
+    ""
+  ).trim();
+const mapId = (process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || "").trim();
+const enableMockMaps =
+  (process.env.NEXT_PUBLIC_ENABLE_MOCK_MAPS ||
+    process.env.ENABLE_MOCK_MAPS ||
+    ""
+  ).trim();
+
+const injectedEnv: Record<string, string> = {};
+if (mapsKey) {
+  injectedEnv.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY = mapsKey;
+}
+if (mapId) {
+  injectedEnv.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID = mapId;
+}
+if (enableMockMaps) {
+  injectedEnv.NEXT_PUBLIC_ENABLE_MOCK_MAPS = enableMockMaps;
+}
+
 const nextConfig: NextConfig = {
-  env: {
-    NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:
-      process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || "",
-    NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID: process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || "",
-    NEXT_PUBLIC_ENABLE_MOCK_MAPS:
-      process.env.NEXT_PUBLIC_ENABLE_MOCK_MAPS || process.env.ENABLE_MOCK_MAPS || "",
+  env: injectedEnv,
+  async redirects() {
+    return [
+      {
+        source: "/collaborate",
+        destination: "/itinerary",
+        permanent: false,
+      },
+    ];
   },
   images: {
     remotePatterns: [
@@ -22,7 +53,7 @@ const nextConfig: NextConfig = {
     ],
   },
   turbopack: {
-    root: path.join(__dirname),
+    root: repoRoot,
   },
 };
 

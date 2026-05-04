@@ -75,3 +75,12 @@ export function buildPinsFromTripPlan(days: TripPlanDay[]): MapPin[] {
 
   return pins;
 }
+
+/**
+ * 以目前行程重建「行程」來源的地圖標記，並保留影片、手動或其他非 itinerary 標記。
+ */
+export function mergeTripItineraryPins(currentPins: MapPin[], days: TripPlanDay[]): MapPin[] {
+  const preserved = currentPins.filter((pin) => pin.source !== "itinerary");
+  const itineraryPins = buildPinsFromTripPlan(days);
+  return [...preserved, ...itineraryPins];
+}

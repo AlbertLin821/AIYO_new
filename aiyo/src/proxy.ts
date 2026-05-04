@@ -7,10 +7,6 @@ export default withAuth({
 });
 
 export const config = {
-  matcher: [
-    "/profile/:path*",
-    "/itinerary/:path*",
-    "/collaborate/:path*",
-  ],
+  matcher: ["/profile/:path*", "/itinerary/:path*"],
 };
 

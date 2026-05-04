@@ -189,6 +189,7 @@ function buildHeuristicSegments(chunks: TranscriptChunk[]): VideoSummarySegment[
       title: chunk.title || title,
       text,
       summary: text,
+      highlights: sentences.slice(1, 4).map((sentence) => truncateText(sentence, 120)),
       locationHints,
     };
   });
@@ -243,6 +244,9 @@ function alignSegmentsWithChunks(
       title: segment.title || matchedChunk?.title || truncateText(segment.text, 56),
       text: truncateText(segment.text || matchedChunk?.text || "", 260),
       summary: truncateText(segment.summary || segment.text || matchedChunk?.text || "", 260),
+      highlights: segment.highlights?.length
+        ? segment.highlights.map((highlight) => truncateText(highlight, 120)).slice(0, 3)
+        : undefined,
       locationHints,
     };
   });

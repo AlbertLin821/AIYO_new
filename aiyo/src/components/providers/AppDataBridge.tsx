@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { zhTW as t } from "@/locales/zh-TW";
 import { clearPersistedState } from "@/services/persistence";
+import { ApiRequestError } from "@/services/apiClient";
+import { mergeTripItineraryPins } from "@/services/mapSync";
 import { syncService } from "@/services/syncService";
 import { useChatStore } from "@/stores/useChatStore";
 import { useCollabStore } from "@/stores/useCollabStore";
@@ -15,6 +18,7 @@ import { useUIStore } from "@/stores/useUIStore";
 import { useUserStore } from "@/stores/useUserStore";
 
 export default function AppDataBridge() {
+  const pathname = usePathname();
   const { data: session, status } = useSession();
   const collabRoomId = useCollabStore((state) => state.roomId);
   const pushToast = useToastStore((state) => state.pushToast);
@@ -45,7 +49,17 @@ export default function AppDataBridge() {
       })
       .catch((error) => {
         const message = error instanceof Error ? error.message : "";
-        if (message.includes("Authentication required") || message.includes("unauthorized")) {
+        const unauthorizedApi =
+          error instanceof ApiRequestError &&
+          (error.status === 401 || error.code === "unauthorized");
+        if (
+          unauthorizedApi ||
+          message.includes("Authentication required") ||
+          message.includes("unauthorized") ||
+          message.includes("尚未登入") ||
+          message.includes("登入已失效") ||
+          message.includes("帳號不存在")
+        ) {
           clearPersistedState();
           withSyncMutationSource("bootstrap", () => {
             useChatStore.getState().clearMessages();
@@ -102,6 +116,13 @@ export default function AppDataBridge() {
       ) {
         syncService.scheduleTripSync("trip-store");
       }
+
+      if (
+        JSON.stringify(state.itinerary) !== JSON.stringify(previousState.itinerary)
+      ) {
+        const merged = mergeTripItineraryPins(useMapStore.getState().pins, state.itinerary);
+        useMapStore.getState().setPins(merged, "local-user-edit");
+      }
     });
 
     const unsubscribeMap = useMapStore.subscribe((state, previousState) => {
@@ -127,22 +148,24 @@ export default function AppDataBridge() {
       return;
     }
 
+    const activeSection = pathname?.startsWith("/itinerary") ? "itinerary" : "workspace";
+
     void syncService.sendPresenceHeartbeat({
       roomId: collabRoomId,
-      activeSection: "workspace",
+      activeSection,
       selectedEntityId: useTripStore.getState().tripId || undefined,
     });
 
     const interval = window.setInterval(() => {
       void syncService.sendPresenceHeartbeat({
         roomId: collabRoomId,
-        activeSection: "workspace",
+        activeSection,
         selectedEntityId: useTripStore.getState().tripId || undefined,
       });
     }, 10000);
 
     return () => window.clearInterval(interval);
-  }, [collabRoomId, status]);
+  }, [collabRoomId, pathname, status]);
 
   return null;
 }

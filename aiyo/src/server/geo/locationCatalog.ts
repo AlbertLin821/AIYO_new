@@ -232,6 +232,33 @@ export function resolveLocationReference(
   };
 }
 
+export function findKnownLocationReference(
+  name: string,
+  description?: string,
+): LocationReference | null {
+  const normalized = normalizeName(name);
+  const directMatch = KNOWN_LOCATIONS[normalized];
+  if (directMatch) {
+    return {
+      ...directMatch,
+      description: description || directMatch.description,
+    };
+  }
+
+  const partialMatch = Object.entries(KNOWN_LOCATIONS).find(([key]) =>
+    normalized.includes(key) || key.includes(normalized),
+  )?.[1];
+  if (!partialMatch) {
+    return null;
+  }
+
+  return {
+    ...partialMatch,
+    name,
+    description: description || partialMatch.description,
+  };
+}
+
 export function resolveLocationNames(
   names: string[],
   destinationHint?: string,

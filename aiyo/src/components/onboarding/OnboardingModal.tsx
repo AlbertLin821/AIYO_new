@@ -109,7 +109,7 @@ export default function OnboardingModal() {
           >
             <button
               data-testid="onboarding-close-button"
-              aria-label="關閉 onboarding"
+              aria-label={t.onboarding.closeModalAria}
               onClick={() => finish(true)}
               className="absolute right-4 top-4 z-10 cursor-pointer rounded-full p-1.5 text-muted transition-colors hover:bg-border-light hover:text-foreground"
             >
@@ -162,17 +162,15 @@ export default function OnboardingModal() {
               <div className="mt-6 rounded-2xl border border-border-light bg-cream/30 p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-foreground">推薦旅遊影片</p>
-                    <p className="mt-1 text-xs text-muted">
-                      未輸入資料時顯示台灣六都；輸入目的地後會依偏好調整。
-                    </p>
+                    <p className="text-sm font-semibold text-foreground">{t.onboarding.recommendedTitle}</p>
+                    <p className="mt-1 text-xs text-muted">{t.onboarding.recommendedHint}</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => void loadRecommendations()}
                     disabled={loadingRecommendations}
                     className="rounded-lg p-2 text-primary hover:bg-primary/10 disabled:opacity-50"
-                    aria-label="重新推薦"
+                    aria-label={t.onboarding.refreshRecommendationsAria}
                   >
                     <RefreshCw className={`size-4 ${loadingRecommendations ? "animate-spin" : ""}`} />
                   </button>
@@ -192,7 +190,7 @@ export default function OnboardingModal() {
                   ))}
                   {!loadingRecommendations && recommendedVideos.length === 0 && (
                     <p className="col-span-full rounded-xl border border-dashed border-border-light px-3 py-4 text-center text-xs text-muted">
-                      暫時沒有推薦影片。
+                      {t.onboarding.noRecommendedVideos}
                     </p>
                   )}
                 </div>

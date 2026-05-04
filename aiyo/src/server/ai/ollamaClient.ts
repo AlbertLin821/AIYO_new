@@ -19,7 +19,7 @@ export class OllamaRequestError extends Error {
   }
 }
 
-function resolveModelForTask(
+export function resolveModelForTask(
   task: OllamaChatOptions["task"],
   explicitModel?: string,
 ): string {

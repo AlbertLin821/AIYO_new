@@ -28,6 +28,10 @@ export async function GET() {
       }
     }
 
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[api/bootstrap] internal_error", error);
+    }
+
     return NextResponse.json(
       createError("internal_error", "無法載入資料，請稍後再試。"),
       { status: 500 },

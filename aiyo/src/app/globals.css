@@ -2,28 +2,30 @@
 @import "tailwindcss";
 
 :root {
-  --background: #FFF8F0;
-  --foreground: #2D3748;
-  --primary: #7C9CBF;
-  --primary-light: #a3bdd6;
-  --primary-dark: #5a7fa8;
-  --secondary: #F4A7B9;
-  --secondary-light: #f8c4d0;
-  --tertiary: #B8D8BA;
-  --tertiary-light: #d4ebd5;
-  --lavender: #C3B1E1;
-  --lavender-light: #ddd0ed;
-  --peach: #FFDAB9;
-  --peach-light: #ffe8d0;
-  --cream: #FFF8F0;
-  --surface: #FFFFFF;
-  --surface-hover: #fefcf9;
-  --muted: #718096;
-  --muted-light: #A0AEC0;
-  --border: #E8E0D8;
-  --border-light: #F0EBE5;
-  --danger: #E57373;
-  --shadow-color: 220 20% 70%;
+  --background: #faf6f1;
+  --foreground: #2d3748;
+  --primary: #5a7ea3;
+  --primary-light: #9fb8d5;
+  --primary-dark: #4a6d91;
+  --secondary: #e890a8;
+  --secondary-light: #fad4de;
+  --tertiary: #8fbc91;
+  --tertiary-light: #dceee0;
+  --lavender: #a896cc;
+  --lavender-light: #e8e0f5;
+  --peach: #ffc9a3;
+  --peach-light: #ffe8d6;
+  --cream: #faf6f1;
+  --surface: #ffffff;
+  --surface-elevated: #f8f9fc;
+  --surface-hover: #f5f6fa;
+  --muted: #5c6578;
+  --muted-light: #8b95a8;
+  --border: #c9c2b8;
+  --border-light: #e6e2da;
+  --border-strong: #a89f92;
+  --danger: #d86565;
+  --shadow-color: 220 20% 55%;
 }
 
 @theme inline {
@@ -47,6 +49,8 @@
   --color-muted-light: var(--muted-light);
   --color-border: var(--border);
   --color-border-light: var(--border-light);
+  --color-border-strong: var(--border-strong);
+  --color-surface-elevated: var(--surface-elevated);
   --color-danger: var(--danger);
   --font-sans: 'Inter', 'Noto Sans TC', system-ui, sans-serif;
 }
@@ -128,10 +132,18 @@ body {
   animation: cursorBlink 1s ease-in-out infinite;
 }
 
-/* Map grid pattern */
+/* Map grid pattern（示意／一般底紋共用） */
 .map-grid {
   background-image:
-    linear-gradient(rgba(124, 156, 191, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(124, 156, 191, 0.08) 1px, transparent 1px);
-  background-size: 40px 40px;
+    linear-gradient(rgba(58, 90, 121, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(58, 90, 121, 0.12) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.map-mock-shell {
+  background:
+    radial-gradient(ellipse 120% 80% at 50% 100%, rgb(218 228 216 / 0.95), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 20% 30%, rgb(232 239 247), transparent),
+    radial-gradient(ellipse 60% 45% at 85% 25%, rgb(210 226 238), transparent),
+    linear-gradient(165deg, rgb(226 236 246) 0%, rgb(200 218 228) 45%, rgb(205 223 206) 100%);
 }

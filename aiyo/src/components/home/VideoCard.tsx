@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { AlertCircle, Clock, ExternalLink, Play } from "lucide-react";
@@ -26,13 +26,30 @@ export default function VideoCard({ video, index, onClick }: VideoCardProps) {
   const thumbLabels = [...t.videoCard.thumbLabels];
   const [imageFailed, setImageFailed] = useState(false);
   const showThumbnail = Boolean(video.thumbnail) && !imageFailed;
+
+  function handleActivate() {
+    onClick();
+  }
+
+  function handleKeyDown(event: KeyboardEvent) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onClick();
+    }
+  }
+
   return (
     <motion.div
+      role="button"
+      tabIndex={0}
+      aria-label={`${t.videoCard.openVideoSummary}：${video.title}`}
+      data-testid="recommended-video"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.08 }}
-      onClick={onClick}
-      className="group bg-surface rounded-2xl overflow-hidden shadow-soft hover:shadow-soft-lg transition-all duration-300 cursor-pointer hover:-translate-y-1"
+      onClick={handleActivate}
+      onKeyDown={handleKeyDown}
+      className="group cursor-pointer overflow-hidden rounded-2xl bg-surface shadow-soft transition-all duration-300 hover:-translate-y-1 hover:shadow-soft-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
     >
       <div
         className={`relative aspect-video bg-gradient-to-br ${gradients[index % gradients.length]} flex items-center justify-center`}
@@ -49,9 +66,7 @@ export default function VideoCard({ video, index, onClick }: VideoCardProps) {
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-foreground/60">
             <AlertCircle className="size-6" />
-            <span className="px-4 text-center text-xs font-medium">
-              Thumbnail unavailable
-            </span>
+            <span className="px-4 text-center text-xs font-medium">{t.videoCard.thumbUnavailable}</span>
             <span className="text-2xl font-bold tracking-[0.3em] text-foreground/45">
               {thumbLabels[index % thumbLabels.length]}
             </span>

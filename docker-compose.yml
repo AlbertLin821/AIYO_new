@@ -1,8 +1,18 @@
+# NEXT_PUBLIC_* 會在 Docker 映像「建置」（npm run build）時打入前端程式；若在 builder 時為空，
+# 之後只靠 env_file 重啟容器也無效。請在 build 時讓 Compose 代入變數，例如：
+#   docker compose --env-file ./aiyo/.env build [--profile dev app-dev | app]
+# 或將同樣鍵放在與本檔同一層資料夾的 .env（Docker Compose 用於 ${} 替換）。
+# 詳見：https://docs.docker.com/compose/how-tos/environment-variables/set-environment-variables/
+
 services:
   app-dev:
     build:
       context: ./aiyo
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
+        NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID: ${NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID:-}
+        NEXT_PUBLIC_ENABLE_MOCK_MAPS: ${NEXT_PUBLIC_ENABLE_MOCK_MAPS:-}
     container_name: aiyo-new-app-dev
     env_file:
       - ./aiyo/.env
@@ -10,17 +20,21 @@ services:
       DATABASE_URL: postgresql://aiyo:aiyo_password@postgres:5432/aiyo_new_db?schema=public
       NEXTAUTH_URL: http://localhost:3000
       OLLAMA_BASE_URL: http://host.docker.internal:11434
+      MEM0_BASE_URL: ${MEM0_BASE_URL:-http://mem0-memory:8000}
+      MEM0_ENABLED: ${MEM0_ENABLED:-false}
+      MEM0_TOP_K: ${MEM0_TOP_K:-5}
       HOSTNAME: 0.0.0.0
       PORT: 3000
       CHOKIDAR_USEPOLLING: "true"
       WATCHPACK_POLLING: "true"
     ports:
       - "3000:3000"
-    command: sh -c "npx prisma migrate deploy && npm run dev"
+    command: sh -c "npx prisma generate && npx prisma migrate deploy && npm run dev"
     volumes:
       - ./aiyo:/app
       - /app/node_modules
-      - /app/.next
+      # 改為繫結到宿主，避免匿名卷長期快取「無 NEXT_PUBLIC_*」時的編譯結果；若仍異常請刪除本機 ./aiyo/.next 資料夾
+      - ./aiyo/.next:/app/.next
     restart: unless-stopped
     healthcheck:
       test:
@@ -43,6 +57,10 @@ services:
     build:
       context: ./aiyo
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
+        NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID: ${NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID:-}
+        NEXT_PUBLIC_ENABLE_MOCK_MAPS: ${NEXT_PUBLIC_ENABLE_MOCK_MAPS:-}
     container_name: aiyo-new-app
     env_file:
       - ./aiyo/.env
@@ -50,6 +68,9 @@ services:
       DATABASE_URL: postgresql://aiyo:aiyo_password@postgres:5432/aiyo_new_db?schema=public
       NEXTAUTH_URL: http://localhost:3000
       OLLAMA_BASE_URL: http://host.docker.internal:11434
+      MEM0_BASE_URL: ${MEM0_BASE_URL:-http://mem0-memory:8000}
+      MEM0_ENABLED: ${MEM0_ENABLED:-false}
+      MEM0_TOP_K: ${MEM0_TOP_K:-5}
       HOSTNAME: 0.0.0.0
       PORT: 3000
     ports:
@@ -71,6 +92,74 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  mem0-memory:
+    build:
+      context: "F:/Projects/Githubs/mem0"
+      dockerfile: server/dev.Dockerfile
+    container_name: mem0-memory
+    environment:
+      POSTGRES_HOST: mem0-memory-postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_COLLECTION_NAME: aiyo_memories_local
+      JWT_SECRET: mem0-local-dev-secret-change-me
+      AUTH_DISABLED: "true"
+      DASHBOARD_URL: http://localhost:3010
+      APP_DB_NAME: mem0_app
+      MEM0_DEFAULT_LLM_PROVIDER: ollama
+      MEM0_DEFAULT_EMBEDDER_PROVIDER: ollama
+      MEM0_DEFAULT_LLM_MODEL: gpt-oss:20b
+      MEM0_DEFAULT_EMBEDDER_MODEL: nomic-embed-text
+      MEM0_DEFAULT_EMBEDDING_DIMS: 768
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      MEM0_TELEMETRY: "false"
+      REQUEST_LOG_RETENTION_DAYS: 30
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      PYTHONPATH: ""
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: >
+      sh -c "rm -rf /app/packages &&
+      pip install -q --force-reinstall --no-deps mem0ai &&
+      alembic upgrade head &&
+      uvicorn main:app --host 0.0.0.0 --port 8000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/docs')\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    depends_on:
+      mem0-memory-postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles: ["mem0"]
+
+  mem0-memory-postgres:
+    image: ankane/pgvector:v0.5.1
+    container_name: mem0-memory-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - mem0_memory_postgres_data:/var/lib/postgresql/data
+      - "F:/Projects/Githubs/mem0/server/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro"
+    restart: unless-stopped
+    profiles: ["mem0"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-d", "postgres", "-U", "postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   postgres:
     image: pgvector/pgvector:pg16
@@ -123,3 +212,4 @@ volumes:
   aiyo_new_postgres_data:
   aiyo_new_pgadmin_data:
   aiyo_new_redis_data:
+  mem0_memory_postgres_data:

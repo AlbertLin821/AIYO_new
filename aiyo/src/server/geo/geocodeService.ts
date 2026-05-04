@@ -3,7 +3,7 @@ import {
   mergeAndDedupeExtractions,
   type PlaceCandidate,
 } from "@/server/geo/extractLocations";
-import { resolveLocationReference } from "@/server/geo/locationCatalog";
+import { findKnownLocationReference } from "@/server/geo/locationCatalog";
 import type { LocationReference } from "@/types";
 
 export type GeocodeResult = {
@@ -160,6 +160,29 @@ function combineConfidence(input: {
 
 const DROP_CONFIDENCE_BELOW = 0.17;
 
+function buildKnownCatalogLocation(
+  cand: PlaceCandidate,
+  reason: string,
+): LocationReference | null {
+  const extraction = cand.extraction;
+  const known = findKnownLocationReference(extraction.displayName, reason);
+  if (!known) {
+    return null;
+  }
+  return {
+    ...known,
+    resolvedFrom: cand.source,
+    rawQuery: extraction.raw,
+    raw: extraction.raw,
+    normalized: extraction.normalized,
+    normalizedName: extraction.displayName,
+    name: extraction.displayName,
+    confidence: Math.min(0.48, Math.min(1, cand.rerankScore / 10) * 0.42),
+    verified: false,
+    description: `${known.description}（內部地名對照，仍需人工確認）`,
+  };
+}
+
 export async function geocodeWithGoogle(
   rawQuery: string,
   regionBias?: string,
@@ -267,25 +290,14 @@ export async function resolvePlaceExtractionsHybrid(
   if (!serverConfig.googleMapsApiKey) {
     for (const cand of candidates) {
       const extraction = cand.extraction;
-      const fallback = resolveLocationReference(
-        extraction.displayName,
-        destinationHint,
-        `內部地名對照（未設定 Google Maps API 金鑰）。`,
-      );
-      const conf = Math.min(1, cand.rerankScore / 10) * 0.35;
-      locations.push({
-        ...fallback,
-        resolvedFrom: cand.source,
-        rawQuery: extraction.raw,
-        raw: extraction.raw,
-        normalized: extraction.normalized,
-        normalizedName: extraction.displayName,
-        name: extraction.displayName,
-        confidence: conf,
-        verified: false,
-        description: `${fallback.description}（信心：低，未經 Google 驗證）`,
-      });
-      catalogCount += 1;
+      const known = buildKnownCatalogLocation(cand, "內部地名對照（未設定 Google Maps API 金鑰）。");
+      if (known) {
+        locations.push(known);
+        catalogCount += 1;
+        continue;
+      }
+
+      failures.push(`${extraction.displayName}：未設定 Google Maps API 金鑰且不在內部地名表，已略過。`);
     }
 
     return {
@@ -355,26 +367,15 @@ export async function resolvePlaceExtractionsHybrid(
       continue;
     }
 
-    failures.push(`${extraction.displayName}：${resolved.reason}`);
-    catalogCount += 1;
-    const fallback = resolveLocationReference(
-      extraction.displayName,
-      destinationHint,
-      `Google 查無或失敗，改為內部地名對照。`,
-    );
-    const conf = Math.min(1, cand.rerankScore / 10) * 0.32;
-    locations.push({
-      ...fallback,
-      resolvedFrom: cand.source,
-      rawQuery: extraction.raw,
-      raw: extraction.raw,
-      normalized: extraction.normalized,
-      normalizedName: extraction.displayName,
-      name: extraction.displayName,
-      confidence: conf,
-      verified: false,
-      description: `${fallback.description}（未通過線上地理編碼，信心：低）`,
-    });
+    const known = buildKnownCatalogLocation(cand, "Google 查無或失敗，改用內部已知地名。");
+    if (known && (cand.source === "title-poi" || cand.rerankScore >= 5)) {
+      failures.push(`${extraction.displayName}：${resolved.reason}，改用內部已知地名。`);
+      locations.push(known);
+      catalogCount += 1;
+      continue;
+    }
+
+    failures.push(`${extraction.displayName}：${resolved.reason}，未通過驗證已略過。`);
   }
 
   const mapsProvenance: "google-geocoding" | "catalog-fallback" | "mixed" =
