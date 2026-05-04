@@ -6,7 +6,11 @@ import VideoCard from "@/components/home/VideoCard";
 import VideoSearchBar from "@/components/home/VideoSearchBar";
 import VideoSummaryDrawer from "@/components/home/VideoSummaryDrawer";
 import { zhTW as t } from "@/locales/zh-TW";
+import { summarizeVideo } from "@/services/videoClient";
+import { useToastStore } from "@/stores/useToastStore";
+import { useTripStore } from "@/stores/useTripStore";
 import { useVideoStore } from "@/stores/useVideoStore";
+import type { VideoRecommendation } from "@/types";
 
 export default function HomePage() {
   const {
@@ -17,10 +21,54 @@ export default function HomePage() {
     recommendationSource,
     setSummaryDiagnostics,
     searchQuery,
+    upsertVideo,
+    setIsSummarizing,
   } = useVideoStore();
+  const tripDestination = useTripStore((state) => state.destination);
+  const pushToast = useToastStore((state) => state.pushToast);
 
   const hasSearched = Boolean(searchQuery.trim());
   const showEmptyGrid = videos.length === 0 && !errorMessage;
+
+  async function openVideoSummary(video: VideoRecommendation) {
+    setSummaryDiagnostics(null);
+    setSelectedVideo(video);
+
+    if (!video.videoId || video.summarySegments?.length || video.extractedLocations.length > 0) {
+      return;
+    }
+
+    setIsSummarizing(true);
+    try {
+      const result = await summarizeVideo({
+        videoId: video.videoId,
+        title: video.title,
+        destination: tripDestination,
+      });
+      upsertVideo(result.video);
+      setSelectedVideo(result.video);
+      setSummaryDiagnostics({
+        transcriptSource: result.transcriptSource,
+        summarySource: result.summarySource,
+        segmentSource: result.segmentSource,
+        captionLanguage: result.debug?.captionLanguage,
+        captionKind: result.debug?.captionKind,
+        captionSource: result.debug?.captionSource,
+        mapsProvenance: result.mapsProvenance,
+        geocodeWarnings: result.geocodeWarnings,
+        summaryUnavailable: result.summaryUnavailable,
+        unavailableReason: result.unavailableReason,
+      });
+    } catch (error) {
+      pushToast({
+        variant: "error",
+        title: t.video.requestFailed,
+        description: error instanceof Error ? error.message : t.video.requestFailedGeneric,
+      });
+    } finally {
+      setIsSummarizing(false);
+    }
+  }
 
   return (
     <div className="min-h-screen p-6 lg:p-8">
@@ -85,10 +133,7 @@ export default function HomePage() {
                 key={video.id}
                 video={video}
                 index={index}
-                onClick={() => {
-                  setSummaryDiagnostics(null);
-                  setSelectedVideo(video);
-                }}
+                onClick={() => void openVideoSummary(video)}
               />
             ))}
           </div>

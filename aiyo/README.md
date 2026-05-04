@@ -137,7 +137,7 @@ Protected routes:
 
 - `/profile`
 - `/itinerary`
-- `/collaborate`
+- `/collaborate`（導向 `/itinerary`，舊書籤相容）
 
 Compatibility routes retained:
 

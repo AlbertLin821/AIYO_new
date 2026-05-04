@@ -12,8 +12,8 @@ export default function MapPage() {
   const { panelOpen, setPanelOpen } = useMapStore();
 
   return (
-    <div className="relative h-screen w-full overflow-hidden">
-      <div className="absolute inset-0">
+    <div className="relative flex h-[100dvh] max-lg:h-[calc(100dvh-3.5rem-env(safe-area-inset-bottom,0px))] min-h-0 w-full flex-col overflow-hidden bg-background">
+      <div className="relative flex min-h-0 flex-1 flex-col p-3 sm:p-4">
         <MapView />
       </div>
 
@@ -22,7 +22,7 @@ export default function MapPage() {
       {!panelOpen && (
         <button
           onClick={() => setPanelOpen(true)}
-          className="absolute top-4 right-4 z-20 px-3 py-2 bg-surface rounded-xl shadow-soft text-sm font-medium text-foreground hover:bg-surface-hover transition-colors cursor-pointer flex items-center gap-2"
+          className="absolute top-4 right-4 z-20 flex cursor-pointer items-center gap-2 rounded-xl border-2 border-border bg-surface px-3 py-2 text-sm font-medium text-foreground shadow-soft-lg transition-colors hover:border-primary/40 hover:bg-surface-elevated"
         >
           <CalendarDays className="size-4 text-primary" />
           {t.mapPage.openItineraryPanel}

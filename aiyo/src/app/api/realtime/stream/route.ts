@@ -13,9 +13,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const roomId = searchParams.get("roomId") || undefined;
 
-    let interval: ReturnType<typeof setInterval> | null = null;
+    let tickHandle: ReturnType<typeof setTimeout> | null = null;
     let closed = false;
     let lastSnapshotKey: string | null = null;
+    let pumpInFlight = false;
 
     const stream = new ReadableStream({
       async start(controller) {
@@ -23,9 +24,13 @@ export async function GET(request: Request) {
           if (closed) {
             return;
           }
-          controller.enqueue(
-            encoder.encode(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`),
-          );
+          try {
+            controller.enqueue(
+              encoder.encode(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`),
+            );
+          } catch {
+            closeStream();
+          }
         };
 
         const closeStream = () => {
@@ -33,44 +38,72 @@ export async function GET(request: Request) {
             return;
           }
           closed = true;
-          if (interval) {
-            clearInterval(interval);
-            interval = null;
+          if (tickHandle !== null) {
+            clearTimeout(tickHandle);
+            tickHandle = null;
           }
-          controller.close();
+          try {
+            controller.close();
+          } catch {
+            /* already closed or errored */
+          }
         };
 
         const pump = async () => {
+          if (closed || pumpInFlight) {
+            return;
+          }
+          pumpInFlight = true;
+          try {
+            const snapshot = await getBootstrapPayload(userId);
+            if (roomId) {
+              await cleanupStalePresence(roomId);
+            }
+            const snapshotPayload = createSuccess(snapshot);
+            const nextKey = JSON.stringify(snapshotPayload.data);
+            if (nextKey !== lastSnapshotKey) {
+              lastSnapshotKey = nextKey;
+              send("snapshot", snapshotPayload);
+              return;
+            }
+            send("ping", { ok: true });
+          } catch (err) {
+            const message = err instanceof Error ? err.message : "unknown_error";
+            console.error("[realtime/stream] pump failed:", message);
+            // 保持連線並送出一則可恢復的訊息，避免未處理拒絕直接撕毀 chunked 回應
+            send("tick_failed", {
+              ok: false,
+              retry: true,
+            });
+          } finally {
+            pumpInFlight = false;
+          }
+        };
+
+        const scheduleNextTick = () => {
           if (closed) {
             return;
           }
-          const snapshot = await getBootstrapPayload(userId);
-          if (roomId) {
-            await cleanupStalePresence(roomId);
-          }
-          const snapshotPayload = createSuccess(snapshot);
-          const nextKey = JSON.stringify(snapshotPayload.data);
-          if (nextKey !== lastSnapshotKey) {
-            lastSnapshotKey = nextKey;
-            send("snapshot", snapshotPayload);
-            return;
-          }
-          send("ping", { ok: true });
+          tickHandle = setTimeout(() => {
+            tickHandle = null;
+            void (async () => {
+              await pump();
+              scheduleNextTick();
+            })();
+          }, 2500);
         };
 
         request.signal.addEventListener("abort", closeStream);
 
         send("connected", { ok: true });
         await pump();
-        interval = setInterval(() => {
-          void pump();
-        }, 2500);
+        scheduleNextTick();
       },
       cancel() {
         closed = true;
-        if (interval) {
-          clearInterval(interval);
-          interval = null;
+        if (tickHandle !== null) {
+          clearTimeout(tickHandle);
+          tickHandle = null;
         }
       },
     });
@@ -80,6 +113,7 @@ export async function GET(request: Request) {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
       },
     });
   } catch {

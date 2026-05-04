@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requireTripAccess } from "@/server/tripAccess";
+import { getTripAccess, requireTripAccess } from "@/server/tripAccess";
 import type {
   BootstrapPayload,
   ChatMessage,
@@ -11,8 +11,10 @@ import type {
   User,
 } from "@/types";
 
-function buildInviteCode(seed: string): string {
-  return `AIYO-${seed.slice(0, 8).toUpperCase()}`;
+function buildInviteCode(tripId: string): string {
+  // `inviteCode` is unique in the DB; truncating CUID prefixes can collide when
+  // multiple trips are created in the same tick, causing Prisma P2002 and a 500 from /api/bootstrap.
+  return `AIYO-${tripId.replace(/-/g, "").toUpperCase()}`;
 }
 
 function toUserProfile(input: {
@@ -207,15 +209,130 @@ export async function ensureProfile(userId: string) {
   return prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { profile: true } });
 }
 
+function parseProfilePreferencesRecord(preferences: unknown): Record<string, unknown> {
+  if (preferences && typeof preferences === "object" && !Array.isArray(preferences)) {
+    return { ...(preferences as Record<string, unknown>) };
+  }
+  return {};
+}
+
+async function persistProfilePreferences(userId: string, next: Record<string, unknown>) {
+  await prisma.profile.upsert({
+    where: { userId },
+    update: { preferences: next as object },
+    create: {
+      userId,
+      budget: null,
+      destination: null,
+      preferences: next as object,
+    },
+  });
+}
+
+/** 將 `activeTripId` 寫入 Profile.preferences（與既有 interests 等欄位合併）。 */
+export async function setUserActiveTripId(userId: string, tripId: string | null) {
+  await ensureProfile(userId);
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { profile: true } });
+  const merged = parseProfilePreferencesRecord(user.profile?.preferences);
+  if (tripId) {
+    merged.activeTripId = tripId;
+  } else {
+    delete merged.activeTripId;
+  }
+  await persistProfilePreferences(userId, merged);
+}
+
+export type TripLibraryListRow = {
+  id: string;
+  title: string;
+  destination: string;
+  days: number;
+  folderId: string | null;
+  folderName: string | null;
+  createdAt: string;
+  updatedAt: string;
+  isOwner: boolean;
+};
+
+/** 行程資料夾列表：mine 僅本人擁有；recent 含協作行程。 */
+export async function listTripsForLibrary(userId: string, scope: "recent" | "mine"): Promise<TripLibraryListRow[]> {
+  const where =
+    scope === "mine"
+      ? { userId }
+      : {
+          OR: [{ userId }, { collaborators: { some: { userId } } }],
+        };
+
+  const trips = await prisma.trip.findMany({
+    where,
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      title: true,
+      destination: true,
+      days: true,
+      folderId: true,
+      createdAt: true,
+      updatedAt: true,
+      userId: true,
+      folder: { select: { name: true } },
+    },
+  });
+
+  return trips.map((trip) => ({
+    id: trip.id,
+    title: trip.title?.trim() || (trip.destination?.trim() ? `${trip.destination} 行程` : "未命名行程"),
+    destination: trip.destination?.trim() || "尚未設定",
+    days: trip.days,
+    folderId: trip.folderId,
+    folderName: trip.folder?.name ?? null,
+    createdAt: trip.createdAt.toISOString(),
+    updatedAt: trip.updatedAt.toISOString(),
+    isOwner: trip.userId === userId,
+  }));
+}
+
+const tripIncludeFull = { itineraryDays: true, items: true, pins: true } as const;
+
 export async function ensureCurrentTrip(userId: string) {
+  await ensureProfile(userId);
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { profile: true } });
+  const prefs = parseProfilePreferencesRecord(user.profile?.preferences);
+  const activeTripId = typeof prefs.activeTripId === "string" ? prefs.activeTripId : null;
+
+  if (activeTripId) {
+    const access = await getTripAccess(userId, activeTripId);
+    if (access) {
+      const active = await prisma.trip.findUnique({
+        where: { id: activeTripId },
+        include: tripIncludeFull,
+      });
+      if (active) {
+        return active;
+      }
+    }
+    delete prefs.activeTripId;
+    await persistProfilePreferences(userId, prefs);
+  }
+
   const existing = await prisma.trip.findFirst({
     where: { userId },
     orderBy: { updatedAt: "desc" },
-    include: { itineraryDays: true, items: true, pins: true },
+    include: tripIncludeFull,
   });
 
   if (existing) {
     return existing;
+  }
+
+  const collabTrip = await prisma.trip.findFirst({
+    where: { collaborators: { some: { userId } } },
+    orderBy: { updatedAt: "desc" },
+    include: tripIncludeFull,
+  });
+
+  if (collabTrip) {
+    return collabTrip;
   }
 
   return prisma.trip.create({
@@ -233,7 +350,7 @@ export async function ensureCurrentTrip(userId: string) {
         },
       },
     },
-    include: { itineraryDays: true, items: true, pins: true },
+    include: tripIncludeFull,
   });
 }
 
@@ -298,10 +415,19 @@ export async function getBootstrapPayload(userId: string): Promise<BootstrapPayl
 }
 
 export async function updateProfile(userId: string, input: Partial<User>) {
+  const existing = await prisma.user.findUnique({ where: { id: userId }, include: { profile: true } });
+  const prev = parseProfilePreferencesRecord(existing?.profile?.preferences);
+  const prevInterests = Array.isArray(prev.interests) ? (prev.interests as string[]) : [];
   const preferences = {
-    interests: input.interests || input.travelPreferences || [],
-    preferredTransport: input.preferredTransport?.trim() || "",
-    pace: input.travelPace || "moderate",
+    ...prev,
+    interests: input.interests ?? input.travelPreferences ?? prevInterests,
+    preferredTransport:
+      input.preferredTransport !== undefined
+        ? input.preferredTransport.trim()
+        : typeof prev.preferredTransport === "string"
+          ? prev.preferredTransport
+          : "",
+    pace: input.travelPace ?? prev.pace ?? "moderate",
   };
 
   const user = await prisma.user.update({
@@ -445,10 +571,17 @@ export async function saveChatMessage(userId: string, role: string, content: str
 }
 
 function serializeComments(
-  comments: Array<{ id: string; content: string; createdAt: Date; author: { name: string | null; image: string | null } }>,
+  comments: Array<{
+    id: string;
+    authorId: string;
+    content: string;
+    createdAt: Date;
+    author: { name: string | null; image: string | null };
+  }>,
 ): CollaborativeComment[] {
   return comments.map((comment, index) => ({
     id: comment.id,
+    authorId: comment.authorId,
     author: comment.author.name || "AIYO user",
     authorAvatar: comment.author.image || undefined,
     content: comment.content,
@@ -459,14 +592,25 @@ function serializeComments(
 }
 
 function serializePresence(
-  presences: Array<{ userId: string; activeSection: string | null; selectedEntityId: string | null; online: boolean; user: { name: string | null } }>,
+  presences: Array<{
+    userId: string;
+    activeSection: string | null;
+    selectedEntityId: string | null;
+    cursorX: number | null;
+    cursorY: number | null;
+    online: boolean;
+    user: { name: string | null };
+  }>,
 ): EditingPresence[] {
   return presences
     .filter((entry) => entry.online)
     .map((entry, index) => ({
       userId: entry.userId,
       userName: entry.user.name || "AIYO user",
-      cursorPosition: { x: 30 + index * 25, y: 40 + index * 18 },
+      cursorPosition: {
+        x: entry.cursorX ?? 30 + index * 25,
+        y: entry.cursorY ?? 40 + index * 18,
+      },
       color: ["#7C9CBF", "#F4A7B9", "#B8D8BA", "#C3B1E1"][index % 4],
       activeSection: entry.activeSection || "workspace",
     }));
@@ -476,8 +620,22 @@ function serializeCollaboration(room: {
   id: string;
   inviteCode: string;
   tripId: string;
-  comments: Array<{ id: string; content: string; createdAt: Date; author: { name: string | null; image: string | null } }>;
-  presences: Array<{ userId: string; activeSection: string | null; selectedEntityId: string | null; online: boolean; user: { id: string; name: string | null; image: string | null } }>;
+  comments: Array<{
+    id: string;
+    authorId: string;
+    content: string;
+    createdAt: Date;
+    author: { name: string | null; image: string | null };
+  }>;
+  presences: Array<{
+    userId: string;
+    activeSection: string | null;
+    selectedEntityId: string | null;
+    cursorX: number | null;
+    cursorY: number | null;
+    online: boolean;
+    user: { id: string; name: string | null; image: string | null };
+  }>;
   trip: { user: { id: string; name: string | null; image: string | null } };
 }): CollaborationPresenceState {
   const memberMap = new Map<string, { id: string; name: string; avatar: string; role: "owner" | "editor" | "viewer"; online: boolean }>();
@@ -505,7 +663,7 @@ function serializeCollaboration(room: {
   return {
     roomId: room.id,
     inviteCode: room.inviteCode,
-    shareLink: `/collaborate?invite=${room.inviteCode}`,
+    shareLink: `/itinerary?invite=${room.inviteCode}`,
     comments: serializeComments(room.comments),
     presence: serializePresence(room.presences),
     members: Array.from(memberMap.values()),
@@ -514,6 +672,41 @@ function serializeCollaboration(room: {
 
 export async function getCollaborationState(tripId: string) {
   const room = await ensureCollaborationRoom(tripId);
+  return serializeCollaboration(room);
+}
+
+export async function deleteComment(roomId: string, commentId: string, userId: string) {
+  const comment = await prisma.comment.findFirst({
+    where: { id: commentId, roomId },
+    include: {
+      room: {
+        include: {
+          trip: { select: { userId: true } },
+        },
+      },
+    },
+  });
+  if (!comment) {
+    throw new Error("not_found");
+  }
+  const isAuthor = comment.authorId === userId;
+  const isTripOwner = comment.room.trip.userId === userId;
+  if (!isAuthor && !isTripOwner) {
+    throw new Error("forbidden");
+  }
+  await prisma.comment.delete({
+    where: { id: commentId },
+  });
+
+  const room = await prisma.collaborationRoom.findUniqueOrThrow({
+    where: { id: roomId },
+    include: {
+      comments: { include: { author: true }, orderBy: { createdAt: "asc" } },
+      presences: { include: { user: true } },
+      trip: { include: { user: true } },
+    },
+  });
+
   return serializeCollaboration(room);
 }
 
@@ -543,7 +736,49 @@ export async function upsertPresence(input: {
   userId: string;
   activeSection?: string;
   selectedEntityId?: string;
+  cursorX?: number | null;
+  cursorY?: number | null;
 }) {
+  const roomExists = await prisma.collaborationRoom.findUnique({
+    where: { id: input.roomId },
+    select: { id: true },
+  });
+  if (!roomExists) {
+    throw new Error("presence_room_not_found");
+  }
+
+  const userExists = await prisma.user.findUnique({
+    where: { id: input.userId },
+    select: { id: true },
+  });
+  if (!userExists) {
+    throw new Error("presence_user_not_found");
+  }
+
+  const update: {
+    activeSection?: string | null;
+    selectedEntityId?: string | null;
+    cursorX?: number | null;
+    cursorY?: number | null;
+    online: boolean;
+    lastSeenAt: Date;
+  } = {
+    online: true,
+    lastSeenAt: new Date(),
+  };
+  if (input.activeSection !== undefined) {
+    update.activeSection = input.activeSection;
+  }
+  if (input.selectedEntityId !== undefined) {
+    update.selectedEntityId = input.selectedEntityId;
+  }
+  if (input.cursorX !== undefined) {
+    update.cursorX = input.cursorX;
+  }
+  if (input.cursorY !== undefined) {
+    update.cursorY = input.cursorY;
+  }
+
   await prisma.collaborationPresence.upsert({
     where: {
       roomId_userId: {
@@ -551,17 +786,14 @@ export async function upsertPresence(input: {
         userId: input.userId,
       },
     },
-    update: {
-      activeSection: input.activeSection,
-      selectedEntityId: input.selectedEntityId,
-      online: true,
-      lastSeenAt: new Date(),
-    },
+    update,
     create: {
       roomId: input.roomId,
       userId: input.userId,
-      activeSection: input.activeSection,
-      selectedEntityId: input.selectedEntityId,
+      activeSection: input.activeSection ?? null,
+      selectedEntityId: input.selectedEntityId ?? null,
+      cursorX: input.cursorX ?? null,
+      cursorY: input.cursorY ?? null,
       online: true,
       lastSeenAt: new Date(),
     },

@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
 import { OllamaRequestError } from "@/server/ai/ollamaClient";
+import { addMemories, formatMemoryContext, searchMemories } from "@/server/memory/mem0Client";
 import { requireSessionUser } from "@/server/auth";
 import { ensureCurrentTrip, saveChatMessage } from "@/server/data/appStateService";
 import { chatWithTravelAssistant } from "@/server/services/travelPlannerService";
-import type { ChatContext } from "@/types";
+import type { ChatContext, ChatMessage } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +14,7 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as {
       message?: string;
+      messages?: ChatMessage[];
       context?: ChatContext;
     };
 
@@ -24,6 +26,7 @@ export async function POST(request: Request) {
 
     let persistedUserId: string | null = null;
     let persistedTripId: string | undefined;
+    let memoryContext: string | undefined;
 
     try {
       const { userId } = await requireSessionUser();
@@ -31,13 +34,20 @@ export async function POST(request: Request) {
       persistedUserId = userId;
       persistedTripId = trip.id;
       await saveChatMessage(userId, "user", body.message.trim(), trip.id);
+      const memories = await searchMemories({
+        userId,
+        query: body.message.trim(),
+      });
+      memoryContext = formatMemoryContext(memories);
     } catch {
       // Chat remains functional even if the user is not authenticated.
     }
 
     const response = await chatWithTravelAssistant({
       message: body.message.trim(),
+      messages: body.messages,
       context: body.context,
+      memoryContext,
     });
 
     if (persistedUserId) {
@@ -50,6 +60,22 @@ export async function POST(request: Request) {
         );
       } catch {
         // Assistant reply persistence should not block the response.
+      }
+
+      try {
+        await addMemories({
+          userId: persistedUserId,
+          messages: [
+            { role: "user", content: body.message.trim() },
+            { role: "assistant", content: response.reply.content },
+          ],
+          metadata: {
+            source: "aiyo-chat",
+            tripId: persistedTripId,
+          },
+        });
+      } catch {
+        // Memory persistence should not block the response.
       }
     }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
@@ -8,21 +8,27 @@ import {
   CalendarDays,
   DollarSign,
   Heart,
+  History,
   Loader2,
   MapPin,
   Mic,
+  Plus,
   Send,
   Sparkles,
+  Trash2,
 } from "lucide-react";
+import VideoCard from "@/components/home/VideoCard";
+import VideoSummaryDrawer from "@/components/home/VideoSummaryDrawer";
 import { zhTW as t } from "@/locales/zh-TW";
 import { applyPlanningUpdateToStores, derivePlanningSnapshot, extractPlanningUpdateFromText } from "@/lib/planningContext";
 import { sendChatMessage } from "@/services/aiClient";
+import { fetchVideoRecommendations, summarizeVideo } from "@/services/videoClient";
 import { useChatStore } from "@/stores/useChatStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
-import { useUIStore } from "@/stores/useUIStore";
 import { useUserStore } from "@/stores/useUserStore";
-import type { ChatMessage } from "@/types";
+import { useVideoStore } from "@/stores/useVideoStore";
+import type { ChatMessage, VideoRecommendation } from "@/types";
 
 function buildUserMessage(content: string): ChatMessage {
   return {
@@ -36,23 +42,47 @@ function buildUserMessage(content: string): ChatMessage {
   };
 }
 
+function shouldRecommendVideos(message: string): boolean {
+  return /影片|youtube|YouTube|video|vlog|推薦.*看|找.*看|旅遊.*看|景點.*影片/i.test(message);
+}
+
 export default function ChatPage() {
   const router = useRouter();
   const { status } = useSession();
   const [input, setInput] = useState("");
-  const { messages, appendMessage, isSending, setIsSending, errorMessage, setErrorMessage } =
-    useChatStore();
+  const [recommendedVideos, setRecommendedVideos] = useState<VideoRecommendation[]>([]);
+  const [selectedVideo, setSelectedVideo] = useState<VideoRecommendation | null>(null);
+  const [isLoadingVideos, setIsLoadingVideos] = useState(false);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const {
+    conversations,
+    activeConversationId,
+    messages,
+    createConversation,
+    selectConversation,
+    deleteConversation,
+    appendMessage,
+    isSending,
+    setIsSending,
+    errorMessage,
+    setErrorMessage,
+  } = useChatStore();
   const tripStore = useTripStore();
   const userStore = useUserStore();
-  const { voiceState, setVoiceState } = useUIStore();
   const pushToast = useToastStore((state) => state.pushToast);
+  const setSummaryDiagnostics = useVideoStore((state) => state.setSummaryDiagnostics);
 
   const tagConfigs = [
     { icon: MapPin, label: t.chat.tagDestination },
     { icon: CalendarDays, label: t.chat.tagDays },
     { icon: DollarSign, label: t.chat.tagBudget },
-    { icon: Heart, label: "\u884c\u7a0b" },
+    { icon: Heart, label: t.chat.tagItinerary },
   ];
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, isSending, errorMessage]);
 
   async function handleSend(rawInput?: string) {
     const message = (rawInput || input).trim();
@@ -67,6 +97,7 @@ export default function ChatPage() {
       user: useUserStore.getState(),
     });
 
+    const previousMessages = useChatStore.getState().messages;
     appendMessage(buildUserMessage(message));
     setInput("");
     setErrorMessage(null);
@@ -75,6 +106,7 @@ export default function ChatPage() {
     try {
       const response = await sendChatMessage({
         message,
+        messages: previousMessages.slice(-10),
         context: {
           destination: planningSnapshot.destination,
           days: planningSnapshot.days,
@@ -89,6 +121,39 @@ export default function ChatPage() {
         },
       });
       appendMessage(response.reply);
+
+      if (shouldRecommendVideos(message)) {
+        setIsLoadingVideos(true);
+        setVideoError(null);
+        try {
+          const outcome = await fetchVideoRecommendations({
+            destination: planningSnapshot.destination,
+            keyword: message,
+            days: planningSnapshot.days,
+            preferences: useUserStore.getState().interests,
+            limit: 6,
+          });
+          setRecommendedVideos(outcome.videos);
+          if (outcome.source === "mock-fallback") {
+            pushToast({
+              variant: "warning",
+              title: t.video.mockVideosTitle,
+              description: outcome.fallbackReason || t.video.mockVideosDesc,
+            });
+          }
+        } catch (error) {
+          const description =
+            error instanceof Error ? error.message : t.video.requestFailedGeneric;
+          setVideoError(description);
+          pushToast({
+            variant: "error",
+            title: t.video.requestFailed,
+            description,
+          });
+        } finally {
+          setIsLoadingVideos(false);
+        }
+      }
     } catch (error) {
       const description =
         error instanceof Error ? error.message : t.chat.requestFailedGeneric;
@@ -105,21 +170,56 @@ export default function ChatPage() {
     }
   }
 
-  function handleVoiceToggle() {
-    if (voiceState !== "idle") {
-      setVoiceState("idle");
+  function handleVoiceHint() {
+    pushToast({
+      variant: "info",
+      title: t.chat.voiceMapOnlyTitle,
+      description: t.chat.voiceMapOnlyHint,
+      actionLabel: t.chat.goToMap,
+      action: () => router.push("/map"),
+    });
+  }
+
+  async function openVideoSummary(video: VideoRecommendation) {
+    setSummaryDiagnostics(null);
+    setSelectedVideo(video);
+
+    if (!video.videoId || video.summarySegments?.length || video.extractedLocations.length > 0) {
       return;
     }
 
-    setVoiceState("listening");
-    window.setTimeout(() => {
-      setVoiceState("idle");
-      pushToast({
-        variant: "info",
-        title: t.chat.voiceUnavailableTitle,
-        description: t.chat.voiceUnavailable,
+    setIsLoadingVideos(true);
+    try {
+      const result = await summarizeVideo({
+        videoId: video.videoId,
+        title: video.title,
+        destination: planningSnapshot.destination,
       });
-    }, 400);
+      setRecommendedVideos((videos) =>
+        videos.map((item) => (item.id === video.id ? result.video : item)),
+      );
+      setSelectedVideo(result.video);
+      setSummaryDiagnostics({
+        transcriptSource: result.transcriptSource,
+        summarySource: result.summarySource,
+        segmentSource: result.segmentSource,
+        captionLanguage: result.debug?.captionLanguage,
+        captionKind: result.debug?.captionKind,
+        captionSource: result.debug?.captionSource,
+        mapsProvenance: result.mapsProvenance,
+        geocodeWarnings: result.geocodeWarnings,
+        summaryUnavailable: result.summaryUnavailable,
+        unavailableReason: result.unavailableReason,
+      });
+    } catch (error) {
+      pushToast({
+        variant: "error",
+        title: t.video.requestFailed,
+        description: error instanceof Error ? error.message : t.video.requestFailedGeneric,
+      });
+    } finally {
+      setIsLoadingVideos(false);
+    }
   }
 
   const planningSnapshot = derivePlanningSnapshot({
@@ -136,7 +236,7 @@ export default function ChatPage() {
       ? `${t.chat.currencyPrefix}${planningSnapshot.budget.toLocaleString()}`
       : t.chat.valueUnset,
     planningSnapshot.hasItinerary
-      ? `${planningSnapshot.plannedStopCount} \u500b\u5df2\u898f\u5283\u505c\u9760\u9ede`
+      ? t.chat.plannedStops.replace("{n}", String(planningSnapshot.plannedStopCount))
       : t.chat.valueUnset,
   ];
 
@@ -144,21 +244,117 @@ export default function ChatPage() {
     status === "authenticated" ? t.chat.emptyHintAuthed : t.chat.emptyHintGuest;
 
   return (
-    <div className="h-screen flex">
-      <div className="flex-1 flex flex-col">
-        <div className="px-6 py-4 border-b border-border-light">
-          <div className="flex items-center gap-3">
-            <div className="size-10 rounded-xl bg-gradient-to-br from-lavender to-primary flex items-center justify-center">
-              <Sparkles className="size-5 text-white" />
-            </div>
-            <div>
-              <h1 className="font-semibold text-foreground">{t.chat.pageTitle}</h1>
-              <p className="text-xs text-muted">{t.chat.pageSubtitle}</p>
-            </div>
+    <div className="flex h-[calc(100dvh-3.5rem-env(safe-area-inset-bottom,0px))] min-h-0 lg:h-screen">
+      <aside className="hidden w-72 shrink-0 flex-col border-r border-border-light bg-surface/70 p-4 md:flex">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <History className="size-4 text-primary" aria-hidden />
+              {t.chat.sidebarTitle}
+            </h2>
+            <p className="mt-1 text-xs text-muted">{t.chat.sidebarHint}</p>
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              createConversation();
+              setInput("");
+            }}
+            className="flex size-9 items-center justify-center rounded-xl bg-primary text-white transition-colors hover:bg-primary-dark"
+            aria-label={t.chat.newConversationAria}
+          >
+            <Plus className="size-4" aria-hidden />
+          </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-4">
+        <div className="flex flex-1 flex-col gap-2 overflow-y-auto">
+          {conversations.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border-light bg-cream/40 px-4 py-6 text-center text-xs text-muted">
+              {t.chat.emptyConversationsHint}
+            </div>
+          ) : (
+            conversations.map((conversation) => (
+              <div
+                key={conversation.id}
+                className={`group relative rounded-2xl border transition-colors ${
+                  conversation.id === activeConversationId
+                    ? "border-primary/40 bg-primary/10"
+                    : "border-border-light bg-surface hover:bg-cream/50"
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => selectConversation(conversation.id)}
+                  className="w-full rounded-2xl px-3 py-3 pr-10 text-left"
+                >
+                  <p className="truncate text-sm font-medium text-foreground">{conversation.title}</p>
+                  <p className="mt-1 text-[11px] text-muted">
+                    {t.chat.messagesCount.replace("{n}", String(conversation.messages.length))} ·{" "}
+                    {new Date(conversation.updatedAt).toLocaleDateString("zh-TW")}
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  className="absolute right-2 top-1/2 z-[1] flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-red-600 opacity-0 transition-opacity hover:bg-red-500/10 group-hover:opacity-100"
+                  aria-label={t.chat.deleteConversationAria}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    deleteConversation(conversation.id);
+                  }}
+                >
+                  <Trash2 className="size-4" aria-hidden />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </aside>
+
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="border-b border-border-light px-6 py-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-lavender to-primary">
+                <Sparkles className="size-5 text-white" aria-hidden />
+              </div>
+              <div>
+                <h1 className="font-semibold text-foreground">{t.chat.pageTitle}</h1>
+                <p className="text-xs text-muted">{t.chat.pageSubtitle}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                createConversation();
+                setInput("");
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-border-light bg-surface px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-cream/60 md:hidden"
+            >
+              <Plus className="size-3.5" aria-hidden />
+              {t.chat.newConversation}
+            </button>
+          </div>
+        </div>
+        {conversations.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto border-b border-border-light px-4 py-3 md:hidden">
+            {conversations.map((conversation) => (
+              <button
+                type="button"
+                key={conversation.id}
+                onClick={() => selectConversation(conversation.id)}
+                className={`shrink-0 rounded-full border px-3 py-1.5 text-xs ${
+                  conversation.id === activeConversationId
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-border-light bg-surface text-muted"
+                }`}
+              >
+                {conversation.title}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 py-6">
           {messages.length === 0 && !isSending && !errorMessage && (
             <div className="rounded-2xl border border-dashed border-border-light bg-cream/40 px-4 py-8 text-center text-sm text-muted">
               <p className="font-medium text-foreground">{t.chat.emptyTitle}</p>
@@ -172,15 +368,16 @@ export default function ChatPage() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.03 }}
+              data-testid={message.role === "user" ? "chat-message-user" : "chat-message-ai"}
               className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`flex items-end gap-2 max-w-[70%] ${
+                className={`flex max-w-[70%] items-end gap-2 ${
                   message.role === "user" ? "flex-row-reverse" : ""
                 }`}
               >
                 <div
-                  className={`size-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold ${
+                  className={`flex size-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${
                     message.role === "user"
                       ? "bg-gradient-to-br from-secondary to-primary"
                       : "bg-gradient-to-br from-lavender to-primary"
@@ -191,16 +388,16 @@ export default function ChatPage() {
 
                 <div>
                   <div
-                    className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+                    className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                       message.role === "user"
-                        ? "bg-primary text-white rounded-br-md"
-                        : "bg-surface border border-border-light text-foreground rounded-bl-md shadow-soft"
+                        ? "rounded-br-md bg-primary text-white"
+                        : "rounded-bl-md border border-border-light bg-surface text-foreground shadow-soft"
                     }`}
                   >
                     <p className="whitespace-pre-wrap">{message.content}</p>
                   </div>
                   <p
-                    className={`text-[10px] text-muted mt-1 ${
+                    className={`mt-1 text-[10px] text-muted ${
                       message.role === "user" ? "text-right" : ""
                     }`}
                   >
@@ -213,14 +410,14 @@ export default function ChatPage() {
 
           {isSending && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2">
-              <div className="size-8 rounded-full bg-gradient-to-br from-lavender to-primary flex items-center justify-center text-xs text-white">
+              <div className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-lavender to-primary text-xs text-white">
                 {t.chat.aiShort}
               </div>
-              <div className="px-4 py-3 bg-surface border border-border-light rounded-2xl rounded-bl-md shadow-soft">
+              <div className="rounded-2xl rounded-bl-md border border-border-light bg-surface px-4 py-3 shadow-soft">
                 <div className="flex items-center gap-1">
-                  <div className="size-2 rounded-full bg-muted-light animate-bounce" style={{ animationDelay: "0ms" }} />
-                  <div className="size-2 rounded-full bg-muted-light animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <div className="size-2 rounded-full bg-muted-light animate-bounce" style={{ animationDelay: "300ms" }} />
+                  <div className="size-2 animate-bounce rounded-full bg-muted-light" style={{ animationDelay: "0ms" }} />
+                  <div className="size-2 animate-bounce rounded-full bg-muted-light" style={{ animationDelay: "150ms" }} />
+                  <div className="size-2 animate-bounce rounded-full bg-muted-light" style={{ animationDelay: "300ms" }} />
                 </div>
               </div>
             </motion.div>
@@ -231,25 +428,49 @@ export default function ChatPage() {
               {errorMessage}
             </div>
           )}
+
+          {(isLoadingVideos || videoError || recommendedVideos.length > 0) && (
+            <section className="rounded-2xl border border-border-light bg-surface px-4 py-4 shadow-soft">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold text-foreground">AI 推薦影片</h2>
+                {isLoadingVideos && (
+                  <Loader2 className="size-4 animate-spin text-primary" aria-hidden />
+                )}
+              </div>
+              {videoError && (
+                <p className="mb-3 rounded-xl border border-danger/20 bg-danger/10 px-3 py-2 text-sm text-danger">
+                  {videoError}
+                </p>
+              )}
+              {recommendedVideos.length > 0 && (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {recommendedVideos.map((video, index) => (
+                    <VideoCard
+                      key={video.id}
+                      video={video}
+                      index={index}
+                      onClick={() => void openVideoSummary(video)}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+          <div ref={messagesEndRef} aria-hidden className="h-px shrink-0" />
         </div>
 
         <div className="px-6 pb-6 pt-3">
-          <div className="flex items-center gap-3 bg-surface rounded-2xl border border-border-light shadow-soft px-4 py-2">
+          <div className="flex items-center gap-3 rounded-2xl border border-border-light bg-surface px-4 py-2 shadow-soft">
             <motion.button
+              type="button"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => void handleVoiceToggle()}
-              className={`size-10 rounded-xl flex items-center justify-center cursor-pointer transition-colors ${
-                voiceState === "listening"
-                  ? "bg-lavender text-white"
-                  : "bg-lavender/10 text-lavender hover:bg-lavender/20"
-              }`}
+              onClick={() => handleVoiceHint()}
+              className="flex size-10 cursor-pointer items-center justify-center rounded-xl bg-lavender/10 text-lavender transition-colors hover:bg-lavender/20"
+              aria-label={t.chat.voiceMapOnlyTitle}
+              title={t.chat.voiceMapOnlyHint}
             >
-              {voiceState === "listening" ? (
-                <Loader2 className="size-5 animate-spin" />
-              ) : (
-                <Mic className="size-5" />
-              )}
+              <Mic className="size-5" aria-hidden />
             </motion.button>
 
             <input
@@ -258,23 +479,27 @@ export default function ChatPage() {
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => event.key === "Enter" && void handleSend()}
               placeholder={t.chat.placeholder}
-              className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-light focus:outline-none py-2"
+              data-testid="chat-input"
+              className="min-w-0 flex-1 bg-transparent py-2 text-sm text-foreground placeholder:text-muted-light focus:outline-none"
             />
 
             <button
+              type="button"
               onClick={() => void handleSend()}
               disabled={!input.trim() || isSending}
-              className="size-10 rounded-xl bg-primary text-white flex items-center justify-center cursor-pointer hover:bg-primary-dark transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              data-testid="chat-send-button"
+              className="flex size-10 cursor-pointer items-center justify-center rounded-xl bg-primary text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-30"
+              aria-label={t.floatingChat.sendAria}
             >
-              <Send className="size-4" />
+              <Send className="size-4" aria-hidden />
             </button>
           </div>
         </div>
       </div>
 
-      <div className="w-72 border-l border-border-light bg-surface/50 p-5 overflow-y-auto hidden lg:block">
-        <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
-          <Sparkles className="size-4 text-lavender" />
+      <div className="hidden w-72 overflow-y-auto border-l border-border-light bg-surface/50 p-5 lg:block">
+        <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Sparkles className="size-4 text-lavender" aria-hidden />
           {t.chat.contextTitle}
         </h3>
 
@@ -289,7 +514,7 @@ export default function ChatPage() {
                   onClick={() => router.push(index === 3 ? "/itinerary" : "/profile")}
                   className="flex w-full min-w-0 items-center gap-3 rounded-xl bg-primary/5 px-3 py-2.5 text-left transition-colors hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/30"
                 >
-                  <Icon className="size-4 flex-shrink-0 text-primary" />
+                  <Icon className="size-4 flex-shrink-0 text-primary" aria-hidden />
                   <div className="min-w-0">
                     <p className="text-[11px] text-muted">{tag.label}</p>
                     <p className="truncate text-sm font-medium text-foreground">{extractedValues[index]}</p>
@@ -301,15 +526,21 @@ export default function ChatPage() {
         ) : (
           <div className="rounded-2xl border border-dashed border-border-light bg-cream/30 px-4 py-6 text-center">
             <p className="text-sm font-medium text-foreground">{t.chat.contextEmptyTitle}</p>
-            <p className="mt-2 text-xs text-muted leading-relaxed">{t.chat.contextEmptyBody}</p>
+            <p className="mt-2 text-xs leading-relaxed text-muted">{t.chat.contextEmptyBody}</p>
           </div>
         )}
 
-        <div className="mt-6 p-4 bg-gradient-to-br from-lavender/10 to-primary/10 rounded-2xl border border-lavender/15">
-          <h4 className="text-sm font-semibold text-foreground mb-2">{t.chat.planningNoteTitle}</h4>
-          <p className="text-xs text-muted leading-relaxed">{t.chat.planningNoteBody}</p>
+        <div className="mt-6 rounded-2xl border border-lavender/15 bg-gradient-to-br from-lavender/10 to-primary/10 p-4">
+          <h4 className="mb-2 text-sm font-semibold text-foreground">{t.chat.planningNoteTitle}</h4>
+          <p className="text-xs leading-relaxed text-muted">{t.chat.planningNoteBody}</p>
         </div>
       </div>
+
+      <VideoSummaryDrawer
+        video={selectedVideo}
+        open={selectedVideo !== null}
+        onClose={() => setSelectedVideo(null)}
+      />
     </div>
   );
 }

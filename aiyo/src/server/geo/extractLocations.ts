@@ -99,6 +99,14 @@ const TITLE_POI_LEXICON: ReadonlyArray<{ match: string; displayName: string }> =
   { match: "奇美博物館", displayName: "奇美博物館" },
   { match: "赤崁樓", displayName: "赤崁樓" },
   { match: "安平古堡", displayName: "安平古堡" },
+  { match: "煙波大飯店台南館", displayName: "煙波大飯店台南館" },
+  { match: "台南煙波大飯店", displayName: "煙波大飯店台南館" },
+  { match: "司法博物館", displayName: "司法博物館" },
+  { match: "台南市美術館", displayName: "台南市美術館" },
+  { match: "台南美術館", displayName: "台南市美術館" },
+  { match: "林百貨", displayName: "林百貨" },
+  { match: "度小月擔仔麵", displayName: "度小月擔仔麵 中正旗艦店" },
+  { match: "度小月担仔面", displayName: "度小月擔仔麵 中正旗艦店" },
   { match: "四草綠色隧道", displayName: "四草綠色隧道" },
   { match: "井仔腳瓦盤鹽田", displayName: "井仔腳瓦盤鹽田" },
   { match: "奮起湖", displayName: "奮起湖" },
@@ -274,6 +282,21 @@ function isLikelyGenericPhrase(value: string): boolean {
     return true;
   }
   return false;
+}
+
+function isMalformedPlaceName(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  if (/jquery|selection|document|window|function|undefined|null/.test(normalized)) {
+    return true;
+  }
+  if (/[{}<>[\]#$]/.test(normalized)) {
+    return true;
+  }
+  // Reject OCR/model artifacts such as "台n南" while keeping normal romanized names.
+  return /[\u3400-\u9fff][a-z][\u3400-\u9fff]/i.test(value);
 }
 
 function hasPlaceSignal(value: string): boolean {
@@ -488,7 +511,7 @@ export function extractPlacesFromTranscriptAndSummary(input: {
       };
     })
     .filter(({ extraction, patternScore }) => {
-      if (isLikelyGenericPhrase(extraction.displayName)) {
+      if (isLikelyGenericPhrase(extraction.displayName) || isMalformedPlaceName(extraction.displayName)) {
         return false;
       }
       if (destinationNormalized && extraction.normalized === destinationNormalized) {

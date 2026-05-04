@@ -22,6 +22,8 @@ interface PersistedState {
   version: number;
   chat?: {
     messages: ReturnType<typeof useChatStore.getState>["messages"];
+    conversations?: ReturnType<typeof useChatStore.getState>["conversations"];
+    activeConversationId?: ReturnType<typeof useChatStore.getState>["activeConversationId"];
   };
   trip?: Pick<
     ReturnType<typeof useTripStore.getState>,
@@ -136,7 +138,13 @@ export function debounce<T extends (...args: never[]) => void>(
 }
 
 function resetInMemoryStores(): void {
-  useChatStore.setState({ messages: [], isSending: false, errorMessage: null });
+  useChatStore.setState({
+    conversations: [],
+    activeConversationId: null,
+    messages: [],
+    isSending: false,
+    errorMessage: null,
+  });
   useTripStore.setState(EMPTY_TRIP_STATE);
   useMapStore.setState({
     pins: [],
@@ -184,6 +192,8 @@ function buildStateSnapshot(): PersistedState {
     version: STORAGE_VERSION,
     chat: {
       messages: chat.messages,
+      conversations: chat.conversations,
+      activeConversationId: chat.activeConversationId,
     },
     trip: {
       tripId: trip.tripId,
@@ -222,7 +232,14 @@ function hydrateStores(persisted: PersistedState | null): void {
 
   withSyncMutationSource("bootstrap", () => {
     if (persisted.chat) {
-      useChatStore.setState(persisted.chat);
+      const activeConversation = persisted.chat.conversations?.find(
+        (conversation) => conversation.id === persisted.chat?.activeConversationId,
+      );
+      useChatStore.setState({
+        conversations: persisted.chat.conversations || [],
+        activeConversationId: persisted.chat.activeConversationId || null,
+        messages: activeConversation?.messages || persisted.chat.messages,
+      });
     }
     if (persisted.trip) {
       useTripStore.setState(persisted.trip);

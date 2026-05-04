@@ -12,7 +12,6 @@ import {
   MessageCircle,
   LogOut,
   User,
-  Users,
 } from "lucide-react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
@@ -26,7 +25,6 @@ const navItems = [
   { icon: MessageCircle, labelKey: "chat" as const, href: "/chat" },
   { icon: CalendarDays, labelKey: "itinerary" as const, href: "/itinerary" },
   { icon: User, labelKey: "profile" as const, href: "/profile" },
-  { icon: Users, labelKey: "collaborate" as const, href: "/collaborate" },
 ];
 
 export default function Sidebar() {
@@ -40,9 +38,9 @@ export default function Sidebar() {
       initial={false}
       animate={{ width: sidebarCollapsed ? 72 : 240 }}
       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-      className="fixed left-0 top-0 z-40 hidden h-screen flex-col border-r border-border-light bg-surface shadow-soft lg:flex"
+      className="fixed left-0 top-0 z-40 hidden h-screen flex-col border-r-2 border-border bg-surface shadow-soft lg:flex"
     >
-      <div className="flex items-center gap-3 px-4 h-16 border-b border-border-light">
+      <div className="flex h-16 items-center gap-3 border-b border-border bg-surface-elevated/60 px-4">
         <div className="flex items-center justify-center size-10 rounded-xl bg-gradient-to-br from-primary to-lavender text-white flex-shrink-0">
           <Compass className="size-5" />
         </div>
@@ -69,12 +67,14 @@ export default function Sidebar() {
           return (
             <button
               key={item.href}
+              type="button"
+              aria-current={isActive ? "page" : undefined}
               onClick={() => router.push(item.href)}
               className={cn(
                 "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer",
                 "hover:bg-primary/8",
                 isActive
-                  ? "bg-primary/12 text-primary"
+                  ? "bg-primary/15 text-primary shadow-sm ring-2 ring-primary/25"
                   : "text-muted hover:text-foreground",
               )}
             >
@@ -112,7 +112,7 @@ export default function Sidebar() {
       <div className="px-3 pb-3">
         <div
           className={cn(
-            "mb-2 rounded-2xl border border-border-light bg-cream/40 p-3",
+            "mb-2 rounded-2xl border border-border bg-peach-light/40 p-3",
             sidebarCollapsed && "px-2 py-2",
           )}
         >

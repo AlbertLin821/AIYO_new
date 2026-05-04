@@ -1,4 +1,5 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/services/apiClient";
+import type { ItineraryListItem } from "@/lib/itinerary-sort";
 import type { CollaboratorRole } from "@/lib/permissions";
 
 export type ItineraryFolderDto = {
@@ -23,6 +24,15 @@ export type TripCollaboratorDto = {
 
 export function listItineraryFolders() {
   return apiGet<ItineraryFolderDto[]>("/api/itinerary-folders");
+}
+
+export function listTripsForLibrary(scope: "recent" | "mine") {
+  const query = scope === "mine" ? "?scope=mine" : "?scope=recent";
+  return apiGet<ItineraryListItem[]>(`/api/trips${query}`);
+}
+
+export function setActiveTrip(tripId: string) {
+  return apiPost<{ tripId: string }, { ok: boolean }>("/api/trips/active", { tripId });
 }
 
 export function createItineraryFolder(input: { name: string; sortOrder?: number }) {

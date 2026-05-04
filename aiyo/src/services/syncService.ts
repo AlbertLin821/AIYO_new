@@ -1,5 +1,5 @@
 import { zhTW as t } from "@/locales/zh-TW";
-import { apiGet, apiPost, apiPut } from "@/services/apiClient";
+import { apiDelete, apiGet, apiPost, apiPut } from "@/services/apiClient";
 import { useChatStore } from "@/stores/useChatStore";
 import { useCollabStore } from "@/stores/useCollabStore";
 import { useMapStore } from "@/stores/useMapStore";
@@ -317,10 +317,17 @@ class SyncService {
     );
   }
 
+  async deleteComment(roomId: string, commentId: string) {
+    const qs = new URLSearchParams({ roomId, commentId }).toString();
+    return withRetry(() => apiDelete<CollaborationPresenceState>(`/api/collab/comments?${qs}`));
+  }
+
   async sendPresenceHeartbeat(input: {
     roomId: string;
     activeSection?: string;
     selectedEntityId?: string;
+    cursorX?: number | null;
+    cursorY?: number | null;
   }) {
     try {
       await apiPost<typeof input, { ok: boolean }>("/api/realtime/presence", input);

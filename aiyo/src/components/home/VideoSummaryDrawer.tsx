@@ -9,7 +9,6 @@ import {
   Check,
   ExternalLink,
   Loader2,
-  Map as MapIcon,
   MapPin,
   Play,
   Plus,
@@ -35,14 +34,13 @@ export default function VideoSummaryDrawer({
   onClose,
 }: VideoSummaryDrawerProps) {
   const router = useRouter();
-  const addPins = useMapStore((state) => state.addPins);
   const addDay = useTripStore((state) => state.addDay);
   const addItineraryItem = useTripStore((state) => state.addItineraryItem);
   const itinerary = useTripStore((state) => state.itinerary);
+  const addPins = useMapStore((state) => state.addPins);
   const summaryDiagnostics = useVideoStore((state) => state.summaryDiagnostics);
   const pushToast = useToastStore((state) => state.pushToast);
   const [toast, setToast] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [failedImageVideoId, setFailedImageVideoId] = useState<string | null>(null);
   const videoId = video?.videoId;
@@ -76,54 +74,12 @@ export default function VideoSummaryDrawer({
     window.setTimeout(() => setToast(null), 1800);
   }
 
-  async function handleSyncToMap() {
-    if (activeVideo.extractedLocations.length === 0) {
-      pushToast({
-        variant: "warning",
-        title: "目前沒有可同步的地點",
-        description: "這支影片還沒有可驗證的地點結果可同步到地圖。",
-      });
-      return;
-    }
-
-    setSyncing(true);
-    const pins = buildPinsFromLocations(activeVideo.extractedLocations, "video");
-    const googleCount = activeVideo.extractedLocations.filter(
-      (location) => location.resolvedFrom === "google-geocode",
-    ).length;
-    const catalogCount = activeVideo.extractedLocations.filter(
-      (location) =>
-        location.resolvedFrom === "llm" ||
-        location.resolvedFrom === "heuristic" ||
-        location.resolvedFrom === "title-poi",
-    ).length;
-    const lowConfidenceCount = activeVideo.extractedLocations.filter(
-      (location) => (location.confidence ?? 0) < 0.45 || location.verified === false,
-    ).length;
-
-    addPins(pins);
-    setSyncing(false);
-    showToastMessage(t.drawer.toastMap);
-    const warnTail = summaryDiagnostics?.geocodeWarnings?.length
-      ? ` 未完全解析：${summaryDiagnostics.geocodeWarnings.slice(0, 2).join("、")}`
-      : "";
-    const lowTail =
-      lowConfidenceCount > 0 ? ` 另有 ${lowConfidenceCount} 個低信心點位待人工確認。` : "";
-    pushToast({
-      variant: "success",
-      title: `已同步 ${pins.length} 個地點到地圖`,
-      description: `Google 驗證 ${googleCount} 個，候選資料庫 ${catalogCount} 個。${lowTail}${warnTail}`,
-    });
-    onClose();
-    router.push("/map");
-  }
-
   async function handleAddToItinerary() {
     if (activeVideo.extractedLocations.length === 0) {
       pushToast({
         variant: "warning",
-        title: "目前沒有可加入行程的地點",
-        description: "這支影片還沒有抽出可用地點，暫時無法建立新的一天。",
+        title: t.drawer.noLocationsToastTitle,
+        description: t.drawer.noLocationsToastDesc,
       });
       return;
     }
@@ -144,6 +100,7 @@ export default function VideoSummaryDrawer({
         source: "video",
       });
     });
+    addPins(buildPinsFromLocations(activeVideo.extractedLocations, "video"));
 
     setAdding(false);
     showToastMessage(t.drawer.toastItinerary);
@@ -168,6 +125,7 @@ export default function VideoSummaryDrawer({
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
+            data-testid="video-summary-drawer"
             className="fixed right-0 top-0 z-50 flex h-screen w-full max-w-lg flex-col bg-surface shadow-soft-lg"
           >
             <div className="flex items-center justify-between border-b border-border-light px-6 py-4">
@@ -221,10 +179,12 @@ export default function VideoSummaryDrawer({
                 )}
               </div>
               <button
+                type="button"
                 onClick={onClose}
+                aria-label={t.drawer.closeDrawerAria}
                 className="cursor-pointer rounded-full p-1.5 text-muted transition-colors hover:bg-border-light hover:text-foreground"
               >
-                <X className="size-5" />
+                <X className="size-5" aria-hidden />
               </button>
             </div>
 
@@ -256,10 +216,13 @@ export default function VideoSummaryDrawer({
                 )}
 
                 {!embedUrl && (
-                  <div className="relative z-10 flex h-full items-center justify-center">
+                  <div className="relative z-10 flex h-full flex-col items-center justify-center gap-1" aria-hidden>
                     <div className="flex size-16 items-center justify-center rounded-full bg-white/90 shadow-lg">
                       <Play className="ml-1 size-7 text-primary" fill="currentColor" />
                     </div>
+                    <span className="rounded-md bg-foreground/55 px-2 py-0.5 text-[10px] font-medium text-white">
+                      {t.drawer.previewThumbOnly}
+                    </span>
                   </div>
                 )}
 
@@ -283,11 +246,11 @@ export default function VideoSummaryDrawer({
                     <a
                       href={activeVideo.url}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       className="inline-flex items-center gap-2 text-xs font-medium text-primary hover:text-primary-dark"
                     >
-                      <ExternalLink className="size-3" />
-                      在 YouTube 開啟影片
+                      <ExternalLink className="size-3" aria-hidden />
+                      {t.drawer.openOnYoutube}
                     </a>
                   </div>
                 </div>
@@ -338,6 +301,18 @@ export default function VideoSummaryDrawer({
                               <p className="mt-1 text-sm text-muted">
                                 {segment.summary || segment.text}
                               </p>
+                              {segment.highlights && segment.highlights.length > 0 && (
+                                <div className="mt-2 flex flex-col gap-1">
+                                  {segment.highlights.map((highlight) => (
+                                    <p
+                                      key={`${segment.id}_${highlight}`}
+                                      className="rounded-lg bg-surface/80 px-2 py-1 text-xs text-foreground/80"
+                                    >
+                                      {highlight}
+                                    </p>
+                                  ))}
+                                </div>
+                              )}
                               {segment.locationHints && segment.locationHints.length > 0 && (
                                 <div className="mt-2 flex flex-wrap gap-1.5">
                                   {segment.locationHints.map((hint) => (
@@ -377,12 +352,13 @@ export default function VideoSummaryDrawer({
                     <MapPin className="size-4 text-secondary" />
                     {t.drawer.extractedLocations}
                   </h4>
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-2" data-testid="video-location-list">
                     {activeVideo.extractedLocations.length > 0 ? (
                       activeVideo.extractedLocations.map((location) => (
                         <div
                           key={`${activeVideo.id}_${location.name}`}
                           className="flex items-start gap-3 rounded-xl border border-border-light bg-cream/50 px-3 py-2.5"
+                          data-testid="video-location-item"
                         >
                           <div className="mt-0.5 flex size-8 flex-shrink-0 items-center justify-center rounded-lg bg-secondary/15">
                             <MapPin className="size-4 text-secondary" />
@@ -399,7 +375,7 @@ export default function VideoSummaryDrawer({
                                     : t.video.mapsCatalog}
                                 {location.verified === false ||
                                 (location.confidence !== undefined && location.confidence < 0.45)
-                                  ? ` 繚 ${t.video.locationLowConfidence}`
+                                  ? `（${t.video.locationLowConfidence}）`
                                   : ""}
                               </p>
                             )}
@@ -421,8 +397,10 @@ export default function VideoSummaryDrawer({
 
                 <div className="flex flex-col gap-2 pb-4">
                   <button
+                    type="button"
                     onClick={() => void handleAddToItinerary()}
                     disabled={adding}
+                    data-testid="video-add-to-itinerary-button"
                     className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-primary-dark py-3 text-sm font-medium text-white transition-all hover:scale-[1.01] hover:shadow-md active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {adding ? (
@@ -434,24 +412,6 @@ export default function VideoSummaryDrawer({
                       <>
                         <Plus className="size-4" />
                         {t.drawer.createDay}
-                      </>
-                    )}
-                  </button>
-
-                  <button
-                    onClick={() => void handleSyncToMap()}
-                    disabled={syncing}
-                    className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-tertiary/15 py-3 text-sm font-medium text-foreground transition-all hover:bg-tertiary/25 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {syncing ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin" />
-                        {t.drawer.syncMapLoading}
-                      </>
-                    ) : (
-                      <>
-                        <MapIcon className="size-4" />
-                        {t.drawer.syncMap}
                       </>
                     )}
                   </button>

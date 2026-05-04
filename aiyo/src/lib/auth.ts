@@ -161,9 +161,20 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, user, token }) {
-      if (session.user) {
-        session.user.id = user?.id || token.userId || token.sub || "";
+      if (!session.user) {
+        session.user = {
+          id: user?.id || token.userId || token.sub || "",
+          name: token.name ?? null,
+          email: token.email ?? null,
+          image: token.picture ?? null,
+        };
       }
+
+      session.user.name = session.user.name ?? token.name ?? null;
+      session.user.email = session.user.email ?? token.email ?? null;
+      session.user.image = session.user.image ?? token.picture ?? null;
+      session.user.id = user?.id || token.userId || token.sub || "";
+
       return session;
     },
     async signIn({ user, account }) {

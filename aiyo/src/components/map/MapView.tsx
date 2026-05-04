@@ -21,7 +21,9 @@ import { useUserStore } from "@/stores/useUserStore";
 import type { MapPin as MapPinType } from "@/types";
 import { zhTW as t } from "@/locales/zh-TW";
 
-const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+const GOOGLE_MAPS_API_KEY = (
+  process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""
+).trim();
 /** 與伺服端 ENABLE_MOCK_MAPS 對齊：建置時由 next.config 注入。 */
 const FORCE_MOCK_MAP = process.env.NEXT_PUBLIC_ENABLE_MOCK_MAPS === "true";
 /** Vector map ID from Cloud Console (Map Management). Required for AdvancedMarkerElement; omit to use legacy Marker. */
@@ -66,15 +68,14 @@ function MockMapFallback({
   pins,
   selectedPinId,
   setSelectedPinId,
-  destination,
+  zoom,
 }: {
   pins: MapPinType[];
   selectedPinId: string | null;
   setSelectedPinId: (value: string | null) => void;
-  destination: string;
+  zoom: number;
 }) {
   const [hoveredPin, setHoveredPin] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(1);
 
   const lats = pins.map((pin) => pin.lat);
   const lngs = pins.map((pin) => pin.lng);
@@ -89,90 +90,104 @@ function MockMapFallback({
 
   function getPos(lat: number, lng: number) {
     return {
-      x: ((lng - lngRange.min) / (lngRange.max - lngRange.min)) * 70 + 15,
-      y: (1 - (lat - latRange.min) / (latRange.max - latRange.min)) * 70 + 15,
+      x: ((lng - lngRange.min) / (lngRange.max - lngRange.min)) * 74 + 13,
+      y: (1 - (lat - latRange.min) / (latRange.max - latRange.min)) * 74 + 13,
     };
   }
 
   return (
-    <div className="relative h-full w-full bg-gradient-to-br from-primary/5 via-cream to-tertiary/5 map-grid">
-      <div className="absolute right-4 top-4 z-10 flex flex-col gap-2">
-        <button onClick={() => setZoom((value) => Math.min(value + 0.2, 2))} className="flex size-9 items-center justify-center rounded-xl bg-surface text-muted shadow-soft transition-colors hover:text-foreground">
-          <ZoomIn className="size-4" />
-        </button>
-        <button onClick={() => setZoom((value) => Math.max(value - 0.2, 0.6))} className="flex size-9 items-center justify-center rounded-xl bg-surface text-muted shadow-soft transition-colors hover:text-foreground">
-          <ZoomOut className="size-4" />
-        </button>
-      </div>
+    <div
+      className="map-mock-shell map-grid absolute inset-0 flex min-h-0 w-full overflow-hidden"
+      aria-label={t.map.mockLegend}
+    >
+      <div
+        className="relative mx-auto box-border flex size-full items-center justify-center px-4 py-6"
+      >
+        <div
+          className="relative w-full max-w-5xl transition-transform duration-300 ease-out"
+          style={{
+            transform: `scale(${zoom})`,
+            transformOrigin: "center center",
+            minHeight: "min(52vh, 520px)",
+          }}
+        >
+          <svg className="pointer-events-none absolute inset-x-8 inset-y-6 z-[1] h-[calc(100%-3rem)] w-[calc(100%-4rem)] opacity-95">
+            <rect
+              x="4%"
+              y="6%"
+              width="92%"
+              height="88%"
+              rx="28"
+              fill="rgba(255,255,255,0.38)"
+              stroke="rgba(45,76,118,0.22)"
+              strokeWidth="2"
+            />
+          </svg>
 
-      <div className="absolute left-4 top-4 z-10 flex items-center gap-2 rounded-xl bg-surface/90 px-3 py-1.5 text-xs font-medium text-foreground shadow-soft backdrop-blur-sm">
-        <MapPin className="size-3 text-secondary" />
-        {destination}
-        <span className="text-muted">
-          - {pins.length} {t.map.pinsCount}
-        </span>
-      </div>
+          <svg className="pointer-events-none absolute inset-0 z-[1] h-full w-full">
+            {pins.length > 1 &&
+              pins.slice(0, -1).map((pin, index) => {
+                const from = getPos(pin.lat, pin.lng);
+                const to = getPos(pins[index + 1].lat, pins[index + 1].lng);
+                return (
+                  <line
+                    key={`route_${pin.id}`}
+                    x1={`${from.x}%`}
+                    y1={`${from.y}%`}
+                    x2={`${to.x}%`}
+                    y2={`${to.y}%`}
+                    stroke="#4a6d91"
+                    strokeWidth="2"
+                    strokeDasharray="8 6"
+                    opacity="0.55"
+                  />
+                );
+              })}
+          </svg>
 
-      <div className="relative h-full w-full transition-transform duration-300" style={{ transform: `scale(${zoom})`, transformOrigin: "center" }}>
-        <svg className="pointer-events-none absolute inset-0 z-[1] h-full w-full">
-          {pins.length > 1 &&
-            pins.slice(0, -1).map((pin, index) => {
-              const from = getPos(pin.lat, pin.lng);
-              const to = getPos(pins[index + 1].lat, pins[index + 1].lng);
-              return (
-                <line
-                  key={`route_${pin.id}`}
-                  x1={`${from.x}%`}
-                  y1={`${from.y}%`}
-                  x2={`${to.x}%`}
-                  y2={`${to.y}%`}
-                  stroke="#7C9CBF"
-                  strokeWidth="1.5"
-                  strokeDasharray="6 4"
-                  opacity="0.35"
-                />
-              );
-            })}
-        </svg>
-
-        {pins.map((pin) => {
-          const pos = getPos(pin.lat, pin.lng);
-          const isSelected = pin.id === selectedPinId;
-          return (
-            <motion.button
-              key={pin.id}
-              initial={{ scale: 0, y: 10 }}
-              animate={{ scale: 1, y: 0 }}
-              className="absolute z-[2] -translate-x-1/2 -translate-y-full"
-              style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
-              onMouseEnter={() => setHoveredPin(pin.id)}
-              onMouseLeave={() => setHoveredPin(null)}
-              onClick={() => setSelectedPinId(pin.id)}
-            >
-              <div className="relative cursor-pointer group">
-                <div className={`flex size-8 items-center justify-center rounded-full shadow-md transition-transform group-hover:scale-110 ${isSelected ? "ring-4 ring-primary/20" : ""}`} style={{ backgroundColor: pin.color || "#7C9CBF" }}>
-                  <MapPin className="size-4 text-white" fill="white" />
-                </div>
-                {hoveredPin === pin.id && (
-                  <div className="absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-xl bg-surface px-3 py-2 text-left shadow-soft-lg">
-                    <p className="text-xs font-semibold text-foreground">{pin.name}</p>
-                    <p className="mt-0.5 text-[10px] text-muted">{pin.description}</p>
+          {pins.map((pin) => {
+            const pos = getPos(pin.lat, pin.lng);
+            const isSelected = pin.id === selectedPinId;
+            return (
+              <motion.button
+                key={pin.id}
+                initial={{ scale: 0, y: 10 }}
+                animate={{ scale: 1, y: 0 }}
+                type="button"
+                className="absolute z-[2] -translate-x-1/2 -translate-y-full outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-primary"
+                style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
+                onMouseEnter={() => setHoveredPin(pin.id)}
+                onMouseLeave={() => setHoveredPin(null)}
+                onClick={() => setSelectedPinId(pin.id)}
+              >
+                <div className="group relative cursor-pointer">
+                  <div
+                    className={`flex size-10 items-center justify-center rounded-full shadow-[0_4px_14px_rgba(0,0,0,0.2)] ring-2 ring-white transition-transform group-hover:scale-105 ${isSelected ? "ring-4 ring-secondary/70" : ""}`}
+                    style={{ backgroundColor: pin.color || "#5a7ea3" }}
+                  >
+                    <MapPin className="size-[18px] text-white" fill="white" />
                   </div>
-                )}
-              </div>
-            </motion.button>
-          );
-        })}
+                  {hoveredPin === pin.id && (
+                    <div className="absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-xl border border-border bg-surface px-3 py-2 text-left shadow-soft-lg">
+                      <p className="text-xs font-semibold text-foreground">{pin.name}</p>
+                      <p className="mt-0.5 max-w-[220px] text-[10px] text-muted">{pin.description}</p>
+                    </div>
+                  )}
+                </div>
+              </motion.button>
+            );
+          })}
 
-        {pins.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-muted">
-            <div className="text-center">
-              <MapPin className="mx-auto mb-2 size-8 opacity-30" />
-              <p>{t.map.noPinsTitle}</p>
-              <p className="mt-1 text-xs">{t.map.noPinsHint}</p>
+          {pins.length === 0 && (
+            <div className="absolute inset-0 z-[2] flex items-center justify-center px-8">
+              <div className="max-w-sm rounded-2xl border border-border-strong/40 bg-surface/90 px-6 py-8 text-center shadow-soft-lg backdrop-blur-sm">
+                <MapPin className="mx-auto mb-3 size-10 text-primary/80" aria-hidden />
+                <p className="text-sm font-semibold text-foreground">{t.map.noPinsTitle}</p>
+                <p className="mt-2 text-xs leading-relaxed text-muted">{t.map.noPinsHint}</p>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
@@ -186,13 +201,13 @@ export default function MapView() {
   const pushToast = useToastStore((state) => state.pushToast);
   const useGoogleSdk = Boolean(GOOGLE_MAPS_API_KEY) && !FORCE_MOCK_MAP;
   const [sdkState, setSdkState] = useState<SdkState>(() => (useGoogleSdk ? "loading" : "error"));
+  const [mockZoom, setMockZoom] = useState(1);
   const [mapType, setMapType] = useState<"roadmap" | "satellite">("roadmap");
   const [providerError, setProviderError] = useState<string | null>(null);
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<GoogleMapInstance | null>(null);
   const infoWindowRef = useRef<GoogleInfoWindowInstance | null>(null);
   const markersRef = useRef<Map<string, GoogleMarkerInstance>>(new Map());
-  const notifiedFallbackRef = useRef(false);
 
   const selectedPin = useMemo(
     () => pins.find((pin) => pin.id === selectedPinId) || null,
@@ -213,27 +228,11 @@ export default function MapView() {
 
   useEffect(() => {
     if (FORCE_MOCK_MAP) {
-      if (!notifiedFallbackRef.current) {
-        notifiedFallbackRef.current = true;
-        pushToast({
-          variant: "warning",
-          title: t.map.mockDevTitle,
-          description: t.map.mockDevDesc,
-        });
-      }
       queueMicrotask(() => setSdkState("error"));
       return;
     }
 
     if (!useGoogleSdk) {
-      if (!notifiedFallbackRef.current) {
-        notifiedFallbackRef.current = true;
-        pushToast({
-          variant: "info",
-          title: t.map.keyMissingTitle,
-          description: t.map.keyMissingDesc,
-        });
-      }
       return;
     }
 
@@ -300,6 +299,42 @@ export default function MapView() {
     window.addEventListener(AIYO_MAPS_AUTH_FAILURE_EVENT, onAuthFailure);
     return () => window.removeEventListener(AIYO_MAPS_AUTH_FAILURE_EVENT, onAuthFailure);
   }, [pushToast, useGoogleSdk]);
+
+  useEffect(() => {
+    if (!useGoogleSdk || sdkState !== "ready" || !mapInstanceRef.current || !mapElementRef.current) {
+      return;
+    }
+    const map = mapInstanceRef.current;
+    const el = mapElementRef.current;
+
+    type MapsWithEvent = NonNullable<typeof window.google>["maps"] & {
+      event?: { trigger: (instance: typeof map, eventName: string) => void };
+    };
+    const triggerResize = () => {
+      const mapsApi = window.google?.maps as MapsWithEvent | undefined;
+      try {
+        mapsApi?.event?.trigger(map, "resize");
+      } catch {
+        /* ignore unsupported internal trigger */
+      }
+    };
+
+    triggerResize();
+    const ro = new ResizeObserver(() => {
+      requestAnimationFrame(triggerResize);
+    });
+    ro.observe(el);
+    window.addEventListener("orientationchange", triggerResize);
+
+    const onWinResize = () => requestAnimationFrame(triggerResize);
+    window.addEventListener("resize", onWinResize);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("orientationchange", triggerResize);
+      window.removeEventListener("resize", onWinResize);
+    };
+  }, [sdkState, useGoogleSdk]);
 
   useEffect(() => {
     const maps = window.google?.maps;
@@ -370,7 +405,7 @@ export default function MapView() {
           pins.forEach((pin) => {
             const selected = pin.id === selectedPinId;
             const pinElement = new lib.PinElement({
-              background: pin.color || "#7C9CBF",
+              background: pin.color || "#5a7ea3",
               borderColor: "#FFFFFF",
               scale: selected ? 1.2 : 1,
             });
@@ -409,7 +444,7 @@ export default function MapView() {
               map,
               position: { lat: pin.lat, lng: pin.lng },
               title: pin.name,
-              icon: buildMarkerIcon(maps, pin.color || "#7C9CBF", pin.id === selectedPinId),
+              icon: buildMarkerIcon(maps, pin.color || "#5a7ea3", pin.id === selectedPinId),
             });
             marker.addListener("click", () => setSelectedPinId(pin.id));
             markersRef.current.set(pin.id, marker);
@@ -433,7 +468,7 @@ export default function MapView() {
         map,
         position: { lat: pin.lat, lng: pin.lng },
         title: pin.name,
-        icon: buildMarkerIcon(maps, pin.color || "#7C9CBF", pin.id === selectedPinId),
+        icon: buildMarkerIcon(maps, pin.color || "#5a7ea3", pin.id === selectedPinId),
       });
       marker.addListener("click", () => setSelectedPinId(pin.id));
       markersRef.current.set(pin.id, marker);
@@ -447,6 +482,12 @@ export default function MapView() {
       cancelled = true;
     };
   }, [pins, pushToast, sdkState, selectedPinId, setSelectedPinId]);
+
+  function changeMockZoom(delta: number) {
+    setMockZoom((z) =>
+      Math.min(2.3, Math.max(0.5, Math.round((z + delta) * 1000) / 1000)),
+    );
+  }
 
   function changeZoom(delta: number) {
     if (sdkState !== "ready" || !mapInstanceRef.current) {
@@ -485,10 +526,13 @@ export default function MapView() {
   const mapReady = sdkState === "ready";
 
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-2xl bg-surface">
+    <div className="relative flex min-h-0 flex-1 w-full flex-col overflow-hidden rounded-2xl border-2 border-border bg-surface shadow-soft-lg ring-1 ring-black/5">
       {showRealMap ? (
-        <div className="relative h-full w-full">
-          <div ref={mapElementRef} className="h-full w-full min-h-[320px] bg-border-light/20" />
+        <div className="relative z-0 min-h-0 flex-1">
+          <div
+            ref={mapElementRef}
+            className="absolute inset-0 min-h-[200px] bg-[var(--surface-elevated)]"
+          />
           {sdkState === "loading" && (
             <div className="absolute inset-0 z-[5] flex flex-col items-center justify-center gap-2 bg-surface/85 text-sm text-muted">
               <Navigation className="size-6 animate-pulse text-secondary" />
@@ -497,37 +541,80 @@ export default function MapView() {
           )}
         </div>
       ) : (
-        <MockMapFallback pins={pins} selectedPinId={selectedPinId} setSelectedPinId={setSelectedPinId} destination={mapHeaderTitle} />
+        <div className="relative z-0 min-h-0 flex-1 overflow-hidden">
+          <MockMapFallback
+            pins={pins}
+            selectedPinId={selectedPinId}
+            setSelectedPinId={setSelectedPinId}
+            zoom={mockZoom}
+          />
+        </div>
       )}
 
-      <div className="absolute left-4 top-4 z-10 flex items-center gap-2 rounded-xl bg-surface/90 px-3 py-1.5 text-xs font-medium text-foreground shadow-soft backdrop-blur-sm">
-        <MapPin className="size-3 text-secondary" />
-        {mapHeaderTitle}
+      {!showRealMap && FORCE_MOCK_MAP && (
+        <div className="absolute left-0 right-0 top-14 z-[12] flex justify-center px-6">
+          <p className="max-w-xl rounded-xl border border-primary/35 bg-peach-light/95 px-4 py-2 text-center text-[11px] font-medium leading-relaxed text-foreground shadow-soft backdrop-blur-sm sm:text-xs">
+            {t.map.mockForcedBanner}
+          </p>
+        </div>
+      )}
+
+      {!showRealMap && !FORCE_MOCK_MAP && (
+        <div className="absolute left-0 right-0 top-14 z-[12] flex justify-center px-6">
+          <p className="max-w-xl rounded-xl border border-secondary/35 bg-secondary-light/95 px-4 py-2 text-center text-[11px] font-medium leading-relaxed text-foreground shadow-soft backdrop-blur-sm sm:text-xs">
+            {t.map.keyMissingBanner}
+          </p>
+        </div>
+      )}
+
+      <div className="absolute left-4 top-4 z-[11] flex max-w-[min(calc(100vw-120px),28rem)] flex-wrap items-center gap-2 rounded-xl border border-border bg-surface/95 px-3 py-1.5 text-xs font-medium text-foreground shadow-soft backdrop-blur-sm">
+        <MapPin className="size-3 shrink-0 text-secondary" />
+        <span className="truncate">{mapHeaderTitle}</span>
         <span className="text-muted">
-          - {pins.length} {t.map.pinsCount}
+          · {pins.length} {t.map.pinsCount}
         </span>
-        <span className="rounded-full bg-border-light px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted">
-          {mapReady ? t.map.googleMaps : showRealMap ? t.map.badgeLoadingSdk : t.map.fallbackMode}
+        <span className="rounded-full border border-border bg-surface-elevated px-2 py-0.5 text-[10px] tracking-wide text-muted">
+          {mapReady ? t.map.googleMaps : showRealMap ? t.map.badgeLoadingSdk : t.map.mockLegend}
         </span>
       </div>
 
-      <div className="absolute right-4 top-4 z-10 flex flex-col gap-2">
-        <button onClick={() => changeZoom(1)} disabled={!mapReady} className="flex size-9 items-center justify-center rounded-xl bg-surface text-muted shadow-soft transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50">
+      <div className="absolute right-4 top-[7.25rem] z-[11] flex flex-col gap-2 sm:top-[6.75rem]">
+        <button
+          type="button"
+          onClick={() => (showRealMap ? changeZoom(1) : changeMockZoom(0.18))}
+          disabled={showRealMap && !mapReady}
+          className="flex size-9 cursor-pointer items-center justify-center rounded-xl border border-border bg-surface text-muted shadow-soft transition-colors hover:border-primary/30 hover:bg-surface-elevated hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+        >
           <ZoomIn className="size-4" />
         </button>
-        <button onClick={() => changeZoom(-1)} disabled={!mapReady} className="flex size-9 items-center justify-center rounded-xl bg-surface text-muted shadow-soft transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50">
+        <button
+          type="button"
+          onClick={() => (showRealMap ? changeZoom(-1) : changeMockZoom(-0.18))}
+          disabled={showRealMap && !mapReady}
+          className="flex size-9 cursor-pointer items-center justify-center rounded-xl border border-border bg-surface text-muted shadow-soft transition-colors hover:border-primary/30 hover:bg-surface-elevated hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+        >
           <ZoomOut className="size-4" />
         </button>
-        <button onClick={toggleMapType} disabled={!mapReady} className="flex size-9 items-center justify-center rounded-xl bg-surface text-muted shadow-soft transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50">
+        <button
+          type="button"
+          onClick={toggleMapType}
+          disabled={!mapReady}
+          className="flex size-9 cursor-pointer items-center justify-center rounded-xl border border-border bg-surface text-muted shadow-soft transition-colors hover:border-primary/30 hover:bg-surface-elevated hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+        >
           <Layers className="size-4" />
         </button>
-        <button onClick={focusSelectedPin} disabled={!mapReady || pins.length === 0} className="flex size-9 items-center justify-center rounded-xl bg-surface text-muted shadow-soft transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50">
+        <button
+          type="button"
+          onClick={focusSelectedPin}
+          disabled={!mapReady || pins.length === 0}
+          className="flex size-9 cursor-pointer items-center justify-center rounded-xl border border-border bg-surface text-muted shadow-soft transition-colors hover:border-primary/30 hover:bg-surface-elevated hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+        >
           <Navigation className="size-4" />
         </button>
       </div>
 
-      {providerError && sdkState === "error" && (
-        <div className="absolute left-4 bottom-4 z-10 flex w-80 items-start gap-3 rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-foreground shadow-soft">
+      {providerError && sdkState === "error" && useGoogleSdk && (
+        <div className="absolute left-4 bottom-4 z-[11] flex w-80 items-start gap-3 rounded-2xl border-2 border-danger/25 bg-peach-light/90 px-4 py-3 text-sm text-foreground shadow-soft-lg">
           <AlertCircle className="mt-0.5 size-4 shrink-0 text-danger" />
           <div>
             <p className="font-semibold">{t.map.fallbackMode}</p>
@@ -536,14 +623,18 @@ export default function MapView() {
         </div>
       )}
 
-      <div className="absolute bottom-4 left-4 z-10 w-72 rounded-2xl border border-border-light bg-surface/90 p-4 shadow-soft backdrop-blur-sm">
-        <h3 className="mb-3 text-sm font-semibold text-foreground">{t.map.markerListTitle}</h3>
-        <div className="flex max-h-44 flex-col gap-2 overflow-y-auto">
+      <div className="absolute bottom-4 left-4 z-[11] w-72 rounded-2xl border-2 border-border bg-surface/95 p-4 shadow-soft-lg backdrop-blur-sm" data-testid="map-marker-panel">
+        <h3 className="mb-3 border-b border-border pb-2 text-sm font-semibold text-foreground">
+          {t.map.markerListTitle}
+        </h3>
+        <div className="flex max-h-44 flex-col gap-2 overflow-y-auto pt-1" data-testid="map-marker-list">
           {pins.map((pin) => (
             <button
               key={`list_${pin.id}`}
+              type="button"
               onClick={() => setSelectedPinId(pin.id)}
-              className={`rounded-xl border px-3 py-2 text-left transition-colors ${pin.id === selectedPinId ? "border-primary bg-primary/5" : "border-border-light hover:bg-cream/60"}`}
+              data-testid="map-marker-item"
+              className={`rounded-xl border px-3 py-2 text-left transition-colors ${pin.id === selectedPinId ? "border-secondary bg-secondary-light/50 ring-2 ring-secondary/35" : "border-border hover:bg-surface-elevated"}`}
             >
               <p className="text-sm font-medium text-foreground">{pin.name}</p>
               <p className="mt-0.5 text-xs text-muted">
@@ -557,7 +648,7 @@ export default function MapView() {
       </div>
 
       {selectedPin && (
-        <div className="absolute bottom-4 right-4 z-10 w-80 rounded-2xl border border-border-light bg-surface p-4 shadow-soft">
+        <div className="absolute bottom-4 right-4 z-[11] w-80 rounded-2xl border-2 border-primary/25 bg-peach-light/40 p-4 shadow-soft-lg backdrop-blur-sm" data-testid="selected-map-pin">
           <p className="mb-2 text-xs uppercase tracking-wide text-muted">{t.map.selectedPinTitle}</p>
           <h3 className="text-base font-semibold text-foreground">{selectedPin.name}</h3>
           <p className="mt-1 text-sm text-muted">{selectedPin.description}</p>

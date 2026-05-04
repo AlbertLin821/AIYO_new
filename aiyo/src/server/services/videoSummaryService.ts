@@ -189,6 +189,7 @@ function buildHeuristicSegments(chunks: TranscriptChunk[]): VideoSummarySegment[
       title: chunk.title || title,
       text,
       summary: text,
+      highlights: sentences.slice(1, 4).map((sentence) => truncateText(sentence, 120)),
       locationHints,
     };
   });
@@ -243,6 +244,9 @@ function alignSegmentsWithChunks(
       title: segment.title || matchedChunk?.title || truncateText(segment.text, 56),
       text: truncateText(segment.text || matchedChunk?.text || "", 260),
       summary: truncateText(segment.summary || segment.text || matchedChunk?.text || "", 260),
+      highlights: segment.highlights?.length
+        ? segment.highlights.map((highlight) => truncateText(highlight, 120)).slice(0, 3)
+        : undefined,
       locationHints,
     };
   });
@@ -469,7 +473,10 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
       })
     : null;
 
-  const summarySource: VideoSummaryDebugMeta["summarySource"] = "ollama-transcript";
+  const summarySource: VideoSummaryDebugMeta["summarySource"] =
+    ollamaSummary && !ollamaSummary.parseFailed
+      ? "ollama-transcript"
+      : "heuristic-transcript-fallback";
   const segmentSource: VideoSummaryDebugMeta["segmentSource"] = "transcript-chunks";
 
   const summary = ollamaSummary?.summary || heuristicSummary;
@@ -545,6 +552,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     ollamaSummary?.parseFailed
       ? "模型摘要過於泛泛或 JSON 異常，已改用逐字稿規則式摘要。"
       : undefined,
+    !ollamaSummary ? "Ollama 無法使用，已改用逐字稿規則式摘要。" : undefined,
   ].filter(Boolean) as string[];
 
   const result: VideoSummaryResult = {

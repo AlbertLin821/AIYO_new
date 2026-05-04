@@ -189,6 +189,9 @@ model CollaborationPresence {
   userId            String
   activeSection     String?
   selectedEntityId  String?
+  /** 行程頁游標預覽區座標（百分比 0–100） */
+  cursorX          Float?
+  cursorY          Float?
   online            Boolean           @default(true)
   lastSeenAt        DateTime          @default(now())
   room              CollaborationRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)

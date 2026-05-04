@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
+import { zhTW as t } from "@/locales/zh-TW";
 import { useToastStore } from "@/stores/useToastStore";
 
 const toneStyles = {
@@ -27,7 +28,11 @@ export default function ToastViewport() {
   const { toasts, dismissToast } = useToastStore();
 
   return (
-    <div className="pointer-events-none fixed right-4 top-4 z-[100] flex w-full max-w-sm flex-col gap-3">
+    <div
+      className="pointer-events-none fixed z-[100] flex w-full max-w-sm flex-col gap-3 max-lg:inset-x-4 max-lg:bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px)+12px)] max-lg:top-auto lg:right-4 lg:top-4"
+      aria-live="polite"
+      aria-relevant="additions text"
+    >
       <AnimatePresence>
         {toasts.map((toast) => {
           const tone = toneStyles[toast.variant || "info"];
@@ -49,6 +54,7 @@ export default function ToastViewport() {
                   )}
                   {toast.actionLabel && toast.action && (
                     <button
+                      type="button"
                       onClick={() => {
                         toast.action?.();
                         dismissToast(toast.id);
@@ -60,10 +66,12 @@ export default function ToastViewport() {
                   )}
                 </div>
                 <button
+                  type="button"
                   onClick={() => dismissToast(toast.id)}
+                  aria-label={t.common.dismissToast}
                   className="rounded-full p-1 text-muted transition-colors hover:bg-border-light hover:text-foreground"
                 >
-                  <X className="size-4" />
+                  <X className="size-4" aria-hidden />
                 </button>
               </div>
             </motion.div>

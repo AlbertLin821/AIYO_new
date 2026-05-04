@@ -5,7 +5,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import { CalendarPlus, ChevronDown, ChevronUp, MapPin, Plus, X } from "lucide-react";
 import { zhTW as t } from "@/locales/zh-TW";
 import { cn } from "@/lib/utils";
-import { buildPinsFromTripPlan } from "@/services/mapSync";
 import { useMapStore } from "@/stores/useMapStore";
 import { useTripStore } from "@/stores/useTripStore";
 import type { TripPlanItem } from "@/types";
@@ -34,10 +33,8 @@ function typeLabel(itemType: TripPlanItem["type"]) {
 export default function ItineraryPanel() {
   const itinerary = useTripStore((state) => state.itinerary);
   const addItineraryItem = useTripStore((state) => state.addItineraryItem);
-  const { panelOpen, setPanelOpen, setPins, pins, selectedPinId, setSelectedPinId } =
-    useMapStore();
+  const { panelOpen, setPanelOpen, pins, selectedPinId, setSelectedPinId } = useMapStore();
   const [expandedDay, setExpandedDay] = useState<number>(1);
-  const [syncing, setSyncing] = useState(false);
   const manualItemCounter = useRef(0);
 
   function addQuickStop(dayNumber: number) {
@@ -53,12 +50,6 @@ export default function ItineraryPanel() {
     });
   }
 
-  async function syncToMap() {
-    setSyncing(true);
-    setPins(buildPinsFromTripPlan(itinerary));
-    window.setTimeout(() => setSyncing(false), 300);
-  }
-
   return (
     <AnimatePresence>
       {panelOpen && (
@@ -67,9 +58,9 @@ export default function ItineraryPanel() {
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: "100%", opacity: 0 }}
           transition={{ type: "spring", damping: 28, stiffness: 280 }}
-          className="absolute right-0 top-0 z-20 flex h-full w-[380px] flex-col border-l border-border-light bg-surface/95 shadow-soft-lg backdrop-blur-md"
+          className="absolute right-0 top-0 z-20 flex h-full w-full max-w-[380px] flex-col border-l-4 border-primary/40 bg-surface shadow-soft-lg sm:w-[380px]"
         >
-          <div className="flex items-center justify-between border-b border-border-light px-5 py-4">
+          <div className="flex items-center justify-between border-b-2 border-border bg-surface-elevated/80 px-5 py-4">
             <div>
               <h3 className="text-sm font-semibold text-foreground">{t.itineraryPanel.title}</h3>
               <p className="mt-0.5 text-xs text-muted">
@@ -79,24 +70,18 @@ export default function ItineraryPanel() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => void syncToMap()}
-                className="cursor-pointer rounded-xl bg-primary/10 px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
-              >
-                {syncing ? t.itineraryPanel.syncing : t.itineraryPanel.syncMap}
-              </button>
-              <button
-                type="button"
                 onClick={() => setPanelOpen(false)}
+                aria-label={t.itineraryPanel.closePanelAria}
                 className="cursor-pointer rounded-lg p-1.5 text-muted transition-colors hover:bg-border-light hover:text-foreground"
               >
-                <X className="size-4" />
+                <X className="size-4" aria-hidden />
               </button>
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
             {itinerary.map((day) => (
-              <div key={day.dayNumber} className="border-b border-border-light last:border-b-0">
+              <div key={day.dayNumber} className="border-b border-border last:border-b-0">
                 <button
                   type="button"
                   onClick={() =>
@@ -147,17 +132,21 @@ export default function ItineraryPanel() {
                               (item.location && pin.name === item.location.name),
                           );
                           const isSelected = linkedPin?.id === selectedPinId;
+                          const canSelectOnMap = Boolean(linkedPin);
 
                           return (
                             <button
                               type="button"
                               key={item.id}
+                              disabled={!canSelectOnMap}
+                              aria-disabled={!canSelectOnMap}
                               onClick={() => linkedPin && setSelectedPinId(linkedPin.id)}
                               className={cn(
                                 "group flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
-                                isSelected
+                                !canSelectOnMap && "cursor-default opacity-95",
+                                canSelectOnMap && isSelected
                                   ? "bg-primary/10 ring-1 ring-primary/20"
-                                  : "hover:bg-cream/60",
+                                  : canSelectOnMap && "hover:bg-cream/60",
                               )}
                             >
                               <div className="flex flex-col items-center gap-1 pt-1">
@@ -192,6 +181,9 @@ export default function ItineraryPanel() {
                                     {item.location.name}
                                   </p>
                                 )}
+                                {!canSelectOnMap && (
+                                  <p className="mt-1 text-[10px] text-muted">{t.itineraryPanel.noMapPinYet}</p>
+                                )}
                               </div>
                             </button>
                           );
@@ -213,8 +205,8 @@ export default function ItineraryPanel() {
             ))}
           </div>
 
-          <div className="border-t border-border-light p-4">
-            <div className="flex items-start gap-2 rounded-2xl border border-border-light bg-cream/60 p-3 text-xs text-muted">
+          <div className="border-t-2 border-border bg-surface-elevated/50 p-4">
+            <div className="flex items-start gap-2 rounded-2xl border border-secondary/35 bg-peach-light/50 p-3 text-xs text-muted">
               <CalendarPlus className="mt-0.5 size-4 text-primary" />
               {t.itineraryPanel.footerHint}
             </div>

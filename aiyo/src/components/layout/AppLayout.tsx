@@ -5,7 +5,9 @@ import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 import OnboardingModal from "@/components/onboarding/OnboardingModal";
 import ToastViewport from "@/components/system/ToastViewport";
+import MobileBottomNav from "@/components/layout/MobileBottomNav";
 import Sidebar from "@/components/layout/Sidebar";
+import { cn } from "@/lib/utils";
 import { PersistenceBootstrap } from "@/services/persistence";
 import { useUIStore } from "@/stores/useUIStore";
 
@@ -14,6 +16,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [isDesktop, setIsDesktop] = useState(false);
   const pathname = usePathname();
   const shouldRenderOnboarding = pathname !== "/login";
+  const isLogin = pathname === "/login";
 
   useEffect(() => {
     const query = window.matchMedia("(min-width: 1024px)");
@@ -28,12 +31,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <PersistenceBootstrap />
       <ToastViewport />
       <Sidebar />
+      <MobileBottomNav />
       {shouldRenderOnboarding && <OnboardingModal />}
       <motion.main
         initial={false}
         animate={{ marginLeft: isDesktop ? (sidebarCollapsed ? 72 : 240) : 0 }}
         transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-        className="min-h-screen"
+        className={cn(
+          "min-h-screen",
+          !isLogin &&
+            "pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] lg:pb-0",
+        )}
       >
         {children}
       </motion.main>

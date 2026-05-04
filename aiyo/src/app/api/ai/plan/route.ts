@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
-import { OllamaRequestError } from "@/server/ai/ollamaClient";
+import { OllamaRequestError, resolveModelForTask } from "@/server/ai/ollamaClient";
+import { addMemories, formatMemoryContext, searchMemories } from "@/server/memory/mem0Client";
 import { StructuredOutputError } from "@/server/ai/responseParser";
 import { requireSessionUser } from "@/server/auth";
 import { ensureCurrentTrip, saveTripPayload } from "@/server/data/appStateService";
@@ -75,8 +76,24 @@ export async function POST(request: Request) {
       ),
       itineraryDraft: body.itineraryDraft,
     };
+    const mustVisit = tripRequest.preferences.mustVisit || [];
+    const avoid = tripRequest.preferences.avoid || [];
 
-    const result = await generateTripPlan(tripRequest);
+    const memories = await searchMemories({
+      userId,
+      query: [
+        destination,
+        tripRequest.preferences.interests.join(" "),
+        mustVisit.join(" "),
+        avoid.join(" "),
+        tripRequest.preferences.notes || "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    });
+
+    const generated = await generateTripPlan(tripRequest, formatMemoryContext(memories));
+    const result = generated.plan;
 
     const currentTrip = await ensureCurrentTrip(userId);
     await saveTripPayload(userId, {
@@ -90,7 +107,52 @@ export async function POST(request: Request) {
       updatedAt: new Date().toISOString(),
     });
 
-    return NextResponse.json(createSuccess(result));
+    const tripPlanModel = resolveModelForTask("trip-plan");
+
+    try {
+      await addMemories({
+        userId,
+        messages: [
+          {
+            role: "user",
+            content: [
+              `I want a trip plan for ${destination}.`,
+              `Days: ${days}.`,
+              budget ? `Budget TWD: ${budget}.` : "",
+              `Interests: ${tripRequest.preferences.interests.join(", ") || "none"}.`,
+              `Transport preference: ${tripRequest.preferences.transportPreference}.`,
+              `Must visit: ${mustVisit.join(", ") || "none"}.`,
+              `Avoid: ${avoid.join(", ") || "none"}.`,
+              tripRequest.preferences.notes ? `Notes: ${tripRequest.preferences.notes}` : "",
+            ]
+              .filter(Boolean)
+              .join(" "),
+          },
+          {
+            role: "assistant",
+            content: `Created a ${days}-day ${destination} itinerary with summary: ${result.summary}`,
+          },
+        ],
+        metadata: {
+          source: "aiyo-trip-plan",
+          destination,
+          days,
+          tripId: currentTrip.id,
+        },
+      });
+    } catch {
+      // Memory persistence should not block trip planning.
+    }
+
+    return NextResponse.json(
+      createSuccess(result, {
+        tripPlanModel,
+        task: "trip-plan",
+        planGenerationMode: generated.diagnostics.planGenerationMode,
+        parseMode: generated.diagnostics.parseMode,
+        retryCount: generated.diagnostics.retryCount,
+      }),
+    );
   } catch (error) {
     if (error instanceof Error && error.message === "unauthorized") {
       return NextResponse.json(

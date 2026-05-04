@@ -132,12 +132,14 @@ export default function VideoSearchBar() {
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => event.key === "Enter" && void handleSearch()}
             placeholder={t.video.searchPlaceholder}
+            data-testid="video-search-input"
             className="w-full pl-11 pr-4 py-3.5 rounded-2xl border border-border bg-surface text-foreground placeholder:text-muted-light focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all text-sm shadow-soft"
           />
         </div>
         <button
           onClick={() => void handleSearch()}
           disabled={isBusy || !trimmed}
+          data-testid="video-search-button"
           className="px-5 py-3.5 bg-gradient-to-r from-primary to-primary-dark text-white rounded-2xl font-medium text-sm hover:shadow-md transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2"
         >
           {isBusy ? (

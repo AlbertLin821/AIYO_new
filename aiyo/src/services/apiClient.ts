@@ -2,16 +2,43 @@ import { isApiError } from "@/lib/api-response";
 import { zhTW as t } from "@/locales/zh-TW";
 import type { ApiResponse } from "@/types";
 
+export class ApiRequestError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.code = code;
+    Object.setPrototypeOf(this, ApiRequestError.prototype);
+  }
+}
+
 async function parseResponse<T>(response: Response): Promise<T> {
   const payload = (await response.json()) as ApiResponse<T>;
   if (!response.ok || isApiError(payload)) {
-    throw new Error(
-      isApiError(payload)
-        ? payload.error.message
-        : `Request failed with status ${response.status}`,
-    );
+    const message = isApiError(payload)
+      ? payload.error.message
+      : `Request failed with status ${response.status}`;
+    const code = isApiError(payload) ? payload.error.code : undefined;
+    throw new ApiRequestError(message, response.status, code);
   }
   return payload.data;
+}
+
+async function parseResponseWithMeta<T>(
+  response: Response,
+): Promise<{ data: T; meta?: Record<string, unknown> }> {
+  const payload = (await response.json()) as ApiResponse<T>;
+  if (!response.ok || isApiError(payload)) {
+    const message = isApiError(payload)
+      ? payload.error.message
+      : `Request failed with status ${response.status}`;
+    const code = isApiError(payload) ? payload.error.code : undefined;
+    throw new ApiRequestError(message, response.status, code);
+  }
+  return { data: payload.data, meta: payload.meta };
 }
 
 function mergeAbortSignals(a: AbortSignal, b: AbortSignal): AbortSignal {
@@ -76,6 +103,56 @@ export async function apiPost<TRequest, TResponse>(
       ...(signal ? { signal } : {}),
     });
     return parseResponse<TResponse>(response);
+  } catch (error) {
+    const isAbort =
+      (error instanceof Error && error.name === "AbortError") ||
+      (typeof DOMException !== "undefined" && error instanceof DOMException && error.name === "AbortError");
+    if (isAbort) {
+      throw new Error(t.api.planTimeout);
+    }
+    throw new Error(
+      error instanceof Error ? error.message : t.api.postFailed,
+    );
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+export async function apiPostWithMeta<TRequest, TResponse>(
+  path: string,
+  body: TRequest,
+  options?: { timeoutMs?: number; signal?: AbortSignal },
+): Promise<{ data: TResponse; meta?: Record<string, unknown> }> {
+  const timeoutMs = options?.timeoutMs;
+  const outerSignal = options?.signal;
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  if (timeoutMs != null && timeoutMs > 0) {
+    timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  }
+
+  let signal: AbortSignal | undefined;
+  if (outerSignal && timeoutMs != null && timeoutMs > 0) {
+    signal = mergeAbortSignals(outerSignal, controller.signal);
+  } else if (outerSignal) {
+    signal = outerSignal;
+  } else if (timeoutMs != null && timeoutMs > 0) {
+    signal = controller.signal;
+  }
+
+  try {
+    const response = await fetch(path, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      ...(signal ? { signal } : {}),
+    });
+    return parseResponseWithMeta<TResponse>(response);
   } catch (error) {
     const isAbort =
       (error instanceof Error && error.name === "AbortError") ||
