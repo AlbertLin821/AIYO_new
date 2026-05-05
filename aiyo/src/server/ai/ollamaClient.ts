@@ -9,7 +9,14 @@ interface OllamaChatOptions {
   messages: OllamaMessage[];
   format?: "json";
   model?: string;
-  task?: "default" | "trip-plan" | "travel-chat" | "video-summary" | "location-filter";
+  task?:
+    | "default"
+    | "trip-plan"
+    | "travel-chat"
+    | "video-summary"
+    | "video-summary-fast"
+    | "video-summary-final"
+    | "location-filter";
 }
 
 export class OllamaRequestError extends Error {
@@ -25,6 +32,12 @@ export function resolveModelForTask(
 ): string {
   if (explicitModel?.trim()) {
     return explicitModel.trim();
+  }
+  if (task === "video-summary-fast" && serverConfig.ollamaFastSummaryModel) {
+    return serverConfig.ollamaFastSummaryModel;
+  }
+  if (task === "video-summary-final" && serverConfig.ollamaFinalSummaryModel) {
+    return serverConfig.ollamaFinalSummaryModel;
   }
   if (task === "video-summary" && serverConfig.ollamaSummaryModel) {
     return serverConfig.ollamaSummaryModel;

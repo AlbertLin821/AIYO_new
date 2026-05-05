@@ -18,6 +18,10 @@ export interface GoogleInfoWindowInstance {
   open: (input: { map: GoogleMapInstance; anchor: GoogleMarkerInstance | unknown }) => void;
 }
 
+export interface GooglePolylineInstance {
+  setMap: (map: GoogleMapInstance | null) => void;
+}
+
 export interface GoogleLatLngBounds {
   extend: (coords: { lat: number; lng: number }) => void;
 }
@@ -28,6 +32,7 @@ export interface GoogleMapsApi {
     options: Record<string, unknown>,
   ) => GoogleMapInstance;
   Marker: new (options: Record<string, unknown>) => GoogleMarkerInstance;
+  Polyline: new (options: Record<string, unknown>) => GooglePolylineInstance;
   InfoWindow: new () => GoogleInfoWindowInstance;
   LatLngBounds: new () => GoogleLatLngBounds;
   SymbolPath: {

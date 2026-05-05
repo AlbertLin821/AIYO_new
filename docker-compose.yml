@@ -20,6 +20,10 @@ services:
       DATABASE_URL: postgresql://aiyo:aiyo_password@postgres:5432/aiyo_new_db?schema=public
       NEXTAUTH_URL: http://localhost:3000
       OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.6:27b}
+      OLLAMA_VIDEO_SUMMARY_MODEL: ${OLLAMA_VIDEO_SUMMARY_MODEL:-qwen3.6:27b}
+      OLLAMA_VIDEO_SUMMARY_FAST_MODEL: ${OLLAMA_VIDEO_SUMMARY_FAST_MODEL:-qwen3.5:9b}
+      OLLAMA_VIDEO_SUMMARY_FINAL_MODEL: ${OLLAMA_VIDEO_SUMMARY_FINAL_MODEL:-qwen3.6:27b}
       MEM0_BASE_URL: ${MEM0_BASE_URL:-http://mem0-memory:8000}
       MEM0_ENABLED: ${MEM0_ENABLED:-false}
       MEM0_TOP_K: ${MEM0_TOP_K:-5}
@@ -68,6 +72,10 @@ services:
       DATABASE_URL: postgresql://aiyo:aiyo_password@postgres:5432/aiyo_new_db?schema=public
       NEXTAUTH_URL: http://localhost:3000
       OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.6:27b}
+      OLLAMA_VIDEO_SUMMARY_MODEL: ${OLLAMA_VIDEO_SUMMARY_MODEL:-qwen3.6:27b}
+      OLLAMA_VIDEO_SUMMARY_FAST_MODEL: ${OLLAMA_VIDEO_SUMMARY_FAST_MODEL:-qwen3.5:9b}
+      OLLAMA_VIDEO_SUMMARY_FINAL_MODEL: ${OLLAMA_VIDEO_SUMMARY_FINAL_MODEL:-qwen3.6:27b}
       MEM0_BASE_URL: ${MEM0_BASE_URL:-http://mem0-memory:8000}
       MEM0_ENABLED: ${MEM0_ENABLED:-false}
       MEM0_TOP_K: ${MEM0_TOP_K:-5}
@@ -122,8 +130,23 @@ services:
       PYTHONPATH: ""
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    command: >
-      sh -c "rm -rf /app/packages &&
+    command: |
+      sh -c "python - <<'PY'
+      import os, time, urllib.request
+      base = os.environ.get('OLLAMA_BASE_URL', 'http://host.docker.internal:11434').rstrip('/')
+      url = base + '/api/tags'
+      for attempt in range(1, 121):
+          try:
+              with urllib.request.urlopen(url, timeout=3) as response:
+                  if response.status == 200:
+                      print(f'Ollama is reachable at {base}', flush=True)
+                      raise SystemExit(0)
+          except Exception as exc:
+              print(f'Waiting for Ollama at {base} ({attempt}/120): {exc}', flush=True)
+              time.sleep(5)
+      raise SystemExit('Ollama did not become reachable; start Ollama or update OLLAMA_BASE_URL.')
+      PY
+      rm -rf /app/packages &&
       pip install -q --force-reinstall --no-deps mem0ai &&
       alembic upgrade head &&
       uvicorn main:app --host 0.0.0.0 --port 8000"

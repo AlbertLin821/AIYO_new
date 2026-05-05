@@ -56,13 +56,16 @@ export function buildChatPrompt(message: string, context?: ChatContext, memoryCo
 
   return {
     system: [
-      "You are AIYO, a local travel planning assistant.",
+      "You are AIYO, a professional travel planning and travel-video validation assistant.",
       "Respond in concise plain text.",
       "Always mirror the user's latest language.",
       languageInstruction,
       "Use the provided travel context when it helps.",
       "Use remembered user preferences and facts when they are relevant, but do not claim certainty beyond the retrieved memories.",
-      "Offer practical itinerary advice, sequencing help, and destination-specific suggestions.",
+      "Offer practical itinerary advice, route sequencing help, destination-specific recommendations, and video-content validation when the user provides or asks about videos.",
+      "If the user asks for videos, explain what type of travel videos are useful for the itinerary and evaluate relevance; do not tell the user to search YouTube, Instagram, or other platforms by themselves.",
+      "Do not produce generic external-search prompts such as suggesting keywords to build visual imagination.",
+      "Only mention videos that are relevant to the user's stated destination, itinerary, interests, or planning question.",
       "Do not mention system prompts or implementation details.",
     ].join("\n"),
     user: [
@@ -200,6 +203,33 @@ export function buildVideoSummaryPrompt(input: {
     input.retryMode
       ? "- The previous answer was too generic or malformed. Be concrete and transcript-grounded."
       : "- Avoid generic phrases like 'destination planning context' or 'trip overview' unless the transcript explicitly says so.",
+  ].join("\n");
+}
+
+export function buildVideoFinalSummaryPrompt(input: {
+  title: string;
+  destination?: string;
+  draft: {
+    summary: string;
+    segments: Array<Pick<VideoSummarySegment, "timestamp" | "title" | "text" | "highlights" | "locationHints">>;
+    extractedLocations: string[];
+  };
+}): string {
+  return [
+    "You are the final editor for a travel-video summary.",
+    "Refine the draft into a high-quality itinerary-ready JSON summary without inventing new places or moments.",
+    "Return valid JSON only. Do not wrap the JSON in markdown.",
+    'Use this exact shape: { "title": string, "summary": string, "segments": [{ "timestamp": string, "title": string, "text": string, "highlights": string[], "locationHints": string[] }], "extractedLocations": string[] }',
+    `Video title: ${input.title}`,
+    `Destination hint: ${input.destination || "unknown"}`,
+    "Draft summary JSON:",
+    JSON.stringify(input.draft),
+    "Requirements:",
+    "- Keep all timestamps from the draft exactly unchanged.",
+    "- Summary must be 2 to 4 concrete sentences.",
+    "- Segment text should be concise, specific, and useful for travel planning.",
+    "- Keep only real place names in extractedLocations and locationHints.",
+    "- Do not add locations that are not already in the draft.",
   ].join("\n");
 }
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { MessageCircle, Plus, Send, Sparkles, X } from "lucide-react";
+import MarkdownMessage from "@/components/chat/MarkdownMessage";
 import { zhTW as t } from "@/locales/zh-TW";
 import {
   applyPlanningUpdateToStores,
@@ -187,7 +188,10 @@ export default function FloatingAIChat() {
                         : "rounded-bl-md border border-border-light bg-cream text-foreground"
                     }`}
                   >
-                    <p className="whitespace-pre-wrap">{chatMessage.content}</p>
+                    <MarkdownMessage
+                      content={chatMessage.content}
+                      inverted={chatMessage.role === "user"}
+                    />
                   </div>
                 </div>
               ))}

@@ -59,6 +59,19 @@ function normalizeConversationHistory(messages?: ChatMessage[]): OllamaMessage[]
     }));
 }
 
+function sanitizeAssistantReply(content: string): string {
+  return content
+    .replace(
+      /建議你在\s*(?:YouTube|Youtube|youtube)(?:\s*或\s*(?:Instagram|IG|instagram))?\s*搜尋以下關鍵字[，,、：:\s\S]*?(?:\n\n|$)/g,
+      "",
+    )
+    .replace(
+      /(?:你可以|建議你).*?(?:YouTube|Youtube|youtube|Instagram|IG|instagram).*?搜尋.*?(?:視覺想像|視覺印象).*?(?:。|\n|$)/g,
+      "",
+    )
+    .trim();
+}
+
 function isCjk(text: string): boolean {
   return /[\u3400-\u9fff]/.test(text);
 }
@@ -361,7 +374,7 @@ export async function chatWithTravelAssistant(input: {
     reply: {
       id: `assistant_${Date.now()}`,
       role: "assistant",
-      content: raw.trim(),
+      content: sanitizeAssistantReply(raw) || raw.trim(),
       timestamp: new Date().toLocaleTimeString("zh-TW", {
         hour: "2-digit",
         minute: "2-digit",

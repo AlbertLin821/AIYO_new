@@ -203,6 +203,15 @@ const taiwanCityFallbackVideos: Array<VideoRecommendation & {
   },
 ];
 
+const taiwanCityAliases: Record<string, string[]> = {
+  台北: ["taipei", "臺北"],
+  新北: ["new taipei", "newtaipei"],
+  桃園: ["taoyuan"],
+  台中: ["taichung", "臺中"],
+  台南: ["tainan", "臺南"],
+  高雄: ["kaohsiung"],
+};
+
 function toPreference(input: RecommendationInput): UserTravelPreference {
   return {
     destination: input.destination,
@@ -241,6 +250,37 @@ function rankTaiwanCityFallbackVideos(input: RecommendationInput): VideoRecommen
   });
 }
 
+function hasTaiwanCityFallbackRelevance(input: RecommendationInput): boolean {
+  const query = [
+    input.destination,
+    input.keyword,
+    ...(input.preferences || []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (!query.trim()) {
+    return true;
+  }
+
+  return taiwanCityFallbackVideos.some((video) =>
+    [video.city, ...(taiwanCityAliases[video.city] || []), ...video.tags].some((token) =>
+      query.includes(token.toLowerCase()),
+    ),
+  );
+}
+
+function getRelevantFallbackVideos(input: RecommendationInput): VideoRecommendation[] {
+  const taiwanFallback = hasTaiwanCityFallbackRelevance(input)
+    ? rankTaiwanCityFallbackVideos(input)
+    : [];
+  if (taiwanFallback.length > 0) {
+    return taiwanFallback;
+  }
+  return rankFallbackVideos(input);
+}
+
 export async function getVideoRecommendations(
   input: RecommendationInput,
 ): Promise<VideoRecommendationOutcome> {
@@ -248,9 +288,7 @@ export async function getVideoRecommendations(
     const reason = "ENABLE_MOCK_VIDEO_PROVIDER is true; using local catalog.";
     console.warn(`[videoRecommendationService] ${reason}`);
     return {
-      videos: input.destination || input.keyword || input.preferences?.length
-        ? rankTaiwanCityFallbackVideos(input)
-        : rankTaiwanCityFallbackVideos({ ...input, limit: 6 }),
+      videos: getRelevantFallbackVideos(input),
       source: "mock-fallback",
       fallbackReason: reason,
       debug: {
@@ -299,9 +337,7 @@ export async function getVideoRecommendations(
     console.info(`[videoRecommendationService] No YouTube results: ${reason}`);
     if (serverConfig.enableMockVideoProvider || providerResult.provider === "mock") {
       return {
-        videos: rankTaiwanCityFallbackVideos(input).length
-          ? rankTaiwanCityFallbackVideos(input)
-          : rankFallbackVideos(input),
+        videos: getRelevantFallbackVideos(input),
         source: "mock-fallback",
         fallbackReason: reason,
         debug: providerResult.debug,
@@ -318,9 +354,7 @@ export async function getVideoRecommendations(
     console.warn(`[videoRecommendationService] YouTube API error: ${message}`);
     if (serverConfig.enableMockVideoProvider) {
       return {
-        videos: rankTaiwanCityFallbackVideos(input).length
-          ? rankTaiwanCityFallbackVideos(input)
-          : rankFallbackVideos(input),
+        videos: getRelevantFallbackVideos(input),
         source: "mock-fallback",
         fallbackReason: message,
         debug: {

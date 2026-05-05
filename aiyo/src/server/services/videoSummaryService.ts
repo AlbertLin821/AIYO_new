@@ -1,5 +1,9 @@
 import { OllamaRequestError, chatWithOllama } from "@/server/ai/ollamaClient";
-import { buildLocationFilteringPrompt, buildVideoSummaryPrompt } from "@/server/ai/promptBuilder";
+import {
+  buildLocationFilteringPrompt,
+  buildVideoFinalSummaryPrompt,
+  buildVideoSummaryPrompt,
+} from "@/server/ai/promptBuilder";
 import { parseLocationFilterResponse, parseVideoSummaryResponse } from "@/server/ai/responseParser";
 import {
   extractAttractionNamesFromVideoTitle,
@@ -281,7 +285,7 @@ async function summarizeTranscriptWithOllama(input: {
     try {
       const raw = await chatWithOllama({
         format: "json",
-        task: "video-summary",
+        task: "video-summary-fast",
         messages: [
           { role: "system", content: "Return valid JSON only." },
           {
@@ -306,10 +310,71 @@ async function summarizeTranscriptWithOllama(input: {
       ]).map((entry) => entry.displayName);
 
       if (!parsed.parseFailed && !looksGenericSummary(parsed.summary)) {
-        return {
+        const fastResult = {
           summary: parsed.summary,
           segments: alignedSegments,
           extractedLocations: mergedLocations,
+          parseFailed: false,
+        };
+
+        try {
+          const finalRaw = await chatWithOllama({
+            format: "json",
+            task: "video-summary-final",
+            messages: [
+              { role: "system", content: "Return valid JSON only." },
+              {
+                role: "user",
+                content: buildVideoFinalSummaryPrompt({
+                  title: input.title,
+                  destination: input.destination,
+                  draft: {
+                    summary: fastResult.summary,
+                    segments: fastResult.segments.map((segment) => ({
+                      timestamp: segment.timestamp,
+                      title: segment.title,
+                      text: segment.text,
+                      highlights: segment.highlights,
+                      locationHints: segment.locationHints,
+                    })),
+                    extractedLocations: fastResult.extractedLocations,
+                  },
+                }),
+              },
+            ],
+          });
+          const finalParsed = parseVideoSummaryResponse(finalRaw, {
+            title: input.title,
+            summary: fastResult.summary,
+            segments: fastResult.segments,
+            extractedLocations: fastResult.extractedLocations,
+          });
+          const finalAlignedSegments = alignSegmentsWithChunks(finalParsed.segments, input.chunks);
+          const finalMergedLocations = mergeAndDedupeExtractions([
+            ...extractAttractionNamesFromVideoTitle(input.title),
+            ...fastResult.extractedLocations,
+            ...(finalParsed.extractedLocations || []),
+            ...finalAlignedSegments.flatMap((segment) => segment.locationHints || []),
+          ]).map((entry) => entry.displayName);
+
+          if (!finalParsed.parseFailed && !looksGenericSummary(finalParsed.summary)) {
+            return {
+              summary: finalParsed.summary,
+              segments: finalAlignedSegments,
+              extractedLocations: finalMergedLocations,
+              parseFailed: false,
+            };
+          }
+        } catch (error) {
+          if (!(error instanceof OllamaRequestError)) {
+            throw error;
+          }
+        }
+
+        return {
+          summary: fastResult.summary,
+          segments: fastResult.segments,
+          extractedLocations: fastResult.extractedLocations,
           parseFailed: false,
         };
       }
