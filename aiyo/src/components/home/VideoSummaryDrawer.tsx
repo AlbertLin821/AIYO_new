@@ -28,6 +28,46 @@ interface VideoSummaryDrawerProps {
   onClose: () => void;
 }
 
+function compactText(value: string, maxChars: number): string {
+  const text = value.replace(/\s+/g, "").trim();
+  if (text.length <= maxChars) {
+    return text;
+  }
+  return `${text.slice(0, Math.max(0, maxChars - 1))}…`;
+}
+
+function parseTimestampToSeconds(timestamp?: string): number {
+  if (!timestamp) {
+    return 0;
+  }
+  const parts = timestamp
+    .split(":")
+    .map((part) => Number.parseInt(part, 10))
+    .filter((part) => Number.isFinite(part));
+  if (parts.length === 3) {
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  }
+  if (parts.length === 2) {
+    return parts[0] * 60 + parts[1];
+  }
+  return parts[0] || 0;
+}
+
+function getSegmentStartSeconds(startSeconds?: number, timestamp?: string): number {
+  return typeof startSeconds === "number" && Number.isFinite(startSeconds)
+    ? startSeconds
+    : parseTimestampToSeconds(timestamp);
+}
+
+function ProcessingRow({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-border-light bg-cream/40 px-3 py-3 text-sm text-muted">
+      <Loader2 className="size-4 animate-spin text-primary" aria-hidden />
+      <span>{label}</span>
+    </div>
+  );
+}
+
 export default function VideoSummaryDrawer({
   video,
   open,
@@ -39,27 +79,29 @@ export default function VideoSummaryDrawer({
   const itinerary = useTripStore((state) => state.itinerary);
   const addPins = useMapStore((state) => state.addPins);
   const summaryDiagnostics = useVideoStore((state) => state.summaryDiagnostics);
+  const isSummarizing = useVideoStore((state) => state.isSummarizing);
   const pushToast = useToastStore((state) => state.pushToast);
   const [toast, setToast] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [failedImageVideoId, setFailedImageVideoId] = useState<string | null>(null);
+  const [activeStart, setActiveStart] = useState<{ videoId: string; seconds: number } | null>(null);
   const videoId = video?.videoId;
 
-  const summaryParagraphs = useMemo(
-    () =>
-      (video?.summary || "")
-        .split(/(?<=[.!?])\s+/)
-        .map((item) => item.trim())
-        .filter(Boolean),
+  const conciseSummary = useMemo(
+    () => compactText(video?.summary || "", 40),
     [video?.summary],
   );
 
   const embedUrl = useMemo(
-    () =>
-      videoId
-        ? `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`
-        : null,
-    [videoId],
+    () => {
+      if (!videoId) {
+        return null;
+      }
+      const startSeconds = activeStart?.videoId === videoId ? activeStart.seconds : null;
+      const start = startSeconds !== null ? `&start=${Math.max(0, Math.floor(startSeconds))}` : "";
+      return `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1${start}`;
+    },
+    [activeStart, videoId],
   );
 
   if (!video) {
@@ -68,6 +110,15 @@ export default function VideoSummaryDrawer({
 
   const activeVideo = video;
   const imageFailed = failedImageVideoId === activeVideo.id;
+  const isProcessingVideo =
+    isSummarizing &&
+    !summaryDiagnostics?.summaryUnavailable &&
+    (!activeVideo.summary ||
+      (activeVideo.summarySegments || []).length === 0 ||
+      activeVideo.extractedLocations.length === 0);
+  const verifiedLocations = activeVideo.extractedLocations.filter(
+    (location) => location.verified === true && location.resolvedFrom === "google-geocode",
+  );
 
   function showToastMessage(message: string) {
     setToast(message);
@@ -75,7 +126,7 @@ export default function VideoSummaryDrawer({
   }
 
   async function handleAddToItinerary() {
-    if (activeVideo.extractedLocations.length === 0) {
+    if (verifiedLocations.length === 0) {
       pushToast({
         variant: "warning",
         title: t.drawer.noLocationsToastTitle,
@@ -88,7 +139,7 @@ export default function VideoSummaryDrawer({
     const targetDayNumber = itinerary.length + 1;
     addDay();
 
-    activeVideo.extractedLocations.forEach((location, index) => {
+    verifiedLocations.forEach((location, index) => {
       addItineraryItem(targetDayNumber, {
         id: `video_${activeVideo.id}_${index}`,
         dayNumber: targetDayNumber,
@@ -100,7 +151,7 @@ export default function VideoSummaryDrawer({
         source: "video",
       });
     });
-    addPins(buildPinsFromLocations(activeVideo.extractedLocations, "video"));
+    addPins(buildPinsFromLocations(verifiedLocations, "video"));
 
     setAdding(false);
     showToastMessage(t.drawer.toastItinerary);
@@ -263,15 +314,10 @@ export default function VideoSummaryDrawer({
                         {summaryDiagnostics.unavailableReason ||
                           "無法取得逐字稿，暫時無法產生精準摘要。"}
                       </p>
-                    ) : summaryParagraphs.length > 0 ? (
-                      summaryParagraphs.map((paragraph, index) => (
-                        <p
-                          key={`${activeVideo.id}_summary_${index}`}
-                          className="text-sm leading-relaxed text-muted"
-                        >
-                          {paragraph}
-                        </p>
-                      ))
+                    ) : conciseSummary ? (
+                      <p className="text-sm leading-relaxed text-muted">{conciseSummary}</p>
+                    ) : isProcessingVideo ? (
+                      <ProcessingRow label={t.drawer.videoProcessing} />
                     ) : (
                       <p className="text-sm leading-relaxed text-muted">{activeVideo.summary}</p>
                     )}
@@ -289,9 +335,21 @@ export default function VideoSummaryDrawer({
                       activeVideo.summarySegments.map((segment) => (
                         <div key={segment.id} className="rounded-xl bg-primary/5 px-3 py-3">
                           <div className="flex items-start gap-3">
-                            <span className="min-w-[52px] rounded-md bg-primary/10 px-2 py-0.5 text-center font-mono text-xs text-primary">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (videoId) {
+                                  setActiveStart({
+                                    videoId,
+                                    seconds: getSegmentStartSeconds(segment.startSeconds, segment.startLabel || segment.timestamp),
+                                  });
+                                }
+                              }}
+                              title={t.drawer.jumpToTimestamp}
+                              className="min-w-[52px] cursor-pointer rounded-md bg-primary/10 px-2 py-0.5 text-center font-mono text-xs text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                            >
                               {segment.startLabel || segment.timestamp}
-                            </span>
+                            </button>
                             <div className="min-w-0 flex-1">
                               {segment.title && (
                                 <p className="text-sm font-medium text-foreground">
@@ -335,12 +393,26 @@ export default function VideoSummaryDrawer({
                           key={`${activeVideo.id}_${timestamp.time}`}
                           className="flex items-center gap-3 rounded-xl bg-primary/5 px-3 py-2"
                         >
-                          <span className="min-w-[52px] rounded-md bg-primary/10 px-2 py-0.5 text-center font-mono text-xs text-primary">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (videoId) {
+                                setActiveStart({
+                                  videoId,
+                                  seconds: getSegmentStartSeconds(undefined, timestamp.time),
+                                });
+                              }
+                            }}
+                            title={t.drawer.jumpToTimestamp}
+                            className="min-w-[52px] cursor-pointer rounded-md bg-primary/10 px-2 py-0.5 text-center font-mono text-xs text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                          >
                             {timestamp.time}
-                          </span>
+                          </button>
                           <span className="text-sm text-muted">{timestamp.label}</span>
                         </div>
                       ))
+                    ) : isProcessingVideo ? (
+                      <ProcessingRow label={t.drawer.videoProcessing} />
                     ) : (
                       <p className="text-sm text-muted">目前沒有可顯示的重點片段。</p>
                     )}
@@ -353,8 +425,8 @@ export default function VideoSummaryDrawer({
                     {t.drawer.extractedLocations}
                   </h4>
                   <div className="flex flex-col gap-2" data-testid="video-location-list">
-                    {activeVideo.extractedLocations.length > 0 ? (
-                      activeVideo.extractedLocations.map((location) => (
+                    {verifiedLocations.length > 0 ? (
+                      verifiedLocations.map((location) => (
                         <div
                           key={`${activeVideo.id}_${location.name}`}
                           className="flex items-start gap-3 rounded-xl border border-border-light bg-cream/50 px-3 py-2.5"
@@ -385,11 +457,13 @@ export default function VideoSummaryDrawer({
                           </div>
                         </div>
                       ))
+                    ) : isProcessingVideo ? (
+                      <ProcessingRow label={t.drawer.videoProcessing} />
                     ) : (
                       <p className="text-sm text-muted">
                         {summaryDiagnostics?.summaryUnavailable
                           ? "無法取得逐字稿，暫時無法抽出可靠地點。"
-                          : "目前沒有抽出可用地點。"}
+                          : t.drawer.noVerifiedLocations}
                       </p>
                     )}
                   </div>

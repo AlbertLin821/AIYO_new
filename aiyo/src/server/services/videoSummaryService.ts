@@ -67,12 +67,44 @@ function truncateText(input: string, maxChars: number): string {
   return `${text.slice(0, maxChars - 1).trimEnd()}...`;
 }
 
-function normalizeSentence(input: string): string {
-  const text = input.replace(/\s+/g, " ").trim();
+function splitSentences(input: string): string[] {
+  return input
+    .replace(/\s+/g, " ")
+    .split(/(?<=[。！？.!?])\s*/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+}
+
+function compactSummaryText(input: string, maxChars = 40): string {
+  const firstUsefulSentence = splitSentences(input).find((sentence) => sentence.length >= 6) || input;
+  const text = firstUsefulSentence
+    .replace(/^(這支影片|這段影片|影片中|本影片|This video)\s*/i, "")
+    .replace(/\s+/g, "")
+    .trim();
   if (!text) {
     return "";
   }
-  return /[.!?]$/.test(text) ? text : `${text}.`;
+  return text.length <= maxChars ? text : `${text.slice(0, Math.max(0, maxChars - 1))}…`;
+}
+
+function summarizeSegmentText(input: string, maxChars = 72): string {
+  const text = splitSentences(input).slice(0, 2).join("");
+  const compact = (text || input).replace(/\s+/g, "").trim();
+  if (!compact) {
+    return "";
+  }
+  return compact.length <= maxChars ? compact : `${compact.slice(0, Math.max(0, maxChars - 1))}…`;
+}
+
+function normalizeLocationKey(input: string): string {
+  return input.replace(/\s+/g, "").trim().toLowerCase();
+}
+
+function locationHintMatchesVerifiedPlace(hint: string, verifiedNames: string[]): boolean {
+  const normalizedHint = normalizeLocationKey(hint);
+  return verifiedNames.some(
+    (name) => normalizedHint === name || normalizedHint.includes(name) || name.includes(normalizedHint),
+  );
 }
 
 function looksGenericSummary(summary: string): boolean {
@@ -173,15 +205,13 @@ function chunkTranscriptByNativeChapters(
 
 function buildHeuristicSegments(chunks: TranscriptChunk[]): VideoSummarySegment[] {
   return chunks.map((chunk, index) => {
-    const sentences = chunk.text
-      .split(/(?<=[.!?])\s+/)
-      .map((sentence) => sentence.trim())
-      .filter(Boolean);
-    const text = truncateText(sentences.slice(0, 2).join(" ") || chunk.text, 220);
-    const title = truncateText(sentences[0] || chunk.text, 56);
     const locationHints = mergeAndDedupeExtractions(extractPlaceCandidates(chunk.text))
       .map((entry) => entry.displayName)
       .slice(0, 4);
+    const sentences = splitSentences(chunk.text);
+    const text = summarizeSegmentText(sentences.slice(0, 2).join("") || chunk.text);
+    const titleSource = chunk.title || locationHints[0] || sentences[0] || chunk.text;
+    const title = truncateText(titleSource, 32);
 
     return {
       id: `segment_${index + 1}`,
@@ -193,28 +223,26 @@ function buildHeuristicSegments(chunks: TranscriptChunk[]): VideoSummarySegment[
       title: chunk.title || title,
       text,
       summary: text,
-      highlights: sentences.slice(1, 4).map((sentence) => truncateText(sentence, 120)),
+      highlights: sentences.slice(1, 4).map((sentence) => summarizeSegmentText(sentence, 42)),
       locationHints,
     };
   });
 }
 
 function buildHeuristicSummary(chunks: TranscriptChunk[], destination?: string): string {
-  const candidateSentences = chunks
-    .flatMap((chunk) =>
-      chunk.text
-        .split(/(?<=[.!?])\s+/)
-        .map((sentence) => normalizeSentence(sentence))
-        .filter(Boolean),
-    )
-    .filter((sentence, index, array) => array.indexOf(sentence) === index)
-    .slice(0, 4);
+  const placeHints = mergeAndDedupeExtractions(
+    chunks.flatMap((chunk) => extractPlaceCandidates(chunk.text)),
+  )
+    .map((entry) => entry.displayName)
+    .slice(0, 3);
 
-  if (candidateSentences.length > 0) {
-    return candidateSentences.join(" ");
+  if (placeHints.length > 0) {
+    return compactSummaryText(
+      `${destination ? `${destination}旅遊聚焦` : "旅遊影片聚焦"}${placeHints.join("、")}等景點美食。`,
+    );
   }
 
-  return `${destination || "This video"} focuses on a travel route, but the transcript detail was too sparse for a richer heuristic summary.`;
+  return compactSummaryText(`${destination || "旅遊"}重點快速整理，適合規劃行程參考。`);
 }
 
 function alignSegmentsWithChunks(
@@ -245,11 +273,11 @@ function alignSegmentsWithChunks(
       endLabel: matchedChunk ? formatSeconds(matchedChunk.endSeconds) : segment.endLabel,
       startSeconds: matchedChunk?.startSeconds ?? segment.startSeconds,
       endSeconds: matchedChunk?.endSeconds ?? segment.endSeconds,
-      title: segment.title || matchedChunk?.title || truncateText(segment.text, 56),
-      text: truncateText(segment.text || matchedChunk?.text || "", 260),
-      summary: truncateText(segment.summary || segment.text || matchedChunk?.text || "", 260),
+      title: segment.title || matchedChunk?.title || truncateText(segment.text, 32),
+      text: summarizeSegmentText(segment.text || segment.summary || matchedChunk?.text || ""),
+      summary: summarizeSegmentText(segment.summary || segment.text || matchedChunk?.text || ""),
       highlights: segment.highlights?.length
-        ? segment.highlights.map((highlight) => truncateText(highlight, 120)).slice(0, 3)
+        ? segment.highlights.map((highlight) => summarizeSegmentText(highlight, 42)).slice(0, 3)
         : undefined,
       locationHints,
     };
@@ -311,7 +339,7 @@ async function summarizeTranscriptWithOllama(input: {
 
       if (!parsed.parseFailed && !looksGenericSummary(parsed.summary)) {
         const fastResult = {
-          summary: parsed.summary,
+          summary: compactSummaryText(parsed.summary),
           segments: alignedSegments,
           extractedLocations: mergedLocations,
           parseFailed: false,
@@ -359,7 +387,7 @@ async function summarizeTranscriptWithOllama(input: {
 
           if (!finalParsed.parseFailed && !looksGenericSummary(finalParsed.summary)) {
             return {
-              summary: finalParsed.summary,
+              summary: compactSummaryText(finalParsed.summary),
               segments: finalAlignedSegments,
               extractedLocations: finalMergedLocations,
               parseFailed: false,
@@ -372,7 +400,7 @@ async function summarizeTranscriptWithOllama(input: {
         }
 
         return {
-          summary: fastResult.summary,
+          summary: compactSummaryText(fastResult.summary),
           segments: fastResult.segments,
           extractedLocations: fastResult.extractedLocations,
           parseFailed: false,
@@ -387,7 +415,7 @@ async function summarizeTranscriptWithOllama(input: {
   }
 
   return {
-    summary: fallback.summary,
+    summary: compactSummaryText(fallback.summary),
     segments: fallback.segments,
     extractedLocations: fallback.extractedLocations,
     parseFailed: true,
@@ -544,7 +572,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
       : "heuristic-transcript-fallback";
   const segmentSource: VideoSummaryDebugMeta["segmentSource"] = "transcript-chunks";
 
-  const summary = ollamaSummary?.summary || heuristicSummary;
+  const summary = compactSummaryText(ollamaSummary?.summary || heuristicSummary);
   const segments = ollamaSummary?.segments?.length ? ollamaSummary.segments : heuristicSegments;
   const extractedLocationsFromSummary =
     ollamaSummary?.extractedLocations?.length ? ollamaSummary.extractedLocations : [];
@@ -583,18 +611,31 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     transcriptContext: transcriptBlob,
   });
 
-  const extractedLocationNames = geo.locations.map((loc) => loc.name).slice(0, 16);
+  const verifiedLocations = geo.locations
+    .filter((loc) => loc.verified === true && loc.resolvedFrom === "google-geocode")
+    .slice(0, 16);
+  const verifiedLocationKeys = verifiedLocations.map((loc) => normalizeLocationKey(loc.name));
+  const extractedLocationNames = verifiedLocations.map((loc) => loc.name);
   const geocodeWarnings = geo.failures.length ? geo.failures : undefined;
 
-  const resolvedSegmentLocations = segments.map((segment) => ({
-    ...segment,
-    locationHints: mergeAndDedupeExtractions([
-      ...(segment.locationHints || []),
-      ...extractPlaceCandidates(segment.text),
-    ])
-      .map((entry) => entry.displayName)
-      .slice(0, 4),
-  }));
+  const resolvedSegmentLocations = segments
+    .map((segment) => {
+      const locationHints = mergeAndDedupeExtractions([
+        ...(segment.locationHints || []),
+        ...extractPlaceCandidates(segment.text),
+      ])
+        .map((entry) => entry.displayName)
+        .filter((hint) => locationHintMatchesVerifiedPlace(hint, verifiedLocationKeys))
+        .slice(0, 4);
+
+      return {
+        ...segment,
+        text: summarizeSegmentText(segment.text || segment.summary || ""),
+        summary: summarizeSegmentText(segment.summary || segment.text || ""),
+        locationHints,
+      };
+    })
+    .filter((segment) => (segment.locationHints || []).length > 0);
 
   const video: VideoRecommendation = {
     id: metadata.id,
@@ -610,7 +651,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     publishedAt: metadata.publishedAt,
     timestamps: toTimestamps(resolvedSegmentLocations),
     summarySegments: resolvedSegmentLocations,
-    extractedLocations: geo.locations,
+    extractedLocations: verifiedLocations,
   };
 
   const fallbackMessages = [

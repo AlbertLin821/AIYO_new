@@ -300,6 +300,7 @@ export default function MapView() {
   const useGoogleSdk = Boolean(runtimeMapsConfig.googleMapsApiKey) && !runtimeMapsConfig.enableMockMaps;
   const useAdvancedMarkers = Boolean(runtimeMapsConfig.googleMapsMapId);
   const [sdkState, setSdkState] = useState<SdkState>(() => (useGoogleSdk ? "loading" : "error"));
+  const [mapVisualReady, setMapVisualReady] = useState(false);
   const [mockZoom, setMockZoom] = useState(1);
   const [mapType, setMapType] = useState<"roadmap" | "satellite">("roadmap");
   const [providerError, setProviderError] = useState<string | null>(null);
@@ -348,6 +349,7 @@ export default function MapView() {
         setRuntimeMapsConfig(nextConfig);
         setRuntimeConfigChecked(true);
         setSdkState(nextConfig.googleMapsApiKey && !nextConfig.enableMockMaps ? "loading" : "error");
+        setMapVisualReady(false);
       })
       .catch(() => {
         setRuntimeConfigChecked(true);
@@ -361,7 +363,10 @@ export default function MapView() {
 
   useEffect(() => {
     if (runtimeMapsConfig.enableMockMaps) {
-      queueMicrotask(() => setSdkState("error"));
+      queueMicrotask(() => {
+        setSdkState("error");
+        setMapVisualReady(false);
+      });
       return;
     }
 
@@ -392,6 +397,7 @@ export default function MapView() {
             mapOptions.mapId = runtimeMapsConfig.googleMapsMapId;
           }
           mapInstanceRef.current = new maps.Map(mapElementRef.current, mapOptions);
+          setMapVisualReady(true);
           infoWindowRef.current = new maps.InfoWindow();
           setSdkState("ready");
           setProviderError(null);
@@ -401,6 +407,7 @@ export default function MapView() {
             return;
           }
           setSdkState("error");
+          setMapVisualReady(false);
           setProviderError(error instanceof Error ? error.message : t.map.loadFailed);
           pushToast({
             variant: "error",
@@ -422,6 +429,7 @@ export default function MapView() {
     }
     const onAuthFailure = () => {
       setSdkState("error");
+      setMapVisualReady(false);
       setProviderError(t.map.authError);
       pushToast({
         variant: "error",
@@ -714,7 +722,7 @@ export default function MapView() {
             ref={mapElementRef}
             className="absolute inset-0 min-h-[200px] bg-[var(--surface-elevated)]"
           />
-          {sdkState === "loading" && (
+          {sdkState === "loading" && !mapVisualReady && (
             <div className="absolute inset-0 z-[5] flex flex-col items-center justify-center gap-2 bg-surface/85 text-sm text-muted">
               <Navigation className="size-6 animate-pulse text-secondary" />
               <span>{t.map.loadingSdk}</span>

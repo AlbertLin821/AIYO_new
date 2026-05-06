@@ -407,6 +407,9 @@ export const zhTW = {
     closeDrawerAria: "關閉影片摘要",
     noLocationsToastTitle: "尚無可加入的地點",
     noLocationsToastDesc: "此影片尚未擷取出可用地點，暫時無法建立新的行程日。",
+    videoProcessing: "影片正在處理中，完成後會顯示摘要、重點片段與地點。",
+    noVerifiedLocations: "尚未抽出 Google 驗證過的景點或美食地點。",
+    jumpToTimestamp: "跳到影片對應時間點",
   },
   toasts: {
     mapFallback: "地圖後援模式",

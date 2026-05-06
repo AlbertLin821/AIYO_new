@@ -193,12 +193,13 @@ export function buildVideoSummaryPrompt(input: {
         `- ${segment.timestamp} (${segment.startSeconds ?? 0}-${segment.endSeconds ?? 0}s): ${segment.text}`,
     ),
     "Requirements:",
-    "- Summary must be 2 to 4 full sentences based on the transcript.",
+    "- Summary must be one Traditional Chinese sentence within 40 Chinese characters. Do not paste transcript wording.",
     "- Produce 3 to 8 segments using only timestamps that exist in the transcript chunks.",
     "- Each segment title must be short and specific.",
-    "- Each segment text must summarize what happens in that time range, not repeat metadata boilerplate.",
-    "- Each segment highlights array must contain 1 to 3 concrete notable details from that same time range.",
-    "- Extract only specific place names or districts when they are actually mentioned.",
+    "- Each segment text must be a concise 1 to 2 sentence synthesis of that time range, within 60 Chinese characters, not verbatim transcript.",
+    "- Each segment highlights array must contain 1 to 3 concise concrete notable details from that same time range.",
+    "- Prefer segments about attractions, restaurants, food, landmarks, viewpoints, shopping streets, or photo spots.",
+    "- Extract only specific place names, restaurants, food spots, attractions, landmarks, markets, parks, stations, or districts when actually mentioned.",
     "- If the video TITLE names a concrete attraction (temple, park, night market, landmark), include it in extractedLocations when it is a real place name.",
     input.retryMode
       ? "- The previous answer was too generic or malformed. Be concrete and transcript-grounded."
@@ -226,9 +227,9 @@ export function buildVideoFinalSummaryPrompt(input: {
     JSON.stringify(input.draft),
     "Requirements:",
     "- Keep all timestamps from the draft exactly unchanged.",
-    "- Summary must be 2 to 4 concrete sentences.",
-    "- Segment text should be concise, specific, and useful for travel planning.",
-    "- Keep only real place names in extractedLocations and locationHints.",
+    "- Summary must be one Traditional Chinese sentence within 40 Chinese characters.",
+    "- Segment text should be concise, specific, useful for travel planning, and within 60 Chinese characters.",
+    "- Keep only real attractions, restaurants, food spots, landmarks, markets, parks, stations, districts, or photo spots in extractedLocations and locationHints.",
     "- Do not add locations that are not already in the draft.",
   ].join("\n");
 }
