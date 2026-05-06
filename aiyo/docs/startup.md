@@ -32,7 +32,7 @@ Required (minimum):
 - `NEXTAUTH_URL` (usually `http://localhost:3000`)
 - `NEXTAUTH_SECRET` (generate a long random string)
 - `OLLAMA_BASE_URL` (usually `http://localhost:11434`)
-- `OLLAMA_MODEL` (example: `gemma3:4b`)
+- `OLLAMA_MODEL` (default: `qwen3.5:9b`)
 
 Optional:
 
@@ -102,7 +102,7 @@ In a separate terminal:
 
 ```bash
 ollama serve
-ollama pull gemma3:4b
+ollama pull qwen3.5:9b
 ```
 
 ## 6) Start the app

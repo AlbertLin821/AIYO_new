@@ -67,7 +67,14 @@ export async function chatWithOllama({
         model: resolveModelForTask(task, model),
         stream: false,
         format,
-        messages,
+        messages: [
+          {
+            role: "system",
+            content:
+              "你只能輸出繁體中文。禁止使用簡體中文。若必須輸出 JSON，JSON key 必須照 schema 保持不變，但所有可讀文字值都必須使用繁體中文；URL、程式代碼、模型名稱、專有名詞與原文地名可保留原文。",
+          },
+          ...messages,
+        ],
       }),
       signal: controller.signal,
       cache: "no-store",

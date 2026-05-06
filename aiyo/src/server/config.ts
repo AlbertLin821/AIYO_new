@@ -23,14 +23,14 @@ function readBoolean(name: string, fallback: boolean): boolean {
 export const serverConfig = {
   appName: readString("NEXT_PUBLIC_APP_NAME", "AIYO"),
   ollamaBaseUrl: readString("OLLAMA_BASE_URL", "http://localhost:11434"),
-  ollamaModel: readString("OLLAMA_MODEL", "qwen3.6:27b"),
+  ollamaModel: readString("OLLAMA_MODEL", "qwen3.5:9b"),
   ollamaSummaryModel: readString(
     "OLLAMA_VIDEO_SUMMARY_MODEL",
-    readString("OLLAMA_SUMMARY_MODEL", "qwen3.6:27b"),
+    readString("OLLAMA_SUMMARY_MODEL", "qwen3.5:9b"),
   ),
   ollamaFastSummaryModel: readString("OLLAMA_VIDEO_SUMMARY_FAST_MODEL", "qwen3.5:9b"),
-  ollamaFinalSummaryModel: readString("OLLAMA_VIDEO_SUMMARY_FINAL_MODEL", "qwen3.6:27b"),
-  ollamaLocationModel: readString("OLLAMA_LOCATION_MODEL", ""),
+  ollamaFinalSummaryModel: readString("OLLAMA_VIDEO_SUMMARY_FINAL_MODEL", "qwen3.5:9b"),
+  ollamaLocationModel: readString("OLLAMA_LOCATION_MODEL", "qwen3.5:9b"),
   ollamaTimeoutMs: readNumber("OLLAMA_TIMEOUT_MS", 45000),
   mem0BaseUrl: readString("MEM0_BASE_URL", "http://localhost:8890"),
   mem0Enabled: readBoolean("MEM0_ENABLED", false),

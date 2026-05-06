@@ -46,20 +46,12 @@ function formatMemoryContext(memoryContext?: string): string {
 }
 
 export function buildChatPrompt(message: string, context?: ChatContext, memoryContext?: string) {
-  const language = detectResponseLanguage(message);
-  const languageInstruction =
-    language === "traditional-chinese"
-      ? "Reply in Traditional Chinese. Do not use simplified Chinese."
-      : language === "japanese"
-        ? "Reply in Japanese."
-        : "Reply in English unless the user switches language.";
-
   return {
     system: [
       "You are AIYO, a professional travel planning and travel-video validation assistant.",
       "Respond in concise plain text.",
-      "Always mirror the user's latest language.",
-      languageInstruction,
+      "Reply only in Traditional Chinese. Do not use Simplified Chinese.",
+      "Do not mirror other languages; translate the answer into natural Traditional Chinese.",
       "Use the provided travel context when it helps.",
       "Use remembered user preferences and facts when they are relevant, but do not claim certainty beyond the retrieved memories.",
       "Offer practical itinerary advice, route sequencing help, destination-specific recommendations, and video-content validation when the user provides or asks about videos.",
@@ -85,18 +77,6 @@ export function buildItineraryPrompt(
   memoryContext?: string,
   options?: { retryMode?: "default" | "strict-format" },
 ): string {
-  const language = detectResponseLanguage(
-    [request.destination, request.preferences.notes, request.preferences.interests.join(" ")]
-      .filter(Boolean)
-      .join(" "),
-  );
-  const languageInstruction =
-    language === "traditional-chinese"
-      ? "Write summary, theme, notes, and titles in Traditional Chinese."
-      : language === "japanese"
-        ? "Write summary, theme, notes, and titles in Japanese."
-        : "Write summary, theme, notes, and titles in English.";
-
   const retryMode = options?.retryMode || "default";
   const strictSuffix =
     retryMode === "strict-format"
@@ -112,7 +92,7 @@ export function buildItineraryPrompt(
 
   return [
     "Create a structured travel itinerary in JSON only.",
-    languageInstruction,
+    "All user-facing string values must be written only in Traditional Chinese. Do not use Simplified Chinese.",
     "",
     "HARD SCHEMA RULES:",
     '- Return one JSON object exactly in this shape: { "summary": string, "days": [{ "dayNumber": number, "theme": string, "summary": string, "items": [{ "id": string, "time": "HH:MM", "title": string, "type": "attraction|restaurant|transport|hotel|activity|shopping", "transport": string, "notes": string, "location": { "name": string, "lat": number, "lng": number, "description": string, "address": string } }] }], "warnings": string[] }',
@@ -151,18 +131,9 @@ export function buildItineraryPrompt(
 }
 
 export function buildMapPlanningPrompt(request: TripPlanRequest): string {
-  const language = detectResponseLanguage(
-    [request.destination, request.preferences.notes, request.preferences.interests.join(" ")]
-      .filter(Boolean)
-      .join(" "),
-  );
   return [
     "Summarize the best map-sync view for the trip.",
-    language === "traditional-chinese"
-      ? "Reply in Traditional Chinese."
-      : language === "japanese"
-        ? "Reply in Japanese."
-        : "Reply in English.",
+    "Reply only in Traditional Chinese. Do not use Simplified Chinese.",
     `Destination: ${request.destination}`,
     `Days: ${request.days}`,
     `Interests: ${request.preferences.interests.join(", ") || "none"}`,
@@ -180,6 +151,7 @@ export function buildVideoSummaryPrompt(input: {
 }): string {
   return [
     "You summarize travel videos and extract itinerary-ready place hints.",
+    "All user-facing string values must be written only in Traditional Chinese. Do not use Simplified Chinese.",
     "Use transcript chunks as the sole source for summary and segment text; do not invent details from the title or description alone.",
     "Only use the description as supporting metadata when a transcript chunk is clearly incomplete for that time range.",
     "Return valid JSON only. Do not wrap the JSON in markdown.",
@@ -218,6 +190,7 @@ export function buildVideoFinalSummaryPrompt(input: {
 }): string {
   return [
     "You are the final editor for a travel-video summary.",
+    "All user-facing string values must be written only in Traditional Chinese. Do not use Simplified Chinese.",
     "Refine the draft into a high-quality itinerary-ready JSON summary without inventing new places or moments.",
     "Return valid JSON only. Do not wrap the JSON in markdown.",
     'Use this exact shape: { "title": string, "summary": string, "segments": [{ "timestamp": string, "title": string, "text": string, "highlights": string[], "locationHints": string[] }], "extractedLocations": string[] }',
@@ -244,6 +217,7 @@ export function buildLocationFilteringPrompt(input: {
 }): string {
   return [
     "You filter travel-video location candidates.",
+    "All explanatory text and place descriptions must be written only in Traditional Chinese. Keep exact proper-noun place names when needed.",
     "Keep only specific real places, attractions, districts, stations, markets, temples, parks, museums, neighborhoods, or named food streets.",
     "Reject generic phrases, entire countries, vague areas, and non-place concepts.",
     "Use transcript chunks, summary text, and key-moment text together.",
@@ -265,6 +239,7 @@ export function buildSummaryPrompt(input: {
 }): string {
   return [
     "Summarize a travel video from metadata only.",
+    "Reply only in Traditional Chinese. Do not use Simplified Chinese.",
     `URL: ${input.url || "unknown"}`,
     `Title: ${input.title || "unknown"}`,
     `Destination hint: ${input.destination || "unknown"}`,
@@ -279,6 +254,7 @@ export function buildRecommendationPrompt(input: {
 }): string {
   return [
     "Rank the candidate travel videos for the user intent.",
+    "All user-facing string values must be written only in Traditional Chinese. Do not use Simplified Chinese.",
     `Destination: ${input.destination || "unknown"}`,
     `Keyword: ${input.keyword || "unknown"}`,
     `Candidates: ${input.videos.map((video) => video.title).join(" | ")}`,
