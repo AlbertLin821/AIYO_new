@@ -8,12 +8,14 @@ import type {
   GoogleMapInstance,
   GoogleMapsApi,
   GoogleMarkerInstance,
+  GooglePolylineInstance,
 } from "@/services/googleMapsLoader";
 import {
   AIYO_MAPS_AUTH_FAILURE_EVENT,
   loadGoogleMapsApi,
 } from "@/services/googleMapsLoader";
 import { derivePlanningSnapshot } from "@/lib/planningContext";
+import { buildItineraryRouteSegments, type ItineraryRouteSegment } from "@/lib/routeSegments";
 import { useMapStore } from "@/stores/useMapStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
@@ -28,7 +30,6 @@ const GOOGLE_MAPS_API_KEY = (
 const FORCE_MOCK_MAP = process.env.NEXT_PUBLIC_ENABLE_MOCK_MAPS === "true";
 /** Vector map ID from Cloud Console (Map Management). Required for AdvancedMarkerElement; omit to use legacy Marker. */
 const GOOGLE_MAPS_MAP_ID = (process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || "").trim();
-const useAdvancedMarkers = Boolean(GOOGLE_MAPS_MAP_ID);
 
 /** 無任何標記時：地圖預設對準台灣本島（略放大、視覺置中）。 */
 const DEFAULT_MAP_TW_CENTER = { lat: 23.62, lng: 121.0 };
@@ -39,6 +40,41 @@ const MOCK_TW_LAT_RANGE = { min: 21.95, max: 25.35 };
 const MOCK_TW_LNG_RANGE = { min: 119.35, max: 122.05 };
 
 type SdkState = "loading" | "ready" | "error";
+
+type RuntimeMapsConfig = {
+  googleMapsApiKey: string;
+  googleMapsMapId: string;
+  enableMockMaps: boolean;
+};
+
+function normalizeMapId(value: string): string {
+  if (!value || /NEXT_PUBLIC_|GOOGLE_MAPS_API_KEY|Frontend_/i.test(value)) {
+    return "";
+  }
+  return value;
+}
+
+function escapeHtml(value: string | number | undefined): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function formatDistanceKm(distanceKm: number): string {
+  return distanceKm >= 10 ? `${distanceKm.toFixed(0)} km` : `${distanceKm.toFixed(1)} km`;
+}
+
+function formatRouteMinutes(minutes: number): string {
+  if (minutes < 60) {
+    return `${minutes} 分`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest > 0 ? `${hours} 小時 ${rest} 分` : `${hours} 小時`;
+}
 
 function buildMarkerIcon(maps: GoogleMapsApi, color: string, selected: boolean) {
   return {
@@ -64,13 +100,55 @@ function pinSourceLabel(source: string | undefined) {
   return source;
 }
 
+function buildPinInfoContent(
+  pin: MapPinType,
+  linkedItem?: { time: string; title: string; type: string; transport?: string; notes?: string },
+): string {
+  const verifiedLabel = pin.verified ? t.map.verifiedBadge : t.map.unverifiedBadge;
+  const confidence =
+    typeof pin.confidence === "number" ? `${Math.round(pin.confidence * 100)}%` : t.common.notSet;
+
+  return `
+    <article style="min-width:260px;max-width:320px;padding:10px 8px 8px;font-family:inherit;color:#1f2937;">
+      <div style="display:flex;align-items:flex-start;gap:8px;">
+        <div style="width:12px;height:12px;border-radius:999px;background:${escapeHtml(pin.color || "#5a7ea3")};margin-top:5px;box-shadow:0 0 0 3px rgba(255,255,255,.9),0 2px 8px rgba(0,0,0,.18);"></div>
+        <div style="min-width:0;flex:1;">
+          <h3 style="margin:0;font-size:15px;line-height:1.35;font-weight:700;color:#111827;">${escapeHtml(pin.name)}</h3>
+          <p style="margin:4px 0 0;font-size:12px;line-height:1.45;color:#4b5563;">${escapeHtml(pin.description || t.map.noDescription)}</p>
+        </div>
+      </div>
+      <dl style="display:grid;grid-template-columns:72px 1fr;gap:6px 8px;margin:12px 0 0;font-size:12px;line-height:1.45;">
+        <dt style="color:#6b7280;">${escapeHtml(t.map.infoAddress)}</dt>
+        <dd style="margin:0;color:#1f2937;">${escapeHtml(pin.address || t.map.noAddress)}</dd>
+        <dt style="color:#6b7280;">${escapeHtml(t.map.infoSource)}</dt>
+        <dd style="margin:0;color:#1f2937;">${escapeHtml(pinSourceLabel(pin.source))}${pin.dayNumber ? ` · D${escapeHtml(pin.dayNumber)}` : ""}</dd>
+        <dt style="color:#6b7280;">${escapeHtml(t.map.infoStatus)}</dt>
+        <dd style="margin:0;color:#1f2937;">${escapeHtml(verifiedLabel)} · ${escapeHtml(t.map.infoConfidence)} ${escapeHtml(confidence)}</dd>
+        <dt style="color:#6b7280;">${escapeHtml(t.map.infoCoords)}</dt>
+        <dd style="margin:0;color:#1f2937;">${escapeHtml(pin.lat.toFixed(5))}, ${escapeHtml(pin.lng.toFixed(5))}</dd>
+      </dl>
+      ${
+        linkedItem
+          ? `<div style="margin-top:12px;padding:9px 10px;border-radius:12px;background:#f4f7fb;border:1px solid #dbe7f3;">
+              <div style="font-size:11px;font-weight:700;color:#426991;letter-spacing:.04em;">${escapeHtml(t.map.linkedItinerary)}</div>
+              <div style="margin-top:4px;font-size:13px;font-weight:650;color:#111827;">${escapeHtml(linkedItem.time)} ${escapeHtml(linkedItem.title)}</div>
+              <div style="margin-top:3px;font-size:12px;color:#4b5563;">${escapeHtml(linkedItem.transport || t.common.notSet)}</div>
+            </div>`
+          : ""
+      }
+    </article>
+  `;
+}
+
 function MockMapFallback({
   pins,
+  routeSegments,
   selectedPinId,
   setSelectedPinId,
   zoom,
 }: {
   pins: MapPinType[];
+  routeSegments: ItineraryRouteSegment[];
   selectedPinId: string | null;
   setSelectedPinId: (value: string | null) => void;
   zoom: number;
@@ -125,22 +203,36 @@ function MockMapFallback({
           </svg>
 
           <svg className="pointer-events-none absolute inset-0 z-[1] h-full w-full">
-            {pins.length > 1 &&
-              pins.slice(0, -1).map((pin, index) => {
-                const from = getPos(pin.lat, pin.lng);
-                const to = getPos(pins[index + 1].lat, pins[index + 1].lng);
+            {routeSegments.map((segment) => {
+                const from = getPos(segment.from.lat, segment.from.lng);
+                const to = getPos(segment.to.lat, segment.to.lng);
+                const midX = (from.x + to.x) / 2;
+                const midY = (from.y + to.y) / 2;
                 return (
-                  <line
-                    key={`route_${pin.id}`}
-                    x1={`${from.x}%`}
-                    y1={`${from.y}%`}
-                    x2={`${to.x}%`}
-                    y2={`${to.y}%`}
-                    stroke="#4a6d91"
-                    strokeWidth="2"
-                    strokeDasharray="8 6"
-                    opacity="0.55"
-                  />
+                  <g key={segment.id}>
+                    <line
+                      x1={`${from.x}%`}
+                      y1={`${from.y}%`}
+                      x2={`${to.x}%`}
+                      y2={`${to.y}%`}
+                      stroke={segment.color}
+                      strokeWidth="3"
+                      strokeDasharray="8 6"
+                      opacity="0.72"
+                    />
+                    <text
+                      x={`${midX}%`}
+                      y={`${midY}%`}
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      className="fill-foreground text-[10px] font-semibold"
+                      paintOrder="stroke"
+                      stroke="rgba(255,255,255,0.92)"
+                      strokeWidth="5"
+                    >
+                      {`${segment.transport} · ${formatRouteMinutes(segment.estimatedMinutes)}`}
+                    </text>
+                  </g>
                 );
               })}
           </svg>
@@ -199,8 +291,16 @@ export default function MapView() {
   const itinerary = tripStore.itinerary;
   const { pins, selectedPinId, setSelectedPinId } = useMapStore();
   const pushToast = useToastStore((state) => state.pushToast);
-  const useGoogleSdk = Boolean(GOOGLE_MAPS_API_KEY) && !FORCE_MOCK_MAP;
+  const [runtimeMapsConfig, setRuntimeMapsConfig] = useState<RuntimeMapsConfig>({
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+    googleMapsMapId: normalizeMapId(GOOGLE_MAPS_MAP_ID),
+    enableMockMaps: FORCE_MOCK_MAP,
+  });
+  const [runtimeConfigChecked, setRuntimeConfigChecked] = useState(Boolean(GOOGLE_MAPS_API_KEY) || FORCE_MOCK_MAP);
+  const useGoogleSdk = Boolean(runtimeMapsConfig.googleMapsApiKey) && !runtimeMapsConfig.enableMockMaps;
+  const useAdvancedMarkers = Boolean(runtimeMapsConfig.googleMapsMapId);
   const [sdkState, setSdkState] = useState<SdkState>(() => (useGoogleSdk ? "loading" : "error"));
+  const [mapVisualReady, setMapVisualReady] = useState(false);
   const [mockZoom, setMockZoom] = useState(1);
   const [mapType, setMapType] = useState<"roadmap" | "satellite">("roadmap");
   const [providerError, setProviderError] = useState<string | null>(null);
@@ -208,11 +308,14 @@ export default function MapView() {
   const mapInstanceRef = useRef<GoogleMapInstance | null>(null);
   const infoWindowRef = useRef<GoogleInfoWindowInstance | null>(null);
   const markersRef = useRef<Map<string, GoogleMarkerInstance>>(new Map());
+  const polylinesRef = useRef<GooglePolylineInstance[]>([]);
+  const routeLabelMarkersRef = useRef<GoogleMarkerInstance[]>([]);
 
   const selectedPin = useMemo(
     () => pins.find((pin) => pin.id === selectedPinId) || null,
     [pins, selectedPinId],
   );
+  const routeSegments = useMemo(() => buildItineraryRouteSegments(itinerary), [itinerary]);
   const planningSnapshot = useMemo(
     () =>
       derivePlanningSnapshot({
@@ -227,8 +330,43 @@ export default function MapView() {
     : "尚未開始規劃";
 
   useEffect(() => {
-    if (FORCE_MOCK_MAP) {
-      queueMicrotask(() => setSdkState("error"));
+    let cancelled = false;
+    fetch("/api/runtime-config", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (cancelled || !payload || typeof payload !== "object") {
+          return;
+        }
+        const nextConfig = {
+          googleMapsApiKey:
+            typeof payload.googleMapsApiKey === "string" ? payload.googleMapsApiKey.trim() : "",
+          googleMapsMapId:
+            typeof payload.googleMapsMapId === "string"
+              ? normalizeMapId(payload.googleMapsMapId.trim())
+              : "",
+          enableMockMaps: payload.enableMockMaps === true,
+        };
+        setRuntimeMapsConfig(nextConfig);
+        setRuntimeConfigChecked(true);
+        setSdkState(nextConfig.googleMapsApiKey && !nextConfig.enableMockMaps ? "loading" : "error");
+        setMapVisualReady(false);
+      })
+      .catch(() => {
+        setRuntimeConfigChecked(true);
+        // Build-time public env remains the fallback when the runtime route is unavailable.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (runtimeMapsConfig.enableMockMaps) {
+      queueMicrotask(() => {
+        setSdkState("error");
+        setMapVisualReady(false);
+      });
       return;
     }
 
@@ -242,7 +380,7 @@ export default function MapView() {
       if (!mapElementRef.current || cancelled) {
         return;
       }
-      loadGoogleMapsApi(GOOGLE_MAPS_API_KEY)
+      loadGoogleMapsApi(runtimeMapsConfig.googleMapsApiKey)
         .then((maps) => {
           if (cancelled || !mapElementRef.current) {
             return;
@@ -256,9 +394,10 @@ export default function MapView() {
             mapTypeControl: false,
           };
           if (useAdvancedMarkers) {
-            mapOptions.mapId = GOOGLE_MAPS_MAP_ID;
+            mapOptions.mapId = runtimeMapsConfig.googleMapsMapId;
           }
           mapInstanceRef.current = new maps.Map(mapElementRef.current, mapOptions);
+          setMapVisualReady(true);
           infoWindowRef.current = new maps.InfoWindow();
           setSdkState("ready");
           setProviderError(null);
@@ -268,6 +407,7 @@ export default function MapView() {
             return;
           }
           setSdkState("error");
+          setMapVisualReady(false);
           setProviderError(error instanceof Error ? error.message : t.map.loadFailed);
           pushToast({
             variant: "error",
@@ -281,7 +421,7 @@ export default function MapView() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [pushToast, useGoogleSdk]);
+  }, [pushToast, runtimeMapsConfig.enableMockMaps, runtimeMapsConfig.googleMapsApiKey, runtimeMapsConfig.googleMapsMapId, useAdvancedMarkers, useGoogleSdk]);
 
   useEffect(() => {
     if (!useGoogleSdk) {
@@ -289,6 +429,7 @@ export default function MapView() {
     }
     const onAuthFailure = () => {
       setSdkState("error");
+      setMapVisualReady(false);
       setProviderError(t.map.authError);
       pushToast({
         variant: "error",
@@ -341,11 +482,16 @@ export default function MapView() {
     if (sdkState !== "ready" || !mapInstanceRef.current || !maps) {
       return;
     }
+    const mapsApi = maps;
 
     let cancelled = false;
 
     markersRef.current.forEach((marker) => marker.setMap(null));
     markersRef.current.clear();
+    polylinesRef.current.forEach((polyline) => polyline.setMap(null));
+    polylinesRef.current = [];
+    routeLabelMarkersRef.current.forEach((marker) => marker.setMap(null));
+    routeLabelMarkersRef.current = [];
 
     const map = mapInstanceRef.current;
 
@@ -355,7 +501,7 @@ export default function MapView() {
       return;
     }
 
-    const bounds = new maps.LatLngBounds();
+    const bounds = new mapsApi.LatLngBounds();
 
     function openInfoForSelectedPin() {
       if (!selectedPinId || !infoWindowRef.current) {
@@ -369,13 +515,11 @@ export default function MapView() {
       if (!marker) {
         return;
       }
+      const linkedItem = itinerary
+        .flatMap((day) => day.items)
+        .find((item) => item.id === pin.linkedTripItemId);
       map.panTo({ lat: pin.lat, lng: pin.lng });
-      infoWindowRef.current.setContent(`
-      <div style="min-width:180px;padding:4px 2px;">
-        <div style="font-weight:600;color:#1F2937;">${pin.name}</div>
-        <div style="font-size:12px;color:#6B7280;margin-top:4px;">${pin.description}</div>
-      </div>
-    `);
+      infoWindowRef.current.setContent(buildPinInfoContent(pin, linkedItem));
       infoWindowRef.current.open({ map, anchor: marker });
     }
 
@@ -388,8 +532,43 @@ export default function MapView() {
       }
     }
 
-    if (useAdvancedMarkers && typeof maps.importLibrary === "function") {
-      void maps
+    function drawRouteSegments() {
+      routeSegments.forEach((segment) => {
+        const polyline = new mapsApi.Polyline({
+          map,
+          path: [segment.from, segment.to],
+          strokeColor: segment.color,
+          strokeOpacity: 0.78,
+          strokeWeight: 4,
+          geodesic: true,
+        });
+        polylinesRef.current.push(polyline);
+        const labelMarker = new mapsApi.Marker({
+          map,
+          position: {
+            lat: (segment.from.lat + segment.to.lat) / 2,
+            lng: (segment.from.lng + segment.to.lng) / 2,
+          },
+          clickable: false,
+          icon: {
+            path: mapsApi.SymbolPath.CIRCLE,
+            scale: 0,
+            fillOpacity: 0,
+            strokeOpacity: 0,
+          },
+          label: {
+            text: `${segment.transport} · ${formatRouteMinutes(segment.estimatedMinutes)}`,
+            color: segment.color,
+            fontSize: "11px",
+            fontWeight: "700",
+          },
+        });
+        routeLabelMarkersRef.current.push(labelMarker);
+      });
+    }
+
+    if (useAdvancedMarkers && typeof mapsApi.importLibrary === "function") {
+      void mapsApi
         .importLibrary("marker")
         .then((markerLib) => {
           if (cancelled || !mapInstanceRef.current) {
@@ -427,6 +606,7 @@ export default function MapView() {
           });
 
           fitMapToBounds();
+          drawRouteSegments();
           openInfoForSelectedPin();
         })
         .catch(() => {
@@ -438,13 +618,13 @@ export default function MapView() {
             title: t.map.advancedMarkerFailTitle,
             description: t.map.advancedMarkerFailDesc,
           });
-          const fallbackBounds = new maps.LatLngBounds();
+          const fallbackBounds = new mapsApi.LatLngBounds();
           pins.forEach((pin) => {
-            const marker = new maps.Marker({
+            const marker = new mapsApi.Marker({
               map,
               position: { lat: pin.lat, lng: pin.lng },
               title: pin.name,
-              icon: buildMarkerIcon(maps, pin.color || "#5a7ea3", pin.id === selectedPinId),
+              icon: buildMarkerIcon(mapsApi, pin.color || "#5a7ea3", pin.id === selectedPinId),
             });
             marker.addListener("click", () => setSelectedPinId(pin.id));
             markersRef.current.set(pin.id, marker);
@@ -456,6 +636,7 @@ export default function MapView() {
           } else {
             map.fitBounds(fallbackBounds, 72);
           }
+          drawRouteSegments();
           openInfoForSelectedPin();
         });
       return () => {
@@ -464,11 +645,11 @@ export default function MapView() {
     }
 
     pins.forEach((pin) => {
-      const marker = new maps.Marker({
+      const marker = new mapsApi.Marker({
         map,
         position: { lat: pin.lat, lng: pin.lng },
         title: pin.name,
-        icon: buildMarkerIcon(maps, pin.color || "#5a7ea3", pin.id === selectedPinId),
+        icon: buildMarkerIcon(mapsApi, pin.color || "#5a7ea3", pin.id === selectedPinId),
       });
       marker.addListener("click", () => setSelectedPinId(pin.id));
       markersRef.current.set(pin.id, marker);
@@ -476,12 +657,13 @@ export default function MapView() {
     });
 
     fitMapToBounds();
+    drawRouteSegments();
     openInfoForSelectedPin();
 
     return () => {
       cancelled = true;
     };
-  }, [pins, pushToast, sdkState, selectedPinId, setSelectedPinId]);
+  }, [itinerary, pins, pushToast, routeSegments, sdkState, selectedPinId, setSelectedPinId, useAdvancedMarkers]);
 
   function changeMockZoom(delta: number) {
     setMockZoom((z) =>
@@ -521,6 +703,13 @@ export default function MapView() {
   const highlightedItem = itinerary
     .flatMap((day) => day.items)
     .find((item) => item.id === selectedPin?.linkedTripItemId);
+  const selectedPinRoutes = selectedPin
+    ? routeSegments.filter(
+        (segment) =>
+          segment.fromItemId === selectedPin.linkedTripItemId ||
+          segment.toItemId === selectedPin.linkedTripItemId,
+      )
+    : [];
 
   const showRealMap = useGoogleSdk && sdkState !== "error";
   const mapReady = sdkState === "ready";
@@ -533,7 +722,7 @@ export default function MapView() {
             ref={mapElementRef}
             className="absolute inset-0 min-h-[200px] bg-[var(--surface-elevated)]"
           />
-          {sdkState === "loading" && (
+          {sdkState === "loading" && !mapVisualReady && (
             <div className="absolute inset-0 z-[5] flex flex-col items-center justify-center gap-2 bg-surface/85 text-sm text-muted">
               <Navigation className="size-6 animate-pulse text-secondary" />
               <span>{t.map.loadingSdk}</span>
@@ -544,6 +733,7 @@ export default function MapView() {
         <div className="relative z-0 min-h-0 flex-1 overflow-hidden">
           <MockMapFallback
             pins={pins}
+            routeSegments={routeSegments}
             selectedPinId={selectedPinId}
             setSelectedPinId={setSelectedPinId}
             zoom={mockZoom}
@@ -551,7 +741,7 @@ export default function MapView() {
         </div>
       )}
 
-      {!showRealMap && FORCE_MOCK_MAP && (
+      {!showRealMap && runtimeMapsConfig.enableMockMaps && (
         <div className="absolute left-0 right-0 top-14 z-[12] flex justify-center px-6">
           <p className="max-w-xl rounded-xl border border-primary/35 bg-peach-light/95 px-4 py-2 text-center text-[11px] font-medium leading-relaxed text-foreground shadow-soft backdrop-blur-sm sm:text-xs">
             {t.map.mockForcedBanner}
@@ -559,7 +749,7 @@ export default function MapView() {
         </div>
       )}
 
-      {!showRealMap && !FORCE_MOCK_MAP && (
+      {!showRealMap && runtimeConfigChecked && !runtimeMapsConfig.enableMockMaps && !runtimeMapsConfig.googleMapsApiKey && (
         <div className="absolute left-0 right-0 top-14 z-[12] flex justify-center px-6">
           <p className="max-w-xl rounded-xl border border-secondary/35 bg-secondary-light/95 px-4 py-2 text-center text-[11px] font-medium leading-relaxed text-foreground shadow-soft backdrop-blur-sm sm:text-xs">
             {t.map.keyMissingBanner}
@@ -648,21 +838,62 @@ export default function MapView() {
       </div>
 
       {selectedPin && (
-        <div className="absolute bottom-4 right-4 z-[11] w-80 rounded-2xl border-2 border-primary/25 bg-peach-light/40 p-4 shadow-soft-lg backdrop-blur-sm" data-testid="selected-map-pin">
+        <div className="absolute bottom-4 right-4 z-[11] max-h-[min(70vh,28rem)] w-80 overflow-y-auto rounded-2xl border-2 border-primary/25 bg-peach-light/60 p-4 shadow-soft-lg backdrop-blur-sm" data-testid="selected-map-pin">
           <p className="mb-2 text-xs uppercase tracking-wide text-muted">{t.map.selectedPinTitle}</p>
           <h3 className="text-base font-semibold text-foreground">{selectedPin.name}</h3>
           <p className="mt-1 text-sm text-muted">{selectedPin.description}</p>
-          <p className="mt-3 text-xs text-muted">{selectedPin.address || t.map.noAddress}</p>
+          <div className="mt-3 grid grid-cols-[4.5rem_1fr] gap-x-2 gap-y-1 text-xs">
+            <span className="text-muted">{t.map.infoAddress}</span>
+            <span className="text-foreground">{selectedPin.address || t.map.noAddress}</span>
+            <span className="text-muted">{t.map.infoSource}</span>
+            <span className="text-foreground">
+              {pinSourceLabel(selectedPin.source)}
+              {selectedPin.dayNumber ? ` · D${selectedPin.dayNumber}` : ""}
+            </span>
+            <span className="text-muted">{t.map.infoStatus}</span>
+            <span className="text-foreground">
+              {selectedPin.verified ? t.map.verifiedBadge : t.map.unverifiedBadge}
+              {typeof selectedPin.confidence === "number"
+                ? ` · ${t.map.infoConfidence} ${Math.round(selectedPin.confidence * 100)}%`
+                : ""}
+            </span>
+            <span className="text-muted">{t.map.infoCoords}</span>
+            <span className="font-mono text-[11px] text-foreground">
+              {selectedPin.lat.toFixed(5)}, {selectedPin.lng.toFixed(5)}
+            </span>
+          </div>
           {highlightedItem && (
             <div className="mt-3 rounded-xl bg-primary/5 px-3 py-2">
               <p className="text-[11px] uppercase tracking-wide text-primary">{t.map.linkedItinerary}</p>
               <p className="mt-1 text-sm font-medium text-foreground">{highlightedItem.time} {highlightedItem.title}</p>
+              {highlightedItem.transport && (
+                <p className="mt-1 text-xs text-muted">{highlightedItem.transport}</p>
+              )}
+            </div>
+          )}
+          {selectedPinRoutes.length > 0 && (
+            <div className="mt-3 rounded-xl border border-border/80 bg-surface/80 px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                {t.map.relatedRoutes}
+              </p>
+              <div className="mt-2 flex flex-col gap-2">
+                {selectedPinRoutes.map((segment) => (
+                  <div key={segment.id} className="text-xs leading-relaxed text-foreground">
+                    <p className="font-medium">
+                      D{segment.dayNumber} {segment.fromTime} {segment.fromName} → {segment.toTime} {segment.toName}
+                    </p>
+                    <p className="text-muted">
+                      {segment.transport} · {formatDistanceKm(segment.distanceKm)} · {formatRouteMinutes(segment.estimatedMinutes)}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
       )}
 
-      {sdkState === "error" && GOOGLE_MAPS_API_KEY && !FORCE_MOCK_MAP && (
+      {sdkState === "error" && runtimeMapsConfig.googleMapsApiKey && !runtimeMapsConfig.enableMockMaps && (
         <button
           onClick={() => window.location.reload()}
           className="absolute bottom-4 right-4 z-20 flex items-center gap-2 rounded-xl bg-surface/90 px-3 py-2 text-xs font-medium text-foreground shadow-soft backdrop-blur-sm hover:bg-surface"

@@ -1,0 +1,6 @@
+# Local editor/runtime artifacts
+.cursor/
+*.log
+
+# Environment files are local-only; app templates live under aiyo/.env.example.
+.env*

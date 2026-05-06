@@ -69,6 +69,8 @@ export function buildPinsFromTripPlan(days: TripPlanDay[]): MapPin[] {
         linkedTripItemId: item.id,
         color: PIN_COLORS[pins.length % PIN_COLORS.length],
         source: "itinerary",
+        confidence: item.location.confidence,
+        verified: item.location.verified,
       });
     }
   }

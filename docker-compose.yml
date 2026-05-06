@@ -1,3 +1,5 @@
+# 開發環境建議從本檔所在目錄執行：.\dev-up.ps1（或 docker compose --profile dev up -d postgres redis app-dev），
+# 勿只 docker start aiyo-new-app-dev，以免容器脫離 Compose 所建立的網路而無法解析主機名 postgres。
 # NEXT_PUBLIC_* 會在 Docker 映像「建置」（npm run build）時打入前端程式；若在 builder 時為空，
 # 之後只靠 env_file 重啟容器也無效。請在 build 時讓 Compose 代入變數，例如：
 #   docker compose --env-file ./aiyo/.env build [--profile dev app-dev | app]
@@ -20,6 +22,11 @@ services:
       DATABASE_URL: postgresql://aiyo:aiyo_password@postgres:5432/aiyo_new_db?schema=public
       NEXTAUTH_URL: http://localhost:3000
       OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:9b}
+      OLLAMA_VIDEO_SUMMARY_MODEL: ${OLLAMA_VIDEO_SUMMARY_MODEL:-qwen3.5:9b}
+      OLLAMA_VIDEO_SUMMARY_FAST_MODEL: ${OLLAMA_VIDEO_SUMMARY_FAST_MODEL:-qwen3.5:9b}
+      OLLAMA_VIDEO_SUMMARY_FINAL_MODEL: ${OLLAMA_VIDEO_SUMMARY_FINAL_MODEL:-qwen3.5:9b}
+      OLLAMA_LOCATION_MODEL: ${OLLAMA_LOCATION_MODEL:-qwen3.5:9b}
       MEM0_BASE_URL: ${MEM0_BASE_URL:-http://mem0-memory:8000}
       MEM0_ENABLED: ${MEM0_ENABLED:-false}
       MEM0_TOP_K: ${MEM0_TOP_K:-5}
@@ -51,6 +58,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - backend
     profiles: ["dev"]
 
   app:
@@ -68,6 +77,11 @@ services:
       DATABASE_URL: postgresql://aiyo:aiyo_password@postgres:5432/aiyo_new_db?schema=public
       NEXTAUTH_URL: http://localhost:3000
       OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:9b}
+      OLLAMA_VIDEO_SUMMARY_MODEL: ${OLLAMA_VIDEO_SUMMARY_MODEL:-qwen3.5:9b}
+      OLLAMA_VIDEO_SUMMARY_FAST_MODEL: ${OLLAMA_VIDEO_SUMMARY_FAST_MODEL:-qwen3.5:9b}
+      OLLAMA_VIDEO_SUMMARY_FINAL_MODEL: ${OLLAMA_VIDEO_SUMMARY_FINAL_MODEL:-qwen3.5:9b}
+      OLLAMA_LOCATION_MODEL: ${OLLAMA_LOCATION_MODEL:-qwen3.5:9b}
       MEM0_BASE_URL: ${MEM0_BASE_URL:-http://mem0-memory:8000}
       MEM0_ENABLED: ${MEM0_ENABLED:-false}
       MEM0_TOP_K: ${MEM0_TOP_K:-5}
@@ -92,6 +106,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - backend
 
   mem0-memory:
     build:
@@ -111,7 +127,7 @@ services:
       APP_DB_NAME: mem0_app
       MEM0_DEFAULT_LLM_PROVIDER: ollama
       MEM0_DEFAULT_EMBEDDER_PROVIDER: ollama
-      MEM0_DEFAULT_LLM_MODEL: gpt-oss:20b
+      MEM0_DEFAULT_LLM_MODEL: qwen3.5:9b
       MEM0_DEFAULT_EMBEDDER_MODEL: nomic-embed-text
       MEM0_DEFAULT_EMBEDDING_DIMS: 768
       OLLAMA_BASE_URL: http://host.docker.internal:11434
@@ -122,8 +138,23 @@ services:
       PYTHONPATH: ""
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    command: >
-      sh -c "rm -rf /app/packages &&
+    command: |
+      sh -c "python - <<'PY'
+      import os, time, urllib.request
+      base = os.environ.get('OLLAMA_BASE_URL', 'http://host.docker.internal:11434').rstrip('/')
+      url = base + '/api/tags'
+      for attempt in range(1, 121):
+          try:
+              with urllib.request.urlopen(url, timeout=3) as response:
+                  if response.status == 200:
+                      print(f'Ollama is reachable at {base}', flush=True)
+                      raise SystemExit(0)
+          except Exception as exc:
+              print(f'Waiting for Ollama at {base} ({attempt}/120): {exc}', flush=True)
+              time.sleep(5)
+      raise SystemExit('Ollama did not become reachable; start Ollama or update OLLAMA_BASE_URL.')
+      PY
+      rm -rf /app/packages &&
       pip install -q --force-reinstall --no-deps mem0ai &&
       alembic upgrade head &&
       uvicorn main:app --host 0.0.0.0 --port 8000"
@@ -141,6 +172,8 @@ services:
       mem0-memory-postgres:
         condition: service_healthy
     restart: unless-stopped
+    networks:
+      - backend
     profiles: ["mem0"]
 
   mem0-memory-postgres:
@@ -160,6 +193,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - backend
 
   postgres:
     image: pgvector/pgvector:pg16
@@ -178,6 +213,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - backend
 
   pgadmin:
     image: dpage/pgadmin4:latest
@@ -193,6 +230,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - backend
 
   redis:
     image: redis:7-alpine
@@ -207,6 +246,13 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - backend
+
+networks:
+  # 所有服務掛在同一後端網路，服務主機名 postgres、redis、mem0-memory 才可互相解析。
+  # 請用專案目錄的 dev-up.ps1 或 docker compose，勿只執行 docker start（容器可能脫離 compose 網路）。
+  backend: {}
 
 volumes:
   aiyo_new_postgres_data:

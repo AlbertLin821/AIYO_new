@@ -114,7 +114,7 @@ ollama serve
 ollama pull <your-model>
 ```
 
-Set `OLLAMA_MODEL` to the same model you pulled. The current default in `aiyo/.env.example` is `gemma4:26b`.
+Set `OLLAMA_MODEL` to the same model you pulled. The current default in `aiyo/.env.example` is `qwen3.5:9b`.
 
 ### 6. Start the app
 

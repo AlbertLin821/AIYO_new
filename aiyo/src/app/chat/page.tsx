@@ -17,6 +17,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import MarkdownMessage from "@/components/chat/MarkdownMessage";
 import VideoCard from "@/components/home/VideoCard";
 import VideoSummaryDrawer from "@/components/home/VideoSummaryDrawer";
 import { zhTW as t } from "@/locales/zh-TW";
@@ -394,7 +395,10 @@ export default function ChatPage() {
                         : "rounded-bl-md border border-border-light bg-surface text-foreground shadow-soft"
                     }`}
                   >
-                    <p className="whitespace-pre-wrap">{message.content}</p>
+                    <MarkdownMessage
+                      content={message.content}
+                      inverted={message.role === "user"}
+                    />
                   </div>
                   <p
                     className={`mt-1 text-[10px] text-muted ${

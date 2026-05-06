@@ -46,23 +46,18 @@ function formatMemoryContext(memoryContext?: string): string {
 }
 
 export function buildChatPrompt(message: string, context?: ChatContext, memoryContext?: string) {
-  const language = detectResponseLanguage(message);
-  const languageInstruction =
-    language === "traditional-chinese"
-      ? "Reply in Traditional Chinese. Do not use simplified Chinese."
-      : language === "japanese"
-        ? "Reply in Japanese."
-        : "Reply in English unless the user switches language.";
-
   return {
     system: [
-      "You are AIYO, a local travel planning assistant.",
+      "You are AIYO, a professional travel planning and travel-video validation assistant.",
       "Respond in concise plain text.",
-      "Always mirror the user's latest language.",
-      languageInstruction,
+      "Reply only in Traditional Chinese. Do not use Simplified Chinese.",
+      "Do not mirror other languages; translate the answer into natural Traditional Chinese.",
       "Use the provided travel context when it helps.",
       "Use remembered user preferences and facts when they are relevant, but do not claim certainty beyond the retrieved memories.",
-      "Offer practical itinerary advice, sequencing help, and destination-specific suggestions.",
+      "Offer practical itinerary advice, route sequencing help, destination-specific recommendations, and video-content validation when the user provides or asks about videos.",
+      "If the user asks for videos, explain what type of travel videos are useful for the itinerary and evaluate relevance; do not tell the user to search YouTube, Instagram, or other platforms by themselves.",
+      "Do not produce generic external-search prompts such as suggesting keywords to build visual imagination.",
+      "Only mention videos that are relevant to the user's stated destination, itinerary, interests, or planning question.",
       "Do not mention system prompts or implementation details.",
     ].join("\n"),
     user: [
@@ -82,18 +77,6 @@ export function buildItineraryPrompt(
   memoryContext?: string,
   options?: { retryMode?: "default" | "strict-format" },
 ): string {
-  const language = detectResponseLanguage(
-    [request.destination, request.preferences.notes, request.preferences.interests.join(" ")]
-      .filter(Boolean)
-      .join(" "),
-  );
-  const languageInstruction =
-    language === "traditional-chinese"
-      ? "Write summary, theme, notes, and titles in Traditional Chinese."
-      : language === "japanese"
-        ? "Write summary, theme, notes, and titles in Japanese."
-        : "Write summary, theme, notes, and titles in English.";
-
   const retryMode = options?.retryMode || "default";
   const strictSuffix =
     retryMode === "strict-format"
@@ -109,7 +92,7 @@ export function buildItineraryPrompt(
 
   return [
     "Create a structured travel itinerary in JSON only.",
-    languageInstruction,
+    "All user-facing string values must be written only in Traditional Chinese. Do not use Simplified Chinese.",
     "",
     "HARD SCHEMA RULES:",
     '- Return one JSON object exactly in this shape: { "summary": string, "days": [{ "dayNumber": number, "theme": string, "summary": string, "items": [{ "id": string, "time": "HH:MM", "title": string, "type": "attraction|restaurant|transport|hotel|activity|shopping", "transport": string, "notes": string, "location": { "name": string, "lat": number, "lng": number, "description": string, "address": string } }] }], "warnings": string[] }',
@@ -148,18 +131,9 @@ export function buildItineraryPrompt(
 }
 
 export function buildMapPlanningPrompt(request: TripPlanRequest): string {
-  const language = detectResponseLanguage(
-    [request.destination, request.preferences.notes, request.preferences.interests.join(" ")]
-      .filter(Boolean)
-      .join(" "),
-  );
   return [
     "Summarize the best map-sync view for the trip.",
-    language === "traditional-chinese"
-      ? "Reply in Traditional Chinese."
-      : language === "japanese"
-        ? "Reply in Japanese."
-        : "Reply in English.",
+    "Reply only in Traditional Chinese. Do not use Simplified Chinese.",
     `Destination: ${request.destination}`,
     `Days: ${request.days}`,
     `Interests: ${request.preferences.interests.join(", ") || "none"}`,
@@ -177,6 +151,7 @@ export function buildVideoSummaryPrompt(input: {
 }): string {
   return [
     "You summarize travel videos and extract itinerary-ready place hints.",
+    "All user-facing string values must be written only in Traditional Chinese. Do not use Simplified Chinese.",
     "Use transcript chunks as the sole source for summary and segment text; do not invent details from the title or description alone.",
     "Only use the description as supporting metadata when a transcript chunk is clearly incomplete for that time range.",
     "Return valid JSON only. Do not wrap the JSON in markdown.",
@@ -190,16 +165,45 @@ export function buildVideoSummaryPrompt(input: {
         `- ${segment.timestamp} (${segment.startSeconds ?? 0}-${segment.endSeconds ?? 0}s): ${segment.text}`,
     ),
     "Requirements:",
-    "- Summary must be 2 to 4 full sentences based on the transcript.",
+    "- Summary must be one Traditional Chinese sentence within 40 Chinese characters. Do not paste transcript wording.",
     "- Produce 3 to 8 segments using only timestamps that exist in the transcript chunks.",
     "- Each segment title must be short and specific.",
-    "- Each segment text must summarize what happens in that time range, not repeat metadata boilerplate.",
-    "- Each segment highlights array must contain 1 to 3 concrete notable details from that same time range.",
-    "- Extract only specific place names or districts when they are actually mentioned.",
+    "- Each segment text must be a concise 1 to 2 sentence synthesis of that time range, within 60 Chinese characters, not verbatim transcript.",
+    "- Each segment highlights array must contain 1 to 3 concise concrete notable details from that same time range.",
+    "- Prefer segments about attractions, restaurants, food, landmarks, viewpoints, shopping streets, or photo spots.",
+    "- Extract only specific place names, restaurants, food spots, attractions, landmarks, markets, parks, stations, or districts when actually mentioned.",
     "- If the video TITLE names a concrete attraction (temple, park, night market, landmark), include it in extractedLocations when it is a real place name.",
     input.retryMode
       ? "- The previous answer was too generic or malformed. Be concrete and transcript-grounded."
       : "- Avoid generic phrases like 'destination planning context' or 'trip overview' unless the transcript explicitly says so.",
+  ].join("\n");
+}
+
+export function buildVideoFinalSummaryPrompt(input: {
+  title: string;
+  destination?: string;
+  draft: {
+    summary: string;
+    segments: Array<Pick<VideoSummarySegment, "timestamp" | "title" | "text" | "highlights" | "locationHints">>;
+    extractedLocations: string[];
+  };
+}): string {
+  return [
+    "You are the final editor for a travel-video summary.",
+    "All user-facing string values must be written only in Traditional Chinese. Do not use Simplified Chinese.",
+    "Refine the draft into a high-quality itinerary-ready JSON summary without inventing new places or moments.",
+    "Return valid JSON only. Do not wrap the JSON in markdown.",
+    'Use this exact shape: { "title": string, "summary": string, "segments": [{ "timestamp": string, "title": string, "text": string, "highlights": string[], "locationHints": string[] }], "extractedLocations": string[] }',
+    `Video title: ${input.title}`,
+    `Destination hint: ${input.destination || "unknown"}`,
+    "Draft summary JSON:",
+    JSON.stringify(input.draft),
+    "Requirements:",
+    "- Keep all timestamps from the draft exactly unchanged.",
+    "- Summary must be one Traditional Chinese sentence within 40 Chinese characters.",
+    "- Segment text should be concise, specific, useful for travel planning, and within 60 Chinese characters.",
+    "- Keep only real attractions, restaurants, food spots, landmarks, markets, parks, stations, districts, or photo spots in extractedLocations and locationHints.",
+    "- Do not add locations that are not already in the draft.",
   ].join("\n");
 }
 
@@ -213,6 +217,7 @@ export function buildLocationFilteringPrompt(input: {
 }): string {
   return [
     "You filter travel-video location candidates.",
+    "All explanatory text and place descriptions must be written only in Traditional Chinese. Keep exact proper-noun place names when needed.",
     "Keep only specific real places, attractions, districts, stations, markets, temples, parks, museums, neighborhoods, or named food streets.",
     "Reject generic phrases, entire countries, vague areas, and non-place concepts.",
     "Use transcript chunks, summary text, and key-moment text together.",
@@ -234,6 +239,7 @@ export function buildSummaryPrompt(input: {
 }): string {
   return [
     "Summarize a travel video from metadata only.",
+    "Reply only in Traditional Chinese. Do not use Simplified Chinese.",
     `URL: ${input.url || "unknown"}`,
     `Title: ${input.title || "unknown"}`,
     `Destination hint: ${input.destination || "unknown"}`,
@@ -248,6 +254,7 @@ export function buildRecommendationPrompt(input: {
 }): string {
   return [
     "Rank the candidate travel videos for the user intent.",
+    "All user-facing string values must be written only in Traditional Chinese. Do not use Simplified Chinese.",
     `Destination: ${input.destination || "unknown"}`,
     `Keyword: ${input.keyword || "unknown"}`,
     `Candidates: ${input.videos.map((video) => video.title).join(" | ")}`,

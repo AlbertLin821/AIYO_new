@@ -33,6 +33,7 @@ interface TripState {
     details?: Partial<Pick<TripState, "destination" | "days" | "budget" | "title">>,
   ) => void;
   addItineraryItem: (dayNumber: number, item: TripPlanItem) => void;
+  updateItineraryItemTransport: (dayNumber: number, itemId: string, transport: string) => void;
   removeItineraryItem: (dayNumber: number, itemId: string) => void;
   addDay: () => void;
   removeDay: (dayNumber: number) => void;
@@ -95,6 +96,22 @@ export const useTripStore = create<TripState>((set) => ({
             ? {
                 ...day,
                 items: [...day.items, { ...item, dayNumber }],
+              }
+            : day,
+        ),
+        lastUpdatedAt: new Date().toISOString(),
+      }));
+    }),
+  updateItineraryItemTransport: (dayNumber, itemId, transport) =>
+    withSyncMutationSource("local-user-edit", () => {
+      set((state) => ({
+        itinerary: state.itinerary.map((day) =>
+          day.dayNumber === dayNumber
+            ? {
+                ...day,
+                items: day.items.map((item) =>
+                  item.id === itemId ? { ...item, transport } : item,
+                ),
               }
             : day,
         ),

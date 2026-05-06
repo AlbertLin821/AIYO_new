@@ -498,8 +498,7 @@ export async function searchYouTubeVideos(input: SearchInput): Promise<{
   }
 
   if (pool.length === 0 && mapped.length > 0) {
-    fallbackReasons.push("No videos passed travel filters; returning scored mapped results.");
-    pool = mapped;
+    fallbackReasons.push("No videos passed travel and place relevance filters.");
   }
 
   pool = pool.filter((video) => {

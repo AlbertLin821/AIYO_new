@@ -22,6 +22,10 @@ export async function GET() {
   }
 
   const tripPlanModel = resolveModelForTask("trip-plan");
+  const travelChatModel = resolveModelForTask("travel-chat");
+  const videoSummaryModel = resolveModelForTask("video-summary");
+  const videoSummaryFastModel = resolveModelForTask("video-summary-fast");
+  const videoSummaryFinalModel = resolveModelForTask("video-summary-final");
   const baseUrl = serverConfig.ollamaBaseUrl.replace(/\/$/, "");
 
   try {
@@ -38,6 +42,10 @@ export async function GET() {
       return NextResponse.json(
         createSuccess({
           tripPlanModel,
+          travelChatModel,
+          videoSummaryModel,
+          videoSummaryFastModel,
+          videoSummaryFinalModel,
           ollamaReachable: false,
           modelPresent: false,
           ollamaStatus: "error",
@@ -48,15 +56,25 @@ export async function GET() {
 
     const payload = (await response.json()) as OllamaTagsResponse;
     const names = new Set((payload.models || []).map((m) => m.name));
-    const modelPresent =
-      names.has(tripPlanModel) ||
-      [...names].some((n) => n === tripPlanModel || n.startsWith(`${tripPlanModel}:`));
+    const isModelPresent = (model: string) =>
+      names.has(model) ||
+      [...names].some((n) => n === model || n.startsWith(`${model}:`));
+    const modelPresent = isModelPresent(tripPlanModel);
 
     return NextResponse.json(
       createSuccess({
         tripPlanModel,
+        travelChatModel,
+        videoSummaryModel,
+        videoSummaryFastModel,
+        videoSummaryFinalModel,
         ollamaReachable: true,
         modelPresent,
+        videoSummaryModelsPresent: {
+          default: isModelPresent(videoSummaryModel),
+          fast: isModelPresent(videoSummaryFastModel),
+          final: isModelPresent(videoSummaryFinalModel),
+        },
         ollamaStatus: modelPresent ? "ready" : "model_missing",
         modelCount: payload.models?.length ?? 0,
       }),
@@ -65,6 +83,10 @@ export async function GET() {
     return NextResponse.json(
       createSuccess({
         tripPlanModel,
+        travelChatModel,
+        videoSummaryModel,
+        videoSummaryFastModel,
+        videoSummaryFinalModel,
         ollamaReachable: false,
         modelPresent: false,
         ollamaStatus: "unreachable",
