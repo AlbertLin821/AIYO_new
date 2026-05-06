@@ -1,3 +1,5 @@
+# 開發環境建議從本檔所在目錄執行：.\dev-up.ps1（或 docker compose --profile dev up -d postgres redis app-dev），
+# 勿只 docker start aiyo-new-app-dev，以免容器脫離 Compose 所建立的網路而無法解析主機名 postgres。
 # NEXT_PUBLIC_* 會在 Docker 映像「建置」（npm run build）時打入前端程式；若在 builder 時為空，
 # 之後只靠 env_file 重啟容器也無效。請在 build 時讓 Compose 代入變數，例如：
 #   docker compose --env-file ./aiyo/.env build [--profile dev app-dev | app]
@@ -55,6 +57,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - backend
     profiles: ["dev"]
 
   app:
@@ -100,6 +104,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - backend
 
   mem0-memory:
     build:
@@ -164,6 +170,8 @@ services:
       mem0-memory-postgres:
         condition: service_healthy
     restart: unless-stopped
+    networks:
+      - backend
     profiles: ["mem0"]
 
   mem0-memory-postgres:
@@ -183,6 +191,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - backend
 
   postgres:
     image: pgvector/pgvector:pg16
@@ -201,6 +211,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - backend
 
   pgadmin:
     image: dpage/pgadmin4:latest
@@ -216,6 +228,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - backend
 
   redis:
     image: redis:7-alpine
@@ -230,6 +244,13 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - backend
+
+networks:
+  # 所有服務掛在同一後端網路，服務主機名 postgres、redis、mem0-memory 才可互相解析。
+  # 請用專案目錄的 dev-up.ps1 或 docker compose，勿只執行 docker start（容器可能脫離 compose 網路）。
+  backend: {}
 
 volumes:
   aiyo_new_postgres_data:
