@@ -6,8 +6,8 @@ import {
 } from "@/server/ai/promptBuilder";
 import { parseLocationFilterResponse, parseVideoSummaryResponse } from "@/server/ai/responseParser";
 import {
-  extractAttractionNamesFromVideoTitle,
   extractPlaceCandidates,
+  isGenericDestinationName,
   extractPlacesFromTranscriptAndSummary,
   mergeAndDedupeExtractions,
 } from "@/server/geo/extractLocations";
@@ -203,35 +203,44 @@ function chunkTranscriptByNativeChapters(
     .slice(0, 8);
 }
 
-function buildHeuristicSegments(chunks: TranscriptChunk[]): VideoSummarySegment[] {
-  return chunks.map((chunk, index) => {
-    const locationHints = mergeAndDedupeExtractions(extractPlaceCandidates(chunk.text))
+function buildHeuristicSegments(chunks: TranscriptChunk[], destination?: string): VideoSummarySegment[] {
+  const segments = chunks.flatMap((chunk, chunkIndex) => {
+    const locationHints = mergeAndDedupeExtractions(
+      extractPlaceCandidates(chunk.text),
+      destination,
+    )
       .map((entry) => entry.displayName)
       .slice(0, 4);
     const sentences = splitSentences(chunk.text);
     const text = summarizeSegmentText(sentences.slice(0, 2).join("") || chunk.text);
-    const titleSource = chunk.title || locationHints[0] || sentences[0] || chunk.text;
-    const title = truncateText(titleSource, 32);
+    const hints = locationHints.length ? locationHints : [chunk.title || ""].filter(Boolean);
 
-    return {
-      id: `segment_${index + 1}`,
-      timestamp: chunk.timestamp,
-      startLabel: chunk.timestamp,
-      endLabel: formatSeconds(chunk.endSeconds),
-      startSeconds: chunk.startSeconds,
-      endSeconds: chunk.endSeconds,
-      title: chunk.title || title,
-      text,
-      summary: text,
-      highlights: sentences.slice(1, 4).map((sentence) => summarizeSegmentText(sentence, 42)),
-      locationHints,
-    };
+    return hints.slice(0, 3).map((hint, hintIndex) => {
+      const titleSource = hint || sentences[0] || chunk.text;
+      const title = truncateText(titleSource, 32);
+      return {
+        id: `segment_${chunkIndex + 1}_${hintIndex + 1}`,
+        timestamp: chunk.timestamp,
+        startLabel: chunk.timestamp,
+        endLabel: formatSeconds(chunk.endSeconds),
+        startSeconds: chunk.startSeconds,
+        endSeconds: chunk.endSeconds,
+        title,
+        text,
+        summary: text,
+        highlights: sentences.slice(1, 4).map((sentence) => summarizeSegmentText(sentence, 42)),
+        locationHints: hint && !isGenericDestinationName(hint, destination) ? [hint] : [],
+      };
+    });
   });
+
+  return segments.slice(0, 10);
 }
 
 function buildHeuristicSummary(chunks: TranscriptChunk[], destination?: string): string {
   const placeHints = mergeAndDedupeExtractions(
     chunks.flatMap((chunk) => extractPlaceCandidates(chunk.text)),
+    destination,
   )
     .map((entry) => entry.displayName)
     .slice(0, 3);
@@ -248,9 +257,10 @@ function buildHeuristicSummary(chunks: TranscriptChunk[], destination?: string):
 function alignSegmentsWithChunks(
   parsedSegments: VideoSummarySegment[],
   chunks: TranscriptChunk[],
+  destination?: string,
 ): VideoSummarySegment[] {
   if (parsedSegments.length === 0) {
-    return buildHeuristicSegments(chunks);
+    return buildHeuristicSegments(chunks, destination);
   }
 
   return parsedSegments.map((segment, index) => {
@@ -261,7 +271,7 @@ function alignSegmentsWithChunks(
     const locationHints = mergeAndDedupeExtractions([
       ...(segment.locationHints || []),
       ...extractPlaceCandidates(segment.text),
-    ])
+    ], destination)
       .map((entry) => entry.displayName)
       .slice(0, 4);
 
@@ -298,15 +308,14 @@ async function summarizeTranscriptWithOllama(input: {
     }
   | null
 > {
-  const fallbackSegments = buildHeuristicSegments(input.chunks);
+  const fallbackSegments = buildHeuristicSegments(input.chunks, input.destination);
   const fallback = {
     title: input.title,
     summary: buildHeuristicSummary(input.chunks, input.destination),
     segments: fallbackSegments,
     extractedLocations: mergeAndDedupeExtractions([
-      ...extractAttractionNamesFromVideoTitle(input.title),
       ...fallbackSegments.flatMap((segment) => segment.locationHints || []),
-    ]).map((entry) => entry.displayName),
+    ], input.destination).map((entry) => entry.displayName),
   };
 
   for (const retryMode of [false, true]) {
@@ -330,12 +339,11 @@ async function summarizeTranscriptWithOllama(input: {
       });
 
       const parsed = parseVideoSummaryResponse(raw, fallback);
-      const alignedSegments = alignSegmentsWithChunks(parsed.segments, input.chunks);
+      const alignedSegments = alignSegmentsWithChunks(parsed.segments, input.chunks, input.destination);
       const mergedLocations = mergeAndDedupeExtractions([
-        ...extractAttractionNamesFromVideoTitle(input.title),
         ...(parsed.extractedLocations || []),
         ...alignedSegments.flatMap((segment) => segment.locationHints || []),
-      ]).map((entry) => entry.displayName);
+      ], input.destination).map((entry) => entry.displayName);
 
       if (!parsed.parseFailed && !looksGenericSummary(parsed.summary)) {
         const fastResult = {
@@ -377,13 +385,12 @@ async function summarizeTranscriptWithOllama(input: {
             segments: fastResult.segments,
             extractedLocations: fastResult.extractedLocations,
           });
-          const finalAlignedSegments = alignSegmentsWithChunks(finalParsed.segments, input.chunks);
+          const finalAlignedSegments = alignSegmentsWithChunks(finalParsed.segments, input.chunks, input.destination);
           const finalMergedLocations = mergeAndDedupeExtractions([
-            ...extractAttractionNamesFromVideoTitle(input.title),
             ...fastResult.extractedLocations,
             ...(finalParsed.extractedLocations || []),
             ...finalAlignedSegments.flatMap((segment) => segment.locationHints || []),
-          ]).map((entry) => entry.displayName);
+          ], input.destination).map((entry) => entry.displayName);
 
           if (!finalParsed.parseFailed && !looksGenericSummary(finalParsed.summary)) {
             return {
@@ -584,12 +591,11 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     segmentTexts: segments.map((segment) => segment.text),
     transcriptTexts,
     candidateLocations: mergeAndDedupeExtractions([
-      ...extractAttractionNamesFromVideoTitle(metadata.title),
       ...extractedLocationsFromSummary,
       ...segments.flatMap((segment) => segment.locationHints || []),
       ...transcriptTexts.flatMap((text) => extractPlaceCandidates(text)),
       ...extractPlaceCandidates(summary),
-    ]).map((entry) => entry.displayName),
+    ], input.destination).map((entry) => entry.displayName),
   });
 
   const transcriptBlob = [summary, ...segments.map((segment) => segment.text), ...transcriptTexts].join("\n");
@@ -601,7 +607,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     llmLocationNames: mergeAndDedupeExtractions([
       ...extractedLocationsFromSummary,
       ...modelFilteredLocations,
-    ]).map((entry) => entry.displayName),
+    ], input.destination).map((entry) => entry.displayName),
     destinationHint: input.destination,
     videoTitle: metadata.title,
   }).slice(0, 16);
@@ -623,7 +629,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
       const locationHints = mergeAndDedupeExtractions([
         ...(segment.locationHints || []),
         ...extractPlaceCandidates(segment.text),
-      ])
+      ], input.destination)
         .map((entry) => entry.displayName)
         .filter((hint) => locationHintMatchesVerifiedPlace(hint, verifiedLocationKeys))
         .slice(0, 4);

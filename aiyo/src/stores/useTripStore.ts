@@ -9,6 +9,7 @@ export const EMPTY_TRIP_STATE = {
   destination: "",
   days: 1,
   budget: 0,
+  coverImageUrl: null as string | null,
   itinerary: [] as TripPlanDay[],
   planSummary: "",
   lastUpdatedAt: null as string | null,
@@ -20,12 +21,14 @@ interface TripState {
   destination: string;
   days: number;
   budget: number;
+  coverImageUrl: string | null;
   itinerary: TripPlanDay[];
   planSummary: string;
   lastUpdatedAt: string | null;
   setDestination: (destination: string) => void;
   setDays: (days: number) => void;
   setBudget: (budget: number) => void;
+  setCoverImageUrl: (url: string | null) => void;
   setItinerary: (itinerary: TripPlanDay[]) => void;
   setRemoteTrip: (trip: PersistedTripPayload, budget?: number, source?: SyncMutationSource) => void;
   replaceTripPlan: (
@@ -33,9 +36,11 @@ interface TripState {
     details?: Partial<Pick<TripState, "destination" | "days" | "budget" | "title">>,
   ) => void;
   addItineraryItem: (dayNumber: number, item: TripPlanItem) => void;
+  updateItineraryItem: (dayNumber: number, itemId: string, patch: Partial<TripPlanItem>) => void;
   updateItineraryItemTransport: (dayNumber: number, itemId: string, transport: string) => void;
   removeItineraryItem: (dayNumber: number, itemId: string) => void;
   addDay: () => void;
+  insertDayAfter: (afterDayNumber: number) => void;
   removeDay: (dayNumber: number) => void;
   reorderItineraryItem: (dayNumber: number, oldIndex: number, newIndex: number) => void;
   resetTrip: (source?: SyncMutationSource) => void;
@@ -55,6 +60,10 @@ export const useTripStore = create<TripState>((set) => ({
     withSyncMutationSource("local-user-edit", () => {
       set({ budget: Math.max(0, budget) });
     }),
+  setCoverImageUrl: (url) =>
+    withSyncMutationSource("local-user-edit", () => {
+      set({ coverImageUrl: url, lastUpdatedAt: new Date().toISOString() });
+    }),
   setItinerary: (itinerary) =>
     withSyncMutationSource("local-user-edit", () => {
       set({
@@ -71,6 +80,10 @@ export const useTripStore = create<TripState>((set) => ({
         destination: trip.destination,
         days: Math.max(1, trip.days || trip.itinerary.length || 1),
         budget: budget ?? 0,
+        coverImageUrl:
+          typeof trip.coverImageUrl === "string" && trip.coverImageUrl.trim().length > 0
+            ? trip.coverImageUrl.trim()
+            : null,
         itinerary: trip.itinerary,
         planSummary: "",
         lastUpdatedAt: trip.updatedAt,
@@ -85,6 +98,7 @@ export const useTripStore = create<TripState>((set) => ({
         planSummary: plan.summary,
         destination: details?.destination ?? state.destination,
         budget: details?.budget ?? state.budget,
+        coverImageUrl: state.coverImageUrl,
         lastUpdatedAt: new Date().toISOString(),
       }));
     }),
@@ -96,6 +110,22 @@ export const useTripStore = create<TripState>((set) => ({
             ? {
                 ...day,
                 items: [...day.items, { ...item, dayNumber }],
+              }
+            : day,
+        ),
+        lastUpdatedAt: new Date().toISOString(),
+      }));
+    }),
+  updateItineraryItem: (dayNumber, itemId, patch) =>
+    withSyncMutationSource("local-user-edit", () => {
+      set((state) => ({
+        itinerary: state.itinerary.map((day) =>
+          day.dayNumber === dayNumber
+            ? {
+                ...day,
+                items: day.items.map((item) =>
+                  item.id === itemId ? { ...item, ...patch, id: item.id } : item,
+                ),
               }
             : day,
         ),
@@ -148,9 +178,43 @@ export const useTripStore = create<TripState>((set) => ({
         };
       });
     }),
+  insertDayAfter: (afterDayNumber) =>
+    withSyncMutationSource("local-user-edit", () => {
+      set((state) => {
+        const idx = state.itinerary.findIndex((d) => d.dayNumber === afterDayNumber);
+        if (idx === -1) {
+          return state;
+        }
+        const insertAt = idx + 1;
+        const merged = [
+          ...state.itinerary.slice(0, insertAt),
+          {
+            dayNumber: 0,
+            theme: "",
+            summary: "尚未安排內容",
+            items: [] as TripPlanItem[],
+          },
+          ...state.itinerary.slice(insertAt),
+        ];
+        const renumbered = merged.map((day, index) => ({
+          ...day,
+          dayNumber: index + 1,
+          theme: day.theme?.trim() ? day.theme : `Day ${index + 1}`,
+          items: day.items.map((item) => ({ ...item, dayNumber: index + 1 })),
+        }));
+        return {
+          itinerary: renumbered,
+          days: renumbered.length,
+          lastUpdatedAt: new Date().toISOString(),
+        };
+      });
+    }),
   removeDay: (dayNumber) =>
     withSyncMutationSource("local-user-edit", () => {
       set((state) => {
+        if (state.itinerary.length <= 1) {
+          return state;
+        }
         const itinerary = state.itinerary
           .filter((day) => day.dayNumber !== dayNumber)
           .map((day, index) => ({

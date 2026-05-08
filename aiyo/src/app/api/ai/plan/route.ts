@@ -4,7 +4,7 @@ import { OllamaRequestError, resolveModelForTask } from "@/server/ai/ollamaClien
 import { addMemories, formatMemoryContext, searchMemories } from "@/server/memory/mem0Client";
 import { StructuredOutputError } from "@/server/ai/responseParser";
 import { requireSessionUser } from "@/server/auth";
-import { ensureCurrentTrip, saveTripPayload } from "@/server/data/appStateService";
+import { resolveSessionTrip, saveTripPayload } from "@/server/data/appStateService";
 import { generateTripPlan } from "@/server/services/travelPlannerService";
 import { buildPinsFromTripPlan } from "@/services/mapSync";
 import type { TravelPreferences, TripPlanRequest } from "@/types";
@@ -95,9 +95,9 @@ export async function POST(request: Request) {
     const generated = await generateTripPlan(tripRequest, formatMemoryContext(memories));
     const result = generated.plan;
 
-    const currentTrip = await ensureCurrentTrip(userId);
-    await saveTripPayload(userId, {
-      tripId: currentTrip.id,
+    const existingTrip = await resolveSessionTrip(userId);
+    const savedTrip = await saveTripPayload(userId, {
+      tripId: existingTrip.id,
       title: `${destination} 行程`,
       destination,
       days,
@@ -137,7 +137,7 @@ export async function POST(request: Request) {
           source: "aiyo-trip-plan",
           destination,
           days,
-          tripId: currentTrip.id,
+          tripId: savedTrip.tripId,
         },
       });
     } catch {

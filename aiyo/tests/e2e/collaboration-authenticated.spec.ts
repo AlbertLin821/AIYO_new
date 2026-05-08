@@ -13,9 +13,10 @@ test("authenticated collaboration roles enforce view, edit, and permission manag
   const trip = await seedTripForUser(owner.id, "E2E Collaboration 台南行程");
 
   await loginAs(page, E2E_OWNER);
-  await page.getByRole("button", { name: "分享" }).click();
-  await expect(page.getByText("分享 / 協作")).toBeVisible();
-  await expect(page.getByText(E2E_OWNER.email)).toBeVisible();
+  await page.getByTestId("share-collaboration-button").click();
+  await expect(page.getByTestId("share-collaboration-dialog")).toBeVisible();
+  await expect(page.getByText("分享與協作")).toBeVisible();
+  await expect(page.getByText(E2E_OWNER.email).first()).toBeVisible();
 
   const inviteResponse = await page.request.post(`/api/trips/${trip.id}/collaborators`, {
     data: { email: E2E_COLLABORATOR.email, role: "viewer" },

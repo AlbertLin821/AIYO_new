@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { CalendarPlus, ChevronDown, ChevronUp, MapPin, Plus, X } from "lucide-react";
 import { zhTW as t } from "@/locales/zh-TW";
@@ -44,16 +44,19 @@ function typeLabel(itemType: TripPlanItem["type"]) {
 export default function ItineraryPanel() {
   const itinerary = useTripStore((state) => state.itinerary);
   const addItineraryItem = useTripStore((state) => state.addItineraryItem);
+  const updateItineraryItem = useTripStore((state) => state.updateItineraryItem);
   const updateItineraryItemTransport = useTripStore((state) => state.updateItineraryItemTransport);
   const { panelOpen, setPanelOpen, pins, selectedPinId, setSelectedPinId } = useMapStore();
   const [expandedDay, setExpandedDay] = useState<number>(1);
+  const [editingItem, setEditingItem] = useState<{ dayNumber: number; itemId: string; title: string } | null>(null);
   const manualItemCounter = useRef(0);
   const routeSegments = useMemo(() => buildItineraryRouteSegments(itinerary), [itinerary]);
 
-  function addQuickStop(dayNumber: number) {
+  const addQuickStop = useCallback((dayNumber: number) => {
     manualItemCounter.current += 1;
+    const id = `manual_${dayNumber}_${manualItemCounter.current}`;
     addItineraryItem(dayNumber, {
-      id: `manual_${dayNumber}_${manualItemCounter.current}`,
+      id,
       dayNumber,
       time: "16:00",
       title: t.itineraryPanel.newActivityTitle,
@@ -61,7 +64,17 @@ export default function ItineraryPanel() {
       notes: t.itineraryPanel.newActivityNotes,
       source: "manual",
     });
-  }
+    setEditingItem({ dayNumber, itemId: id, title: t.itineraryPanel.newActivityTitle });
+  }, [addItineraryItem]);
+
+  const commitTitleEdit = useCallback(() => {
+    if (!editingItem) {
+      return;
+    }
+    const nextTitle = editingItem.title.trim() || t.itineraryPanel.newActivityTitle;
+    updateItineraryItem(editingItem.dayNumber, editingItem.itemId, { title: nextTitle });
+    setEditingItem(null);
+  }, [editingItem, updateItineraryItem]);
 
   return (
     <AnimatePresence>
@@ -153,6 +166,7 @@ export default function ItineraryPanel() {
                           const hasKnownTransport = transportOptions.some(
                             (option) => option.value === currentTransport,
                           );
+                          const isEditingTitle = editingItem?.itemId === item.id;
 
                           return (
                             <div key={item.id} className="flex flex-col gap-1">
@@ -194,11 +208,18 @@ export default function ItineraryPanel() {
                                   </div>
                                 </div>
                               )}
-                              <button
-                                type="button"
-                                disabled={!canSelectOnMap}
-                                aria-disabled={!canSelectOnMap}
+                              <div
+                                role="button"
+                                tabIndex={canSelectOnMap ? 0 : -1}
+                                aria-disabled={!canSelectOnMap && !isEditingTitle}
                                 onClick={() => linkedPin && setSelectedPinId(linkedPin.id)}
+                                onKeyDown={(event) => {
+                                  if (!linkedPin || (event.key !== "Enter" && event.key !== " ")) {
+                                    return;
+                                  }
+                                  event.preventDefault();
+                                  setSelectedPinId(linkedPin.id);
+                                }}
                                 className={cn(
                                   "group flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
                                   !canSelectOnMap && "cursor-default opacity-95",
@@ -230,9 +251,48 @@ export default function ItineraryPanel() {
                                       {typeLabel(item.type)}
                                     </span>
                                   </div>
-                                  <p className="truncate text-sm font-medium text-foreground">
-                                    {item.title}
-                                  </p>
+                                  {isEditingTitle ? (
+                                    <input
+                                      value={editingItem.title}
+                                      autoFocus
+                                      data-testid="itinerary-panel-title-input"
+                                      onClick={(event) => event.stopPropagation()}
+                                      onChange={(event) =>
+                                        setEditingItem((current) =>
+                                          current ? { ...current, title: event.target.value } : current,
+                                        )
+                                      }
+                                      onBlur={commitTitleEdit}
+                                      onKeyDown={(event) => {
+                                        if (event.key === "Enter") {
+                                          event.preventDefault();
+                                          commitTitleEdit();
+                                        }
+                                        if (event.key === "Escape") {
+                                          event.preventDefault();
+                                          setEditingItem(null);
+                                        }
+                                      }}
+                                      className="w-full rounded-lg border border-primary/30 bg-surface px-2 py-1 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/25"
+                                    />
+                                  ) : (
+                                    <p
+                                      className="truncate text-sm font-medium text-foreground"
+                                      onClick={(event) => {
+                                        if (item.source !== "manual") {
+                                          return;
+                                        }
+                                        event.stopPropagation();
+                                        setEditingItem({
+                                          dayNumber: day.dayNumber,
+                                          itemId: item.id,
+                                          title: item.title,
+                                        });
+                                      }}
+                                    >
+                                      {item.title}
+                                    </p>
+                                  )}
                                   {item.location && (
                                     <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted">
                                       <MapPin className="size-3" />
@@ -243,7 +303,7 @@ export default function ItineraryPanel() {
                                     <p className="mt-1 text-[10px] text-muted">{t.itineraryPanel.noMapPinYet}</p>
                                   )}
                                 </div>
-                              </button>
+                              </div>
                             </div>
                           );
                         })}
@@ -251,6 +311,7 @@ export default function ItineraryPanel() {
                         <button
                           type="button"
                           onClick={() => addQuickStop(day.dayNumber)}
+                          data-testid="itinerary-panel-add-activity"
                           className="mt-1 flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs text-muted transition-all hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
                         >
                           <Plus className="size-3" />

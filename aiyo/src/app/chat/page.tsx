@@ -1,11 +1,14 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
 import {
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   DollarSign,
   Heart,
   History,
@@ -19,9 +22,9 @@ import {
 } from "lucide-react";
 import MarkdownMessage from "@/components/chat/MarkdownMessage";
 import VideoCard from "@/components/home/VideoCard";
-import VideoSummaryDrawer from "@/components/home/VideoSummaryDrawer";
 import { zhTW as t } from "@/locales/zh-TW";
 import { applyPlanningUpdateToStores, derivePlanningSnapshot, extractPlanningUpdateFromText } from "@/lib/planningContext";
+import { cn } from "@/lib/utils";
 import { sendChatMessage } from "@/services/aiClient";
 import { fetchVideoRecommendations, summarizeVideo } from "@/services/videoClient";
 import { useChatStore } from "@/stores/useChatStore";
@@ -30,6 +33,11 @@ import { useTripStore } from "@/stores/useTripStore";
 import { useUserStore } from "@/stores/useUserStore";
 import { useVideoStore } from "@/stores/useVideoStore";
 import type { ChatMessage, VideoRecommendation } from "@/types";
+
+const VideoSummaryDrawer = dynamic(
+  () => import("@/components/home/VideoSummaryDrawer"),
+  { ssr: false },
+);
 
 function buildUserMessage(content: string): ChatMessage {
   return {
@@ -47,6 +55,8 @@ function shouldRecommendVideos(message: string): boolean {
   return /影片|youtube|YouTube|video|vlog|推薦.*看|找.*看|旅遊.*看|景點.*影片/i.test(message);
 }
 
+const CHAT_HISTORY_SIDEBAR_KEY = "aiyo:chat-history-sidebar-expanded";
+
 export default function ChatPage() {
   const router = useRouter();
   const { status } = useSession();
@@ -55,6 +65,7 @@ export default function ChatPage() {
   const [selectedVideo, setSelectedVideo] = useState<VideoRecommendation | null>(null);
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
+  const [historySidebarExpanded, setHistorySidebarExpanded] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const {
     conversations,
@@ -84,6 +95,26 @@ export default function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, isSending, errorMessage]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(CHAT_HISTORY_SIDEBAR_KEY);
+      if (raw === "false") {
+        setHistorySidebarExpanded(false);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  function persistHistorySidebarExpanded(next: boolean) {
+    setHistorySidebarExpanded(next);
+    try {
+      window.localStorage.setItem(CHAT_HISTORY_SIDEBAR_KEY, String(next));
+    } catch {
+      /* ignore */
+    }
+  }
 
   async function handleSend(rawInput?: string) {
     const message = (rawInput || input).trim();
@@ -246,69 +277,117 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem-env(safe-area-inset-bottom,0px))] min-h-0 lg:h-screen">
-      <aside className="hidden w-72 shrink-0 flex-col border-r border-border-light bg-surface/70 p-4 md:flex">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <History className="size-4 text-primary" aria-hidden />
-              {t.chat.sidebarTitle}
-            </h2>
-            <p className="mt-1 text-xs text-muted">{t.chat.sidebarHint}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              createConversation();
-              setInput("");
-            }}
-            className="flex size-9 items-center justify-center rounded-xl bg-primary text-white transition-colors hover:bg-primary-dark"
-            aria-label={t.chat.newConversationAria}
-          >
-            <Plus className="size-4" aria-hidden />
-          </button>
-        </div>
-
-        <div className="flex flex-1 flex-col gap-2 overflow-y-auto">
-          {conversations.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border-light bg-cream/40 px-4 py-6 text-center text-xs text-muted">
-              {t.chat.emptyConversationsHint}
+      <aside
+        className={cn(
+          "hidden min-h-0 shrink-0 flex-col border-r border-border-light bg-surface/70 transition-[width,padding] duration-200 ease-out md:flex",
+          historySidebarExpanded ? "w-72 p-4" : "w-[52px] items-center px-2 py-4",
+        )}
+      >
+        {!historySidebarExpanded ? (
+          <div className="flex flex-1 flex-col items-center gap-3">
+            <button
+              type="button"
+              onClick={() => persistHistorySidebarExpanded(true)}
+              className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border-light bg-surface text-foreground transition-colors hover:bg-cream/60"
+              aria-expanded={false}
+              title={t.chat.expandHistorySidebar}
+              aria-label={t.chat.expandHistorySidebar}
+            >
+              <ChevronRight className="size-4" aria-hidden />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                createConversation();
+                setInput("");
+              }}
+              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-white transition-colors hover:bg-primary-dark"
+              title={t.chat.newConversationAria}
+              aria-label={t.chat.newConversationAria}
+            >
+              <Plus className="size-4" aria-hidden />
+            </button>
+            <div className="flex flex-1 flex-col items-center pt-1">
+              <History className="size-4 text-muted" aria-hidden />
             </div>
-          ) : (
-            conversations.map((conversation) => (
-              <div
-                key={conversation.id}
-                className={`group relative rounded-2xl border transition-colors ${
-                  conversation.id === activeConversationId
-                    ? "border-primary/40 bg-primary/10"
-                    : "border-border-light bg-surface hover:bg-cream/50"
-                }`}
+          </div>
+        ) : (
+          <>
+            <div className="mb-4 flex items-start gap-2">
+              <button
+                type="button"
+                onClick={() => persistHistorySidebarExpanded(false)}
+                className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border-light bg-surface text-foreground transition-colors hover:bg-cream/60"
+                aria-expanded={true}
+                aria-controls="chat-history-sidebar-panel"
+                title={t.chat.collapseHistorySidebar}
+                aria-label={t.chat.collapseHistorySidebar}
               >
-                <button
-                  type="button"
-                  onClick={() => selectConversation(conversation.id)}
-                  className="w-full rounded-2xl px-3 py-3 pr-10 text-left"
-                >
-                  <p className="truncate text-sm font-medium text-foreground">{conversation.title}</p>
-                  <p className="mt-1 text-[11px] text-muted">
-                    {t.chat.messagesCount.replace("{n}", String(conversation.messages.length))} ·{" "}
-                    {new Date(conversation.updatedAt).toLocaleDateString("zh-TW")}
-                  </p>
-                </button>
-                <button
-                  type="button"
-                  className="absolute right-2 top-1/2 z-[1] flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-red-600 opacity-0 transition-opacity hover:bg-red-500/10 group-hover:opacity-100"
-                  aria-label={t.chat.deleteConversationAria}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    deleteConversation(conversation.id);
-                  }}
-                >
-                  <Trash2 className="size-4" aria-hidden />
-                </button>
+                <ChevronLeft className="size-4" aria-hidden />
+              </button>
+              <div id="chat-history-sidebar-panel" className="min-w-0 flex-1">
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <History className="size-4 shrink-0 text-primary" aria-hidden />
+                  <span className="truncate">{t.chat.sidebarTitle}</span>
+                </h2>
+                <p className="mt-1 text-xs text-muted">{t.chat.sidebarHint}</p>
               </div>
-            ))
-          )}
-        </div>
+              <button
+                type="button"
+                onClick={() => {
+                  createConversation();
+                  setInput("");
+                }}
+                className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-white transition-colors hover:bg-primary-dark"
+                aria-label={t.chat.newConversationAria}
+              >
+                <Plus className="size-4" aria-hidden />
+              </button>
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+              {conversations.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border-light bg-cream/40 px-4 py-6 text-center text-xs text-muted">
+                  {t.chat.emptyConversationsHint}
+                </div>
+              ) : (
+                conversations.map((conversation) => (
+                  <div
+                    key={conversation.id}
+                    className={`group relative rounded-2xl border transition-colors ${
+                      conversation.id === activeConversationId
+                        ? "border-primary/40 bg-primary/10"
+                        : "border-border-light bg-surface hover:bg-cream/50"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => selectConversation(conversation.id)}
+                      className="w-full rounded-2xl px-3 py-3 pr-10 text-left"
+                    >
+                      <p className="truncate text-sm font-medium text-foreground">{conversation.title}</p>
+                      <p className="mt-1 text-[11px] text-muted">
+                        {t.chat.messagesCount.replace("{n}", String(conversation.messages.length))} ·{" "}
+                        {new Date(conversation.updatedAt).toLocaleDateString("zh-TW")}
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      className="absolute right-2 top-1/2 z-[1] flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-red-600 opacity-0 transition-opacity hover:bg-red-500/10 group-hover:opacity-100"
+                      aria-label={t.chat.deleteConversationAria}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void deleteConversation(conversation.id);
+                      }}
+                    >
+                      <Trash2 className="size-4" aria-hidden />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </>
+        )}
       </aside>
 
       <div className="flex min-h-0 flex-1 flex-col">

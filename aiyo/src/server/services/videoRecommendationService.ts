@@ -352,29 +352,9 @@ export async function getVideoRecommendations(
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown YouTube API error.";
     console.warn(`[videoRecommendationService] YouTube API error: ${message}`);
-    if (serverConfig.enableMockVideoProvider) {
-      return {
-        videos: getRelevantFallbackVideos(input),
-        source: "mock-fallback",
-        fallbackReason: message,
-        debug: {
-          rawInput:
-            buildVideoRecommendationSearchQuery({
-              keyword: input.keyword,
-              destination: input.destination,
-            }) || "",
-          searchQueries: [],
-          executedQueries: [],
-          regionCode: "TW",
-          relevanceLanguage: "zh-Hant",
-          selectedStrategy: "high-intent",
-          fallbackReasons: [message],
-        },
-      };
-    }
     return {
-      videos: [],
-      source: "youtube-data-api",
+      videos: getRelevantFallbackVideos(input),
+      source: "mock-fallback",
       fallbackReason: message,
       debug: {
         rawInput:

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
 import { requireSessionUser } from "@/server/auth";
-import { ensureCurrentTrip, saveTripPayload } from "@/server/data/appStateService";
+import { resolveSessionTrip, saveTripPayload } from "@/server/data/appStateService";
 import type { PersistedTripPayload } from "@/types";
 
 export const runtime = "nodejs";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const { userId } = await requireSessionUser();
-    const trip = await ensureCurrentTrip(userId);
+    const trip = await resolveSessionTrip(userId);
     return NextResponse.json(createSuccess({ tripId: trip.id }));
   } catch (error) {
     if (error instanceof Error && error.message === "unauthorized") {

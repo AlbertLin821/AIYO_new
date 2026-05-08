@@ -3,8 +3,8 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Globe, Lock, Mail, KeyRound, UserPlus, LogIn } from "lucide-react";
-import { getProviders, signIn, useSession } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { getProviders, signIn } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import { apiPost } from "@/services/apiClient";
 import { zhTW as t } from "@/locales/zh-TW";
 
@@ -39,10 +39,59 @@ function mapAuthError(code: string | null | undefined): string | null {
   return map[code] || "登入失敗，請稍後再試。";
 }
 
+async function fetchCsrfToken() {
+  const response = await fetch("/api/auth/csrf", {
+    headers: {
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  });
+  const payload = (await response.json()) as { csrfToken?: string };
+  if (!response.ok || !payload.csrfToken) {
+    throw new Error("登入初始化失敗，請稍後再試。");
+  }
+  return payload.csrfToken;
+}
+
+async function signInWithCredentials(input: {
+  email: string;
+  password: string;
+  callbackUrl: string;
+}) {
+  const csrfToken = await fetchCsrfToken();
+  const body = new URLSearchParams({
+    csrfToken,
+    email: input.email,
+    password: input.password,
+    callbackUrl: input.callbackUrl,
+    json: "true",
+  });
+
+  const response = await fetch("/api/auth/callback/credentials", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body,
+  });
+  const payload = (await response.json()) as { url?: string };
+
+  if (!response.ok) {
+    return { ok: false, error: "CredentialsSignin" };
+  }
+
+  const url = payload.url || "";
+  const error = url ? new URL(url, window.location.origin).searchParams.get("error") : null;
+  if (error) {
+    return { ok: false, error };
+  }
+
+  return { ok: true, error: null };
+}
+
 function LoginPageContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const { status } = useSession();
 
   const callbackUrl = useMemo(
     () => searchParams.get("callbackUrl") || "/profile",
@@ -57,12 +106,6 @@ function LoginPageContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(mapAuthError(initialError));
   const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    if (status === "authenticated") {
-      router.replace(callbackUrl);
-    }
-  }, [callbackUrl, router, status]);
 
   useEffect(() => {
     let mounted = true;
@@ -94,8 +137,7 @@ function LoginPageContent() {
   async function handleCredentialsLogin() {
     setFormError(null);
     setIsSubmitting(true);
-    const result = await signIn("credentials", {
-      redirect: false,
+    const result = await signInWithCredentials({
       email,
       password,
       callbackUrl,
@@ -103,7 +145,6 @@ function LoginPageContent() {
     setIsSubmitting(false);
 
     if (result?.ok) {
-      // Force a full navigation so SessionProvider picks up the new session reliably.
       window.location.assign(callbackUrl);
       return;
     }
@@ -125,8 +166,7 @@ function LoginPageContent() {
         },
       );
 
-      const result = await signIn("credentials", {
-        redirect: false,
+      const result = await signInWithCredentials({
         email,
         password,
         callbackUrl,

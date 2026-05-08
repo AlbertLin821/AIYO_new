@@ -179,7 +179,7 @@ export const authOptions: NextAuthOptions = {
     },
     async signIn({ user, account }) {
       // Do not block OAuth sign-in on application-level bootstrap logic.
-      // The app creates missing profile/trip lazily via `ensureProfile/ensureCurrentTrip` on first bootstrap.
+      // Profile is ensured lazily via bootstrap (`ensureProfile`); trips are optional until the user creates one.
       if (process.env.NODE_ENV !== "production") {
         console.log("[auth] signIn callback allow", {
           provider: account?.provider,

@@ -32,6 +32,21 @@ type GoogleGeocodeResponse = {
   }>;
 };
 
+type GooglePlaceDetailsResponse = {
+  status: string;
+  error_message?: string;
+  result?: {
+    formatted_phone_number?: string;
+    international_phone_number?: string;
+    website?: string;
+    url?: string;
+    rating?: number;
+    user_ratings_total?: number;
+    opening_hours?: { weekday_text?: string[] };
+    photos?: Array<{ photo_reference?: string }>;
+  };
+};
+
 function buildQueryString(input: string, regionBias?: string): string {
   const base = input.trim();
   if (!base) {
@@ -181,6 +196,51 @@ function buildKnownCatalogLocation(
     verified: false,
     description: `${known.description}（內部地名對照，仍需人工確認）`,
   };
+}
+
+function buildPhotoUrl(photoReference?: string): string | undefined {
+  if (!photoReference || !serverConfig.googleMapsApiKey) {
+    return undefined;
+  }
+  const params = new URLSearchParams({
+    maxwidth: "480",
+    photo_reference: photoReference,
+    key: serverConfig.googleMapsApiKey,
+  });
+  return `https://maps.googleapis.com/maps/api/place/photo?${params.toString()}`;
+}
+
+async function fetchPlaceDetails(placeId?: string): Promise<Partial<LocationReference>> {
+  if (!placeId || !serverConfig.googleMapsApiKey) {
+    return {};
+  }
+  const params = new URLSearchParams({
+    place_id: placeId,
+    fields: "formatted_phone_number,international_phone_number,website,url,rating,user_ratings_total,opening_hours,photos",
+    language: "zh-TW",
+    key: serverConfig.googleMapsApiKey,
+  });
+  const url = `https://maps.googleapis.com/maps/api/place/details/json?${params.toString()}`;
+  try {
+    const response = await fetch(url, { cache: "no-store" });
+    const payload = (await response.json()) as GooglePlaceDetailsResponse;
+    if (!response.ok || payload.status !== "OK" || !payload.result) {
+      return {};
+    }
+    const photoUrl = buildPhotoUrl(payload.result.photos?.[0]?.photo_reference);
+    return {
+      photoUrl,
+      thumbnail: photoUrl,
+      openingHours: payload.result.opening_hours?.weekday_text?.join("；"),
+      phoneNumber: payload.result.formatted_phone_number || payload.result.international_phone_number,
+      website: payload.result.website,
+      googleMapsUrl: payload.result.url,
+      rating: payload.result.rating,
+      userRatingsTotal: payload.result.user_ratings_total,
+    };
+  } catch {
+    return {};
+  }
 }
 
 export async function geocodeWithGoogle(
@@ -348,6 +408,7 @@ export async function resolvePlaceExtractionsHybrid(
       }
 
       googleCount += 1;
+      const details = await fetchPlaceDetails(result.placeId);
       locations.push({
         name: extraction.displayName,
         lat: result.lat,
@@ -356,6 +417,8 @@ export async function resolvePlaceExtractionsHybrid(
           ? `已通過 Google 地理編碼驗證（${result.formattedAddress}）`
           : `Google 地理編碼結果，信心偏低（${result.formattedAddress}）`,
         address: result.formattedAddress,
+        placeId: result.placeId,
+        ...details,
         resolvedFrom: "google-geocode",
         rawQuery: extraction.raw,
         raw: extraction.raw,

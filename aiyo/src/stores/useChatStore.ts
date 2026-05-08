@@ -1,6 +1,13 @@
+import { getSession } from "next-auth/react";
 import { create } from "zustand";
+import { zhTW as t } from "@/locales/zh-TW";
+import { clearPersistedChatHistoryOnServer } from "@/services/chatHistoryClient";
 import { withSyncMutationSource } from "@/stores/syncMutationSource";
+import { useToastStore } from "@/stores/useToastStore";
 import type { ChatMessage } from "@/types";
+
+/** Bootstrap／`/api/ai/chat` 持久化對話在商店中的固定識別 */
+export const CHAT_REMOTE_CONVERSATION_ID = "remote-current-trip";
 
 export interface ChatConversation {
   id: string;
@@ -10,8 +17,6 @@ export interface ChatConversation {
   messages: ChatMessage[];
 }
 
-const REMOTE_CONVERSATION_ID = "remote-current-trip";
-
 interface ChatState {
   conversations: ChatConversation[];
   activeConversationId: string | null;
@@ -20,7 +25,7 @@ interface ChatState {
   errorMessage: string | null;
   createConversation: () => string;
   selectConversation: (conversationId: string) => void;
-  deleteConversation: (conversationId: string) => void;
+  deleteConversation: (conversationId: string) => Promise<void>;
   setMessages: (messages: ChatMessage[]) => void;
   mergeRemoteMessages: (messages: ChatMessage[]) => void;
   appendMessage: (message: ChatMessage) => void;
@@ -63,9 +68,9 @@ function upsertRemoteConversation(
   remoteMessages: ChatMessage[],
 ): ChatConversation[] {
   const updatedAt = nowIso();
-  const existing = conversations.find((conversation) => conversation.id === REMOTE_CONVERSATION_ID);
+  const existing = conversations.find((conversation) => conversation.id === CHAT_REMOTE_CONVERSATION_ID);
   const remoteConversation: ChatConversation = {
-    id: REMOTE_CONVERSATION_ID,
+    id: CHAT_REMOTE_CONVERSATION_ID,
     title: deriveConversationTitle(remoteMessages, "目前行程對話"),
     createdAt: existing?.createdAt || updatedAt,
     updatedAt,
@@ -74,7 +79,7 @@ function upsertRemoteConversation(
 
   return [
     remoteConversation,
-    ...conversations.filter((conversation) => conversation.id !== REMOTE_CONVERSATION_ID),
+    ...conversations.filter((conversation) => conversation.id !== CHAT_REMOTE_CONVERSATION_ID),
   ];
 }
 
@@ -108,7 +113,28 @@ export const useChatStore = create<ChatState>((set) => ({
         errorMessage: null,
       };
     }),
-  deleteConversation: (conversationId) =>
+  deleteConversation: async (conversationId) => {
+    const prevConversations = useChatStore.getState().conversations;
+    const remaining = prevConversations.filter((item) => item.id !== conversationId);
+    const clearServer =
+      conversationId === CHAT_REMOTE_CONVERSATION_ID || remaining.length === 0;
+
+    if (clearServer) {
+      const session = await getSession();
+      if (session?.user) {
+        try {
+          await clearPersistedChatHistoryOnServer();
+        } catch {
+          useToastStore.getState().pushToast({
+            variant: "error",
+            title: t.chat.deleteSyncedHistoryFailedTitle,
+            description: t.chat.deleteSyncedHistoryFailedDesc,
+          });
+          return;
+        }
+      }
+    }
+
     withSyncMutationSource("local-user-edit", () => {
       set((state) => {
         const conversations = state.conversations.filter((item) => item.id !== conversationId);
@@ -123,11 +149,12 @@ export const useChatStore = create<ChatState>((set) => ({
           messages: activeConversation?.messages || [],
         };
       });
-    }),
+    });
+  },
   setMessages: (messages) =>
     set((state) => {
       const conversations = upsertRemoteConversation(state.conversations, messages);
-      const activeConversationId = state.activeConversationId || REMOTE_CONVERSATION_ID;
+      const activeConversationId = state.activeConversationId || CHAT_REMOTE_CONVERSATION_ID;
       const activeConversation = conversations.find((item) => item.id === activeConversationId);
       return {
         conversations,
@@ -139,7 +166,7 @@ export const useChatStore = create<ChatState>((set) => ({
     set((state) => {
       const remoteSignatures = new Set(messages.map(messageSignature));
       const remoteConversation = state.conversations.find(
-        (conversation) => conversation.id === REMOTE_CONVERSATION_ID,
+        (conversation) => conversation.id === CHAT_REMOTE_CONVERSATION_ID,
       );
       const pendingLocal = (remoteConversation?.messages || []).filter(
         (message) =>
@@ -153,7 +180,7 @@ export const useChatStore = create<ChatState>((set) => ({
       return {
         conversations,
         messages:
-          state.activeConversationId === REMOTE_CONVERSATION_ID
+          state.activeConversationId === CHAT_REMOTE_CONVERSATION_ID
             ? mergedMessages
             : activeConversation?.messages || state.messages,
       };

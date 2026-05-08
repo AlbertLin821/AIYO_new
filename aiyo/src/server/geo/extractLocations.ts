@@ -205,7 +205,46 @@ const GENERIC_BLOCKLIST = new Set([
   "guide",
   "vlog",
   "tour",
+  "台灣",
+  "臺灣",
+  "北部",
+  "中部",
+  "南部",
+  "東部",
+  "嘉義",
+  "嘉義市",
+  "嘉義縣",
+  "台北",
+  "台北市",
+  "臺北",
+  "臺北市",
+  "新北",
+  "新北市",
+  "台中",
+  "台中市",
+  "臺中",
+  "臺中市",
+  "台南",
+  "台南市",
+  "臺南",
+  "臺南市",
+  "高雄",
+  "高雄市",
+  "桃園",
+  "桃園市",
+  "日本",
+  "韓國",
+  "大阪",
+  "東京",
 ]);
+
+const GENERIC_LOCATION_PATTERNS = [
+  /^(台灣|臺灣|日本|韓國|北部|中部|南部|東部)$/,
+  /^(嘉義|台北|臺北|新北|桃園|台中|臺中|台南|臺南|高雄)(市|縣)?$/,
+  /^(大阪|東京|京都|首爾)$/,
+  /^(嘉義|台北|臺北|新北|桃園|台中|臺中|台南|臺南|高雄).*(美食|景點|旅遊|懶人包|攻略|自由行|一日遊|兩天一夜|三日遊)$/,
+  /^(.*)(美食|景點|旅遊|懶人包|攻略|自由行|行程|推薦)$/,
+];
 
 /** 關東／關西等地區粗分，用於「東京影片卻抽到京都」等跨區降分。 */
 const KANTO_PLACE_TOKENS = [
@@ -284,6 +323,18 @@ function isLikelyGenericPhrase(value: string): boolean {
   return false;
 }
 
+export function isGenericDestinationName(name: string, destinationHint?: string): boolean {
+  const normalized = name.replace(/\s+/g, "").replace(/臺/g, "台").trim();
+  const destination = (destinationHint || "").replace(/\s+/g, "").replace(/臺/g, "台").trim();
+  if (!normalized) {
+    return true;
+  }
+  if (destination && normalized === destination) {
+    return true;
+  }
+  return GENERIC_LOCATION_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
 function isMalformedPlaceName(value: string): boolean {
   const normalized = value.trim().toLowerCase();
   if (!normalized) {
@@ -297,6 +348,15 @@ function isMalformedPlaceName(value: string): boolean {
   }
   // Reject OCR/model artifacts such as "台n南" while keeping normal romanized names.
   return /[\u3400-\u9fff][a-z][\u3400-\u9fff]/i.test(value);
+}
+
+function stripChinesePoiPrefix(value: string): string {
+  return value
+    .replace(
+      /^(第一站|第二站|第三站|第四站|第五站|接著|接下來|然後|午餐|晚餐|早餐|傍晚|晚上|最後|最後再|今天|這次)?(是|到|來到|走到|去|再去|吃|看|逛|找|介紹)?/,
+      "",
+    )
+    .trim();
 }
 
 function hasPlaceSignal(value: string): boolean {
@@ -405,6 +465,18 @@ export function extractPlaceCandidates(text: string): string[] {
     }
   }
 
+  const chinesePoiHints = cleaned.match(
+    /[\u3400-\u9fffA-Za-z0-9・]{2,24}(?:火雞肉飯|砂鍋魚頭|雞肉飯|牛肉湯|豆花|米糕|肉圓|夜市|市場|老街|商圈|公園|博物館|美術館|神社|寺|廟|宮|樓|塔|車站|咖啡|咖啡店|餐廳|飯店|酒店|小吃|冰店|甜品店|茶屋|拉麵|壽司|食堂|景觀台|步道|農場|漁港|碼頭|溫泉|瀑布|湖|山|書店|百貨)/g,
+  );
+  if (chinesePoiHints) {
+    for (const hint of chinesePoiHints) {
+      const p = stripChinesePoiPrefix(hint.trim());
+      if (p.length >= 3 && p.length <= 28 && !isGenericDestinationName(p)) {
+        candidates.add(p);
+      }
+    }
+  }
+
   return Array.from(candidates);
 }
 
@@ -420,14 +492,14 @@ export function normalizePlaceName(raw: string): PlaceNameExtraction {
   };
 }
 
-export function mergeAndDedupeExtractions(names: string[]): PlaceNameExtraction[] {
+export function mergeAndDedupeExtractions(names: string[], destinationHint?: string): PlaceNameExtraction[] {
   const merged = [...names];
   const seen = new Set<string>();
   const out: PlaceNameExtraction[] = [];
 
   for (const name of merged) {
     const n = normalizePlaceName(name);
-    if (!n.displayName || n.displayName.length < 2) {
+    if (!n.displayName || n.displayName.length < 2 || isGenericDestinationName(n.displayName, destinationHint)) {
       continue;
     }
     if (seen.has(n.normalized)) {
@@ -462,7 +534,7 @@ export function extractPlacesFromTranscriptAndSummary(input: {
     ...titleDerived,
     ...input.llmLocationNames,
     ...heuristic,
-  ]);
+  ], input.destinationHint);
   const destinationNormalized = normalizeToken(input.destinationHint || "");
 
   const scored = candidates
@@ -515,6 +587,9 @@ export function extractPlacesFromTranscriptAndSummary(input: {
         return false;
       }
       if (destinationNormalized && extraction.normalized === destinationNormalized) {
+        return false;
+      }
+      if (isGenericDestinationName(extraction.displayName, input.destinationHint)) {
         return false;
       }
       return patternScore >= 2;

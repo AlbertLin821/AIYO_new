@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
-import { MessageSquare, MousePointer2, Plus, Trash2, Users } from "lucide-react";
+import { MessageSquare, Plus, Trash2, Users } from "lucide-react";
 import { zhTW as t } from "@/locales/zh-TW";
 import { cn } from "@/lib/utils";
 import { syncService } from "@/services/syncService";
@@ -19,19 +19,17 @@ const avatarColors = [
 ];
 
 type Props = {
-  tripId: string | null;
   /** 與行程頁深色資料夾區一致 */
   variant?: "light" | "dark";
 };
 
-export default function ItineraryCollaborationSidebar({ tripId, variant = "light" }: Props) {
+export default function ItineraryCollaborationSidebar({ variant = "light" }: Props) {
   const { data: session } = useSession();
-  const { members, comments, presence, roomId, setCollaboration } = useCollabStore();
+  const { members, comments, roomId, setCollaboration } = useCollabStore();
   const pushToast = useToastStore((state) => state.pushToast);
   const [newComment, setNewComment] = useState("");
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const lastCursorSentAt = useRef(0);
 
   const myUserId = session?.user?.id;
   const isDark = variant === "dark";
@@ -73,29 +71,6 @@ export default function ItineraryCollaborationSidebar({ tripId, variant = "light
     }
   }
 
-  const sendCursor = useCallback(
-    (clientX: number, clientY: number, rect: DOMRect) => {
-      if (!roomId || !tripId) {
-        return;
-      }
-      const now = Date.now();
-      if (now - lastCursorSentAt.current < 180) {
-        return;
-      }
-      lastCursorSentAt.current = now;
-      const x = ((clientX - rect.left) / Math.max(rect.width, 1)) * 100;
-      const y = ((clientY - rect.top) / Math.max(rect.height, 1)) * 100;
-      void syncService.sendPresenceHeartbeat({
-        roomId,
-        activeSection: "itinerary-editor",
-        selectedEntityId: tripId,
-        cursorX: Math.round(x * 10) / 10,
-        cursorY: Math.round(y * 10) / 10,
-      });
-    },
-    [roomId, tripId],
-  );
-
   async function handleAddComment() {
     if (!newComment.trim() || !roomId) {
       return;
@@ -128,12 +103,6 @@ export default function ItineraryCollaborationSidebar({ tripId, variant = "light
       </div>
     );
   }
-
-  const othersPresence = presence.filter(
-    (entry) =>
-      entry.userId !== myUserId &&
-      (entry.activeSection === "itinerary-editor" || entry.activeSection === "itinerary"),
-  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -176,55 +145,6 @@ export default function ItineraryCollaborationSidebar({ tripId, variant = "light
             <p className={cn("py-2 text-center text-xs", mutedClass)}>{t.collab.noMembersHint}</p>
           )}
         </div>
-      </div>
-
-      <div className={panelClass}>
-        <h3
-          className={cn(
-            "mb-3 flex items-center gap-2 text-sm font-semibold",
-            isDark ? "text-zinc-100" : "text-foreground",
-          )}
-        >
-          <MousePointer2 className="size-4 text-tertiary" />
-          {t.collab.presencePreview}
-        </h3>
-        <div
-          className={cn(
-            "relative h-40 overflow-hidden rounded-xl border",
-            isDark ? "border-zinc-800 bg-zinc-950/80" : "border-border-light bg-cream/50",
-          )}
-          onMouseMove={(event) => {
-            const rect = event.currentTarget.getBoundingClientRect();
-            sendCursor(event.clientX, event.clientY, rect);
-          }}
-        >
-          <div className="pointer-events-none absolute inset-0 opacity-40 map-grid" />
-          {othersPresence.map((entry) => (
-            <div
-              key={entry.userId}
-              className="pointer-events-none absolute z-10"
-              style={{
-                left: `${entry.cursorPosition.x}%`,
-                top: `${entry.cursorPosition.y}%`,
-                transform: "translate(-4px, -4px)",
-              }}
-            >
-              <MousePointer2 className="size-4 -rotate-12" style={{ color: entry.color }} fill={entry.color} />
-              <span
-                className="absolute left-4 top-3 whitespace-nowrap rounded-md px-2 py-0.5 text-[10px] font-medium text-white"
-                style={{ backgroundColor: entry.color }}
-              >
-                {entry.userName}
-              </span>
-            </div>
-          ))}
-          {othersPresence.length === 0 && (
-            <div className={cn("flex h-full items-center justify-center px-4 text-center text-xs", mutedClass)}>
-              {t.collab.noPresence}
-            </div>
-          )}
-        </div>
-        <p className={cn("mt-2 text-[10px]", mutedClass)}>{t.collab.presenceCursorHint}</p>
       </div>
 
       <div className={panelClass}>

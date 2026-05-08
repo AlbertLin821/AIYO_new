@@ -45,6 +45,7 @@ model Trip {
   userId      String
   folderId    String?
   title       String
+  coverImageUrl String?
   destination String?
   days        Int
   createdAt   DateTime      @default(now())

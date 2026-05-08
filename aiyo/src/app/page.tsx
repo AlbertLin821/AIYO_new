@@ -1,16 +1,22 @@
 "use client";
 
 import { motion } from "framer-motion";
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useMemo } from "react";
 import { Sparkles, TrendingUp } from "lucide-react";
 import VideoCard from "@/components/home/VideoCard";
 import VideoSearchBar from "@/components/home/VideoSearchBar";
-import VideoSummaryDrawer from "@/components/home/VideoSummaryDrawer";
+import { getDefaultTaiwanCityVideos } from "@/data/defaultTaiwanCityVideos";
 import { zhTW as t } from "@/locales/zh-TW";
-import { summarizeVideo } from "@/services/videoClient";
+import { fetchVideoRecommendations, summarizeVideo } from "@/services/videoClient";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
 import { useVideoStore } from "@/stores/useVideoStore";
 import type { VideoRecommendation } from "@/types";
+
+const VideoSummaryDrawer = dynamic(() => import("@/components/home/VideoSummaryDrawer"), {
+  ssr: false,
+});
 
 export default function HomePage() {
   const {
@@ -23,18 +29,89 @@ export default function HomePage() {
     searchQuery,
     upsertVideo,
     setIsSummarizing,
+    setVideos,
+    setRecommendationSource,
+    setIsSearching,
+    setErrorMessage,
   } = useVideoStore();
   const tripDestination = useTripStore((state) => state.destination);
+  const tripDays = useTripStore((state) => state.days);
   const pushToast = useToastStore((state) => state.pushToast);
 
   const hasSearched = Boolean(searchQuery.trim());
+  const hasTripSeed = Boolean(tripDestination.trim()) && tripDays > 0;
   const showEmptyGrid = videos.length === 0 && !errorMessage;
+  const defaultVideos = useMemo(() => getDefaultTaiwanCityVideos(6), []);
 
-  async function openVideoSummary(video: VideoRecommendation) {
+  useEffect(() => {
+    if (!hasSearched && !hasTripSeed && videos.length === 0) {
+      setVideos(defaultVideos);
+      setRecommendationSource("default-taiwan-cities");
+    }
+  }, [defaultVideos, hasSearched, hasTripSeed, setRecommendationSource, setVideos, videos.length]);
+
+  useEffect(() => {
+    if (!tripDestination.trim() || hasSearched) {
+      return;
+    }
+    if (videos.length > 0 && recommendationSource && recommendationSource !== "default-taiwan-cities") {
+      return;
+    }
+    let cancelled = false;
+    setIsSearching(true);
+    setErrorMessage(null);
+    void fetchVideoRecommendations({
+      destination: tripDestination.trim(),
+      days: tripDays,
+      preferences: ["美食", "景點", "懶人包"],
+      limit: 6,
+    })
+      .then((outcome) => {
+        if (cancelled) {
+          return;
+        }
+        setVideos(outcome.videos.length ? outcome.videos : defaultVideos);
+        setRecommendationSource(outcome.videos.length ? outcome.source : "default-taiwan-cities");
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+        setErrorMessage(error instanceof Error ? error.message : t.video.requestFailedGeneric);
+        setVideos(defaultVideos);
+        setRecommendationSource("default-taiwan-cities");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsSearching(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    defaultVideos,
+    hasSearched,
+    recommendationSource,
+    setErrorMessage,
+    setIsSearching,
+    setRecommendationSource,
+    setVideos,
+    tripDays,
+    tripDestination,
+    videos.length,
+  ]);
+
+  const openVideoSummary = useCallback(async (video: VideoRecommendation) => {
     setSummaryDiagnostics(null);
     setSelectedVideo(video);
 
-    if (!video.videoId || video.summarySegments?.length || video.extractedLocations.length > 0) {
+    if (
+      video.listProvenance === "default-taiwan-cities" ||
+      !video.videoId ||
+      video.summarySegments?.length ||
+      video.extractedLocations.length > 0
+    ) {
       return;
     }
 
@@ -68,7 +145,14 @@ export default function HomePage() {
     } finally {
       setIsSummarizing(false);
     }
-  }
+  }, [
+    pushToast,
+    setIsSummarizing,
+    setSelectedVideo,
+    setSummaryDiagnostics,
+    tripDestination,
+    upsertVideo,
+  ]);
 
   return (
     <div className="min-h-screen p-6 lg:p-8">
@@ -104,6 +188,11 @@ export default function HomePage() {
           {recommendationSource === "youtube-data-api" && (
             <span className="text-[10px] uppercase tracking-wide rounded-full bg-tertiary/15 px-2 py-0.5 text-foreground/80">
               {t.home.sourceYoutube}
+            </span>
+          )}
+          {recommendationSource === "default-taiwan-cities" && (
+            <span className="text-[10px] uppercase tracking-wide rounded-full bg-primary/15 px-2 py-0.5 text-foreground/80">
+              {t.home.sourceDefault}
             </span>
           )}
           {recommendationSource === "mock-fallback" && (

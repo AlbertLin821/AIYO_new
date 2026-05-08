@@ -14,7 +14,8 @@ import {
   User,
 } from "lucide-react";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { zhTW as t } from "@/locales/zh-TW";
 import { useUIStore } from "@/stores/useUIStore";
@@ -29,7 +30,6 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
   const { data: session, status } = useSession();
   const { sidebarCollapsed, toggleSidebar } = useUIStore();
 
@@ -65,11 +65,11 @@ export default function Sidebar() {
           const isActive = pathname === item.href;
           const Icon = item.icon;
           return (
-            <button
+            <Link
               key={item.href}
-              type="button"
+              href={item.href}
+              prefetch
               aria-current={isActive ? "page" : undefined}
-              onClick={() => router.push(item.href)}
               className={cn(
                 "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer",
                 "hover:bg-primary/8",
@@ -104,7 +104,7 @@ export default function Sidebar() {
                   transition={{ type: "spring", stiffness: 300, damping: 30 }}
                 />
               )}
-            </button>
+            </Link>
           );
         })}
       </nav>

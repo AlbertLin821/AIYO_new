@@ -15,6 +15,7 @@ interface CollabState {
   removeComment: (id: string) => void;
   updateMemberRole: (id: string, role: CollabMember["role"]) => void;
   removeMember: (id: string) => void;
+  resetCollaboration: () => void;
 }
 
 export const useCollabStore = create<CollabState>((set) => ({
@@ -42,4 +43,14 @@ export const useCollabStore = create<CollabState>((set) => ({
       members: state.members.map((member) => (member.id === id ? { ...member, role } : member)),
     })),
   removeMember: (id) => set((state) => ({ members: state.members.filter((member) => member.id !== id) })),
+  resetCollaboration: () =>
+    set({
+      roomId: null,
+      members: [],
+      comments: [],
+      presence: [],
+      inviteCode: "",
+      shareLink: "",
+      connectionStatus: "idle",
+    }),
 }));

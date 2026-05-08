@@ -85,7 +85,7 @@ export default function VideoSummaryDrawer({
   const [adding, setAdding] = useState(false);
   const [failedImageVideoId, setFailedImageVideoId] = useState<string | null>(null);
   const [activeStart, setActiveStart] = useState<{ videoId: string; seconds: number } | null>(null);
-  const videoId = video?.videoId;
+  const videoId = video?.listProvenance === "default-taiwan-cities" ? undefined : video?.videoId;
 
   const conciseSummary = useMemo(
     () => compactText(video?.summary || "", 40),
@@ -332,8 +332,8 @@ export default function VideoSummaryDrawer({
                     {summaryDiagnostics?.summaryUnavailable ? (
                       <p className="text-sm text-muted">無法取得逐字稿，暫時無法產生精準片段。</p>
                     ) : activeVideo.summarySegments && activeVideo.summarySegments.length > 0 ? (
-                      activeVideo.summarySegments.map((segment) => (
-                        <div key={segment.id} className="rounded-xl bg-primary/5 px-3 py-3">
+                      activeVideo.summarySegments.map((segment, segmentIndex) => (
+                        <div key={`${segment.id}_${segmentIndex}`} className="rounded-xl bg-primary/5 px-3 py-3">
                           <div className="flex items-start gap-3">
                             <button
                               type="button"
@@ -361,9 +361,9 @@ export default function VideoSummaryDrawer({
                               </p>
                               {segment.highlights && segment.highlights.length > 0 && (
                                 <div className="mt-2 flex flex-col gap-1">
-                                  {segment.highlights.map((highlight) => (
+                                  {segment.highlights.map((highlight, highlightIndex) => (
                                     <p
-                                      key={`${segment.id}_${highlight}`}
+                                      key={`${segment.id}_${segmentIndex}_${highlight}_${highlightIndex}`}
                                       className="rounded-lg bg-surface/80 px-2 py-1 text-xs text-foreground/80"
                                     >
                                       {highlight}
@@ -373,9 +373,9 @@ export default function VideoSummaryDrawer({
                               )}
                               {segment.locationHints && segment.locationHints.length > 0 && (
                                 <div className="mt-2 flex flex-wrap gap-1.5">
-                                  {segment.locationHints.map((hint) => (
+                                  {segment.locationHints.map((hint, hintIndex) => (
                                     <span
-                                      key={`${segment.id}_${hint}`}
+                                      key={`${segment.id}_${segmentIndex}_${hint}_${hintIndex}`}
                                       className="rounded-full bg-secondary/15 px-2 py-0.5 text-[10px] text-foreground/80"
                                     >
                                       {hint}

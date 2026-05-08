@@ -167,12 +167,18 @@ export function buildVideoSummaryPrompt(input: {
     "Requirements:",
     "- Summary must be one Traditional Chinese sentence within 40 Chinese characters. Do not paste transcript wording.",
     "- Produce 3 to 8 segments using only timestamps that exist in the transcript chunks.",
-    "- Each segment title must be short and specific.",
+    "- Each segment must focus on a concrete POI, shop, stall, restaurant, food item, market, night market, cafe, landmark, or attraction that is actually mentioned near that timestamp.",
+    "- If one chunk mentions multiple concrete places or foods, split them into smaller segments instead of merging them into a broad city-food segment.",
+    "- Each segment title must be the concrete place/shop/food/attraction name when available, not a generic theme.",
     "- Each segment text must be a concise 1 to 2 sentence synthesis of that time range, within 60 Chinese characters, not verbatim transcript.",
     "- Each segment highlights array must contain 1 to 3 concise concrete notable details from that same time range.",
     "- Prefer segments about attractions, restaurants, food, landmarks, viewpoints, shopping streets, or photo spots.",
-    "- Extract only specific place names, restaurants, food spots, attractions, landmarks, markets, parks, stations, or districts when actually mentioned.",
-    "- If the video TITLE names a concrete attraction (temple, park, night market, landmark), include it in extractedLocations when it is a real place name.",
+    "- Extract only specific place names, restaurants, food spots, stalls, attractions, landmarks, markets, parks, stations, or districts when actually mentioned in transcript chunks.",
+    "- Do not put broad destinations or search phrases in extractedLocations or locationHints: 台灣, 北部, 中部, 南部, 東部, 嘉義, 嘉義市, 嘉義縣, 台北, 台北市, 新北, 桃園, 台中, 台南, 高雄, 日本, 韓國, 大阪, 東京, 嘉義美食, 台南景點, 高雄旅遊.",
+    "- Destination hint is only context. If the transcript only says the city name, omit it from extractedLocations.",
+    "- Every segment should include at least one locationHint when a concrete place/food/shop is present in that same time range.",
+    "- locationHints must be names actually spoken or shown in that chunk; do not infer from title or destination.",
+    "- Timestamp must point to the chunk where the name is actually mentioned.",
     input.retryMode
       ? "- The previous answer was too generic or malformed. Be concrete and transcript-grounded."
       : "- Avoid generic phrases like 'destination planning context' or 'trip overview' unless the transcript explicitly says so.",
@@ -202,7 +208,8 @@ export function buildVideoFinalSummaryPrompt(input: {
     "- Keep all timestamps from the draft exactly unchanged.",
     "- Summary must be one Traditional Chinese sentence within 40 Chinese characters.",
     "- Segment text should be concise, specific, useful for travel planning, and within 60 Chinese characters.",
-    "- Keep only real attractions, restaurants, food spots, landmarks, markets, parks, stations, districts, or photo spots in extractedLocations and locationHints.",
+    "- Keep only real attractions, restaurants, food spots, stalls, landmarks, markets, parks, stations, cafes, districts, or photo spots in extractedLocations and locationHints.",
+    "- Remove broad destinations and category phrases such as 嘉義, 嘉義市, 嘉義美食, 台南景點, 高雄旅遊, 台灣, 日本, 大阪, 東京.",
     "- Do not add locations that are not already in the draft.",
   ].join("\n");
 }
@@ -218,8 +225,9 @@ export function buildLocationFilteringPrompt(input: {
   return [
     "You filter travel-video location candidates.",
     "All explanatory text and place descriptions must be written only in Traditional Chinese. Keep exact proper-noun place names when needed.",
-    "Keep only specific real places, attractions, districts, stations, markets, temples, parks, museums, neighborhoods, or named food streets.",
-    "Reject generic phrases, entire countries, vague areas, and non-place concepts.",
+    "Keep only specific real POIs: attractions, shops, restaurants, stalls, cafes, stations, markets, temples, parks, museums, neighborhoods, named food streets, or landmarks.",
+    "Reject generic phrases, entire countries, vague areas, city/county-only names, destination-only names, and non-place concepts.",
+    "Reject these broad examples unless part of a longer concrete POI name: 台灣, 北部, 中部, 南部, 東部, 嘉義, 嘉義市, 嘉義縣, 台北, 台北市, 新北, 桃園, 台中, 台南, 高雄, 日本, 韓國, 大阪, 東京, 嘉義美食, 台南景點, 高雄旅遊.",
     "Use transcript chunks, summary text, and key-moment text together.",
     "Return valid JSON only.",
     'Use this exact shape: { "acceptedLocations": string[], "rejectedLocations": string[] }',

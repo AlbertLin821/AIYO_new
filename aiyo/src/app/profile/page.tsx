@@ -345,7 +345,8 @@ export default function ProfilePage() {
             <button
               type="button"
               onClick={() => void loadMemories()}
-              className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-cream/50"
+              disabled={memoriesLoading || Boolean(savingMemoryId || deletingMemoryId)}
+              className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-cream/50 disabled:cursor-not-allowed disabled:opacity-50"
               data-testid="memory-refresh-button"
             >
               <RefreshCcw className="size-3.5" />

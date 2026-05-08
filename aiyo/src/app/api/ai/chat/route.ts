@@ -3,7 +3,7 @@ import { createError, createSuccess } from "@/lib/api-response";
 import { OllamaRequestError } from "@/server/ai/ollamaClient";
 import { addMemories, formatMemoryContext, searchMemories } from "@/server/memory/mem0Client";
 import { requireSessionUser } from "@/server/auth";
-import { ensureCurrentTrip, saveChatMessage } from "@/server/data/appStateService";
+import { resolveSessionTrip, saveChatMessage } from "@/server/data/appStateService";
 import { chatWithTravelAssistant } from "@/server/services/travelPlannerService";
 import type { ChatContext, ChatMessage } from "@/types";
 
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
     try {
       const { userId } = await requireSessionUser();
-      const trip = await ensureCurrentTrip(userId);
+      const trip = await resolveSessionTrip(userId);
       persistedUserId = userId;
       persistedTripId = trip.id;
       await saveChatMessage(userId, "user", body.message.trim(), trip.id);
