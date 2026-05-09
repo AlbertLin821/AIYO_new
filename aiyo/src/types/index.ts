@@ -54,6 +54,11 @@ export interface LocationReference {
   confidence?: number;
   /** True when Google geocode + context checks passed with sufficient score. */
   verified?: boolean;
+  verifiedPlaceIds?: string[];
+  mentionedFoods?: string[];
+  extractionSource?: "deterministic" | "ai-polished" | "fallback";
+  mentionContext?: string;
+  sourceTranscriptLineIds?: string[];
 }
 
 export interface Timestamp {
@@ -175,6 +180,11 @@ export interface VideoSummarySegment {
   endSeconds?: number;
   summary?: string;
   highlights?: string[];
+  foods?: string[];
+  confidence?: number;
+  extractionSource?: "deterministic" | "ai-polished" | "fallback";
+  mentionContext?: string;
+  sourceTranscriptLineIds?: string[];
 }
 
 export interface VideoSummaryDebugMeta {

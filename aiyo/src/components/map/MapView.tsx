@@ -14,13 +14,11 @@ import {
   AIYO_MAPS_AUTH_FAILURE_EVENT,
   loadGoogleMapsApi,
 } from "@/services/googleMapsLoader";
-import { derivePlanningSnapshot } from "@/lib/planningContext";
 import { fetchItineraryRoutePaths } from "@/lib/fetchItineraryDirections";
 import { buildItineraryRouteSegments, type ItineraryRouteSegment } from "@/lib/routeSegments";
 import { useMapStore } from "@/stores/useMapStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
-import { useUserStore } from "@/stores/useUserStore";
 import type { MapPin as MapPinType } from "@/types";
 import { zhTW as t } from "@/locales/zh-TW";
 
@@ -318,7 +316,6 @@ function MockMapFallback({
 
 export default function MapView() {
   const tripStore = useTripStore();
-  const userStore = useUserStore();
   const itinerary = tripStore.itinerary;
   const { pins, selectedPinId, setSelectedPinId } = useMapStore();
   const pushToast = useToastStore((state) => state.pushToast);
@@ -346,19 +343,6 @@ export default function MapView() {
     [pins, selectedPinId],
   );
   const routeSegments = useMemo(() => buildItineraryRouteSegments(itinerary), [itinerary]);
-  const planningSnapshot = useMemo(
-    () =>
-      derivePlanningSnapshot({
-        trip: tripStore,
-        user: userStore,
-        pinCount: pins.length,
-      }),
-    [pins.length, tripStore, userStore],
-  );
-  const mapHeaderTitle = planningSnapshot.hasDestination
-    ? planningSnapshot.destination
-    : "尚未開始規劃";
-
   useEffect(() => {
     let cancelled = false;
     fetch("/api/runtime-config", { cache: "no-store" })
@@ -797,17 +781,6 @@ export default function MapView() {
           </p>
         </div>
       )}
-
-      <div className="absolute left-4 top-4 z-[11] flex max-w-[min(calc(100vw-120px),28rem)] flex-wrap items-center gap-2 rounded-xl border border-border bg-surface/95 px-3 py-1.5 text-xs font-medium text-foreground shadow-soft backdrop-blur-sm">
-        <MapPin className="size-3 shrink-0 text-secondary" />
-        <span className="truncate">{mapHeaderTitle}</span>
-        <span className="text-muted">
-          · {pins.length} {t.map.pinsCount}
-        </span>
-        <span className="rounded-full border border-border bg-surface-elevated px-2 py-0.5 text-[10px] tracking-wide text-muted">
-          {mapReady ? t.map.googleMaps : showRealMap ? t.map.badgeLoadingSdk : t.map.mockLegend}
-        </span>
-      </div>
 
       <div className="absolute right-4 top-[7.25rem] z-[11] flex flex-col gap-2 sm:top-[6.75rem]">
         <button

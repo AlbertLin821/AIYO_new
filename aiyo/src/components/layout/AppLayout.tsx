@@ -8,10 +8,8 @@ import ToastViewport from "@/components/system/ToastViewport";
 import MobileBottomNav from "@/components/layout/MobileBottomNav";
 import Sidebar from "@/components/layout/Sidebar";
 import { cn } from "@/lib/utils";
-import { useUIStore } from "@/stores/useUIStore";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const sidebarCollapsed = useUIStore((state) => state.sidebarCollapsed);
   const [isDesktop, setIsDesktop] = useState(false);
   const pathname = usePathname();
   const shouldRenderOnboarding = pathname !== "/login" && pathname !== "/map";
@@ -33,7 +31,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {shouldRenderOnboarding && <OnboardingModal />}
       <motion.main
         initial={false}
-        animate={{ marginLeft: isDesktop ? (sidebarCollapsed ? 72 : 240) : 0 }}
+        animate={{ marginLeft: isDesktop ? 240 : 0 }}
         transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
         className={cn(
           "min-h-screen",

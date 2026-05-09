@@ -240,6 +240,45 @@ export function buildLocationFilteringPrompt(input: {
   ].join("\n");
 }
 
+export function buildVideoMomentPolishingPrompt(input: {
+  title: string;
+  destination?: string;
+  language?: "traditional-chinese" | "english";
+  moments: Array<{
+    id: string;
+    timestamp: string;
+    startSeconds: number;
+    endSeconds: number;
+    title: string;
+    text: string;
+    summary?: string;
+    locationHints: string[];
+    foods?: string[];
+    confidence?: number;
+  }>;
+}): string {
+  const isZh = (input.language || "traditional-chinese") === "traditional-chinese";
+  return [
+    "You are a moment text polisher for travel videos.",
+    "Return valid JSON only.",
+    'Output schema: { "moments": [{ "id": string, "timestamp": string, "startSeconds": number, "endSeconds": number, "title": string, "text": string, "summary": string, "locationHints": string[], "foods": string[] }] }',
+    `Video title: ${input.title}`,
+    `Destination hint: ${input.destination || "unknown"}`,
+    `Output language: ${isZh ? "Traditional Chinese" : "English"}`,
+    "Rules:",
+    "- Preserve id, timestamp, startSeconds, endSeconds exactly.",
+    "- Preserve locationHints and foods; do not add new POIs.",
+    "- Do not invent timestamps or places.",
+    "- Do not dump transcript lines.",
+    "- Keep title concise and travel-useful.",
+    isZh
+      ? "- Title 長度盡量 18 字內，text/summary 80 字內。"
+      : "- Keep title short, and text/summary concise.",
+    "Input moments:",
+    JSON.stringify(input.moments),
+  ].join("\n");
+}
+
 export function buildSummaryPrompt(input: {
   url?: string;
   title?: string;

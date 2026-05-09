@@ -70,7 +70,9 @@ npx prisma db execute --file prisma/migrations/20260416_000002_add_password_hash
 
 ```bash
 ollama serve
-ollama pull qwen3.5:9b
+ollama pull gemma4:26B
+ollama pull mistral-small:24b
+ollama pull qwen3.6:27b
 ```
 
 6. Start the app:
@@ -102,7 +104,10 @@ Set these for production-like behavior (see also `next.config.ts` for `NEXT_PUBL
 - `GOOGLE_MAPS_API_KEY` — server-side Geocoding API
 - `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` — browser Maps JavaScript API (same key is fine if APIs are enabled for it)
 - `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID` — optional Map ID from Cloud Console (Map Management); enables vector map + `AdvancedMarkerElement`. If omitted, classic markers are used
-- `OLLAMA_BASE_URL` / `OLLAMA_MODEL` — Ollama model endpoint; defaults to `qwen3.5:9b`
+- `OLLAMA_BASE_URL` / `OLLAMA_MODEL` — Ollama model endpoint; defaults to `gemma4:26B`
+- `OLLAMA_VIDEO_SUMMARY_FAST_MODEL` — defaults to `mistral-small:24b`
+- `OLLAMA_VIDEO_SUMMARY_FINAL_MODEL` — defaults to `gemma4:26B`
+- `OLLAMA_LOCATION_MODEL` — defaults to `qwen3.6:27b`
 
 Fallback switches (default `false`):
 

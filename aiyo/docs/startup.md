@@ -32,7 +32,10 @@ Required (minimum):
 - `NEXTAUTH_URL` (usually `http://localhost:3000`)
 - `NEXTAUTH_SECRET` (generate a long random string)
 - `OLLAMA_BASE_URL` (usually `http://localhost:11434`)
-- `OLLAMA_MODEL` (default: `qwen3.5:9b`)
+- `OLLAMA_MODEL` (default: `gemma4:26B`)
+- `OLLAMA_VIDEO_SUMMARY_FAST_MODEL` (default: `mistral-small:24b`)
+- `OLLAMA_VIDEO_SUMMARY_FINAL_MODEL` (default: `gemma4:26B`)
+- `OLLAMA_LOCATION_MODEL` (default: `qwen3.6:27b`)
 
 Optional:
 

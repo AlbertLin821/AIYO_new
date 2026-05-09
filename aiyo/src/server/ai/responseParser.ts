@@ -451,6 +451,50 @@ export function parseLocationFilterResponse(raw: string): {
   }
 }
 
+export function parseVideoMomentPolishingResponse(raw: string): {
+  moments: Array<{
+    id: string;
+    timestamp: string;
+    startSeconds: number;
+    endSeconds: number;
+    title: string;
+    text: string;
+    summary: string;
+    locationHints: string[];
+    foods?: string[];
+  }>;
+  parseFailed: boolean;
+} {
+  const jsonBlock = extractJsonBlock(raw);
+  if (!jsonBlock) {
+    return { moments: [], parseFailed: true };
+  }
+
+  try {
+    const parsed = JSON.parse(jsonBlock) as {
+      moments?: Array<Record<string, unknown>>;
+    };
+    const moments = (parsed.moments || []).map((moment, index) => ({
+      id: String(moment.id || `moment_${index + 1}`),
+      timestamp: String(moment.timestamp || "00:00"),
+      startSeconds: Number(moment.startSeconds || 0),
+      endSeconds: Number(moment.endSeconds || 0),
+      title: String(moment.title || ""),
+      text: String(moment.text || moment.summary || ""),
+      summary: String(moment.summary || moment.text || ""),
+      locationHints: sanitizeLocationNames(
+        Array.isArray(moment.locationHints) ? moment.locationHints.map((value) => String(value)) : [],
+      ),
+      foods: sanitizeLocationNames(
+        Array.isArray(moment.foods) ? moment.foods.map((value) => String(value)) : [],
+      ),
+    }));
+    return { moments, parseFailed: false };
+  } catch {
+    return { moments: [], parseFailed: true };
+  }
+}
+
 export function parseChatResponse(raw: string): ChatResponsePayload {
   const content = raw.trim() || "暫時無法產生有用的回覆。";
   const reply: ChatMessage = {

@@ -1,0 +1,16 @@
+{
+  "scenario": "C",
+  "title": "English Osaka video",
+  "destinationHint": "Osaka",
+  "transcriptLines": [
+    "Osaka travel guide starts now",
+    "next stop is Osaka Castle",
+    "we walk around Dotonbori",
+    "Kuromon Market has great takoyaki"
+  ],
+  "expectations": {
+    "rejectLocations": ["Osaka", "Osaka travel guide"],
+    "keepLocations": ["Osaka Castle", "Dotonbori", "Kuromon Market"],
+    "foods": ["takoyaki"]
+  }
+}

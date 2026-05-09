@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo, useState, type KeyboardEvent } from "react";
+import { memo, useState, type KeyboardEvent } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { AlertCircle, Clock, ExternalLink, Play } from "lucide-react";
@@ -39,11 +39,6 @@ function VideoCard({ video, index, onClick }: VideoCardProps) {
   const thumbLabels = t.videoCard.thumbLabels;
   const [imageFailed, setImageFailed] = useState(false);
   const showThumbnail = Boolean(video.thumbnail) && !imageFailed;
-  const cardSummary = useMemo(
-    () => video.summary || video.description,
-    [video.description, video.summary],
-  );
-
   function handleActivate() {
     onClick();
   }
@@ -106,9 +101,6 @@ function VideoCard({ video, index, onClick }: VideoCardProps) {
         <h3 className="font-semibold text-sm text-foreground leading-snug line-clamp-2 mb-1.5 group-hover:text-primary transition-colors">
           {video.title}
         </h3>
-        <p className="text-xs text-muted line-clamp-2 mb-3 leading-relaxed">
-          {cardSummary}
-        </p>
 
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs text-muted flex items-center gap-1">

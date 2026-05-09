@@ -28,14 +28,6 @@ interface VideoSummaryDrawerProps {
   onClose: () => void;
 }
 
-function compactText(value: string, maxChars: number): string {
-  const text = value.replace(/\s+/g, "").trim();
-  if (text.length <= maxChars) {
-    return text;
-  }
-  return `${text.slice(0, Math.max(0, maxChars - 1))}…`;
-}
-
 function parseTimestampToSeconds(timestamp?: string): number {
   if (!timestamp) {
     return 0;
@@ -85,12 +77,7 @@ export default function VideoSummaryDrawer({
   const [adding, setAdding] = useState(false);
   const [failedImageVideoId, setFailedImageVideoId] = useState<string | null>(null);
   const [activeStart, setActiveStart] = useState<{ videoId: string; seconds: number } | null>(null);
-  const videoId = video?.listProvenance === "default-taiwan-cities" ? undefined : video?.videoId;
-
-  const conciseSummary = useMemo(
-    () => compactText(video?.summary || "", 40),
-    [video?.summary],
-  );
+  const videoId = video?.videoId;
 
   const embedUrl = useMemo(
     () => {
@@ -113,9 +100,7 @@ export default function VideoSummaryDrawer({
   const isProcessingVideo =
     isSummarizing &&
     !summaryDiagnostics?.summaryUnavailable &&
-    (!activeVideo.summary ||
-      (activeVideo.summarySegments || []).length === 0 ||
-      activeVideo.extractedLocations.length === 0);
+    ((activeVideo.summarySegments || []).length === 0 || activeVideo.extractedLocations.length === 0);
   const verifiedLocations = activeVideo.extractedLocations.filter(
     (location) => location.verified === true && location.resolvedFrom === "google-geocode",
   );
@@ -287,12 +272,6 @@ export default function VideoSummaryDrawer({
                   <h3 className="mb-2 text-lg font-bold leading-snug text-foreground">
                     {activeVideo.title}
                   </h3>
-                  <div className="flex items-center gap-2 text-xs text-muted">
-                    <ExternalLink className="size-3" />
-                    <span>{activeVideo.source}</span>
-                    <span>&bull;</span>
-                    <span>{activeVideo.duration}</span>
-                  </div>
                   <div className="mt-3">
                     <a
                       href={activeVideo.url}
@@ -303,24 +282,6 @@ export default function VideoSummaryDrawer({
                       <ExternalLink className="size-3" aria-hidden />
                       {t.drawer.openOnYoutube}
                     </a>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="mb-2 text-sm font-semibold text-foreground">{t.drawer.summary}</h4>
-                  <div className="space-y-2">
-                    {summaryDiagnostics?.summaryUnavailable ? (
-                      <p className="rounded-xl border border-border-light bg-cream/40 px-3 py-3 text-sm leading-relaxed text-muted">
-                        {summaryDiagnostics.unavailableReason ||
-                          "無法取得逐字稿，暫時無法產生精準摘要。"}
-                      </p>
-                    ) : conciseSummary ? (
-                      <p className="text-sm leading-relaxed text-muted">{conciseSummary}</p>
-                    ) : isProcessingVideo ? (
-                      <ProcessingRow label={t.drawer.videoProcessing} />
-                    ) : (
-                      <p className="text-sm leading-relaxed text-muted">{activeVideo.summary}</p>
-                    )}
                   </div>
                 </div>
 
@@ -359,6 +320,32 @@ export default function VideoSummaryDrawer({
                               <p className="mt-1 text-sm text-muted">
                                 {segment.summary || segment.text}
                               </p>
+                              {((segment.locationHints && segment.locationHints.length > 0) ||
+                                (segment.foods && segment.foods.length > 0)) && (
+                                <div className="mt-2 rounded-lg bg-surface/80 px-2 py-2">
+                                  <p className="text-[11px] font-medium text-foreground/80">
+                                    出現的景點／美食
+                                  </p>
+                                  <div className="mt-1 flex flex-wrap gap-1.5">
+                                    {(segment.locationHints || []).map((hint, hintIndex) => (
+                                      <span
+                                        key={`${segment.id}_${segmentIndex}_${hint}_${hintIndex}_poi`}
+                                        className="rounded-full bg-secondary/15 px-2 py-0.5 text-[10px] text-foreground/80"
+                                      >
+                                        {hint}
+                                      </span>
+                                    ))}
+                                    {(segment.foods || []).map((food, foodIndex) => (
+                                      <span
+                                        key={`${segment.id}_${segmentIndex}_${food}_${foodIndex}_food`}
+                                        className="rounded-full bg-tertiary/20 px-2 py-0.5 text-[10px] text-foreground/80"
+                                      >
+                                        {food}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                               {segment.highlights && segment.highlights.length > 0 && (
                                 <div className="mt-2 flex flex-col gap-1">
                                   {segment.highlights.map((highlight, highlightIndex) => (
@@ -368,18 +355,6 @@ export default function VideoSummaryDrawer({
                                     >
                                       {highlight}
                                     </p>
-                                  ))}
-                                </div>
-                              )}
-                              {segment.locationHints && segment.locationHints.length > 0 && (
-                                <div className="mt-2 flex flex-wrap gap-1.5">
-                                  {segment.locationHints.map((hint, hintIndex) => (
-                                    <span
-                                      key={`${segment.id}_${segmentIndex}_${hint}_${hintIndex}`}
-                                      className="rounded-full bg-secondary/15 px-2 py-0.5 text-[10px] text-foreground/80"
-                                    >
-                                      {hint}
-                                    </span>
                                   ))}
                                 </div>
                               )}

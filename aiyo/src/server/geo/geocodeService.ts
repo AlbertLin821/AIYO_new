@@ -4,6 +4,9 @@ import {
   type PlaceCandidate,
 } from "@/server/geo/extractLocations";
 import { findKnownLocationReference } from "@/server/geo/locationCatalog";
+import { isGenericTravelLocation } from "@/server/video/genericLocationFilter";
+import type { PlaceMention } from "@/server/video/placeMentionExtractor";
+import type { TravelExtractionProfile } from "@/server/video/travelExtractionProfiles";
 import type { LocationReference } from "@/types";
 
 export type GeocodeResult = {
@@ -478,5 +481,61 @@ export async function geocodeToLocationReferences(
     locations: result.locations,
     failures: result.failures,
     provenance: result.mapsProvenance,
+  };
+}
+
+export async function resolvePlaceMentionsWithGeocode(input: {
+  mentions: PlaceMention[];
+  profile: TravelExtractionProfile;
+  destinationHint?: string;
+}): Promise<{
+  locations: LocationReference[];
+  failures: string[];
+  mapsProvenance: "google-geocoding" | "catalog-fallback" | "mixed";
+}> {
+  const candidates: PlaceCandidate[] = input.mentions
+    .filter(
+      (mention) =>
+        !isGenericTravelLocation({
+          name: mention.name,
+          destinationHint: input.destinationHint,
+          profile: input.profile,
+        }),
+    )
+    .map((mention) => ({
+      extraction: {
+        raw: mention.rawText,
+        normalized: mention.normalizedName,
+        displayName: mention.name,
+      },
+      source: "heuristic",
+      patternScore: Math.max(2, Math.round(mention.confidence * 10)),
+      rerankScore: Math.max(2, Math.round(mention.confidence * 10)),
+    }));
+
+  if (candidates.length === 0) {
+    return { locations: [], failures: [], mapsProvenance: "catalog-fallback" };
+  }
+
+  const resolved = await resolvePlaceExtractionsHybrid(candidates, {
+    destinationHint: input.destinationHint,
+    transcriptContext: input.mentions.map((mention) => mention.context).join("\n"),
+  });
+
+  const enriched = resolved.locations.map((location) => {
+    const match = input.mentions.find((mention) => mention.name === location.name);
+    return {
+      ...location,
+      mentionedFoods: match?.foods,
+      mentionContext: match?.context,
+      sourceTranscriptLineIds: match?.sourceTranscriptLineIds,
+      extractionSource: "deterministic" as const,
+    };
+  });
+
+  return {
+    locations: enriched,
+    failures: resolved.failures,
+    mapsProvenance: resolved.mapsProvenance,
   };
 }

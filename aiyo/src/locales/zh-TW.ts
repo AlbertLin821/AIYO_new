@@ -51,10 +51,10 @@ export const zhTW = {
   video: {
     searchPlaceholder: "搜尋關鍵字或貼上 YouTube 連結",
     search: "搜尋",
-    summarize: "產生摘要",
+    summarize: "分析影片",
     searching: "搜尋中",
-    summarizing: "摘要中",
-    searchHelper: "貼上連結會進入摘要流程；輸入關鍵字會更新推薦卡片。",
+    summarizing: "分析中",
+    searchHelper: "貼上連結會分析重點片段與地點；輸入關鍵字會更新推薦卡片。",
     transcriptYoutube: "YouTube 逐字稿",
     transcriptNone: "無逐字稿",
     transcriptFallback: "後援摘要",
