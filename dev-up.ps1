@@ -1,8 +1,8 @@
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-Write-Host "Starting postgres, redis, app-dev via Compose (project network: backend)."
-docker compose --profile dev up -d postgres redis app-dev
+Write-Host "Starting postgres, redis, mem0, and app-dev via Compose (project network: backend)."
+docker compose --profile dev --profile mem0 up -d postgres redis mem0-memory-postgres mem0-memory app-dev
 
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
@@ -13,5 +13,5 @@ docker compose --profile dev ps
 
 Write-Host ""
 Write-Host "If you previously saw Prisma error P1001, run:"
-Write-Host "  docker compose --profile dev up -d --force-recreate app-dev"
+Write-Host "  docker compose --profile dev --profile mem0 up -d --force-recreate app-dev"
 Write-Host "Avoid using only: docker start aiyo-new-app-dev"

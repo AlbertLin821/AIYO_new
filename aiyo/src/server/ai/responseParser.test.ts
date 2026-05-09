@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseTripPlanResponse, StructuredOutputError } from "@/server/ai/responseParser";
+import {
+  parseTripPlanResponse,
+  parseVideoMomentPolishingResponse,
+  StructuredOutputError,
+} from "@/server/ai/responseParser";
 import type { TripPlanRequest } from "@/types";
 
 const request: TripPlanRequest = {
@@ -80,5 +84,27 @@ test("parseTripPlanResponse throws when JSON block is missing", () => {
       error instanceof StructuredOutputError &&
       error.message === "MODEL_OUTPUT_JSON_MISSING",
   );
+});
+
+test("parseVideoMomentPolishingResponse parses structured moments", () => {
+  const raw = JSON.stringify({
+    moments: [
+      {
+        id: "moment_1",
+        timestamp: "03:20",
+        startSeconds: 200,
+        endSeconds: 260,
+        title: "文化路夜市小吃散步",
+        text: "這段介紹夜市周邊小吃。",
+        summary: "這段介紹夜市周邊小吃。",
+        locationHints: ["文化路夜市"],
+        foods: ["火雞肉飯"],
+      },
+    ],
+  });
+  const parsed = parseVideoMomentPolishingResponse(raw);
+  assert.equal(parsed.parseFailed, false);
+  assert.equal(parsed.moments[0]?.id, "moment_1");
+  assert.equal(parsed.moments[0]?.locationHints[0], "文化路夜市");
 });
 

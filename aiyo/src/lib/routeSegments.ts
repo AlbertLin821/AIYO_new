@@ -24,6 +24,9 @@ export interface ItineraryRouteSegment {
   color: string;
   from: { lat: number; lng: number };
   to: { lat: number; lng: number };
+  /** 若為 Google Places place_id，路線規劃會優先使用，較接近 Maps 導航結果。 */
+  fromPlaceId?: string;
+  toPlaceId?: string;
 }
 
 function toRadians(value: number): number {
@@ -116,7 +119,9 @@ export function buildItineraryRouteSegments(days: TripPlanDay[]): ItineraryRoute
         color: DAY_ROUTE_COLORS[(day.dayNumber - 1) % DAY_ROUTE_COLORS.length],
         from,
         to,
+        ...(previous.location?.placeId ? { fromPlaceId: previous.location.placeId } : {}),
+        ...(item.location?.placeId ? { toPlaceId: item.location.placeId } : {}),
       } satisfies ItineraryRouteSegment;
-    }).filter((segment): segment is ItineraryRouteSegment => Boolean(segment));
+    }).filter((segment): segment is ItineraryRouteSegment => segment !== null);
   });
 }

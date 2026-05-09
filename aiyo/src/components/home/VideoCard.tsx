@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type KeyboardEvent } from "react";
+import { memo, useState, type KeyboardEvent } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { AlertCircle, Clock, ExternalLink, Play } from "lucide-react";
@@ -22,11 +22,23 @@ const gradients = [
   "from-primary/20 via-peach/20 to-secondary/20",
 ];
 
-export default function VideoCard({ video, index, onClick }: VideoCardProps) {
-  const thumbLabels = [...t.videoCard.thumbLabels];
+function sourceLabel(source: string) {
+  if (source === "youtube-data-api") {
+    return t.videoCard.sourceYoutube;
+  }
+  if (source === "default-recommendation") {
+    return t.home.sourceDefault;
+  }
+  if (source === "mock-fallback") {
+    return t.home.sourceFallback;
+  }
+  return source;
+}
+
+function VideoCard({ video, index, onClick }: VideoCardProps) {
+  const thumbLabels = t.videoCard.thumbLabels;
   const [imageFailed, setImageFailed] = useState(false);
   const showThumbnail = Boolean(video.thumbnail) && !imageFailed;
-
   function handleActivate() {
     onClick();
   }
@@ -89,16 +101,18 @@ export default function VideoCard({ video, index, onClick }: VideoCardProps) {
         <h3 className="font-semibold text-sm text-foreground leading-snug line-clamp-2 mb-1.5 group-hover:text-primary transition-colors">
           {video.title}
         </h3>
-        <p className="text-xs text-muted line-clamp-2 mb-3 leading-relaxed">
-          {video.description}
-        </p>
 
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs text-muted flex items-center gap-1">
             <ExternalLink className="size-3" />
-            {video.source === "youtube-data-api" ? t.videoCard.sourceYoutube : video.source}
+            {sourceLabel(video.source)}
           </span>
           <div className="flex items-center gap-1 flex-wrap justify-end">
+            {video.listProvenance === "default-taiwan-cities" && (
+              <span className="text-[9px] uppercase tracking-wide rounded-full bg-primary/15 px-1.5 py-0.5 text-foreground/70">
+                {t.home.sourceDefault}
+              </span>
+            )}
             {video.listProvenance === "mock-fallback" && (
               <span className="text-[9px] uppercase tracking-wide rounded-full bg-secondary/20 px-1.5 py-0.5 text-foreground/70">
                 {t.home.sourceFallback}
@@ -123,3 +137,5 @@ export default function VideoCard({ video, index, onClick }: VideoCardProps) {
     </motion.div>
   );
 }
+
+export default memo(VideoCard);

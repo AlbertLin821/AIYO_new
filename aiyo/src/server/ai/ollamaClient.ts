@@ -1,4 +1,5 @@
 import { serverConfig } from "@/server/config";
+import { normalizeOllamaResponseContent } from "@/server/ai/ollamaResponseNormalizer";
 
 export interface OllamaMessage {
   role: "system" | "user" | "assistant";
@@ -16,7 +17,8 @@ interface OllamaChatOptions {
     | "video-summary"
     | "video-summary-fast"
     | "video-summary-final"
-    | "location-filter";
+    | "location-filter"
+    | "video-moment-polish";
 }
 
 export class OllamaRequestError extends Error {
@@ -95,7 +97,7 @@ export async function chatWithOllama({
     if (!content) {
       throw new OllamaRequestError("Ollama response did not include message content");
     }
-    return content;
+    return normalizeOllamaResponseContent(content, format);
   } catch (error) {
     if (error instanceof OllamaRequestError) {
       throw error;

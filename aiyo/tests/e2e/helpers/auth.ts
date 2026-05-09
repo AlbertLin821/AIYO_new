@@ -46,7 +46,11 @@ export async function loginAs(page: Page, user: E2EUser, callbackUrl = "/itinera
   await emailInput.fill(user.email);
   await passwordInput.fill(user.password);
   await emailInput.press("Enter");
-  await expect(page).toHaveURL(new RegExp(callbackUrl.replace("/", "\\/")));
+  const expectedUrl = new RegExp(callbackUrl.replace("/", "\\/"));
+  await expect(page).toHaveURL(expectedUrl, { timeout: 5000 }).catch(async () => {
+    await page.locator("form").getByRole("button", { name: "登入" }).filter({ visible: true }).click();
+    await expect(page).toHaveURL(expectedUrl);
+  });
   await dismissOnboardingIfVisible(page);
 }
 

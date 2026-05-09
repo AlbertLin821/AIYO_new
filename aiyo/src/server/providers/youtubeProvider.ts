@@ -138,6 +138,53 @@ function parseDisplayDurationToSeconds(input?: string): number | null {
   return null;
 }
 
+const DESCRIPTION_NOISE_PATTERNS = [
+  /請(記得)?訂閱.*$/i,
+  /別忘了.*(訂閱|按讚|分享).*$/i,
+  /(訂閱|按讚|分享|開啟小鈴鐺).*$/i,
+  /(追蹤|follow).*(ig|instagram|fb|facebook).*$/i,
+  /合作邀約.*$/i,
+  /商業合作.*$/i,
+  /業配.*$/i,
+  /聯絡(信箱|方式).*$/i,
+  /music( by|:).*$/i,
+  /音樂(來源|授權).*$/i,
+  /章節.*$/i,
+];
+
+export function cleanYouTubeDescription(description: string, maxChars = 120): string {
+  const withoutUrls = description
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/www\.\S+/gi, " ");
+  const meaningfulLines = withoutUrls
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !DESCRIPTION_NOISE_PATTERNS.some((pattern) => pattern.test(line)))
+    .filter((line) => (line.match(/#/g) || []).length <= 2)
+    .filter((line) => !/^#/.test(line))
+    .filter((line) => !/^\d{1,2}:\d{2}/.test(line))
+    .filter((line) => !/^[\w.+-]+@[\w.-]+\.\w+/.test(line));
+
+  const compact = meaningfulLines
+    .join(" ")
+    .replace(/#[\p{Letter}\p{Number}_-]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!compact) {
+    return "";
+  }
+
+  if (compact.length <= maxChars) {
+    return compact;
+  }
+
+  const sentenceMatch = compact.match(/^(.{20,}?[。！？.!?])/);
+  const candidate = sentenceMatch?.[1] || compact.slice(0, maxChars - 1);
+  return `${candidate.slice(0, maxChars - 1).trimEnd()}…`;
+}
+
 function parseChapterTimestamp(input: string): number | null {
   const parts = input.split(":").map((part) => Number(part));
   if (parts.some((part) => !Number.isFinite(part))) {
@@ -311,7 +358,7 @@ async function fetchMappedVideosForQuery(
       "",
     url: `https://www.youtube.com/watch?v=${item.id}`,
     duration: formatIsoDuration(item.contentDetails?.duration),
-    summary: item.snippet?.description?.slice(0, 180) || "",
+    summary: cleanYouTubeDescription(item.snippet?.description || ""),
     description: item.snippet?.description || "",
     source: "youtube-data-api",
     channelTitle: item.snippet?.channelTitle,

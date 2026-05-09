@@ -31,6 +31,15 @@ export interface LocationReference {
   lng: number;
   description: string;
   address?: string;
+  placeId?: string;
+  photoUrl?: string;
+  thumbnail?: string;
+  openingHours?: string;
+  phoneNumber?: string;
+  website?: string;
+  googleMapsUrl?: string;
+  rating?: number;
+  userRatingsTotal?: number;
   /**
    * 地點如何被採用並對應座標：Google 地理編碼成功，或僅依 LLM／規則抽取並以內部對照補座標。
    */
@@ -45,6 +54,11 @@ export interface LocationReference {
   confidence?: number;
   /** True when Google geocode + context checks passed with sufficient score. */
   verified?: boolean;
+  verifiedPlaceIds?: string[];
+  mentionedFoods?: string[];
+  extractionSource?: "deterministic" | "ai-polished" | "fallback";
+  mentionContext?: string;
+  sourceTranscriptLineIds?: string[];
 }
 
 export interface Timestamp {
@@ -103,6 +117,15 @@ export interface MapPin {
   lng: number;
   description: string;
   address?: string;
+  placeId?: string;
+  photoUrl?: string;
+  thumbnail?: string;
+  openingHours?: string;
+  phoneNumber?: string;
+  website?: string;
+  googleMapsUrl?: string;
+  rating?: number;
+  userRatingsTotal?: number;
   color?: string;
   linkedTripItemId?: string;
   dayNumber?: number;
@@ -157,6 +180,11 @@ export interface VideoSummarySegment {
   endSeconds?: number;
   summary?: string;
   highlights?: string[];
+  foods?: string[];
+  confidence?: number;
+  extractionSource?: "deterministic" | "ai-polished" | "fallback";
+  mentionContext?: string;
+  sourceTranscriptLineIds?: string[];
 }
 
 export interface VideoSummaryDebugMeta {
@@ -190,7 +218,7 @@ export interface VideoRecommendation {
   extractedLocations: LocationReference[];
   summarySegments?: VideoSummarySegment[];
   /** Batch search: whether results came from YouTube Data API or mock fallback */
-  listProvenance?: "youtube-data-api" | "mock-fallback";
+  listProvenance?: "youtube-data-api" | "mock-fallback" | "default-taiwan-cities";
 }
 
 export interface VideoSummaryResult {
@@ -289,6 +317,14 @@ export interface GeocodeApiResult {
   lat: number;
   lng: number;
   placeId?: string;
+  photoUrl?: string;
+  thumbnail?: string;
+  openingHours?: string;
+  phoneNumber?: string;
+  website?: string;
+  googleMapsUrl?: string;
+  rating?: number;
+  userRatingsTotal?: number;
   types?: string[];
   countryCode?: string;
 }
@@ -303,6 +339,8 @@ export interface PersistedTripPayload {
   destination: string;
   days: number;
   budget?: number;
+  /** 封面圖（資料網址或 https URL），由前端壓縮後寫入 */
+  coverImageUrl?: string | null;
   itinerary: TripPlanDay[];
   pins: MapPin[];
   updatedAt: string;

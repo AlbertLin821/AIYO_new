@@ -20,7 +20,8 @@ function normalizeMapId(value: string): string {
 
 export async function GET() {
   return NextResponse.json({
-    googleMapsApiKey: readString("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY"),
+    googleMapsApiKey:
+      readString("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY") || readString("GOOGLE_MAPS_API_KEY"),
     googleMapsMapId: normalizeMapId(readString("NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID")),
     enableMockMaps: readBoolean("NEXT_PUBLIC_ENABLE_MOCK_MAPS", "ENABLE_MOCK_MAPS"),
   });

@@ -18,6 +18,9 @@ const SAVE_DELAY_MS = 350;
 let activeStorageKey: string | null = null;
 let persistenceUnsubscribers: (() => void)[] = [];
 
+/** 已完成至少一次伺服端 bootstrap 的本機使用者鍵（id 或 email），供 Strict Mode 重掛載時略過 reset + localStorage 覆寫。 */
+const serverHydratedUserKeys = new Set<string>();
+
 interface PersistedState {
   version: number;
   chat?: {
@@ -116,12 +119,31 @@ export function clearPersistedState(): void {
     return;
   }
 
+  clearPersistenceServerHydrated();
+
   for (const key of LEGACY_KEYS) {
     window.localStorage.removeItem(key);
   }
   if (activeStorageKey) {
     window.localStorage.removeItem(activeStorageKey);
   }
+}
+
+export function markPersistenceServerHydrated(user: { id?: string | null; email?: string | null }) {
+  if (user.id) {
+    serverHydratedUserKeys.add(String(user.id));
+  }
+  if (user.email) {
+    serverHydratedUserKeys.add(String(user.email));
+  }
+}
+
+export function clearPersistenceServerHydrated() {
+  serverHydratedUserKeys.clear();
+}
+
+function shouldSkipPersistenceResetAfterServerHydrate(userKey: string): boolean {
+  return serverHydratedUserKeys.has(userKey);
 }
 
 export function debounce<T extends (...args: never[]) => void>(
@@ -260,7 +282,9 @@ function teardownPersistenceSubscriptions(): void {
 }
 
 /**
- * 順序：reset in-memory → hydrate 目前 userKey 的 localStorage → 綁定 autosave subscribe
+ * teardown subs → 依使用者載入：
+ * - 若已對同一 userKey 完成伺服端 bootstrap（Strict Mode 第二次掛載）：不重設記憶體、不以 localStorage 覆蓋。
+ * - 否則：reset → hydrate localStorage → 綁定 autosave subscribe。
  */
 export function initializePersistenceForUser(userKey: string): () => void {
   if (!isBrowser()) {
@@ -269,15 +293,20 @@ export function initializePersistenceForUser(userKey: string): () => void {
 
   teardownPersistenceSubscriptions();
 
-  resetInMemoryStores();
-
-  for (const key of LEGACY_KEYS) {
-    window.localStorage.removeItem(key);
-  }
-
   activeStorageKey = getPersistenceStorageKey(userKey);
-  const persisted = loadStateFromKey(activeStorageKey);
-  hydrateStores(persisted);
+
+  const skipResetBecauseServerAlreadyApplied = shouldSkipPersistenceResetAfterServerHydrate(userKey);
+
+  if (!skipResetBecauseServerAlreadyApplied) {
+    resetInMemoryStores();
+
+    for (const key of LEGACY_KEYS) {
+      window.localStorage.removeItem(key);
+    }
+
+    const persisted = loadStateFromKey(activeStorageKey);
+    hydrateStores(persisted);
+  }
 
   const debouncedSave = debounce(() => {
     if (activeStorageKey) {
@@ -309,6 +338,12 @@ export function PersistenceBootstrap() {
   const { data: session, status } = useSession();
   const userKey =
     status === "loading" ? null : (session?.user?.id || session?.user?.email || "guest");
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      clearPersistenceServerHydrated();
+    }
+  }, [status]);
 
   useEffect(() => {
     if (userKey === null) {

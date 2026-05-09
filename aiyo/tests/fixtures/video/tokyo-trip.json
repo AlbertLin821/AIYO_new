@@ -1,0 +1,16 @@
+{
+  "scenario": "B",
+  "title": "東京自由行",
+  "destinationHint": "東京",
+  "transcriptLines": [
+    "東京旅遊這次會走經典路線",
+    "先到東京鐵塔看視角",
+    "下一站東京車站",
+    "淺草寺附近吃拉麵"
+  ],
+  "expectations": {
+    "rejectLocations": ["東京", "東京旅遊"],
+    "keepLocations": ["東京鐵塔", "東京車站", "淺草寺"],
+    "foods": ["拉麵"]
+  }
+}

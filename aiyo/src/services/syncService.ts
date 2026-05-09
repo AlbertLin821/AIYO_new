@@ -1,4 +1,5 @@
 import { zhTW as t } from "@/locales/zh-TW";
+import { markPersistenceServerHydrated } from "@/services/persistence";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/services/apiClient";
 import { useChatStore } from "@/stores/useChatStore";
 import { useCollabStore } from "@/stores/useCollabStore";
@@ -99,6 +100,7 @@ class SyncService {
         dayNumber: pin.dayNumber || 0,
         source: pin.source || "manual",
       })),
+      coverImageUrl: payload.coverImageUrl ?? "",
     };
   }
 
@@ -160,6 +162,16 @@ class SyncService {
           this.isApplyingRemote = false;
         }
       }
+    } else {
+      this.isApplyingRemote = true;
+      try {
+        const emptyTripSource = source === "realtime" ? "realtime" : "bootstrap";
+        useTripStore.getState().resetTrip(emptyTripSource);
+        useMapStore.getState().setPins([], "bootstrap");
+        this.lastSyncedPayloadKey = null;
+      } finally {
+        this.isApplyingRemote = false;
+      }
     }
 
     if (source === "realtime") {
@@ -171,6 +183,10 @@ class SyncService {
     if (snapshot.collaboration) {
       useCollabStore.getState().setCollaboration(snapshot.collaboration);
       this.roomId = snapshot.collaboration.roomId;
+    } else {
+      this.stopRealtime();
+      useCollabStore.getState().resetCollaboration();
+      this.roomId = null;
     }
 
     const currentProfile = {
@@ -190,6 +206,10 @@ class SyncService {
     }
     useUserStore.getState().setFirstVisit(false);
     useUIStore.setState({ showOnboarding: false });
+
+    if (snapshot.user) {
+      markPersistenceServerHydrated(snapshot.user);
+    }
 
     this.hydrated = true;
   }
@@ -255,6 +275,7 @@ class SyncService {
       destination: trip.destination,
       days: trip.days,
       budget: trip.budget,
+      coverImageUrl: trip.coverImageUrl ?? null,
       itinerary: trip.itinerary,
       pins: map.pins,
       updatedAt: trip.lastUpdatedAt || new Date().toISOString(),
@@ -269,6 +290,13 @@ class SyncService {
     if (!this.hydrated || this.isApplyingRemote) {
       return;
     }
+
+    const noTripId = !payload.tripId?.trim();
+    if (noTripId && payload.itinerary.length === 0) {
+      this.log("skip sync without trip and empty itinerary", { source });
+      return;
+    }
+
     if (payloadKey === this.lastSyncedPayloadKey) {
       this.log("skip duplicate trip sync", { source });
       return;

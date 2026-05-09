@@ -1,7 +1,8 @@
 "use client";
 
 import { CalendarDays, Home, Map, MessageCircle, User } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { zhTW as t } from "@/locales/zh-TW";
 
@@ -20,7 +21,6 @@ const items = [
 
 export default function MobileBottomNav() {
   const pathname = usePathname();
-  const router = useRouter();
 
   if (pathname === "/login") {
     return null;
@@ -35,10 +35,10 @@ export default function MobileBottomNav() {
         {items.map(({ href, icon: Icon, labelKey, ariaKey }) => {
           const isActive = pathname === href;
           return (
-            <button
+            <Link
               key={href}
-              type="button"
-              onClick={() => router.push(href)}
+              href={href}
+              prefetch
               aria-current={isActive ? "page" : undefined}
               aria-label={t.mobileNav[ariaKey]}
               className={cn(
@@ -50,7 +50,7 @@ export default function MobileBottomNav() {
               <span className="w-full truncate text-center text-[10px] font-medium leading-tight">
                 {t.nav[labelKey]}
               </span>
-            </button>
+            </Link>
           );
         })}
       </div>

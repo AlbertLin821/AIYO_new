@@ -130,13 +130,15 @@ export async function updateMemory(input: {
   text: string;
   metadata?: Record<string, unknown> | null;
 }): Promise<Mem0MemoryRecord> {
-  return mem0Fetch<Mem0MemoryRecord>(`/memories/${input.memoryId}`, {
+  await mem0Fetch<{ message?: string }>(`/memories/${input.memoryId}`, {
     method: "PUT",
     body: JSON.stringify({
       text: input.text,
       metadata: input.metadata,
     }),
   });
+
+  return mem0Fetch<Mem0MemoryRecord>(`/memories/${input.memoryId}`);
 }
 
 export async function deleteMemory(memoryId: string): Promise<void> {

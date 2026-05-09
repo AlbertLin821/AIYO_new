@@ -8,14 +8,11 @@ import ToastViewport from "@/components/system/ToastViewport";
 import MobileBottomNav from "@/components/layout/MobileBottomNav";
 import Sidebar from "@/components/layout/Sidebar";
 import { cn } from "@/lib/utils";
-import { PersistenceBootstrap } from "@/services/persistence";
-import { useUIStore } from "@/stores/useUIStore";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const sidebarCollapsed = useUIStore((state) => state.sidebarCollapsed);
   const [isDesktop, setIsDesktop] = useState(false);
   const pathname = usePathname();
-  const shouldRenderOnboarding = pathname !== "/login";
+  const shouldRenderOnboarding = pathname !== "/login" && pathname !== "/map";
   const isLogin = pathname === "/login";
 
   useEffect(() => {
@@ -28,14 +25,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <PersistenceBootstrap />
       <ToastViewport />
       <Sidebar />
       <MobileBottomNav />
       {shouldRenderOnboarding && <OnboardingModal />}
       <motion.main
         initial={false}
-        animate={{ marginLeft: isDesktop ? (sidebarCollapsed ? 72 : 240) : 0 }}
+        animate={{ marginLeft: isDesktop ? 240 : 0 }}
         transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
         className={cn(
           "min-h-screen",

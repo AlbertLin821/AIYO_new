@@ -85,6 +85,7 @@ function sanitizeBootstrapTrip(input: {
 function serializeTrip(trip: {
   id: string;
   title: string;
+  coverImageUrl: string | null;
   destination: string | null;
   days: number;
   updatedAt: Date;
@@ -179,6 +180,7 @@ function serializeTrip(trip: {
     title: trip.title,
     destination: trip.destination?.trim() || "",
     days: trip.days,
+    coverImageUrl: trip.coverImageUrl ?? null,
     itinerary,
     pins,
     updatedAt: trip.updatedAt.toISOString(),
@@ -242,11 +244,23 @@ export async function setUserActiveTripId(userId: string, tripId: string | null)
   await persistProfilePreferences(userId, merged);
 }
 
+/** 若目前選中的行程為指定 id，清除 preferences 中的 activeTripId（刪除行程前呼叫）。 */
+export async function clearActiveTripIfMatches(userId: string, tripId: string) {
+  await ensureProfile(userId);
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { profile: true } });
+  const prefs = parseProfilePreferencesRecord(user.profile?.preferences);
+  const active = typeof prefs.activeTripId === "string" ? prefs.activeTripId : null;
+  if (active === tripId) {
+    await setUserActiveTripId(userId, null);
+  }
+}
+
 export type TripLibraryListRow = {
   id: string;
   title: string;
   destination: string;
   days: number;
+  coverImageUrl: string | null;
   folderId: string | null;
   folderName: string | null;
   createdAt: string;
@@ -254,14 +268,37 @@ export type TripLibraryListRow = {
   isOwner: boolean;
 };
 
-/** 行程資料夾列表：mine 僅本人擁有；recent 含協作行程。 */
-export async function listTripsForLibrary(userId: string, scope: "recent" | "mine"): Promise<TripLibraryListRow[]> {
+/** 寫入資料庫用的行程標題：空白則依目的地給預設，否則為「未命名行程」。 */
+export function normalizeTripStorageTitle(
+  title: string | null | undefined,
+  destination: string | null | undefined,
+): string {
+  const t = typeof title === "string" ? title.trim() : "";
+  if (t.length > 0) {
+    return t;
+  }
+  const d = typeof destination === "string" ? destination.trim() : "";
+  if (d.length > 0) {
+    return `${d} 行程`;
+  }
+  return "未命名行程";
+}
+
+/** 行程資料夾列表：mine 僅本人擁有；recent 含本人與協作；shared 僅他人擁有且本人為協作者。 */
+export async function listTripsForLibrary(
+  userId: string,
+  scope: "recent" | "mine" | "shared",
+): Promise<TripLibraryListRow[]> {
   const where =
     scope === "mine"
       ? { userId }
-      : {
-          OR: [{ userId }, { collaborators: { some: { userId } } }],
-        };
+      : scope === "shared"
+        ? {
+            AND: [{ collaborators: { some: { userId } } }, { userId: { not: userId } }],
+          }
+        : {
+            OR: [{ userId }, { collaborators: { some: { userId } } }],
+          };
 
   const trips = await prisma.trip.findMany({
     where,
@@ -269,6 +306,7 @@ export async function listTripsForLibrary(userId: string, scope: "recent" | "min
     select: {
       id: true,
       title: true,
+      coverImageUrl: true,
       destination: true,
       days: true,
       folderId: true,
@@ -284,6 +322,7 @@ export async function listTripsForLibrary(userId: string, scope: "recent" | "min
     title: trip.title?.trim() || (trip.destination?.trim() ? `${trip.destination} 行程` : "未命名行程"),
     destination: trip.destination?.trim() || "尚未設定",
     days: trip.days,
+    coverImageUrl: trip.coverImageUrl ?? null,
     folderId: trip.folderId,
     folderName: trip.folder?.name ?? null,
     createdAt: trip.createdAt.toISOString(),
@@ -294,7 +333,68 @@ export async function listTripsForLibrary(userId: string, scope: "recent" | "min
 
 const tripIncludeFull = { itineraryDays: true, items: true, pins: true } as const;
 
-export async function ensureCurrentTrip(userId: string) {
+const defaultTripPayloadForCreate: PersistedTripPayload = {
+  tripId: "",
+  title: "",
+  destination: "",
+  days: 1,
+  budget: 0,
+  coverImageUrl: null,
+  itinerary: [
+    {
+      dayNumber: 1,
+      theme: "Day 1",
+      summary: "尚未安排內容",
+      items: [],
+    },
+  ],
+  pins: [],
+  updatedAt: "",
+};
+
+/** 建立一筆空白擁有行程並載入完整關聯（供刪光行程後或首次載入補齊至少一筆）。 */
+export async function createDefaultOwnedTrip(userId: string) {
+  const persisted = await saveTripPayload(userId, {
+    ...defaultTripPayloadForCreate,
+    updatedAt: new Date().toISOString(),
+  });
+  return prisma.trip.findUniqueOrThrow({
+    where: { id: persisted.tripId },
+    include: tripIncludeFull,
+  });
+}
+
+/**
+ * 擁有者刪除行程後：若已無任何「本人擁有」的行程，建立預設行程並在必要時寫入 activeTripId。
+ */
+export async function ensureAtLeastOneOwnedTripAfterDelete(ownerUserId: string) {
+  const ownedLeft = await prisma.trip.count({ where: { userId: ownerUserId } });
+  if (ownedLeft > 0) {
+    return;
+  }
+  const fresh = await createDefaultOwnedTrip(ownerUserId);
+  await ensureProfile(ownerUserId);
+  const userRow = await prisma.user.findUniqueOrThrow({
+    where: { id: ownerUserId },
+    include: { profile: true },
+  });
+  const prefs = parseProfilePreferencesRecord(userRow.profile?.preferences);
+  const active = typeof prefs.activeTripId === "string" ? prefs.activeTripId : null;
+  if (!active) {
+    await setUserActiveTripId(ownerUserId, fresh.id);
+    return;
+  }
+  const access = await getTripAccess(ownerUserId, active);
+  if (!access) {
+    await setUserActiveTripId(ownerUserId, fresh.id);
+  }
+}
+
+/**
+ * 解析目前工作階段應載入的行程：preferences.activeTripId、本人最近行程、協作行程；
+ * 若皆無則建立一筆預設擁有行程並設為使用中（至少一筆擁有行程）。
+ */
+export async function resolveSessionTrip(userId: string) {
   await ensureProfile(userId);
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { profile: true } });
   const prefs = parseProfilePreferencesRecord(user.profile?.preferences);
@@ -335,23 +435,9 @@ export async function ensureCurrentTrip(userId: string) {
     return collabTrip;
   }
 
-  return prisma.trip.create({
-    data: {
-      userId,
-      title: "",
-      destination: null,
-      days: 1,
-      itineraryDays: {
-        create: {
-          dayNumber: 1,
-          sortOrder: 0,
-          theme: "Day 1",
-          summary: null,
-        },
-      },
-    },
-    include: tripIncludeFull,
-  });
+  const created = await createDefaultOwnedTrip(userId);
+  await setUserActiveTripId(userId, created.id);
+  return created;
 }
 
 export async function ensureCollaborationRoom(tripId: string) {
@@ -373,8 +459,7 @@ export async function ensureCollaborationRoom(tripId: string) {
 
 export async function getBootstrapPayload(userId: string): Promise<BootstrapPayload> {
   const user = await ensureProfile(userId);
-  const trip = await ensureCurrentTrip(userId);
-  const room = await ensureCollaborationRoom(trip.id);
+  const tripRecord = await resolveSessionTrip(userId);
   const messages = await prisma.chatMessage.findMany({
     where: { userId },
     orderBy: { createdAt: "asc" },
@@ -389,12 +474,14 @@ export async function getBootstrapPayload(userId: string): Promise<BootstrapPayl
     destination: user.profile?.destination,
   });
   const chatMessages = serializeChatMessages(messages);
+
+  const room = await ensureCollaborationRoom(tripRecord.id);
   const tripPayload = sanitizeBootstrapTrip({
     trip: serializeTrip({
-      ...trip,
-      itineraryDays: trip.itineraryDays,
-      items: trip.items,
-      pins: trip.pins,
+      ...tripRecord,
+      itineraryDays: tripRecord.itineraryDays,
+      items: tripRecord.items,
+      pins: tripRecord.pins,
     }),
     profile,
     chatMessages,
@@ -467,27 +554,42 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
     await requireTripAccess(userId, input.tripId, "edit");
   }
 
+  const coverPatch =
+    input.coverImageUrl !== undefined
+      ? {
+          coverImageUrl:
+            input.coverImageUrl !== null && input.coverImageUrl.trim().length > 0
+              ? input.coverImageUrl.trim()
+              : null,
+        }
+      : undefined;
+
+  const resolvedTitle = normalizeTripStorageTitle(input.title, input.destination);
+
   const trip = input.tripId
     ? await prisma.trip.upsert({
         where: { id: input.tripId },
         update: {
-          title: input.title,
+          title: resolvedTitle,
           destination: input.destination,
           days: Math.max(1, input.itinerary.length || input.days),
+          ...(coverPatch ?? {}),
         },
         create: {
           userId,
-          title: input.title,
+          title: resolvedTitle,
           destination: input.destination,
           days: Math.max(1, input.itinerary.length || input.days),
+          ...(coverPatch ?? {}),
         },
       })
     : await prisma.trip.create({
         data: {
           userId,
-          title: input.title,
+          title: resolvedTitle,
           destination: input.destination,
           days: Math.max(1, input.itinerary.length || input.days),
+          ...(coverPatch ?? {}),
         },
       });
 
@@ -559,6 +661,80 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
   return serializeTrip(freshTrip);
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** 取得複製命名用的「原名」：去掉尾端 `-（複製N）` 或舊版 `（複製）`。 */
+function stemTripTitleForDuplicate(raw: string): string {
+  let t = raw.trim();
+  if (!t) {
+    return t;
+  }
+  for (;;) {
+    const numbered = t.match(/^(.+)-（複製\d+）$/);
+    if (numbered) {
+      t = numbered[1].trim();
+      continue;
+    }
+    if (t.endsWith("（複製）")) {
+      t = t.slice(0, -"（複製）".length).trim();
+      continue;
+    }
+    break;
+  }
+  return t || raw.trim();
+}
+
+async function computeNextDuplicateTripTitle(userId: string, sourceTitle: string): Promise<string> {
+  const stem = stemTripTitleForDuplicate(sourceTitle);
+  const safeStem = stem.length > 0 ? stem : sourceTitle.trim() || "行程";
+  const rows = await prisma.trip.findMany({
+    where: { userId },
+    select: { title: true },
+  });
+  const suffixRe = new RegExp(`^${escapeRegExp(safeStem)}-（複製(\\d+)）$`);
+  let maxN = 0;
+  for (const row of rows) {
+    const tt = row.title?.trim() || "";
+    const m = tt.match(suffixRe);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (!Number.isNaN(n)) {
+        maxN = Math.max(maxN, n);
+      }
+    }
+  }
+  return `${safeStem}-（複製${maxN + 1}）`;
+}
+
+/** 以目前使用者身分複製一份行程（含天數、項目與圖釘）；需至少具備檢視權限。 */
+export async function duplicateTripForUser(userId: string, sourceTripId: string): Promise<{ tripId: string }> {
+  await requireTripAccess(userId, sourceTripId, "view");
+  const source = await prisma.trip.findUnique({
+    where: { id: sourceTripId },
+    include: tripIncludeFull,
+  });
+  if (!source) {
+    throw new Error("not_found");
+  }
+
+  const serialized = serializeTrip(source);
+  const nextTitle = await computeNextDuplicateTripTitle(userId, serialized.title);
+  const copyPayload: PersistedTripPayload = {
+    ...serialized,
+    tripId: "",
+    title: nextTitle,
+    pins: serialized.pins.map((pin) => ({
+      ...pin,
+      linkedTripItemId: undefined,
+    })),
+  };
+
+  const saved = await saveTripPayload(userId, copyPayload);
+  return { tripId: saved.tripId };
+}
+
 export async function saveChatMessage(userId: string, role: string, content: string, tripId?: string) {
   return prisma.chatMessage.create({
     data: {
@@ -568,6 +744,11 @@ export async function saveChatMessage(userId: string, role: string, content: str
       tripId,
     },
   });
+}
+
+export async function clearUserChatMessages(userId: string): Promise<number> {
+  const result = await prisma.chatMessage.deleteMany({ where: { userId } });
+  return result.count;
 }
 
 function serializeComments(

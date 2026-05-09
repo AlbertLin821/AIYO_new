@@ -69,6 +69,14 @@ export async function GET(request: Request) {
             send("ping", { ok: true });
           } catch (err) {
             const message = err instanceof Error ? err.message : "unknown_error";
+            if (message === "missing_user" || message === "unauthorized") {
+              send("error", {
+                ok: false,
+                code: message,
+              });
+              closeStream();
+              return;
+            }
             console.error("[realtime/stream] pump failed:", message);
             // 保持連線並送出一則可恢復的訊息，避免未處理拒絕直接撕毀 chunked 回應
             send("tick_failed", {

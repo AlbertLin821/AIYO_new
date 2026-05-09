@@ -17,8 +17,9 @@ test("authenticated user can manage folders without deleting trips", async ({ pa
   await loginAs(page, E2E_OWNER);
 
   await expect(page.getByText("E2E Folder 台南行程")).toBeVisible();
-  await page.getByPlaceholder("建立新資料夾，例如：台灣旅遊").fill(folderName);
-  await page.getByRole("button", { name: "建立資料夾" }).click();
+  await page.getByRole("button", { name: "建立新資料夾" }).click();
+  await page.getByPlaceholder("資料夾名稱").fill(folderName);
+  await page.getByRole("button", { name: "確認建立" }).click();
   await expect(page.locator("span").filter({ hasText: folderName })).toBeVisible();
 
   page.once("dialog", async (dialog) => {
@@ -31,6 +32,7 @@ test("authenticated user can manage folders without deleting trips", async ({ pa
   const folder = await findFolderByName(owner.id, renamedFolderName);
   expect(folder).not.toBeNull();
 
+  await page.getByRole("button", { name: /Your designs|我的行程/ }).click();
   await page.locator("select").nth(2).selectOption(folder!.id);
   await expect.poll(() => getTripFolderId(trip.id)).toBe(folder!.id);
 

@@ -23,7 +23,7 @@ interface VideoState {
   videos: VideoRecommendation[];
   selectedVideo: VideoRecommendation | null;
   searchQuery: string;
-  recommendationSource: "youtube-data-api" | "mock-fallback" | null;
+  recommendationSource: "youtube-data-api" | "mock-fallback" | "default-taiwan-cities" | null;
   summaryDiagnostics: SummaryDiagnostics | null;
   isSearching: boolean;
   isSummarizing: boolean;
@@ -32,7 +32,7 @@ interface VideoState {
   upsertVideo: (video: VideoRecommendation) => void;
   setSelectedVideo: (video: VideoRecommendation | null) => void;
   setSearchQuery: (query: string) => void;
-  setRecommendationSource: (source: "youtube-data-api" | "mock-fallback" | null) => void;
+  setRecommendationSource: (source: "youtube-data-api" | "mock-fallback" | "default-taiwan-cities" | null) => void;
   setSummaryDiagnostics: (value: SummaryDiagnostics | null) => void;
   setIsSearching: (searching: boolean) => void;
   setIsSummarizing: (summarizing: boolean) => void;

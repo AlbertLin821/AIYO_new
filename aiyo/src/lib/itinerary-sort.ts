@@ -17,6 +17,7 @@ export type ItineraryListItem = {
   days: number;
   updatedAt: string;
   createdAt: string;
+  coverImageUrl?: string | null;
   folderId?: string | null;
   folderName?: string | null;
   /** 是否為本人擁有的行程（協作行程為 false） */

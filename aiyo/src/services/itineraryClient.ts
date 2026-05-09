@@ -26,8 +26,9 @@ export function listItineraryFolders() {
   return apiGet<ItineraryFolderDto[]>("/api/itinerary-folders");
 }
 
-export function listTripsForLibrary(scope: "recent" | "mine") {
-  const query = scope === "mine" ? "?scope=mine" : "?scope=recent";
+export function listTripsForLibrary(scope: "recent" | "mine" | "shared") {
+  const query =
+    scope === "mine" ? "?scope=mine" : scope === "shared" ? "?scope=shared" : "?scope=recent";
   return apiGet<ItineraryListItem[]>(`/api/trips${query}`);
 }
 
@@ -78,5 +79,27 @@ export function updateTripCollaboratorRole(
 
 export function removeTripCollaborator(tripId: string, userId: string) {
   return apiDelete<{ ok: boolean }>(`/api/trips/${tripId}/collaborators/${userId}`);
+}
+
+export function deleteTrip(tripId: string) {
+  return apiDelete<{ ok: boolean }>(`/api/trips/${tripId}`);
+}
+
+export function duplicateTrip(tripId: string) {
+  return apiPost<Record<string, never>, { tripId: string }>(`/api/trips/${tripId}/duplicate`, {});
+}
+
+export function patchTripDetails(
+  tripId: string,
+  input: { title?: string; coverImageUrl?: string | null },
+) {
+  return apiPatch<typeof input, { id: string; title: string; coverImageUrl: string | null }>(
+    `/api/trips/${tripId}`,
+    input,
+  );
+}
+
+export function updateTripTitle(tripId: string, title: string) {
+  return patchTripDetails(tripId, { title });
 }
 

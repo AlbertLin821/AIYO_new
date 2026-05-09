@@ -12,7 +12,8 @@ export async function GET(request: Request) {
     const { userId } = await requireSessionUser();
     const { searchParams } = new URL(request.url);
     const scopeRaw = searchParams.get("scope");
-    const scope = scopeRaw === "mine" ? "mine" : "recent";
+    const scope =
+      scopeRaw === "mine" ? "mine" : scopeRaw === "shared" ? "shared" : "recent";
     const trips = await listTripsForLibrary(userId, scope);
     return NextResponse.json(createSuccess(trips));
   } catch (error) {

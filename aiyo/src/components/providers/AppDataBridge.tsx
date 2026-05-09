@@ -44,6 +44,7 @@ export default function AppDataBridge() {
         }
         syncService.applyBootstrap(snapshot, {
           source: "initial-bootstrap",
+          forceTrip: true,
         });
         syncService.startRealtime(snapshot.collaboration?.roomId || null);
       })

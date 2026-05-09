@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildItineraryPrompt } from "@/server/ai/promptBuilder";
+import { buildItineraryPrompt, buildVideoMomentPolishingPrompt } from "@/server/ai/promptBuilder";
 import type { TripPlanRequest } from "@/types";
 
 const request: TripPlanRequest = {
@@ -32,4 +32,27 @@ test("buildItineraryPrompt strict-format mode adds strict retry instructions", (
   assert.match(prompt, /STRICT FORMAT RETRY MODE:/);
   assert.match(prompt, /Every day must include an `items` array\./);
   assert.match(prompt, /Output raw JSON only/);
+});
+
+test("buildVideoMomentPolishingPrompt enforces preserve rules", () => {
+  const prompt = buildVideoMomentPolishingPrompt({
+    title: "嘉義美食影片",
+    destination: "嘉義",
+    language: "traditional-chinese",
+    moments: [
+      {
+        id: "moment_1",
+        timestamp: "03:20",
+        startSeconds: 200,
+        endSeconds: 260,
+        title: "文化路夜市小吃散步",
+        text: "這段介紹文化路夜市周邊小吃。",
+        locationHints: ["文化路夜市"],
+        foods: ["火雞肉飯", "砂鍋魚頭"],
+      },
+    ],
+  });
+  assert.match(prompt, /Preserve id, timestamp, startSeconds, endSeconds exactly/);
+  assert.match(prompt, /do not add new POIs/);
+  assert.match(prompt, /Title 長度盡量 18 字內/);
 });

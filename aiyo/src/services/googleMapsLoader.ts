@@ -43,6 +43,7 @@ export interface GoogleMapsApi {
 }
 
 let googleMapsPromise: Promise<GoogleMapsApi> | null = null;
+const GOOGLE_MAPS_LOAD_TIMEOUT_MS = 12_000;
 
 declare global {
   interface Window {
@@ -77,7 +78,19 @@ export function loadGoogleMapsApi(apiKey: string): Promise<GoogleMapsApi> {
   }
 
   googleMapsPromise = new Promise((resolve, reject) => {
+    let timeoutId: number | null = window.setTimeout(() => {
+      rejectWithCleanup(new Error("Google Maps SDK loading timed out."));
+    }, GOOGLE_MAPS_LOAD_TIMEOUT_MS);
+
+    const clearLoadTimeout = () => {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    };
+
     const rejectWithCleanup = (error: Error) => {
+      clearLoadTimeout();
       resetLoaderPromise();
       reject(error);
     };
@@ -86,6 +99,7 @@ export function loadGoogleMapsApi(apiKey: string): Promise<GoogleMapsApi> {
     if (existingScript) {
       existingScript.addEventListener("load", () => {
         if (window.google?.maps) {
+          clearLoadTimeout();
           resolve(window.google.maps);
         } else {
           rejectWithCleanup(new Error("Google Maps loaded without maps namespace."));
@@ -121,6 +135,7 @@ export function loadGoogleMapsApi(apiKey: string): Promise<GoogleMapsApi> {
       }
       if (window.google?.maps) {
         settled = true;
+        clearLoadTimeout();
         resolve(window.google.maps);
       } else {
         settled = true;
