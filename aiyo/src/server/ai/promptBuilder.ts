@@ -85,8 +85,10 @@ export function buildChatPrompt(
   context?: ChatContext,
   memoryContext?: string,
   researchDigest?: string,
+  webSearchDigest?: string,
 ) {
   const hasResearch = Boolean(researchDigest?.trim());
+  const hasWebSearch = Boolean(webSearchDigest?.trim());
   return {
     system: [
       "You are AIYO, a professional travel planning and travel-video validation assistant.",
@@ -98,6 +100,12 @@ export function buildChatPrompt(
         : "",
       hasResearch
         ? "Concrete restaurants, attractions, or shops in proposedChanges MUST match a venue listed under \"Verified research\" below (same name or clear substring). If no suitable venue exists, return proposedChanges: []."
+        : "",
+      hasWebSearch
+        ? "You may use web search results as factual grounding. Do not invent place names, opening hours, prices, or addresses."
+        : "",
+      hasWebSearch
+        ? "If web search results are insufficient, state that clearly instead of hallucinating details."
         : "",
       "Reply only in Traditional Chinese. Do not use Simplified Chinese.",
       "Do not mirror other languages; translate the answer into natural Traditional Chinese.",
@@ -127,6 +135,17 @@ export function buildChatPrompt(
             researchDigest!.trim(),
           ].join("\n")
         : "",
+      hasWebSearch
+        ? [
+            "",
+            "You may use the following web search results as factual grounding.",
+            "Do not invent place names, opening hours, prices, or addresses.",
+            "If the search results are insufficient, say so clearly.",
+            "",
+            "[Web Search Results]",
+            webSearchDigest!.trim(),
+          ].join("\n")
+        : "",
     ]
       .filter(Boolean)
       .join("\n"),
@@ -136,10 +155,15 @@ export function buildChatPrompt(
 export function buildItineraryPrompt(
   request: TripPlanRequest,
   memoryContext?: string,
-  options?: { retryMode?: "default" | "strict-format"; externalResearch?: string },
+  options?: {
+    retryMode?: "default" | "strict-format";
+    externalResearch?: string;
+    webSearchDigest?: string;
+  },
 ): string {
   const retryMode = options?.retryMode || "default";
   const externalResearch = options?.externalResearch?.trim();
+  const webSearchDigest = options?.webSearchDigest?.trim();
   const strictSuffix =
     retryMode === "strict-format"
       ? [
@@ -157,7 +181,7 @@ export function buildItineraryPrompt(
     "All user-facing string values must be written only in Traditional Chinese. Do not use Simplified Chinese.",
     "",
     "HARD SCHEMA RULES:",
-    '- Return one JSON object exactly in this shape: { "summary": string, "days": [{ "dayNumber": number, "theme": string, "summary": string, "items": [{ "id": string, "time": "HH:MM", "title": string, "type": "attraction|restaurant|transport|hotel|activity|shopping", "transport": string, "notes": string, "location": { "name": string, "lat": number, "lng": number, "description": string, "address": string } }] }], "warnings": string[] }',
+    '- Return one JSON object exactly in this shape: { "summary": string, "days": [{ "dayNumber": number, "theme": string, "summary": string, "items": [{ "id": string, "time": "HH:MM", "title": string, "type": "attraction|restaurant|transport|hotel|activity|shopping", "transport": string, "notes": string, "location": { "name": string, "lat": number, "lng": number, "description": string, "address": string }, "sourceTitle"?: string, "sourceUrl"?: string, "sourceSnippet"?: string, "confidence"?: "high"|"medium"|"low" }] }], "warnings": string[] }',
     "- Output raw JSON only, no markdown fences.",
     "",
     "QUALITY RULES:",
@@ -193,6 +217,18 @@ export function buildItineraryPrompt(
           externalResearch,
           "",
           "Each item `location.name` (when present) MUST correspond to a concrete venue or place name found in VERIFIED RESEARCH or be omitted — do not invent fictional businesses.",
+        ]
+      : []),
+    ...(webSearchDigest
+      ? [
+          "",
+          "WEB SEARCH FACTUAL GROUNDING:",
+          "Do not invent place names, opening hours, prices, or addresses.",
+          "Prefer places and restaurants appearing in [Web Search Results].",
+          "If search results are insufficient, say \"目前搜尋資料不足\" in summary or warnings.",
+          "[Web Search Results]",
+          webSearchDigest,
+          "When possible, include sourceTitle/sourceUrl/sourceSnippet for each itinerary item.",
         ]
       : []),
     ...strictSuffix,
@@ -241,6 +277,9 @@ export function buildVideoSummaryPrompt(input: {
     "- Each segment must focus on a concrete POI, shop, stall, restaurant, food item, market, night market, cafe, landmark, or attraction that is actually mentioned near that timestamp.",
     "- If one chunk mentions multiple concrete places or foods, split them into smaller segments instead of merging them into a broad city-food segment.",
     "- Each segment title must be a complete, readable headline (full official-style name when the transcript gives it), not a generic theme.",
+    "- Use fully qualified place names suitable for Google Maps search (e.g. 嘉義文化路夜市、臺南武聖夜市), never vague tokens alone such as 夜市、老街、小吃、附近、這裡、當地.",
+    "- Food names must be specific (e.g. 嘉義火雞肉飯、林聰明沙鍋魚頭); if the transcript only implies a dish without a verifiable name, omit it or mark the segment note as （資訊不足） rather than inventing a shop name.",
+    "- Each segment text must state what the place is, why it matters for travelers, and how it fits an itinerary (time-of-day, pacing, or connection to the next stop).",
     "- Never use half-sentences, oral filler, or clipped transcript fragments as the segment title (for example fragments ending mid-thought or with 然後、就是、那個、這邊).",
     "- Each segment text must be a concise 1 to 2 sentence synthesis of that time range, within 60 Chinese characters, not verbatim transcript.",
     "- Each segment highlights array must contain 1 to 3 concise concrete notable details from that same time range.",
@@ -283,6 +322,9 @@ export function buildVideoFinalSummaryPrompt(input: {
     "- Summary must be one Traditional Chinese sentence within 40 Chinese characters.",
     "- Segment text should be concise, specific, useful for travel planning, and within 60 Chinese characters.",
     "- Each segment title must read as a full headline (complete noun phrase or official-style venue name), never a clipped transcript fragment or oral filler.",
+    "- Prefer map-ready strings: full POI / night market / restaurant names as spoken or as official signage (good for geocoding). Ban vague-only labels: 夜市、老街、小吃、附近、這裡、周邊、當地 作為唯一名稱.",
+    "- Food must be named concretely when known; otherwise drop the food clause instead of guessing.",
+    "- Segment text should explain what the stop is, why it is worth visiting, and itinerary relevance (meal slot, walking cluster, transit hub).",
     "- Keep only real attractions, restaurants, food spots, stalls, landmarks, markets, parks, stations, cafes, districts, or photo spots in extractedLocations and locationHints.",
     "- Remove broad destinations and category phrases such as 嘉義, 嘉義市, 嘉義美食, 台南景點, 高雄旅遊, 台灣, 日本, 大阪, 東京.",
     "- Do not add locations that are not already in the draft.",
@@ -346,6 +388,8 @@ export function buildVideoMomentPolishingPrompt(input: {
     "- Do not invent timestamps or places.",
     "- Do not dump transcript lines.",
     "- Title must be a complete, publication-ready headline (full venue or dish name when known), not a transcript fragment or oral filler.",
+    "- Expand titles and summaries to use fully qualified names when hints already contain them (e.g. merge 夜市 into 嘉義文化路夜市 if hints justify it); never output standalone vague words (夜市、老街、小吃 alone) as the title.",
+    "- Summary (and text when used) must say what is featured, why travelers care, and how it fits a day plan; mention concrete dishes only when tied to a named POI or dish in hints/foods.",
     "- If the transcript only gives an unclear nickname, keep a short literal label plus 「（待查證）」 rather than inventing a formal business name.",
     isZh
       ? "- Title 長度盡量 22 字內，text/summary 80 字內。"

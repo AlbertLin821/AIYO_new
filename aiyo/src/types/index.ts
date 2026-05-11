@@ -93,6 +93,10 @@ export interface TripPlanItem {
   location?: LocationReference;
   source?: "manual" | "ai" | "video";
   estimatedCost?: number;
+  sourceTitle?: string;
+  sourceUrl?: string;
+  sourceSnippet?: string;
+  confidence?: "high" | "medium" | "low";
 }
 
 export interface TripPlanDay {
@@ -176,6 +180,10 @@ export interface ChatMessage {
   timestamp: string;
   suggestedAction?: SuggestedAction;
   proposedChanges?: AiProposedChange[];
+  sources?: Array<{
+    title: string;
+    url: string;
+  }>;
 }
 
 export interface ChatRequestPayload {

@@ -16,7 +16,7 @@ function normalizePreferences(input: Partial<TravelPreferences> | undefined): Tr
   return {
     interests: input?.interests || [],
     pace: input?.pace || "moderate",
-    transportPreference: input?.transportPreference || "Train",
+    transportPreference: input?.transportPreference || "Transit",
     budget: input?.budget,
     mustVisit: input?.mustVisit || [],
     avoid: input?.avoid || [],
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
       preferences: normalizePreferences(
         body.preferences || {
           interests: body.interests || [],
-          transportPreference: body.transportPreference || "Train",
+          transportPreference: body.transportPreference || "Transit",
           pace: "moderate",
           notes: body.transcript,
         },

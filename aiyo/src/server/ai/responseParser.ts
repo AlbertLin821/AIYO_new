@@ -263,6 +263,13 @@ function parseTripPlanJson(
             `${request.destination} · ${title}`,
           ),
           source: "ai" as const,
+          sourceTitle: record.sourceTitle ? String(record.sourceTitle).trim() || undefined : undefined,
+          sourceUrl: record.sourceUrl ? String(record.sourceUrl).trim() || undefined : undefined,
+          sourceSnippet: record.sourceSnippet ? String(record.sourceSnippet).trim() || undefined : undefined,
+          confidence:
+            record.confidence === "high" || record.confidence === "medium" || record.confidence === "low"
+              ? (record.confidence as "high" | "medium" | "low")
+              : undefined,
         };
         if (!record.time || !record.type || !record.id) {
           normalized = true;

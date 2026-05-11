@@ -42,4 +42,15 @@ export const serverConfig = {
   googleMapsApiKey: readString("GOOGLE_MAPS_API_KEY", ""),
   /** Tavily Search API (https://tavily.com) for web research in travel chat and segment hints. */
   tavilyApiKey: readString("TAVILY_API_KEY", ""),
+  searxngBaseUrl: readString("SEARXNG_BASE_URL", "http://localhost:8081"),
+  searxngInternalBaseUrl: readString("SEARXNG_INTERNAL_BASE_URL", "http://searxng:8080"),
+  searxngEnabled: readBoolean("SEARXNG_ENABLED", true),
+  searxngTimeoutMs: readNumber("SEARXNG_TIMEOUT_MS", 12000),
+  searxngDefaultLanguage: readString("SEARXNG_DEFAULT_LANGUAGE", "zh-TW"),
+  searxngDefaultCategories: readString("SEARXNG_DEFAULT_CATEGORIES", "general"),
+  searxngResultLimit: readNumber("SEARXNG_RESULT_LIMIT", 8),
+  searxngSafeSearch: readNumber("SEARXNG_SAFE_SEARCH", 1),
+  aiWebSearchEnabled: readBoolean("AI_WEB_SEARCH_ENABLED", true),
+  aiWebSearchMaxResults: readNumber("AI_WEB_SEARCH_MAX_RESULTS", 6),
+  aiWebSearchRequireCitations: readBoolean("AI_WEB_SEARCH_REQUIRE_CITATIONS", true),
 };

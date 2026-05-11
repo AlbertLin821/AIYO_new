@@ -173,6 +173,7 @@ export const japanProfile: TravelExtractionProfile = {
     "水族館",
     "博物館",
     "美術館",
+    "咖啡廳",
     "溫泉",
     "温泉",
     "street",
@@ -205,6 +206,8 @@ export const japanProfile: TravelExtractionProfile = {
     /[A-Za-z\u3400-\u9fff]{2,24}(駅|寺|神社|市場|公園|城|商店街|温泉|溫泉)/g,
     /[A-Za-z][A-Za-z\s]{1,28}(Market|Station|Temple|Shrine|Castle|Tower|Park|Museum)/gi,
     /\b(Dotonbori|Kuromon Market|Osaka Castle|Tokyo Tower|Senso-ji|Asakusa|Shibuya|Ginza)\b/g,
+    /** 中文旁白常出現的日式 POI（profile 選到 japan 時字幕可能仍為繁中） */
+    /[\u3400-\u9fff]{2,18}(神社|大社|寺|公園|城|美術館|博物館|車站|展望台|溫泉|温泉)/g,
   ],
 };
 
@@ -340,7 +343,11 @@ export function selectTravelExtractionProfile(input: {
     return taiwanProfile;
   }
 
-  if (/(日本|東京|大阪|京都|北海道|關西|關東|japan|tokyo|osaka|kyoto|sapporo)/i.test(haystack)) {
+  if (
+    /(日本|東京|大阪|京都|北海道|關西|關東|日光|箱根|鎌倉|輕井澤|名古屋|福岡|沖繩|沖縄|奈良|廣島|宮崎|鹿兒島|japan|tokyo|osaka|kyoto|sapporo|nikko|hakone|kamakura|karuizawa|nagoya|fukuoka|okinawa|nara|hiroshima)/i.test(
+      haystack,
+    )
+  ) {
     return japanProfile;
   }
 

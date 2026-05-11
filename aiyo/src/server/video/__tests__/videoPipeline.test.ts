@@ -157,7 +157,7 @@ test("mention normalization and dedupe merge near duplicates", () => {
   assert.ok(deduped[0].name.includes("文化路夜市"));
 });
 
-test("moment segment generation produces non-transcript dump text", () => {
+test("moment segment generation uses plain noun titles, empty descriptions, chronological order", () => {
   const segments = buildMomentSegments({
     mentions: [
       {
@@ -189,10 +189,47 @@ test("moment segment generation produces non-transcript dump text", () => {
     maxSegments: 8,
   });
   assert.ok(segments.length >= 2);
-  assert.ok(segments[0].title.length <= 18);
-  assert.ok(!segments[0].text.includes("我們現在來到文化路夜市然後這邊很多吃的"));
-  assert.ok(!segments[0].highlights.join(" ").includes("我們現在來到文化路夜市然後這邊很多吃的"));
+  assert.deepEqual(
+    segments.map((s) => s.startSeconds),
+    [...segments.map((s) => s.startSeconds)].sort((a, b) => a - b),
+  );
+  assert.equal(segments[0].title, "文化路夜市");
+  assert.equal(segments[0].text, "");
+  assert.equal(segments[0].summary, "");
+  assert.deepEqual(segments[0].highlights, []);
   assert.ok((segments[0].locationHints || []).length > 0);
+});
+
+test("moment segments keep only first occurrence timestamp per normalized noun", () => {
+  const segments = buildMomentSegments({
+    mentions: [
+      {
+        rawText: "文化路夜市",
+        name: "文化路夜市",
+        normalizedName: "文化路夜市",
+        startSeconds: 300,
+        endSeconds: 310,
+        context: "又回到文化路夜市",
+        source: "profile-pattern",
+        confidence: 0.8,
+      },
+      {
+        rawText: "文化路夜市",
+        name: "文化路夜市",
+        normalizedName: "文化路夜市",
+        startSeconds: 50,
+        endSeconds: 60,
+        context: "一開始到文化路夜市",
+        source: "profile-pattern",
+        confidence: 0.85,
+      },
+    ],
+    videoDurationSeconds: 900,
+    maxSegments: 8,
+  });
+  assert.equal(segments.length, 1);
+  assert.equal(segments[0].startSeconds, 50);
+  assert.equal(segments[0].title, "文化路夜市");
 });
 
 test("buildVideoSegmentPrompt requests strict JSON output for transcript chunks", () => {

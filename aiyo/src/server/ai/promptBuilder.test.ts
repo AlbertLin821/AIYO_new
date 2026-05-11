@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildItineraryPrompt, buildVideoMomentPolishingPrompt } from "@/server/ai/promptBuilder";
+import { buildChatPrompt, buildItineraryPrompt, buildVideoMomentPolishingPrompt } from "@/server/ai/promptBuilder";
 import type { TripPlanRequest } from "@/types";
 
 const request: TripPlanRequest = {
@@ -34,6 +34,28 @@ test("buildItineraryPrompt strict-format mode adds strict retry instructions", (
   assert.match(prompt, /Output raw JSON only/);
 });
 
+test("buildItineraryPrompt includes web search grounding when provided", () => {
+  const prompt = buildItineraryPrompt(request, undefined, {
+    webSearchDigest:
+      "1. Title: 嘉義文化路夜市\n   URL: https://example.com/night-market\n   Snippet: 最新店家與營業資訊",
+  });
+  assert.match(prompt, /WEB SEARCH FACTUAL GROUNDING:/);
+  assert.match(prompt, /\[Web Search Results\]/);
+  assert.match(prompt, /sourceTitle\/sourceUrl\/sourceSnippet/);
+});
+
+test("buildChatPrompt includes web search grounding block", () => {
+  const prompt = buildChatPrompt(
+    "嘉義有什麼最新景點推薦？",
+    undefined,
+    undefined,
+    "weather digest",
+    "1. Title: 嘉義公園\n   URL: https://example.com/park\n   Snippet: 近期活動資訊",
+  );
+  assert.match(prompt.user, /\[Web Search Results\]/);
+  assert.match(prompt.system, /factual grounding/);
+});
+
 test("buildVideoMomentPolishingPrompt enforces preserve rules", () => {
   const prompt = buildVideoMomentPolishingPrompt({
     title: "嘉義美食影片",
@@ -55,4 +77,5 @@ test("buildVideoMomentPolishingPrompt enforces preserve rules", () => {
   assert.match(prompt, /Preserve id, timestamp, startSeconds, endSeconds exactly/);
   assert.match(prompt, /do not add new POIs/);
   assert.match(prompt, /Title 長度盡量 22 字內/);
+  assert.match(prompt, /standalone vague words/);
 });

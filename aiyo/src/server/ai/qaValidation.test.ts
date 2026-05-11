@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { parseTripPlanResponse, parseVideoSummaryResponse } from "@/server/ai/responseParser";
+import { buildMomentSegments, toVideoSummarySegments } from "@/server/video/momentSegmentBuilder";
+import type { PlaceMention } from "@/server/video/placeMentionExtractor";
 import type { TripPlanRequest, TripPlanResult, VideoSummarySegment } from "@/types";
 
 const allowedTypes = new Set(["attraction", "restaurant", "transport", "hotel", "activity", "shopping"]);
@@ -187,5 +189,33 @@ test("video summary fixture keeps timestamped concrete places from transcript", 
     assert.ok(segment.highlights?.length);
     assert.ok(segment.locationHints?.length);
   }
+});
+
+test("deterministic moment segments use title equal to place noun only", () => {
+  const mentions: PlaceMention[] = [
+    {
+      rawText: "文化路夜市",
+      name: "文化路夜市",
+      normalizedName: "文化路夜市",
+      startSeconds: 40,
+      endSeconds: 48,
+      context: "我們現在來到文化路夜市然後這邊很多吃的",
+      source: "profile-pattern",
+      confidence: 0.88,
+    },
+  ];
+  const travel = buildMomentSegments({
+    mentions,
+    videoDurationSeconds: 600,
+    maxSegments: 8,
+  });
+  const segments = toVideoSummarySegments(travel);
+  assert.equal(segments.length, 1);
+  assert.equal(segments[0].title, "文化路夜市");
+  assert.equal(segments[0].text, "");
+  assert.equal(segments[0].summary, "");
+  assert.equal(segments[0].highlights, undefined);
+  assert.ok(!segments[0].title.includes("我們"));
+  assert.ok(!segments[0].title.includes("重點"));
 });
 

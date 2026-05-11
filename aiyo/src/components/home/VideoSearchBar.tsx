@@ -88,7 +88,7 @@ export default function VideoSearchBar() {
         setSummaryDiagnostics(null);
         const outcome = await fetchVideoRecommendations({
           keyword: trimmed,
-          limit: 10,
+          limit: 6,
         });
         setVideos(outcome.videos);
         setRecommendationSource(outcome.source);

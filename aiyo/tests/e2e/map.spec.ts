@@ -12,7 +12,7 @@ test("map page shows the map surface without the onboarding modal", async ({ pag
   await page.goto("/map");
 
   await expect(page.getByTestId("onboarding-modal")).toHaveCount(0);
-  await expect(page.getByTestId("map-marker-panel")).toBeVisible();
+  await expect(page.getByTestId("map-view")).toBeVisible();
   await expect(page.locator(".gm-style, .map-mock-shell").first()).toBeVisible();
   await expect(page.getByText("正在載入 Google 地圖")).toHaveCount(0);
 });
@@ -24,10 +24,10 @@ test("authenticated map sync shows linked pins and editable manual activities", 
   await loginAs(page, E2E_OWNER, "/map");
 
   await expect(page.getByTestId("onboarding-modal")).toHaveCount(0);
-  await expect(page.getByTestId("map-marker-panel")).toBeVisible();
-  await expect(page.getByTestId("map-marker-item").filter({ hasText: "赤崁樓" })).toBeVisible();
+  await expect(page.getByTestId("map-view")).toBeVisible();
+  await expect(page.getByRole("button", { name: "赤崁樓" })).toBeVisible();
 
-  await page.getByTestId("map-marker-item").filter({ hasText: "赤崁樓" }).click();
+  await page.getByRole("button", { name: "赤崁樓" }).click();
   const selectedPin = page.getByTestId("selected-map-pin");
   await expect(selectedPin).toBeVisible();
   await expect(selectedPin).toContainText("赤崁樓");

@@ -8,6 +8,8 @@ import {
   detectResponseLanguage,
 } from "@/server/ai/promptBuilder";
 import { serverConfig } from "@/server/config";
+import { shouldUseWebSearch } from "@/server/search/searchIntent";
+import { searchWeb, type WebSearchResult } from "@/server/search/searxngClient";
 import {
   buildDefaultTravelToolRequests,
   buildTripPlanResearchRequests,
@@ -139,6 +141,109 @@ function isCjk(text: string): boolean {
   return /[\u3400-\u9fff]/.test(text);
 }
 
+type WebSearchBundle = {
+  results: WebSearchResult[];
+  digest: string;
+  warning?: string;
+};
+
+function formatWebSearchDigest(results: WebSearchResult[]): string {
+  return results
+    .map((result, index) => {
+      const lines = [
+        `${index + 1}. Title: ${result.title}`,
+        `   URL: ${result.url}`,
+        `   Snippet: ${result.content || "(no snippet)"}`,
+      ];
+      return lines.join("\n");
+    })
+    .join("\n\n")
+    .slice(0, 10_000);
+}
+
+function toCitationList(results: WebSearchResult[], max: number): Array<{ title: string; url: string }> {
+  return results.slice(0, max).map((result) => ({ title: result.title, url: result.url }));
+}
+
+function attachSearchFallbackNotice(content: string, warning?: string): string {
+  if (!warning) {
+    return content;
+  }
+  const notice = "目前無法連線到搜尋服務，因此以下內容可能不是最新資料。";
+  if (content.includes(notice)) {
+    return content;
+  }
+  return `${notice}\n\n${content}`;
+}
+
+async function runWebSearch(query: string, limit?: number): Promise<WebSearchBundle> {
+  if (!serverConfig.aiWebSearchEnabled || !serverConfig.searxngEnabled || !shouldUseWebSearch(query)) {
+    return { results: [], digest: "" };
+  }
+
+  const results = await searchWeb({
+    query,
+    limit: Math.min(serverConfig.aiWebSearchMaxResults, limit ?? serverConfig.aiWebSearchMaxResults),
+  });
+  if (!results.length) {
+    return {
+      results: [],
+      digest: "",
+      warning: "目前無法連線到搜尋服務，因此以下內容可能不是最新資料。",
+    };
+  }
+  return {
+    results,
+    digest: formatWebSearchDigest(results),
+  };
+}
+
+function enrichPlanWithSearchSources(
+  plan: TripPlanResult,
+  searchResults: WebSearchResult[],
+  warning?: string,
+): TripPlanResult {
+  if (!searchResults.length && !warning) {
+    return plan;
+  }
+
+  const nextDays = plan.days.map((day) => ({
+    ...day,
+    items: day.items.map((item) => {
+      if (item.sourceUrl) {
+        return item;
+      }
+      const normalizedTitle = item.title.trim().toLowerCase();
+      const match = searchResults.find((result) => {
+        const haystack = `${result.title} ${result.content}`.toLowerCase();
+        return normalizedTitle.length >= 2 && haystack.includes(normalizedTitle);
+      });
+      if (!match) {
+        return item;
+      }
+      return {
+        ...item,
+        sourceTitle: match.title,
+        sourceUrl: match.url,
+        sourceSnippet: match.content,
+        confidence: (match.score && match.score >= 0.75 ? "high" : "medium") as
+          | "high"
+          | "medium",
+      };
+    }),
+  }));
+
+  const warningSet = new Set(plan.warnings || []);
+  if (warning) {
+    warningSet.add(warning);
+  }
+  return {
+    ...plan,
+    days: nextDays,
+    warnings: warningSet.size ? [...warningSet] : undefined,
+  };
+}
+
 function buildFallbackTripPlan(request: TripPlanRequest): TripPlanResult {
   const chinese = isCjk(
     [request.destination, request.preferences.notes, request.preferences.interests.join(" ")]
@@ -251,6 +356,17 @@ export async function generateTripPlan(
   };
 }> {
   let externalResearch = "";
+  const searchQuery = [
+    request.destination,
+    request.preferences.interests.join(" "),
+    request.preferences.mustVisit?.join(" ") || "",
+    request.preferences.notes || "",
+    "景點 美食 餐廳 活動 交通 營業時間",
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  const webSearch = await runWebSearch(searchQuery, serverConfig.aiWebSearchMaxResults);
   try {
     const reqs = buildTripPlanResearchRequests(request);
     if (reqs.length) {
@@ -269,6 +385,7 @@ export async function generateTripPlan(
 
   const itineraryUserContent = buildItineraryPrompt(request, memoryContext, {
     externalResearch: externalResearch || undefined,
+    webSearchDigest: webSearch.digest || undefined,
   });
 
   const requestMessages = [
@@ -304,7 +421,7 @@ export async function generateTripPlan(
         const fallback = buildFallbackTripPlan(request);
         console.warn("[trip-plan] timeout,fallback");
         return {
-          plan: fallback,
+          plan: enrichPlanWithSearchSources(fallback, webSearch.results, webSearch.warning),
           diagnostics: {
             planGenerationMode: "fallback",
             parseMode: "fallback",
@@ -321,7 +438,7 @@ export async function generateTripPlan(
     const parsed = parseTripPlanResponse(raw, request);
     console.info(`[trip-plan] parse_mode=${parsed.diagnostics.parseMode} retry_count=${retryCount}`);
     return {
-      plan: parsed.result,
+      plan: enrichPlanWithSearchSources(parsed.result, webSearch.results, webSearch.warning),
       diagnostics: {
         planGenerationMode: "model",
         parseMode: parsed.diagnostics.parseMode,
@@ -349,6 +466,7 @@ export async function generateTripPlan(
             content: buildItineraryPrompt(request, memoryContext, {
               retryMode: "strict-format",
               externalResearch: externalResearch || undefined,
+              webSearchDigest: webSearch.digest || undefined,
             }),
           },
         ],
@@ -367,6 +485,7 @@ export async function generateTripPlan(
                 content: buildItineraryPrompt(request, memoryContext, {
                   retryMode: "strict-format",
                   externalResearch: externalResearch || undefined,
+                  webSearchDigest: webSearch.digest || undefined,
                 }),
               },
             ],
@@ -375,7 +494,7 @@ export async function generateTripPlan(
           const fallback = buildFallbackTripPlan(request);
           console.warn("[trip-plan] timeout,fallback");
           return {
-            plan: fallback,
+            plan: enrichPlanWithSearchSources(fallback, webSearch.results, webSearch.warning),
             diagnostics: {
               planGenerationMode: "fallback",
               parseMode: "fallback",
@@ -394,7 +513,7 @@ export async function generateTripPlan(
         console.info("[trip-plan] normalized");
       }
       return {
-        plan: parsed.result,
+        plan: enrichPlanWithSearchSources(parsed.result, webSearch.results, webSearch.warning),
         diagnostics: {
           planGenerationMode: "model",
           parseMode: parsed.diagnostics.parseMode,
@@ -410,7 +529,7 @@ export async function generateTripPlan(
         `[trip-plan] ${retryError.message === "MODEL_OUTPUT_JSON_MISSING" ? "json_missing" : "json_invalid"},fallback`,
       );
       return {
-        plan: fallback,
+        plan: enrichPlanWithSearchSources(fallback, webSearch.results, webSearch.warning),
         diagnostics: {
           planGenerationMode: "fallback",
           parseMode: "fallback",
@@ -478,6 +597,8 @@ export async function chatWithTravelAssistant(input: {
   }
 
   const digest = await executeTravelToolRequests(toolRequests, input.context);
+  const webSearchQuery = [input.context?.destination || "", input.message].filter(Boolean).join(" ").trim();
+  const webSearch = await runWebSearch(webSearchQuery, serverConfig.aiWebSearchMaxResults);
   const digestText =
     digest.text.trim() ||
     "未取得可驗證的外部資料；請勿捏造具體餐廳或景點名稱，proposedChanges 請為空陣列。";
@@ -487,6 +608,7 @@ export async function chatWithTravelAssistant(input: {
     input.context,
     input.memoryContext,
     digestText,
+    webSearch.digest || undefined,
   );
 
   const raw = await chatWithOllama({
@@ -506,17 +628,23 @@ export async function chatWithTravelAssistant(input: {
     digest.placeHits.length > 0
       ? filterProposedChangesByVerifiedPlaces(structured.proposedChanges, digest.placeHits)
       : [];
+  const replyText = attachSearchFallbackNotice(structured.replyText, webSearch.warning);
+  const sources =
+    serverConfig.aiWebSearchRequireCitations && webSearch.results.length
+      ? toCitationList(webSearch.results, 3)
+      : undefined;
 
   return {
     reply: {
       id: `assistant_${Date.now()}`,
       role: "assistant",
-      content: structured.replyText,
+      content: replyText,
       timestamp: new Date().toLocaleTimeString("zh-TW", {
         hour: "2-digit",
         minute: "2-digit",
       }),
       proposedChanges,
+      sources,
     },
     proposedChanges,
   };

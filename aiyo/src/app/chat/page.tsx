@@ -548,6 +548,23 @@ export default function ChatPage() {
                   >
                     {message.timestamp}
                   </p>
+                  {message.role !== "user" && (message.sources || []).length > 0 && (
+                    <div className="mt-1.5 space-y-1 text-[11px] text-muted">
+                      {(message.sources || []).slice(0, 3).map((source) => (
+                        <p key={`${message.id}_${source.url}`}>
+                          來源：
+                          <a
+                            href={source.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="ml-1 text-primary hover:underline"
+                          >
+                            {source.title}
+                          </a>
+                        </p>
+                      ))}
+                    </div>
+                  )}
                   {message.role !== "user" && (message.proposedChanges || []).length > 0 && (
                     <button
                       type="button"

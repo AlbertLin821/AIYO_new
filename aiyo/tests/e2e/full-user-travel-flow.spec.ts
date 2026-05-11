@@ -185,10 +185,9 @@ test.describe("嘉義兩天一夜完整旅人流程", () => {
     writeArtifactNetwork("network-summary.json", redactSecrets(networkRows));
 
     await page.goto("/map");
-    await expect(page.getByTestId("map-marker-panel")).toBeVisible({
+    await expect(page.getByTestId("map-view")).toBeVisible({
       timeout: 90_000,
     });
-    await expect(page.getByTestId("map-view")).toBeVisible();
 
     await expect(page.getByText("正在載入 Google 地圖")).toHaveCount(0);
     await page.screenshot({
@@ -222,7 +221,7 @@ test.describe("嘉義兩天一夜完整旅人流程", () => {
       pinsArray.length > 0 ? pinsArray : { note: "empty_or_missing_pins", raw: rawPins },
     );
 
-    const markers = page.getByTestId("map-marker-item");
+    const markers = page.getByTestId("map-pin-marker");
     const markerCount = await markers.count();
     const clicks = Math.min(markerCount, 3);
     for (let i = 0; i < clicks; i += 1) {

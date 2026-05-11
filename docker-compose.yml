@@ -30,6 +30,17 @@ services:
       MEM0_BASE_URL: http://mem0-memory:8000
       MEM0_ENABLED: ${MEM0_ENABLED:-true}
       MEM0_TOP_K: ${MEM0_TOP_K:-5}
+      SEARXNG_BASE_URL: ${SEARXNG_BASE_URL:-http://localhost:8081}
+      SEARXNG_INTERNAL_BASE_URL: http://searxng:8080
+      SEARXNG_ENABLED: ${SEARXNG_ENABLED:-true}
+      SEARXNG_TIMEOUT_MS: ${SEARXNG_TIMEOUT_MS:-12000}
+      SEARXNG_DEFAULT_LANGUAGE: ${SEARXNG_DEFAULT_LANGUAGE:-zh-TW}
+      SEARXNG_DEFAULT_CATEGORIES: ${SEARXNG_DEFAULT_CATEGORIES:-general}
+      SEARXNG_RESULT_LIMIT: ${SEARXNG_RESULT_LIMIT:-8}
+      SEARXNG_SAFE_SEARCH: ${SEARXNG_SAFE_SEARCH:-1}
+      AI_WEB_SEARCH_ENABLED: ${AI_WEB_SEARCH_ENABLED:-true}
+      AI_WEB_SEARCH_MAX_RESULTS: ${AI_WEB_SEARCH_MAX_RESULTS:-6}
+      AI_WEB_SEARCH_REQUIRE_CITATIONS: ${AI_WEB_SEARCH_REQUIRE_CITATIONS:-true}
       NODE_ENV: development
       HOSTNAME: 0.0.0.0
       PORT: 3000
@@ -59,6 +70,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      searxng:
+        condition: service_started
     networks:
       - backend
     profiles: ["dev"]
@@ -86,6 +99,17 @@ services:
       MEM0_BASE_URL: http://mem0-memory:8000
       MEM0_ENABLED: ${MEM0_ENABLED:-true}
       MEM0_TOP_K: ${MEM0_TOP_K:-5}
+      SEARXNG_BASE_URL: ${SEARXNG_BASE_URL:-http://localhost:8081}
+      SEARXNG_INTERNAL_BASE_URL: http://searxng:8080
+      SEARXNG_ENABLED: ${SEARXNG_ENABLED:-true}
+      SEARXNG_TIMEOUT_MS: ${SEARXNG_TIMEOUT_MS:-12000}
+      SEARXNG_DEFAULT_LANGUAGE: ${SEARXNG_DEFAULT_LANGUAGE:-zh-TW}
+      SEARXNG_DEFAULT_CATEGORIES: ${SEARXNG_DEFAULT_CATEGORIES:-general}
+      SEARXNG_RESULT_LIMIT: ${SEARXNG_RESULT_LIMIT:-8}
+      SEARXNG_SAFE_SEARCH: ${SEARXNG_SAFE_SEARCH:-1}
+      AI_WEB_SEARCH_ENABLED: ${AI_WEB_SEARCH_ENABLED:-true}
+      AI_WEB_SEARCH_MAX_RESULTS: ${AI_WEB_SEARCH_MAX_RESULTS:-6}
+      AI_WEB_SEARCH_REQUIRE_CITATIONS: ${AI_WEB_SEARCH_REQUIRE_CITATIONS:-true}
       HOSTNAME: 0.0.0.0
       PORT: 3000
     ports:
@@ -107,6 +131,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      searxng:
+        condition: service_started
     networks:
       - backend
 
@@ -259,6 +285,17 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - backend
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: aiyo-new-searxng
+    ports:
+      - "8081:8080"
+    volumes:
+      - "./searxng:/etc/searxng:rw"
+    restart: unless-stopped
     networks:
       - backend
 

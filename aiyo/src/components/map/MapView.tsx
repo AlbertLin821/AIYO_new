@@ -15,12 +15,15 @@ import {
   loadGoogleMapsApi,
 } from "@/services/googleMapsLoader";
 import { fetchItineraryRoutePaths } from "@/lib/fetchItineraryDirections";
+import { inferMapsRegionCode } from "@/lib/tripTransportRegion";
 import { buildItineraryRouteSegments, type ItineraryRouteSegment } from "@/lib/routeSegments";
 import { useMapStore } from "@/stores/useMapStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
 import type { MapPin as MapPinType } from "@/types";
 import { zhTW as t } from "@/locales/zh-TW";
+import { createMapPinElement, encodeMapPinDataUrl, MAP_PIN_VIEWBOX_H, MAP_PIN_VIEWBOX_W } from "@/components/map/mapPinIcon";
+import { MapPinMarker } from "@/components/map/MapPinMarker";
 
 const GOOGLE_MAPS_API_KEY = (
   process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""
@@ -86,14 +89,13 @@ function segmentRouteDisplayMinutes(
   return segment.estimatedMinutes;
 }
 
-function buildMarkerIcon(maps: GoogleMapsApi, color: string, selected: boolean) {
+function buildMarkerPinIcon(maps: GoogleMapsApi, color: string, selected: boolean) {
+  const baseW = selected ? 40 : 34;
+  const height = Math.round((MAP_PIN_VIEWBOX_H / MAP_PIN_VIEWBOX_W) * baseW);
   return {
-    path: maps.SymbolPath.CIRCLE,
-    scale: selected ? 10 : 8,
-    fillColor: color,
-    fillOpacity: 1,
-    strokeColor: "#FFFFFF",
-    strokeWeight: selected ? 3 : 2,
+    url: encodeMapPinDataUrl(color, selected),
+    scaledSize: new maps.Size(baseW, height),
+    anchor: new maps.Point(baseW / 2, height),
   };
 }
 
@@ -140,9 +142,6 @@ function buildPinInfoContent(
   pin: MapPinType,
   linkedItem?: { time: string; title: string; type: string; transport?: string; notes?: string },
 ): string {
-  const verifiedLabel = pin.verified ? t.map.verifiedBadge : t.map.unverifiedBadge;
-  const confidence =
-    typeof pin.confidence === "number" ? `${Math.round(pin.confidence * 100)}%` : t.common.notSet;
   const routeUrl = buildRoutePlanningUrl(pin);
   const googleMapsUrl = buildGoogleMapsUrl(pin);
   const thumbnail = pin.thumbnail || pin.photoUrl;
@@ -175,8 +174,6 @@ function buildPinInfoContent(
         <dd style="margin:0;color:#1f2937;">${escapeHtml(pin.phoneNumber || empty)}</dd>
         <dt style="color:#6b7280;">${escapeHtml(t.map.infoSource)}</dt>
         <dd style="margin:0;color:#1f2937;">${escapeHtml(pinSourceLabel(pin.source))}${pin.dayNumber ? ` · D${escapeHtml(pin.dayNumber)}` : ""}</dd>
-        <dt style="color:#6b7280;">${escapeHtml(t.map.infoStatus)}</dt>
-        <dd style="margin:0;color:#1f2937;">${escapeHtml(verifiedLabel)} · ${escapeHtml(t.map.infoConfidence)} ${escapeHtml(confidence)}</dd>
         <dt style="color:#6b7280;">${escapeHtml(t.map.infoCoords)}</dt>
         <dd style="margin:0;color:#1f2937;">${escapeHtml(pin.lat.toFixed(5))}, ${escapeHtml(pin.lng.toFixed(5))}</dd>
       </dl>
@@ -194,8 +191,11 @@ function buildPinInfoContent(
         linkedItem
           ? `<div style="margin:12px 8px 0;padding:9px 10px;border-radius:12px;background:#f4f7fb;border:1px solid #dbe7f3;">
               <div style="font-size:11px;font-weight:700;color:#426991;letter-spacing:.04em;">${escapeHtml(t.map.linkedItinerary)}</div>
-              <div style="margin-top:4px;font-size:13px;font-weight:650;color:#111827;">${escapeHtml(linkedItem.time)} ${escapeHtml(linkedItem.title)}</div>
-              <div style="margin-top:3px;font-size:12px;color:#4b5563;">${escapeHtml(linkedItem.transport || t.common.notSet)}</div>
+              <div style="margin-top:4px;font-size:13px;font-weight:650;color:#111827;">${escapeHtml(linkedItem.time)} ${escapeHtml(linkedItem.title)}</div>${
+                linkedItem.transport
+                  ? `<div style="margin-top:3px;font-size:12px;color:#4b5563;">${escapeHtml(linkedItem.transport)}</div>`
+                  : ""
+              }
             </div>`
           : ""
       }
@@ -312,19 +312,16 @@ function MockMapFallback({
                 initial={{ scale: 0, y: 10 }}
                 animate={{ scale: 1, y: 0 }}
                 type="button"
+                data-testid="map-pin-marker"
+                aria-label={pin.name}
                 className="absolute z-[2] -translate-x-1/2 -translate-y-full outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-primary"
                 style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
                 onMouseEnter={() => setHoveredPin(pin.id)}
                 onMouseLeave={() => setHoveredPin(null)}
                 onClick={() => setSelectedPinId(pin.id)}
               >
-                <div className="group relative cursor-pointer">
-                  <div
-                    className={`flex size-10 items-center justify-center rounded-full shadow-[0_4px_14px_rgba(0,0,0,0.2)] ring-2 ring-white transition-transform group-hover:scale-105 ${isSelected ? "ring-4 ring-secondary/70" : ""}`}
-                    style={{ backgroundColor: pin.color || "#5a7ea3" }}
-                  >
-                    <MapPin className="size-[18px] text-white" fill="white" />
-                  </div>
+                <div className="group relative cursor-pointer transition-transform group-hover:scale-105">
+                  <MapPinMarker fill={pin.color || "#5a7ea3"} selected={isSelected} decorative />
                   {hoveredPin === pin.id && (
                     <div className="absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-xl border border-border bg-surface px-3 py-2 text-left shadow-soft-lg">
                       <p className="text-xs font-semibold text-foreground">{pin.name}</p>
@@ -354,6 +351,7 @@ function MockMapFallback({
 export default function MapView() {
   const tripStore = useTripStore();
   const itinerary = tripStore.itinerary;
+  const tripDestination = tripStore.destination;
   const { pins, selectedPinId, setSelectedPinId } = useMapStore();
   const segmentDirectionsMinutes = useMapStore((s) => s.segmentDirectionsMinutes);
   const pushToast = useToastStore((state) => state.pushToast);
@@ -591,7 +589,7 @@ export default function MapView() {
         void (async () => {
           const resolved = await fetchItineraryRoutePaths(mapsApi, routeSegments, {
             cancelled: () => cancelled,
-            region: "tw",
+            region: inferMapsRegionCode(tripDestination),
           });
           if (cancelled || !mapInstanceRef.current) {
             return;
@@ -658,23 +656,11 @@ export default function MapView() {
           }
           const lib = markerLib as {
             AdvancedMarkerElement: new (options: Record<string, unknown>) => GoogleMarkerInstance;
-            // Newer Maps JS SDK versions return PinElement as an HTMLElement directly;
-            // older versions expose `.element`. Keep it compatible and avoid deprecation warnings.
-            PinElement: new (options: Record<string, unknown>) => unknown;
           };
 
           pins.forEach((pin) => {
             const selected = pin.id === selectedPinId;
-            const pinElement = new lib.PinElement({
-              background: pin.color || "#5a7ea3",
-              borderColor: "#FFFFFF",
-              scale: selected ? 1.2 : 1,
-            });
-            // Avoid touching deprecated `.element` on newer SDKs (PinElement is already an HTMLElement there).
-            const content =
-              pinElement instanceof HTMLElement
-                ? pinElement
-                : (pinElement as { element: HTMLElement }).element;
+            const content = createMapPinElement(pin.color || "#5a7ea3", selected);
             const marker = new lib.AdvancedMarkerElement({
               map,
               position: { lat: pin.lat, lng: pin.lng },
@@ -706,7 +692,7 @@ export default function MapView() {
               map,
               position: { lat: pin.lat, lng: pin.lng },
               title: pin.name,
-              icon: buildMarkerIcon(mapsApi, pin.color || "#5a7ea3", pin.id === selectedPinId),
+              icon: buildMarkerPinIcon(mapsApi, pin.color || "#5a7ea3", pin.id === selectedPinId),
             });
             marker.addListener("click", () => setSelectedPinId(pin.id));
             markersRef.current.set(pin.id, marker);
@@ -732,7 +718,7 @@ export default function MapView() {
         map,
         position: { lat: pin.lat, lng: pin.lng },
         title: pin.name,
-        icon: buildMarkerIcon(mapsApi, pin.color || "#5a7ea3", pin.id === selectedPinId),
+        icon: buildMarkerPinIcon(mapsApi, pin.color || "#5a7ea3", pin.id === selectedPinId),
       });
       marker.addListener("click", () => setSelectedPinId(pin.id));
       markersRef.current.set(pin.id, marker);
@@ -747,7 +733,17 @@ export default function MapView() {
       cancelled = true;
       clearTimeout(directionsTimer);
     };
-  }, [itinerary, pins, pushToast, routeSegments, sdkState, selectedPinId, setSelectedPinId, useAdvancedMarkers]);
+  }, [
+    itinerary,
+    pins,
+    pushToast,
+    routeSegments,
+    sdkState,
+    selectedPinId,
+    setSelectedPinId,
+    tripDestination,
+    useAdvancedMarkers,
+  ]);
 
   function changeMockZoom(delta: number) {
     setMockZoom((z) =>
@@ -874,7 +870,7 @@ export default function MapView() {
       </div>
 
       {providerError && sdkState === "error" && useGoogleSdk && (
-        <div className="absolute left-4 bottom-4 z-[11] flex w-80 items-start gap-3 rounded-2xl border-2 border-danger/25 bg-peach-light/90 px-4 py-3 text-sm text-foreground shadow-soft-lg">
+        <div className="absolute left-4 top-32 z-[11] flex w-80 max-w-[calc(100%-2rem)] items-start gap-3 rounded-2xl border-2 border-danger/25 bg-peach-light/90 px-4 py-3 text-sm text-foreground shadow-soft-lg">
           <AlertCircle className="mt-0.5 size-4 shrink-0 text-danger" />
           <div>
             <p className="font-semibold">{t.map.fallbackMode}</p>
@@ -883,32 +879,8 @@ export default function MapView() {
         </div>
       )}
 
-      <div className="absolute bottom-4 left-4 z-[11] w-72 rounded-2xl border-2 border-border bg-surface/95 p-4 shadow-soft-lg backdrop-blur-sm" data-testid="map-marker-panel">
-        <h3 className="mb-3 border-b border-border pb-2 text-sm font-semibold text-foreground">
-          {t.map.markerListTitle}
-        </h3>
-        <div className="flex max-h-44 flex-col gap-2 overflow-y-auto pt-1" data-testid="map-marker-list">
-          {pins.map((pin) => (
-            <button
-              key={`list_${pin.id}`}
-              type="button"
-              onClick={() => setSelectedPinId(pin.id)}
-              data-testid="map-marker-item"
-              className={`rounded-xl border px-3 py-2 text-left transition-colors ${pin.id === selectedPinId ? "border-secondary bg-secondary-light/50 ring-2 ring-secondary/35" : "border-border hover:bg-surface-elevated"}`}
-            >
-              <p className="text-sm font-medium text-foreground">{pin.name}</p>
-              <p className="mt-0.5 text-xs text-muted">
-                {pin.dayNumber ? `${t.map.dayPrefix}${pin.dayNumber}${t.map.daySuffix} - ` : ""}
-                {pinSourceLabel(pin.source)}
-              </p>
-            </button>
-          ))}
-          {pins.length === 0 && <p className="text-xs text-muted">{t.map.listEmpty}</p>}
-        </div>
-      </div>
-
       {selectedPin && (
-        <div className="absolute bottom-4 right-4 z-[11] max-h-[min(70vh,28rem)] w-80 overflow-y-auto rounded-2xl border-2 border-primary/25 bg-peach-light/60 p-4 shadow-soft-lg backdrop-blur-sm" data-testid="selected-map-pin">
+        <div className="absolute bottom-4 left-4 z-[11] max-h-[min(70vh,28rem)] w-80 overflow-y-auto rounded-2xl border-2 border-primary/25 bg-peach-light/60 p-4 shadow-soft-lg backdrop-blur-sm" data-testid="selected-map-pin">
           <div className="mb-3 flex h-28 items-center justify-center overflow-hidden rounded-xl bg-surface-elevated">
             {selectedPin.thumbnail || selectedPin.photoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element -- Google Places photo URLs are runtime-provided.
@@ -935,13 +907,6 @@ export default function MapView() {
             <span className="text-foreground">
               {pinSourceLabel(selectedPin.source)}
               {selectedPin.dayNumber ? ` · D${selectedPin.dayNumber}` : ""}
-            </span>
-            <span className="text-muted">{t.map.infoStatus}</span>
-            <span className="text-foreground">
-              {selectedPin.verified ? t.map.verifiedBadge : t.map.unverifiedBadge}
-              {typeof selectedPin.confidence === "number"
-                ? ` · ${t.map.infoConfidence} ${Math.round(selectedPin.confidence * 100)}%`
-                : ""}
             </span>
             <span className="text-muted">{t.map.infoCoords}</span>
             <span className="font-mono text-[11px] text-foreground">

@@ -13,12 +13,28 @@ import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
 import type { MemoryRecord, User } from "@/types";
 
+function normalizePreferredTransport(raw: string): string {
+  const u = raw.trim();
+  if (["Driving", "Transit", "Walking", "Bicycling"].includes(u)) {
+    return u;
+  }
+  if (/walk/i.test(u)) {
+    return "Walking";
+  }
+  if (/bike|bicycle|單車|自行車/i.test(u)) {
+    return "Bicycling";
+  }
+  if (/metro|train|bus|mixed|taxi|car|drive|火車|地鐵|捷運|巴士|混合|開車|計程車|汽車/i.test(u)) {
+    return /taxi|car|drive|開車|計程車|汽車|自駕/i.test(u) ? "Driving" : "Transit";
+  }
+  return "Transit";
+}
+
 const transportOptions = [
-  { value: "Train", label: t.profile.transportTrain },
-  { value: "Metro", label: t.profile.transportMetro },
-  { value: "Walk", label: t.profile.transportWalk },
-  { value: "Taxi", label: t.profile.transportTaxi },
-  { value: "Mixed", label: t.profile.transportMixed },
+  { value: "Driving", label: t.profile.transportDriving },
+  { value: "Transit", label: t.profile.transportTransit },
+  { value: "Walking", label: t.profile.transportWalking },
+  { value: "Bicycling", label: t.profile.transportBicycling },
 ];
 
 const paceOptions: { value: User["travelPace"]; label: string; desc: string }[] = [
@@ -50,7 +66,7 @@ export default function ProfilePage() {
   const [destination, setDestination] = useState(store.destination);
   const [budget, setBudget] = useState(store.budget > 0 ? String(store.budget) : "");
   const [preferences, setPreferences] = useState<string[]>(store.travelPreferences);
-  const [transport, setTransport] = useState(store.preferredTransport);
+  const [transport, setTransport] = useState(() => normalizePreferredTransport(store.preferredTransport));
   const [pace, setPace] = useState<User["travelPace"]>(store.travelPace);
   const [interests, setInterests] = useState<string[]>(store.interests);
   const [saved, setSaved] = useState(false);
@@ -94,7 +110,7 @@ export default function ProfilePage() {
     setDestination(store.destination);
     setBudget(store.budget > 0 ? String(store.budget) : "");
     setPreferences(store.travelPreferences);
-    setTransport(store.preferredTransport);
+    setTransport(normalizePreferredTransport(store.preferredTransport));
     setPace(store.travelPace);
     setInterests(store.interests);
   }, [

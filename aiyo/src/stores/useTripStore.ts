@@ -134,13 +134,14 @@ export const useTripStore = create<TripState>((set) => ({
     }),
   updateItineraryItemTransport: (dayNumber, itemId, transport) =>
     withSyncMutationSource("local-user-edit", () => {
+      const nextTransport = transport.trim();
       set((state) => ({
         itinerary: state.itinerary.map((day) =>
           day.dayNumber === dayNumber
             ? {
                 ...day,
                 items: day.items.map((item) =>
-                  item.id === itemId ? { ...item, transport } : item,
+                  item.id === itemId ? { ...item, transport: nextTransport } : item,
                 ),
               }
             : day,

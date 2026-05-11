@@ -43,7 +43,11 @@ function stripPrefix(name: string, profile: TravelExtractionProfile): string {
       out = out.slice(prefix.length).trim();
     }
   }
-  return stripEnglishLeadIn(out.replace(/^(這間|這家|來到|下一站|推薦|必吃|必去)\s*/i, "")).trim();
+  return stripEnglishLeadIn(
+    out.replace(/^(這間|這家|來到|下一站|推薦|必吃|必去)\s*/i, ""),
+  )
+    .replace(/(?:小吃散步|周邊動線|必吃重點|旅遊重點).*$/u, "")
+    .trim();
 }
 
 function collectFoods(text: string, profile: TravelExtractionProfile): string[] {
@@ -88,7 +92,8 @@ function extractBySuffix(text: string, profile: TravelExtractionProfile): string
   const out = new Set<string>();
   for (const suffix of profile.placeSuffixes) {
     const escaped = suffix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`([\\p{L}\\p{N}A-Za-z\\-\\s]{1,30}${escaped})`, "giu");
+    /** 前綴過長會吞整句字幕；CJK 地名多落在 12 字內 */
+    const re = new RegExp(`([\\p{L}\\p{N}A-Za-z\\-\\s]{1,14}${escaped})`, "giu");
     let match: RegExpExecArray | null = re.exec(text);
     while (match) {
       const v = match[1]?.trim();
@@ -131,6 +136,9 @@ export function extractTimestampAwarePlaceMentions(input: {
     quoted.forEach((v) => candidates.add(v.replace(/["「『」』]/g, "")));
 
     for (const rawCandidate of candidates) {
+      if (rawCandidate.length > 28) {
+        continue;
+      }
       const prefixed = stripPrefix(normalizeName(rawCandidate), input.profile);
       const cleanResult = cleanPlaceMentionName(prefixed || rawCandidate, input.profile, input.destinationHint);
       const cleaned = cleanResult.cleanedName;

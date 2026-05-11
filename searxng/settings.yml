@@ -1,0 +1,22 @@
+use_default_settings: true
+
+general:
+  instance_name: "AIYO SearXNG"
+
+server:
+  secret_key: "replace-with-a-long-random-searxng-secret"
+  limiter: false
+
+search:
+  safe_search: 1
+  default_lang: "zh-TW"
+  formats:
+    - html
+    - json
+  languages:
+    - zh-TW
+    - zh-CN
+    - en
+
+ui:
+  default_locale: "zh-TW"

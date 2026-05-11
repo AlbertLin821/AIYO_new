@@ -199,7 +199,7 @@ if (-not $SkipDocker) {
         "--env-file", "./aiyo/.env",
         "--profile", "dev",
         "up", "-d", "--build",
-        "postgres", "redis", "app-dev"
+        "postgres", "redis", "searxng", "app-dev"
     )
     if ($mem0On) {
         $composeArgs = @(
@@ -208,7 +208,7 @@ if (-not $SkipDocker) {
             "--profile", "dev",
             "--profile", "mem0",
             "up", "-d", "--build",
-            "postgres", "redis", "mem0-memory-postgres", "mem0-memory", "app-dev"
+            "postgres", "redis", "searxng", "mem0-memory-postgres", "mem0-memory", "app-dev"
         )
     }
     & docker @composeArgs
@@ -226,4 +226,4 @@ else {
 }
 
 Write-Host ""
-Write-Host "Done. App: http://localhost:3000  Mem0 (if enabled): http://localhost:8890" -ForegroundColor Green
+Write-Host "Done. App: http://localhost:3000  SearXNG: http://localhost:8081  Mem0 (if enabled): http://localhost:8890" -ForegroundColor Green

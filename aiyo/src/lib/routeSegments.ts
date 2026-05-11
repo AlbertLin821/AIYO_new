@@ -58,24 +58,20 @@ export function estimateTravelMinutes(distanceKm: number, transport: string): nu
   let speedKmh = 20;
   let bufferMinutes = 6;
 
-  if (/walk|步行|徒歩/.test(mode)) {
+  if (/^walking$|^walk$|步行|徒歩|走路/.test(mode)) {
     speedKmh = 4.5;
     bufferMinutes = 2;
-  } else if (/bike|bicycle|自行車|單車/.test(mode)) {
+  } else if (/bicycling|^bike$|bicycle|自行車|單車|腳踏車|cycling/.test(mode)) {
     speedKmh = 12;
     bufferMinutes = 3;
-  } else if (/taxi|計程車|car|drive|開車|自駕/.test(mode)) {
-    speedKmh = 28;
-    bufferMinutes = 5;
-  } else if (/metro|subway|mrt|地鐵|捷運/.test(mode)) {
-    speedKmh = 22;
-    bufferMinutes = 8;
-  } else if (/train|rail|jr|火車|鐵路|電車/.test(mode)) {
-    speedKmh = 26;
-    bufferMinutes = 10;
-  } else if (/bus|巴士|公車/.test(mode)) {
-    speedKmh = 18;
-    bufferMinutes = 8;
+  } else if (/^driving|^transit|drive|汽車|開車|自駕|租車|taxi|計程車|car|大眾|地鐵|捷運|mrt|metro|train|bus|jr|高鐵|台鐵|火車|混合|mixed/.test(mode)) {
+    if (/^driving|drive|汽車|開車|自駕|租車|taxi|計程車|^car$/.test(mode)) {
+      speedKmh = 28;
+      bufferMinutes = 5;
+    } else {
+      speedKmh = 22;
+      bufferMinutes = 8;
+    }
   }
 
   return Math.max(4, Math.round((distanceKm / speedKmh) * 60 + bufferMinutes));
@@ -102,7 +98,7 @@ export function buildItineraryRouteSegments(days: TripPlanDay[]): ItineraryRoute
         return null;
       }
 
-      const transport = item.transport?.trim() || "Mixed";
+      const transport = item.transport?.trim() || "Transit";
       const distanceKm = estimateDistanceKm(from, to);
       const legColor = DAY_ROUTE_COLORS[index % DAY_ROUTE_COLORS.length];
       return {

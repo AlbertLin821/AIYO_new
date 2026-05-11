@@ -1,12 +1,14 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { GripVertical, MapPin, PencilLine, Save, Train, Trash2, X } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 import { zhTW as t } from "@/locales/zh-TW";
 import type { TripPlanItem } from "@/types";
+import { useTripStore } from "@/stores/useTripStore";
+import { getRegionalTransitOptions } from "@/lib/tripTransportRegion";
 import { activityTypeColors, activityTypeLabel, activityTypeOptions } from "./itineraryUi";
 
 type EditDraft = {
@@ -40,6 +42,13 @@ function toDraft(item: TripPlanItem): EditDraft {
   };
 }
 
+function transportEditOptions(destination: string) {
+  return getRegionalTransitOptions(destination).map((row) => ({
+    value: row.value,
+    label: (t.itineraryPanel as Record<string, string>)[row.labelKey] ?? row.value,
+  }));
+}
+
 function SortableActivityItem({
   item,
   dayNumber,
@@ -50,9 +59,13 @@ function SortableActivityItem({
   onUpdate,
   tone = "light",
 }: Props) {
+  const tripDestination = useTripStore((s) => s.destination);
+  const transportChoices = useMemo(() => transportEditOptions(tripDestination), [tripDestination]);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<EditDraft>(() => toDraft(item));
+  const draftTransportTrimmed = (draft.transport ?? "").trim();
+  const draftTransportSelectValue = draftTransportTrimmed || "Transit";
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -171,6 +184,19 @@ function SortableActivityItem({
                 {item.location.name}
               </p>
             )}
+            {item.sourceUrl && (
+              <p className={cn("text-[11px]", isDark ? "text-zinc-400" : "text-muted")}>
+                來源：
+                <a
+                  href={item.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn("ml-1 hover:underline", isDark ? "text-orange-300" : "text-primary")}
+                >
+                  {item.sourceTitle || "連結"}
+                </a>
+              </p>
+            )}
           </div>
         </button>
 
@@ -243,11 +269,21 @@ function SortableActivityItem({
             </label>
             <label className="text-xs font-medium text-muted">
               {t.itineraryPanel.segmentTransport}
-              <input
-                value={draft.transport}
+              <select
+                value={draftTransportSelectValue}
                 onChange={(event) => updateDraft({ transport: event.target.value })}
                 className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
+              >
+                {!transportChoices.some((o) => o.value === draftTransportSelectValue) &&
+                draftTransportTrimmed ? (
+                  <option value={draftTransportTrimmed}>{draftTransportTrimmed}</option>
+                ) : null}
+                {transportChoices.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="sm:col-span-2 text-xs font-medium text-muted">
               {t.itineraryPage.notesPh}

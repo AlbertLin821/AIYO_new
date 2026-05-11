@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cleanPlaceMentionName } from "@/server/video/placeMentionNormalizer";
+import { cleanPlaceMentionName, shouldExcludeAsPoiTitle } from "@/server/video/placeMentionNormalizer";
 import { buildDescriptionFallbackTranscriptEntries } from "@/server/services/videoSummaryService";
 import { extractTimestampAwarePlaceMentions } from "@/server/video/placeMentionExtractor";
 import { preprocessTranscript } from "@/server/video/transcriptProcessing";
-import { taiwanProfile } from "@/server/video/travelExtractionProfiles";
+import {
+  japanProfile,
+  selectTravelExtractionProfile,
+  taiwanProfile,
+} from "@/server/video/travelExtractionProfiles";
 
 function clean(value: string) {
   return cleanPlaceMentionName(value, taiwanProfile, "嘉義市");
@@ -56,4 +60,55 @@ test("description fallback entries are sentence-split and low-confidence", () =>
   assert.ok(entries.every((entry) => entry.timestampSource === "description-fallback"));
   assert.ok(entries.every((entry) => entry.timestampConfidence === "low"));
   assert.ok(entries.every((entry) => !entry.text.includes("請記得訂閱")));
+});
+
+test("cleanPlaceMentionName rejects extremely long subtitle-like fragments", () => {
+  const longSynthetic = `文化路${"子".repeat(50)}`;
+  const result = clean(longSynthetic);
+  assert.equal(result.cleanedName, "");
+  assert.equal(result.rejectedReason, "name-too-long");
+});
+
+test("extractTimestampAwarePlaceMentions drops search-style generic labels", () => {
+  const lines = preprocessTranscript(
+    [
+      {
+        timestamp: "00:10",
+        startSeconds: 10,
+        durationSeconds: 4,
+        text: "嘉義美食攻略與台南景點推薦先看文化路夜市。",
+      },
+    ],
+    taiwanProfile,
+  );
+  const mentions = extractTimestampAwarePlaceMentions({
+    lines,
+    profile: taiwanProfile,
+    destinationHint: "嘉義市",
+  });
+  const names = mentions.map((m) => m.name);
+  assert.ok(names.includes("文化路夜市"));
+  assert.ok(!names.includes("嘉義美食"));
+  assert.ok(!names.some((n) => n.includes("台南景點")));
+});
+
+test("cleanPlaceMentionName rejects narrative hotel and routing captions", () => {
+  assert.equal(
+    cleanPlaceMentionName("走路四分鐘能到地鐵站的飯店", japanProfile, "東京").rejectedReason,
+    "narrative-or-routing-phrase",
+  );
+  assert.equal(
+    cleanPlaceMentionName("在東武日光車站的公車站", japanProfile, "日光").rejectedReason,
+    "relational-site-fragment",
+  );
+  assert.equal(cleanPlaceMentionName("要怎麼前往日光東照宮呢 東武日光車站", japanProfile, "日光").rejectedReason, "narrative-or-routing-phrase");
+});
+
+test("shouldExcludeAsPoiTitle blocks multi-clause glued titles", () => {
+  assert.equal(shouldExcludeAsPoiTitle("世上最繁忙的十字路口 超好吃又便宜的壽司店 日光東照宮"), true);
+  assert.equal(shouldExcludeAsPoiTitle("明治神宮"), false);
+});
+
+test("日光關鍵字會選擇 japan profile", () => {
+  assert.equal(selectTravelExtractionProfile({ destinationHint: "日光", transcriptLanguage: "zh-TW" }).id, "japan");
 });

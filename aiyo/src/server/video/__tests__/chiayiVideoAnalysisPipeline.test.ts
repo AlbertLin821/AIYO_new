@@ -151,10 +151,10 @@ test("嘉義 fixture：moment segments 時間遞增、數量與欄位門檻", ()
   for (const seg of summarySegments) {
     assert.ok(seg.timestamp, "應有 timestamp");
     assert.ok(seg.title && seg.title.length > 0, "應有 title");
-    assert.ok(seg.text && seg.text.length > 0, "應有 text");
+    assert.equal(seg.text, "", "片段不應附帶逐字稿或 AI 描述");
+    assert.equal(seg.summary ?? "", "", "summary 應為空");
     assert.ok((seg.locationHints || []).length > 0, "應有 locationHints");
-    assert.ok(seg.text.length <= 80, "說明長度應 <= 80 字");
-    assert.ok(!seg.text.includes("然後這邊可以看到"), "文字不應為逐字稿 dump");
+    assert.ok(!seg.title.includes("然後這邊可以看到"), "標題不應為逐字稿句子");
   }
 });
 

@@ -45,7 +45,7 @@ test.describe("地圖 marker info card", () => {
     await initialBootstrap.catch(() => {});
     await dismissOnboardingIfVisible(page);
 
-    const marker = page.getByTestId("map-marker-item").filter({ hasText: "林聰明砂鍋魚頭" });
+    const marker = page.getByRole("button", { name: "林聰明砂鍋魚頭" });
     await expect(marker).toBeVisible({ timeout: 40_000 });
     await marker.click();
 

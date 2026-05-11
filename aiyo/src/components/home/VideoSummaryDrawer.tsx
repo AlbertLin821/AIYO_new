@@ -206,17 +206,17 @@ export default function VideoSummaryDrawer({
                           ? t.video.transcriptNone
                           : t.video.transcriptFallback}
                     </span>
-                    {summaryDiagnostics.mapsProvenance === "catalog-fallback" && (
+                    {process.env.NODE_ENV !== "production" && summaryDiagnostics.mapsProvenance === "catalog-fallback" && (
                       <span className="rounded-full bg-secondary/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/80">
                         {t.video.mapsCatalog}
                       </span>
                     )}
-                    {summaryDiagnostics.mapsProvenance === "google-geocoding" && (
+                    {process.env.NODE_ENV !== "production" && summaryDiagnostics.mapsProvenance === "google-geocoding" && (
                       <span className="rounded-full bg-tertiary/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/80">
                         {t.video.mapsGoogle}
                       </span>
                     )}
-                    {summaryDiagnostics.mapsProvenance === "mixed" && (
+                    {process.env.NODE_ENV !== "production" && summaryDiagnostics.mapsProvenance === "mixed" && (
                       <span className="rounded-full bg-tertiary/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/80">
                         {t.video.mapsMixed}
                       </span>
@@ -254,8 +254,8 @@ export default function VideoSummaryDrawer({
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
-              <div className="relative aspect-video overflow-hidden bg-gradient-to-br from-foreground/5 to-foreground/10">
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="relative aspect-video w-full overflow-hidden bg-gradient-to-br from-foreground/5 to-foreground/10">
                 {videoId ? (
                   <YoutubeIframePlayer
                     key={videoId}
@@ -351,9 +351,6 @@ export default function VideoSummaryDrawer({
                               {segment.title && (
                                 <p className="text-sm font-medium text-foreground">{segment.title}</p>
                               )}
-                              <p className="mt-1 text-sm text-muted">
-                                {segment.summary || segment.text}
-                              </p>
                             </div>
                           </div>
                         </div>

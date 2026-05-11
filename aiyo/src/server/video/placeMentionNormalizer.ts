@@ -51,6 +51,45 @@ const KNOWN_KEEPERS = [
   "北門驛",
 ];
 
+/** 行銷／敘述、問路、價格嘴砲、動線描述 — 不應當作 POI 名稱 */
+const NARRATIVE_OR_ROUTING_PHRASE = new RegExp(
+  [
+    "怎麼前往",
+    "怎麼去",
+    "如何到",
+    "要走哪",
+    "入住今天",
+    "今天要來",
+    "現在要來",
+    "現在逛完",
+    "已經逛完",
+    "吃完.{0,6}之後",
+    "中午吃完",
+    "超好吃",
+    "超讚",
+    "意外發現",
+    "非常划算",
+    "[0-9]{2,4}\\s*多塊",
+    "大推這",
+    "我大推",
+    "世上最",
+    "最繁忙",
+    "最多人參拜",
+    "走路\\s*[一二三四五六七八九十\\d零兩]",
+    "分鐘能到",
+    "步行.{0,4}分鐘",
+    "就可以抵達",
+    "逛完走",
+    "繼續往車站",
+    "宮現在我們",
+    "現在我們要來吃",
+    "它除了是",
+  ].join("|"),
+  "u",
+);
+
+const RELATIONAL_SPURIOUS = /的(?:公車站|巴士站|捷運站|地鐵站|出口|入口|路口|[上下]坡)/u;
+
 function stripLeadingFillers(value: string, profile: TravelExtractionProfile): string {
   let out = value.trim();
   for (const filler of profile.fillerPrefixes) {
@@ -86,8 +125,20 @@ export function cleanPlaceMentionName(
     .replace(/(?:這裡|這邊|那裡|那邊|附近|周邊).*$/u, "")
     .trim();
 
+  out = out.replace(/^[店口路站]\s+/u, "").trim();
+
   if (!out || out.length < 2) {
     return { cleanedName: out, rejectedReason: "too-short-after-cleaning" };
+  }
+  if (!known && NARRATIVE_OR_ROUTING_PHRASE.test(out)) {
+    return { cleanedName: "", rejectedReason: "narrative-or-routing-phrase" };
+  }
+  if (!known && RELATIONAL_SPURIOUS.test(out)) {
+    return { cleanedName: "", rejectedReason: "relational-site-fragment" };
+  }
+  const spaceTokens = out.split(/\s+/).filter(Boolean);
+  if (!known && spaceTokens.length >= 4) {
+    return { cleanedName: "", rejectedReason: "multi-clause-glue" };
   }
   if (!known && SENTENCE_ONLY_GENERIC_PATTERN.test(original)) {
     return { cleanedName: out, rejectedReason: "sentence-only-generic-phrase" };
@@ -102,7 +153,34 @@ export function cleanPlaceMentionName(
     return { cleanedName: out, rejectedReason: "generic-location" };
   }
 
+  const MAX_CLEANED_POI_CHARS = 24;
+  if (!known && out.length > MAX_CLEANED_POI_CHARS) {
+    return { cleanedName: "", rejectedReason: "name-too-long" };
+  }
+
   return { cleanedName: out };
+}
+
+/** 片段標題／擷取前最後一道閘：擋敘述句、問路殘片、過長黏句（不依賴 profile）。 */
+export function shouldExcludeAsPoiTitle(name: string): boolean {
+  const t = name.trim().replace(/\s+/g, " ");
+  if (t.length < 2) {
+    return true;
+  }
+  const known = KNOWN_KEEPERS.find((keeper) => t.includes(keeper));
+  if (!known && t.length > 24) {
+    return true;
+  }
+  if (!known && NARRATIVE_OR_ROUTING_PHRASE.test(t)) {
+    return true;
+  }
+  if (!known && RELATIONAL_SPURIOUS.test(t)) {
+    return true;
+  }
+  if (!known && t.split(/\s+/).filter(Boolean).length >= 4) {
+    return true;
+  }
+  return false;
 }
 
 export function normalizePlaceMentionName(name: string, profile: TravelExtractionProfile): string {
@@ -110,21 +188,12 @@ export function normalizePlaceMentionName(name: string, profile: TravelExtractio
 }
 
 function betterName(a: string, b: string): string {
-  const canonicalA = applyKnownAlias(a);
-  const canonicalB = applyKnownAlias(b);
-  if (canonicalA !== a) {
-    return canonicalA;
+  const canonicalA = applyKnownAlias(normalizePunctuation(a));
+  const canonicalB = applyKnownAlias(normalizePunctuation(b));
+  if (canonicalA !== canonicalB) {
+    return canonicalA.length <= canonicalB.length ? canonicalA : canonicalB;
   }
-  if (canonicalB !== b) {
-    return canonicalB;
-  }
-  if (a.includes("路") && a.includes("夜市")) {
-    return a;
-  }
-  if (b.includes("路") && b.includes("夜市")) {
-    return b;
-  }
-  return a.length >= b.length ? a : b;
+  return canonicalA;
 }
 
 export function dedupePlaceMentions(mentions: PlaceMention[]): PlaceMention[] {
@@ -141,14 +210,12 @@ export function dedupePlaceMentions(mentions: PlaceMention[]): PlaceMention[] {
   const out: PlaceMention[] = [];
 
   for (const mention of sorted) {
-    const near = out.find((item) => {
-      const sameName =
-        item.normalizedName === mention.normalizedName ||
-        item.normalizedName.includes(mention.normalizedName) ||
-        mention.normalizedName.includes(item.normalizedName);
-      const closeTime = Math.abs(item.startSeconds - mention.startSeconds) <= 90;
-      return sameName && closeTime;
-    });
+    /** 勿用 includes 合併：短字串會把整句字幕黏成單一「地名」。僅合併 normalized 完全相同且時間接近者。 */
+    const near = out.find(
+      (item) =>
+        item.normalizedName === mention.normalizedName &&
+        Math.abs(item.startSeconds - mention.startSeconds) <= 90,
+    );
 
     if (!near) {
       out.push({ ...mention });

@@ -1,12 +1,6 @@
 import { randomUUID } from "crypto";
-import { normalizeOllamaPlainText } from "@/server/ai/ollamaResponseNormalizer";
-import { OllamaRequestError, chatWithOllama } from "@/server/ai/ollamaClient";
-import { buildVideoMomentPolishingPrompt } from "@/server/ai/promptBuilder";
-import { parseVideoMomentPolishingResponse } from "@/server/ai/responseParser";
 import { prisma } from "@/lib/prisma";
-import { segmentTitleMatchesAnyPlace } from "@/server/ai/placeNameMatch";
 import { resolvePlaceMentionsWithGeocode } from "@/server/geo/geocodeService";
-import { searchPlacesByText } from "@/server/geo/placesSearchService";
 import {
   extractYouTubeVideoId,
   fetchYouTubeMetadata,
@@ -20,6 +14,7 @@ import { extractTimestampAwarePlaceMentions } from "@/server/video/placeMentionE
 import { preprocessTranscript } from "@/server/video/transcriptProcessing";
 import { selectTravelExtractionProfile } from "@/server/video/travelExtractionProfiles";
 import type {
+  LocationReference,
   Timestamp,
   VideoRecommendation,
   VideoSummaryDebugMeta,
@@ -27,7 +22,21 @@ import type {
   VideoSummarySegment,
 } from "@/types";
 
-const VIDEO_PIPELINE_VERSION = "video-quality-v3";
+const VIDEO_PIPELINE_VERSION = "video-quality-v5";
+
+function dedupeLocationsByNormalizedName<T extends Pick<LocationReference, "name">>(locations: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const loc of locations) {
+    const key = loc.name.replace(/\s+/g, "").toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push(loc);
+  }
+  return out;
+}
 const videoSummaryCache = new Map<string, { expiresAt: number; result: VideoSummaryResult }>();
 const VIDEO_SUMMARY_CACHE_MS = 30 * 60 * 1000;
 
@@ -200,98 +209,6 @@ export function buildDescriptionFallbackTranscriptEntries(input: {
   });
 }
 
-async function polishMomentsWithAi(input: {
-  title: string;
-  destination?: string;
-  segments: VideoSummarySegment[];
-}): Promise<VideoSummarySegment[]> {
-  if (!input.segments.length) {
-    return input.segments;
-  }
-
-  try {
-    const raw = await chatWithOllama({
-      format: "json",
-      task: "video-summary-final",
-      messages: [
-        { role: "system", content: "Return valid JSON only." },
-        {
-          role: "user",
-          content: buildVideoMomentPolishingPrompt({
-            title: input.title,
-            destination: input.destination,
-            language: "traditional-chinese",
-            moments: input.segments.map((segment) => ({
-              id: segment.id,
-              timestamp: segment.timestamp,
-              startSeconds: segment.startSeconds || 0,
-              endSeconds: segment.endSeconds || 0,
-              title: segment.title || "",
-              text: segment.text || "",
-              summary: segment.summary,
-              locationHints: segment.locationHints || [],
-              foods: segment.foods,
-              confidence: segment.confidence,
-            })),
-          }),
-        },
-      ],
-    });
-    const parsed = parseVideoMomentPolishingResponse(raw);
-    if (parsed.parseFailed || parsed.moments.length === 0) {
-      return input.segments;
-    }
-
-    const byId = new Map(input.segments.map((segment) => [segment.id, segment]));
-    const polished = parsed.moments
-      .map((moment) => {
-        const original = byId.get(moment.id);
-        if (!original) {
-          return null;
-        }
-        return {
-          ...original,
-          title: normalizeOllamaPlainText(moment.title ?? original.title ?? ""),
-          text: normalizeOllamaPlainText(moment.text ?? original.text),
-          summary: normalizeOllamaPlainText(
-            moment.summary ?? original.summary ?? original.text,
-          ),
-          extractionSource: "ai-polished" as const,
-        };
-      })
-      .filter(Boolean) as VideoSummarySegment[];
-
-    return polished.length ? polished : input.segments;
-  } catch (error) {
-    if (!(error instanceof OllamaRequestError)) {
-      throw error;
-    }
-    return input.segments;
-  }
-}
-
-async function verifySegmentTitlesWithPlaces(
-  segments: VideoSummarySegment[],
-  destination?: string,
-): Promise<VideoSummarySegment[]> {
-  const hint = destination?.trim();
-  if (!hint) {
-    return segments;
-  }
-  const next: VideoSummarySegment[] = [];
-  for (const seg of segments) {
-    const title = seg.title?.trim();
-    if (!title) {
-      next.push(seg);
-      continue;
-    }
-    const res = await searchPlacesByText(title, hint, { maxResults: 5 });
-    const verified = res.ok ? segmentTitleMatchesAnyPlace(title, res.places) : undefined;
-    next.push({ ...seg, titlePlaceVerified: verified });
-  }
-  return next;
-}
-
 function toTimestamps(segments: VideoSummarySegment[]): Timestamp[] {
   return segments.map((segment) => ({
     time: segment.timestamp,
@@ -429,46 +346,35 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     destinationHint: input.destination,
   });
 
-  const mapReadyLocations = geo.locations
-    .filter((loc) => loc.verified === true || (loc.confidence || 0) >= 0.7)
-    .filter(
-      (loc) =>
-        !isGenericTravelLocation({
-          name: loc.name,
-          destinationHint: input.destination,
-          profile,
-        }),
-    )
-    .slice(0, 16);
+  const mapReadyLocations = dedupeLocationsByNormalizedName(
+    geo.locations
+      .filter((loc) => loc.verified === true)
+      .filter(
+        (loc) =>
+          !isGenericTravelLocation({
+            name: loc.name,
+            destinationHint: input.destination,
+            profile,
+          }),
+      ),
+  ).slice(0, 16);
   const extractedLocationNames = mapReadyLocations.map((loc) => loc.name);
   const geocodeWarnings = geo.failures.length ? geo.failures : undefined;
 
   const deterministicMoments = buildMomentSegments({
-    mentions: mentions.filter(
-      (mention) =>
-        mapReadyLocations.some((location) => location.name === mention.name) || mention.confidence >= 0.75,
-    ),
+    mentions,
     videoDurationSeconds: parseDurationToSeconds(metadata.duration),
     maxSegments: 8,
   });
   const deterministicSegments = toVideoSummarySegments(deterministicMoments);
-  const polishedSegments = await polishMomentsWithAi({
-    title: metadata.title,
-    destination: input.destination,
-    segments: deterministicSegments,
-  });
-  const polishedWithPlaceTitles = await verifySegmentTitlesWithPlaces(polishedSegments, input.destination);
-  const resolvedSegmentLocations = polishedWithPlaceTitles.filter(
+  const resolvedSegmentLocations = deterministicSegments.filter(
     (segment) => (segment.locationHints || []).length > 0,
   );
   const summary = compactSummaryFromSegments(resolvedSegmentLocations);
   const usedDescriptionFallback = transcriptSource === "fallback-description";
-  const summarySource: VideoSummaryDebugMeta["summarySource"] =
-    resolvedSegmentLocations.some((segment) => segment.extractionSource === "ai-polished")
-      ? usedDescriptionFallback
-        ? "ollama-description-fallback"
-        : "ollama-transcript"
-      : "heuristic-transcript-fallback";
+  const summarySource: VideoSummaryDebugMeta["summarySource"] = usedDescriptionFallback
+    ? "ollama-description-fallback"
+    : "heuristic-transcript-fallback";
   const segmentSource: VideoSummaryDebugMeta["segmentSource"] = usedDescriptionFallback
     ? "description-fallback"
     : "deterministic-mentions";

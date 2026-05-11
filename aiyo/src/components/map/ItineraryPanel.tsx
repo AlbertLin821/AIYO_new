@@ -16,6 +16,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { CalendarPlus, ChevronDown, ChevronUp, GripVertical, MapPin, Plus, X } from "lucide-react";
 import { zhTW as t } from "@/locales/zh-TW";
 import { buildItineraryRouteSegments } from "@/lib/routeSegments";
+import { getRegionalTransitOptions } from "@/lib/tripTransportRegion";
 import { cn } from "@/lib/utils";
 import { useMapStore } from "@/stores/useMapStore";
 import { useTripStore } from "@/stores/useTripStore";
@@ -30,15 +31,14 @@ const typeColors: Record<TripPlanItem["type"], string> = {
   hotel: "bg-muted/10 text-muted",
 };
 
-const transportOptions = [
-  { value: "Walk", label: t.itineraryPanel.transportWalk },
-  { value: "Metro", label: t.itineraryPanel.transportMetro },
-  { value: "Train", label: t.itineraryPanel.transportTrain },
-  { value: "Bus", label: t.itineraryPanel.transportBus },
-  { value: "Taxi", label: t.itineraryPanel.transportTaxi },
-  { value: "Car", label: t.itineraryPanel.transportCar },
-  { value: "Mixed", label: t.itineraryPanel.transportMixed },
-];
+function transportSelectRows(destination: string) {
+  return getRegionalTransitOptions(destination).map((row) => ({
+    value: row.value,
+    label: (t.itineraryPanel as Record<string, string>)[row.labelKey] ?? row.value,
+  }));
+}
+
+type TransportSelectOption = { value: string; label: string };
 
 type SortableStopProps = {
   item: TripPlanItem;
@@ -51,6 +51,7 @@ type SortableStopProps = {
   routeDisplayMinutes: number;
   currentTransport: string;
   hasKnownTransport: boolean;
+  transportOptions: TransportSelectOption[];
   isEditingTitle: boolean;
   editingTitle: string;
   onSelectPin: () => void;
@@ -73,6 +74,7 @@ function SortableMapStop({
   routeDisplayMinutes,
   currentTransport,
   hasKnownTransport,
+  transportOptions,
   isEditingTitle,
   editingTitle,
   onSelectPin,
@@ -241,6 +243,7 @@ function typeLabel(itemType: TripPlanItem["type"]) {
 
 export default function ItineraryPanel() {
   const itinerary = useTripStore((state) => state.itinerary);
+  const tripDestination = useTripStore((state) => state.destination);
   const addItineraryItem = useTripStore((state) => state.addItineraryItem);
   const updateItineraryItem = useTripStore((state) => state.updateItineraryItem);
   const updateItineraryItemTransport = useTripStore((state) => state.updateItineraryItemTransport);
@@ -255,6 +258,7 @@ export default function ItineraryPanel() {
   const manualItemCounter = useRef(0);
   const routeSegments = useMemo(() => buildItineraryRouteSegments(itinerary), [itinerary]);
   const segmentDirectionsMinutes = useMapStore((s) => s.segmentDirectionsMinutes);
+  const transportOptions = useMemo(() => transportSelectRows(tripDestination), [tripDestination]);
 
   const addQuickStop = useCallback((dayNumber: number) => {
     manualItemCounter.current += 1;
@@ -392,7 +396,12 @@ export default function ItineraryPanel() {
                                 (segment) =>
                                   segment.dayNumber === day.dayNumber && segment.toItemId === item.id,
                               );
-                              const currentTransport = item.transport || incomingRoute?.transport || "Mixed";
+                              const trimmedItemTransport =
+                                typeof item.transport === "string" ? item.transport.trim() : "";
+                              const currentTransport =
+                                trimmedItemTransport !== ""
+                                  ? trimmedItemTransport
+                                  : (incomingRoute?.transport ?? "Transit");
                               const hasKnownTransport = transportOptions.some(
                                 (option) => option.value === currentTransport,
                               );
@@ -418,6 +427,7 @@ export default function ItineraryPanel() {
                                   routeDisplayMinutes={routeDisplayMinutes}
                                   currentTransport={currentTransport}
                                   hasKnownTransport={hasKnownTransport}
+                                  transportOptions={transportOptions}
                                   isEditingTitle={isEditingTitle}
                                   editingTitle={editingTitleValue}
                                   onSelectPin={() => linkedPin && setSelectedPinId(linkedPin.id)}

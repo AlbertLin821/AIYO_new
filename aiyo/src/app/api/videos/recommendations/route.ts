@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     const keyword = searchParams.get("keyword") || undefined;
     const days = searchParams.get("days") ? Number(searchParams.get("days")) : undefined;
     const preferences = searchParams.get("preferences")?.split(",").map((item) => item.trim()).filter(Boolean);
-    const limit = Number(searchParams.get("limit") || 10);
+    const limit = Number(searchParams.get("limit") || 6);
 
     const outcome = await getVideoRecommendations({ destination, keyword, days, preferences, limit });
     return NextResponse.json(
