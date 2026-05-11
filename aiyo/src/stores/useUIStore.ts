@@ -12,7 +12,7 @@ interface UIState {
 }
 
 export const useUIStore = create<UIState>((set) => ({
-  showOnboarding: true,
+  showOnboarding: false,
   voiceState: 'idle',
   chatBubbleOpen: false,
   activeVideoDrawer: null,

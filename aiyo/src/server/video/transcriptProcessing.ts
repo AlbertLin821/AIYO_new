@@ -1,3 +1,4 @@
+import { normalizeOllamaPlainText } from "@/server/ai/ollamaResponseNormalizer";
 import type { TranscriptEntry } from "@/server/providers/youtubeProvider";
 import type { TravelExtractionProfile } from "@/server/video/travelExtractionProfiles";
 
@@ -7,6 +8,8 @@ export type NormalizedTranscriptLine = {
   endSeconds: number;
   text: string;
   rawText: string;
+  timestampSource?: "youtube-transcript" | "description-fallback";
+  timestampConfidence?: "high" | "low";
 };
 
 export type TranscriptWindow = {
@@ -39,32 +42,42 @@ function stripKnownPrefix(text: string, profile: TravelExtractionProfile): strin
 export function preprocessTranscript(
   entries: TranscriptEntry[],
   profile: TravelExtractionProfile,
+  options?: { captionLanguage?: string },
 ): NormalizedTranscriptLine[] {
   const out: NormalizedTranscriptLine[] = [];
   const seen = new Set<string>();
   let index = 0;
+  const captionLang = (options?.captionLanguage || "").toLowerCase();
+  const useSimplifiedToTraditional = captionLang === "zh-cn" || captionLang === "zh-hans";
 
   for (const entry of entries) {
-    const rawText = normalizeWhitespace(entry.text || "");
-    if (!rawText) {
+    const originalRaw = normalizeWhitespace(entry.text || "");
+    let working = originalRaw;
+    if (useSimplifiedToTraditional && working) {
+      working = normalizeOllamaPlainText(working);
+    }
+    if (!working) {
       continue;
     }
 
-    const dedupeKey = `${Math.floor(entry.startSeconds)}:${rawText}`;
-    if (seen.has(dedupeKey)) {
+    const dedupeKey = working.toLowerCase();
+    const nearDuplicateKey = `${Math.floor(entry.startSeconds / 8)}:${dedupeKey}`;
+    if (seen.has(nearDuplicateKey)) {
       continue;
     }
-    seen.add(dedupeKey);
+    seen.add(nearDuplicateKey);
 
-    const stripped = stripKnownPrefix(rawText, profile);
-    const text = normalizeWhitespace(stripped || rawText);
+    const stripped = stripKnownPrefix(working, profile);
+    const text = normalizeWhitespace(stripped || working);
     const endSeconds = Math.max(entry.startSeconds + Math.max(1, entry.durationSeconds), entry.startSeconds + 1);
     out.push({
       id: `line_${++index}`,
       startSeconds: entry.startSeconds,
       endSeconds,
       text,
-      rawText,
+      rawText: originalRaw,
+      timestampSource: entry.timestampSource || "youtube-transcript",
+      timestampConfidence: entry.timestampConfidence || "high",
     });
   }
 
@@ -83,6 +96,8 @@ export function preprocessTranscript(
 
   return merged;
 }
+
+export const transcriptPreprocess = preprocessTranscript;
 
 export function buildTranscriptWindows(
   lines: NormalizedTranscriptLine[],

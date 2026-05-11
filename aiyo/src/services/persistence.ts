@@ -56,6 +56,10 @@ interface PersistedState {
     | "interests"
     | "isFirstVisit"
   >;
+  video?: Pick<
+    ReturnType<typeof useVideoStore.getState>,
+    "videos" | "searchQuery" | "recommendationSource" | "summaryDiagnostics"
+  >;
 }
 
 function isBrowser(): boolean {
@@ -146,6 +150,18 @@ function shouldSkipPersistenceResetAfterServerHydrate(userKey: string): boolean 
   return serverHydratedUserKeys.has(userKey);
 }
 
+/** 在伺服端快照寫入 Zustand 後立刻同步 localStorage，避免重整時載到過期的行程／圖釘。 */
+export function persistActiveUserSnapshotNow(): void {
+  if (!isBrowser() || !activeStorageKey) {
+    return;
+  }
+  try {
+    saveStateToKey(activeStorageKey, buildStateSnapshot());
+  } catch {
+    // 略過寫入失敗（私人模式或配額等）
+  }
+}
+
 export function debounce<T extends (...args: never[]) => void>(
   fn: T,
   wait = SAVE_DELAY_MS,
@@ -180,14 +196,14 @@ function resetInMemoryStores(): void {
     travelPreferences: [],
     budget: 0,
     destination: "",
-    travelDays: 1,
+    travelDays: 0,
     preferredTransport: "",
-    travelPace: "moderate",
+    travelPace: "",
     interests: [],
     isFirstVisit: true,
   });
   useUIStore.setState({
-    showOnboarding: true,
+    showOnboarding: false,
     voiceState: "idle",
     chatBubbleOpen: false,
     activeVideoDrawer: null,
@@ -209,6 +225,7 @@ function buildStateSnapshot(): PersistedState {
   const trip = useTripStore.getState();
   const map = useMapStore.getState();
   const profile = useUserStore.getState();
+  const video = useVideoStore.getState();
 
   return {
     version: STORAGE_VERSION,
@@ -244,10 +261,19 @@ function buildStateSnapshot(): PersistedState {
       interests: profile.interests,
       isFirstVisit: profile.isFirstVisit,
     },
+    video: {
+      videos: video.videos,
+      searchQuery: video.searchQuery,
+      recommendationSource: video.recommendationSource,
+      summaryDiagnostics: video.summaryDiagnostics,
+    },
   };
 }
 
-function hydrateStores(persisted: PersistedState | null): void {
+function hydrateStores(
+  persisted: PersistedState | null,
+  options?: { skipTripAndMap?: boolean },
+): void {
   if (!persisted) {
     return;
   }
@@ -263,15 +289,26 @@ function hydrateStores(persisted: PersistedState | null): void {
         messages: activeConversation?.messages || persisted.chat.messages,
       });
     }
-    if (persisted.trip) {
+    if (persisted.trip && !options?.skipTripAndMap) {
       useTripStore.setState(persisted.trip);
     }
-    if (persisted.map) {
+    if (persisted.map && !options?.skipTripAndMap) {
       useMapStore.setState(persisted.map);
     }
     if (persisted.profile) {
       useUserStore.setState(persisted.profile);
-      useUIStore.setState({ showOnboarding: persisted.profile.isFirstVisit });
+    }
+    if (persisted.video) {
+      useVideoStore.setState({
+        videos: persisted.video.videos,
+        searchQuery: persisted.video.searchQuery,
+        recommendationSource: persisted.video.recommendationSource,
+        summaryDiagnostics: persisted.video.summaryDiagnostics,
+        selectedVideo: null,
+        isSearching: false,
+        isSummarizing: false,
+        errorMessage: null,
+      });
     }
   });
 }
@@ -286,7 +323,10 @@ function teardownPersistenceSubscriptions(): void {
  * - 若已對同一 userKey 完成伺服端 bootstrap（Strict Mode 第二次掛載）：不重設記憶體、不以 localStorage 覆蓋。
  * - 否則：reset → hydrate localStorage → 綁定 autosave subscribe。
  */
-export function initializePersistenceForUser(userKey: string): () => void {
+export function initializePersistenceForUser(
+  userKey: string,
+  initOptions?: { skipTripAndMap?: boolean },
+): () => void {
   if (!isBrowser()) {
     return () => undefined;
   }
@@ -305,7 +345,9 @@ export function initializePersistenceForUser(userKey: string): () => void {
     }
 
     const persisted = loadStateFromKey(activeStorageKey);
-    hydrateStores(persisted);
+    hydrateStores(persisted, {
+      skipTripAndMap: initOptions?.skipTripAndMap,
+    });
   }
 
   const debouncedSave = debounce(() => {
@@ -321,11 +363,16 @@ export function initializePersistenceForUser(userKey: string): () => void {
     debouncedSave();
   };
 
+  const saveVideoState = () => {
+    debouncedSave();
+  };
+
   persistenceUnsubscribers = [
     useChatStore.subscribe(saveIfLocalUserEdit),
     useTripStore.subscribe(saveIfLocalUserEdit),
     useMapStore.subscribe(saveIfLocalUserEdit),
     useUserStore.subscribe(saveIfLocalUserEdit),
+    useVideoStore.subscribe(saveVideoState),
   ];
 
   return () => {
@@ -349,8 +396,9 @@ export function PersistenceBootstrap() {
     if (userKey === null) {
       return;
     }
-    return initializePersistenceForUser(String(userKey));
-  }, [userKey]);
+    const skipTripAndMap = status === "authenticated";
+    return initializePersistenceForUser(String(userKey), { skipTripAndMap });
+  }, [userKey, status]);
 
   return null;
 }

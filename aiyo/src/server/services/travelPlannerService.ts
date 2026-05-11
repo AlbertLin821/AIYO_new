@@ -1,12 +1,22 @@
+import { filterProposedChangesByVerifiedPlaces } from "@/server/ai/placeNameMatch";
 import { chatWithOllama, OllamaRequestError, type OllamaMessage } from "@/server/ai/ollamaClient";
 import {
   buildChatPrompt,
+  buildChatResearchPlanningPrompt,
   buildItineraryPrompt,
   buildMapPlanningPrompt,
   detectResponseLanguage,
 } from "@/server/ai/promptBuilder";
+import { serverConfig } from "@/server/config";
+import {
+  buildDefaultTravelToolRequests,
+  buildTripPlanResearchRequests,
+  executeTravelToolRequests,
+  parseTravelToolRequestsFromModel,
+} from "@/server/services/travelResearchTools";
 import { parseTripPlanResponse, StructuredOutputError } from "@/server/ai/responseParser";
 import type {
+  AiProposedChange,
   ChatContext,
   ChatMessage,
   ChatResponsePayload,
@@ -70,6 +80,59 @@ function sanitizeAssistantReply(content: string): string {
       "",
     )
     .trim();
+}
+
+function extractJsonObject(raw: string): Record<string, unknown> | null {
+  const first = raw.indexOf("{");
+  const last = raw.lastIndexOf("}");
+  if (first < 0 || last <= first) {
+    return null;
+  }
+  try {
+    return JSON.parse(raw.slice(first, last + 1)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeProposedChange(value: unknown): AiProposedChange | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  if (record.type !== "add_itinerary_item") {
+    return null;
+  }
+  const title = String(record.title || record.locationName || "").trim();
+  if (!title) {
+    return null;
+  }
+  const day = Number(record.day ?? record.dayNumber ?? 1);
+  const time = String(record.time || "18:30").trim();
+  return {
+    type: "add_itinerary_item",
+    day: Number.isFinite(day) && day > 0 ? Math.floor(day) : 1,
+    time: /^\d{1,2}:\d{2}$/.test(time) ? time.padStart(5, "0") : "18:30",
+    title,
+    locationName: record.locationName ? String(record.locationName) : title,
+    notes: record.notes ? String(record.notes) : undefined,
+    source: "ai-chat",
+  };
+}
+
+function parseStructuredChatOutput(raw: string): { replyText: string; proposedChanges: AiProposedChange[] } {
+  const parsed = extractJsonObject(raw);
+  if (!parsed) {
+    return { replyText: sanitizeAssistantReply(raw) || raw.trim(), proposedChanges: [] };
+  }
+  const replyText = String(parsed.replyText || parsed.reply || parsed.message || "").trim();
+  const proposedChanges = Array.isArray(parsed.proposedChanges)
+    ? parsed.proposedChanges.map(normalizeProposedChange).filter((item): item is AiProposedChange => Boolean(item))
+    : [];
+  return {
+    replyText: sanitizeAssistantReply(replyText || raw) || raw.trim(),
+    proposedChanges,
+  };
 }
 
 function isCjk(text: string): boolean {
@@ -187,6 +250,27 @@ export async function generateTripPlan(
     retryCount: number;
   };
 }> {
+  let externalResearch = "";
+  try {
+    const reqs = buildTripPlanResearchRequests(request);
+    if (reqs.length) {
+      const digest = await executeTravelToolRequests(reqs, {
+        destination: request.destination,
+        days: request.days,
+        budget: request.budget,
+        preferences: request.preferences,
+        itinerary: request.itineraryDraft,
+      });
+      externalResearch = digest.text.trim();
+    }
+  } catch (error) {
+    console.warn("[trip-plan] research_failed", error);
+  }
+
+  const itineraryUserContent = buildItineraryPrompt(request, memoryContext, {
+    externalResearch: externalResearch || undefined,
+  });
+
   const requestMessages = [
     {
       role: "system" as const,
@@ -195,7 +279,7 @@ export async function generateTripPlan(
     },
     {
       role: "user" as const,
-      content: buildItineraryPrompt(request, memoryContext),
+      content: itineraryUserContent,
     },
   ];
 
@@ -264,6 +348,7 @@ export async function generateTripPlan(
             role: "user",
             content: buildItineraryPrompt(request, memoryContext, {
               retryMode: "strict-format",
+              externalResearch: externalResearch || undefined,
             }),
           },
         ],
@@ -281,6 +366,7 @@ export async function generateTripPlan(
                 role: "user",
                 content: buildItineraryPrompt(request, memoryContext, {
                   retryMode: "strict-format",
+                  externalResearch: externalResearch || undefined,
                 }),
               },
             ],
@@ -359,9 +445,54 @@ export async function chatWithTravelAssistant(input: {
   memoryContext?: string;
 }): Promise<ChatResponsePayload> {
   const language = detectResponseLanguage(input.message);
-  const prompt = buildChatPrompt(input.message, input.context, input.memoryContext);
+  const researchPrompt = buildChatResearchPlanningPrompt({
+    message: input.message,
+    context: input.context,
+    memoryContext: input.memoryContext,
+  });
+
+  const perRoundTimeout = Math.min(32_000, Math.max(12_000, Math.floor(serverConfig.ollamaTimeoutMs * 0.55)));
+
+  let rawResearch = "";
+  try {
+    rawResearch = await chatWithOllama({
+      task: "travel-chat",
+      format: "json",
+      timeoutMs: perRoundTimeout,
+      messages: [
+        { role: "system", content: researchPrompt.system },
+        ...normalizeHistory(input.context, language),
+        ...normalizeConversationHistory(input.messages),
+        { role: "user", content: researchPrompt.user },
+      ],
+    });
+  } catch {
+    rawResearch = JSON.stringify({ phase: "research", toolRequests: [] });
+  }
+
+  let toolRequests = parseTravelToolRequestsFromModel(
+    extractJsonObject(rawResearch)?.toolRequests,
+  );
+  if (!toolRequests.length) {
+    toolRequests = buildDefaultTravelToolRequests(input.message, input.context);
+  }
+
+  const digest = await executeTravelToolRequests(toolRequests, input.context);
+  const digestText =
+    digest.text.trim() ||
+    "未取得可驗證的外部資料；請勿捏造具體餐廳或景點名稱，proposedChanges 請為空陣列。";
+
+  const prompt = buildChatPrompt(
+    input.message,
+    input.context,
+    input.memoryContext,
+    digestText,
+  );
+
   const raw = await chatWithOllama({
     task: "travel-chat",
+    format: "json",
+    timeoutMs: perRoundTimeout,
     messages: [
       { role: "system", content: prompt.system },
       ...normalizeHistory(input.context, language),
@@ -370,15 +501,23 @@ export async function chatWithTravelAssistant(input: {
     ],
   });
 
+  const structured = parseStructuredChatOutput(raw);
+  const proposedChanges =
+    digest.placeHits.length > 0
+      ? filterProposedChangesByVerifiedPlaces(structured.proposedChanges, digest.placeHits)
+      : [];
+
   return {
     reply: {
       id: `assistant_${Date.now()}`,
       role: "assistant",
-      content: sanitizeAssistantReply(raw) || raw.trim(),
+      content: structured.replyText,
       timestamp: new Date().toLocaleTimeString("zh-TW", {
         hour: "2-digit",
         minute: "2-digit",
       }),
+      proposedChanges,
     },
+    proposedChanges,
   };
 }

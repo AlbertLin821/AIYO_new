@@ -52,6 +52,12 @@ export interface LocationReference {
   normalized?: string;
   /** 0–1 aggregate confidence after extraction + geocode verification. */
   confidence?: number;
+  /** Confidence dedicated to the Google geocode match gate. */
+  geocodeConfidence?: number;
+  geocodeMatchReason?: string;
+  geocodeRejectedReason?: string;
+  cleanedName?: string;
+  rawMention?: string;
   /** True when Google geocode + context checks passed with sufficient score. */
   verified?: boolean;
   verifiedPlaceIds?: string[];
@@ -141,12 +147,26 @@ export interface SuggestedAction {
   item?: Partial<TripPlanItem>;
 }
 
+export interface AiProposedChange {
+  type: "add_itinerary_item";
+  day: number;
+  time: string;
+  title: string;
+  locationName?: string;
+  notes?: string;
+  source: "ai-chat";
+}
+
 export interface ChatContext {
   destination?: string;
   days?: number;
   budget?: number;
   itinerary?: TripPlanDay[];
   preferences?: TravelPreferences;
+  /** ISO yyyy-mm-dd，用於天氣與活動檢索 */
+  tripStartDate?: string;
+  /** ISO yyyy-mm-dd，若省略則與 tripStartDate 同日 */
+  tripEndDate?: string;
 }
 
 export interface ChatMessage {
@@ -155,6 +175,7 @@ export interface ChatMessage {
   content: string;
   timestamp: string;
   suggestedAction?: SuggestedAction;
+  proposedChanges?: AiProposedChange[];
 }
 
 export interface ChatRequestPayload {
@@ -166,6 +187,7 @@ export interface ChatRequestPayload {
 export interface ChatResponsePayload {
   reply: ChatMessage;
   itinerarySuggestion?: TripPlanResult;
+  proposedChanges?: AiProposedChange[];
 }
 
 export interface VideoSummarySegment {
@@ -182,9 +204,13 @@ export interface VideoSummarySegment {
   highlights?: string[];
   foods?: string[];
   confidence?: number;
+  timestampSource?: "youtube-transcript" | "description-fallback";
+  timestampConfidence?: "high" | "low";
   extractionSource?: "deterministic" | "ai-polished" | "fallback";
   mentionContext?: string;
   sourceTranscriptLineIds?: string[];
+  /** 選配：以 Google Places 文字搜尋比對段落標題；未定義表示未檢查。 */
+  titlePlaceVerified?: boolean;
 }
 
 export interface VideoSummaryDebugMeta {
@@ -195,10 +221,17 @@ export interface VideoSummaryDebugMeta {
     | "ollama-description-fallback"
     | "ollama-synthetic-fallback"
     | "unavailable";
-  segmentSource: "transcript-chunks" | "description-fallback" | "synthetic-fallback" | "unavailable";
+  segmentSource:
+    | "transcript-chunks"
+    | "deterministic-mentions"
+    | "description-fallback"
+    | "synthetic-fallback"
+    | "unavailable";
   captionLanguage?: string;
   captionKind?: "manual" | "asr";
   captionSource?: "watch-page-captions" | "timedtext" | "youtube-transcript-package";
+  cacheStatus?: "memory-hit" | "persisted-hit" | "miss";
+  pipelineVersion?: string;
 }
 
 export interface VideoRecommendation {
@@ -287,7 +320,8 @@ export interface User {
   destination: string;
   travelDays: number;
   preferredTransport: string;
-  travelPace: TravelPace;
+  /** 空白表示尚未在個人檔選擇節奏 */
+  travelPace: TravelPace | "";
   interests: string[];
 }
 
@@ -363,6 +397,8 @@ export interface BootstrapPayload {
     image?: string | null;
   };
   profile: User;
+  /** 若為 false，登入後應於首頁顯示歡迎引導（尚未完成或新帳號） */
+  onboardingCompleted: boolean;
   trip: PersistedTripPayload | null;
   chatMessages: ChatMessage[];
   collaboration: CollaborationPresenceState | null;

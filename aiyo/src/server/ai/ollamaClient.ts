@@ -10,6 +10,8 @@ interface OllamaChatOptions {
   messages: OllamaMessage[];
   format?: "json";
   model?: string;
+  /** 覆寫預設逾時（例如多輪對話單輪較短）。 */
+  timeoutMs?: number;
   task?:
     | "default"
     | "trip-plan"
@@ -54,10 +56,15 @@ export async function chatWithOllama({
   messages,
   format,
   model,
+  timeoutMs,
   task = "default",
 }: OllamaChatOptions): Promise<string> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), serverConfig.ollamaTimeoutMs);
+  const effectiveTimeout = Math.min(
+    Math.max(5000, timeoutMs ?? serverConfig.ollamaTimeoutMs),
+    120_000,
+  );
+  const timeout = setTimeout(() => controller.abort(), effectiveTimeout);
 
   try {
     const response = await fetch(`${serverConfig.ollamaBaseUrl}/api/chat`, {

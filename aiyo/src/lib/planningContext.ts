@@ -229,3 +229,17 @@ export function derivePlanningSnapshot(input: {
     hasPlanningContext: hasDestination || hasPlannedDays || hasBudget || hasItinerary,
   };
 }
+
+/** 從使用者訊息擷取 ISO 日期（yyyy-mm-dd），供天氣與活動檢索。 */
+export function extractIsoDateRangeFromText(text: string): {
+  tripStartDate?: string;
+  tripEndDate?: string;
+} {
+  const matches = text.match(/\d{4}-\d{2}-\d{2}/g);
+  if (!matches?.length) {
+    return {};
+  }
+  const tripStartDate = matches[0];
+  const tripEndDate = matches.length > 1 ? matches[matches.length - 1] : tripStartDate;
+  return { tripStartDate, tripEndDate };
+}

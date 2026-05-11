@@ -1,5 +1,5 @@
 import { zhTW as t } from "@/locales/zh-TW";
-import { markPersistenceServerHydrated } from "@/services/persistence";
+import { markPersistenceServerHydrated, persistActiveUserSnapshotNow } from "@/services/persistence";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/services/apiClient";
 import { useChatStore } from "@/stores/useChatStore";
 import { useCollabStore } from "@/stores/useCollabStore";
@@ -16,14 +16,22 @@ import type {
   User,
 } from "@/types";
 
-function debounce<T extends (...args: never[]) => void>(fn: T, wait = 700) {
+function debouncedVoidRunner(fn: () => void, wait: number) {
   let timeoutId: number | null = null;
-  return (...args: Parameters<T>) => {
+  const cancel = () => {
     if (timeoutId !== null) {
       window.clearTimeout(timeoutId);
+      timeoutId = null;
     }
-    timeoutId = window.setTimeout(() => fn(...(args as never[])), wait);
   };
+  const schedule = () => {
+    cancel();
+    timeoutId = window.setTimeout(() => {
+      timeoutId = null;
+      fn();
+    }, wait);
+  };
+  return { schedule, cancel };
 }
 
 async function withRetry<T>(operation: () => Promise<T>, attempts = 3): Promise<T> {
@@ -47,9 +55,17 @@ class SyncService {
   private isApplyingRemote = false;
   private isSyncing = false;
   private lastSyncedPayloadKey: string | null = null;
-  private debouncedTripSync = debounce(() => {
+  private debouncedTripSync = debouncedVoidRunner(() => {
     void this.syncTripState("debounced");
-  }, 900);
+  }, 350);
+
+  flushTripSyncNow(options?: { keepalive?: boolean; force?: boolean }) {
+    if ((!this.hydrated && !options?.force) || this.isApplyingRemote) {
+      return Promise.resolve();
+    }
+    this.debouncedTripSync.cancel();
+    return this.syncTripState("flush", options);
+  }
 
   private log(message: string, payload?: Record<string, unknown>) {
     if (process.env.NODE_ENV !== "production") {
@@ -84,6 +100,17 @@ class SyncService {
                 lng: item.location.lng,
                 description: item.location.description,
                 address: item.location.address || "",
+                placeId: item.location.placeId || "",
+                photoUrl: item.location.photoUrl || "",
+                thumbnail: item.location.thumbnail || "",
+                openingHours: item.location.openingHours || "",
+                phoneNumber: item.location.phoneNumber || "",
+                website: item.location.website || "",
+                googleMapsUrl: item.location.googleMapsUrl || "",
+                rating: item.location.rating || 0,
+                userRatingsTotal: item.location.userRatingsTotal || 0,
+                confidence: item.location.confidence || 0,
+                verified: item.location.verified === true,
               }
             : null,
         })),
@@ -95,10 +122,21 @@ class SyncService {
         lng: pin.lng,
         description: pin.description,
         address: pin.address || "",
+        placeId: pin.placeId || "",
+        photoUrl: pin.photoUrl || "",
+        thumbnail: pin.thumbnail || "",
+        openingHours: pin.openingHours || "",
+        phoneNumber: pin.phoneNumber || "",
+        website: pin.website || "",
+        googleMapsUrl: pin.googleMapsUrl || "",
+        rating: pin.rating || 0,
+        userRatingsTotal: pin.userRatingsTotal || 0,
         color: pin.color || "",
         linkedTripItemId: pin.linkedTripItemId || "",
         dayNumber: pin.dayNumber || 0,
         source: pin.source || "manual",
+        confidence: pin.confidence || 0,
+        verified: pin.verified === true,
       })),
       coverImageUrl: payload.coverImageUrl ?? "",
     };
@@ -204,14 +242,45 @@ class SyncService {
     if (JSON.stringify(currentProfile) !== JSON.stringify(snapshot.profile)) {
       useUserStore.setState((state) => ({ ...state, ...snapshot.profile }));
     }
-    useUserStore.getState().setFirstVisit(false);
-    useUIStore.setState({ showOnboarding: false });
+    const onboardingDone = snapshot.onboardingCompleted;
+    useUserStore.getState().setFirstVisit(!onboardingDone);
+    useUIStore.setState({ showOnboarding: !onboardingDone });
 
     if (snapshot.user) {
       markPersistenceServerHydrated(snapshot.user);
     }
 
     this.hydrated = true;
+    persistActiveUserSnapshotNow();
+  }
+
+  applyTripSwitch(snapshot: {
+    trip: PersistedTripPayload;
+    collaboration: CollaborationPresenceState | null;
+  }) {
+    const remoteKey = this.getPayloadKey(snapshot.trip);
+
+    this.isApplyingRemote = true;
+    try {
+      useTripStore.getState().setRemoteTrip(snapshot.trip, snapshot.trip.budget, "bootstrap");
+      useMapStore.getState().setPins(snapshot.trip.pins, "bootstrap");
+      this.lastSyncedPayloadKey = remoteKey;
+      this.log("trip switch snapshot applied", { tripId: snapshot.trip.tripId });
+    } finally {
+      this.isApplyingRemote = false;
+    }
+
+    if (snapshot.collaboration) {
+      useCollabStore.getState().setCollaboration(snapshot.collaboration);
+      this.roomId = snapshot.collaboration.roomId;
+    } else {
+      this.stopRealtime();
+      useCollabStore.getState().resetCollaboration();
+      this.roomId = null;
+    }
+
+    this.hydrated = true;
+    persistActiveUserSnapshotNow();
   }
 
   startRealtime(roomId?: string | null) {
@@ -263,7 +332,7 @@ class SyncService {
       return;
     }
     this.log("schedule trip sync", { source });
-    this.debouncedTripSync();
+    this.debouncedTripSync.schedule();
   }
 
   private buildCurrentTripPayload(): PersistedTripPayload {
@@ -282,12 +351,12 @@ class SyncService {
     };
   }
 
-  async syncTripState(source = "manual") {
+  async syncTripState(source = "manual", options?: { keepalive?: boolean; force?: boolean }) {
     const previousTrip = useTripStore.getState();
     const payload = this.buildCurrentTripPayload();
     const payloadKey = this.getPayloadKey(payload);
 
-    if (!this.hydrated || this.isApplyingRemote) {
+    if ((!this.hydrated && !options?.force) || this.isApplyingRemote) {
       return;
     }
 
@@ -310,7 +379,11 @@ class SyncService {
     try {
       this.log("sync trip state", { source, tripId: payload.tripId, days: payload.days });
       const savedTrip = await withRetry(() =>
-        apiPut<PersistedTripPayload, PersistedTripPayload>("/api/trips/current", payload),
+        apiPut<PersistedTripPayload, PersistedTripPayload>(
+          "/api/trips/current",
+          payload,
+          options?.keepalive ? { keepalive: true } : undefined,
+        ),
       );
 
       this.isApplyingRemote = true;
@@ -321,6 +394,7 @@ class SyncService {
       } finally {
         this.isApplyingRemote = false;
       }
+      persistActiveUserSnapshotNow();
     } catch (error) {
       useToastStore.getState().pushToast({
         variant: "error",
@@ -332,8 +406,8 @@ class SyncService {
     }
   }
 
-  async saveProfile(input: Partial<User>) {
-    return withRetry(() => apiPut<Partial<User>, User>("/api/profile", input));
+  async saveProfile(input: Partial<User> & { welcomeCompleted?: boolean }) {
+    return withRetry(() => apiPut<Partial<User> & { welcomeCompleted?: boolean }, User>("/api/profile", input));
   }
 
   async addComment(roomId: string, content: string) {

@@ -11,6 +11,7 @@ import {
 } from "@/lib/itinerary-sort";
 import { canCollaborator } from "@/lib/permissions";
 import { zhTW as t } from "@/locales/zh-TW";
+import DeleteTripDialog from "@/components/itinerary/DeleteTripDialog";
 import ItineraryEditorSection from "@/components/itinerary/ItineraryEditorSection";
 import ItineraryLibraryPanel, {
   type TripLibrarySort,
@@ -19,6 +20,8 @@ import ItineraryPageHeader from "@/components/itinerary/ItineraryPageHeader";
 import ItineraryShareDialog from "@/components/itinerary/ItineraryShareDialog";
 import RenameTripDialog from "@/components/itinerary/RenameTripDialog";
 import type { AddActivityDraft } from "@/components/itinerary/AddActivityForm";
+import ConfirmDialog from "@/components/system/ConfirmDialog";
+import PromptDialog from "@/components/system/PromptDialog";
 import {
   addTripCollaborator,
   createItineraryFolder,
@@ -133,6 +136,12 @@ export default function ItineraryPage() {
   const [renameDraft, setRenameDraft] = useState("");
   const [renameCoverUrl, setRenameCoverUrl] = useState<string | null>(null);
   const [renameSaving, setRenameSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ItineraryListItem | null>(null);
+  const [deleteDayTarget, setDeleteDayTarget] = useState<{ dayNumber: number; displayOrdinal: number } | null>(null);
+  const [renameFolderTarget, setRenameFolderTarget] = useState<ItineraryFolderDto | null>(null);
+  const [renameFolderDraft, setRenameFolderDraft] = useState("");
+  const [deleteFolderTarget, setDeleteFolderTarget] = useState<ItineraryFolderDto | null>(null);
+  const [folderDialogSaving, setFolderDialogSaving] = useState(false);
   const [coverImageHint, setCoverImageHint] = useState<string | null>(null);
   const libraryEditCoverInputRef = useRef<HTMLInputElement>(null);
   const [collaborators, setCollaborators] = useState<TripCollaboratorDto[]>([]);
@@ -148,7 +157,7 @@ export default function ItineraryPage() {
       if (status === "authenticated") {
         return true;
       }
-      router.push(`/login?redirect=${encodeURIComponent(redirectPath)}`);
+      router.push(`/login?callbackUrl=${encodeURIComponent(redirectPath)}`);
       return false;
     },
     [router, status],
@@ -191,9 +200,14 @@ export default function ItineraryPage() {
       }
       try {
         setCollabError(null);
-        setCollaborators(await listTripCollaborators(id));
+        const rows = await listTripCollaborators(id);
+        if (useTripStore.getState().tripId === id) {
+          setCollaborators(rows);
+        }
       } catch (error) {
-        setCollabError(error instanceof Error ? error.message : "無法載入協作者。");
+        if (useTripStore.getState().tripId === id) {
+          setCollabError(error instanceof Error ? error.message : "無法載入協作者。");
+        }
       }
     },
     [status],
@@ -275,6 +289,7 @@ export default function ItineraryPage() {
           : undefined,
         source: "manual",
       });
+      void syncService.flushTripSyncNow();
       setAddDraft(EMPTY_ADD_DRAFT);
       setAddingToDay(null);
     },
@@ -325,15 +340,23 @@ export default function ItineraryPage() {
       if (itinerary.length <= 1) {
         return;
       }
-      const message = t.itineraryPage.deleteDayConfirm.replace("{n}", String(displayOrdinal));
-      if (!window.confirm(message)) {
-        return;
-      }
-      removeDay(dayNumber);
-      setAddingToDay((current) => (current === dayNumber ? null : current));
+      setDeleteDayTarget({ dayNumber, displayOrdinal });
     },
-    [itinerary.length, removeDay, requireAuthenticated],
+    [itinerary.length, requireAuthenticated],
   );
+
+  const handleConfirmDeleteDay = useCallback(() => {
+    if (!deleteDayTarget) {
+      return;
+    }
+    const { dayNumber } = deleteDayTarget;
+    if (!requireAuthenticated("/itinerary")) {
+      return;
+    }
+    removeDay(dayNumber);
+    setAddingToDay((current) => (current === dayNumber ? null : current));
+    setDeleteDayTarget(null);
+  }, [deleteDayTarget, removeDay, requireAuthenticated]);
 
   const handleRemoveItem = useCallback(
     (dayNumber: number, itemId: string) => {
@@ -369,32 +392,80 @@ export default function ItineraryPage() {
   }, [folders.length, loadTripLibrary, newFolderName]);
 
   const handleRenameFolder = useCallback(
-    async (folder: ItineraryFolderDto) => {
-      const name = window.prompt("重新命名資料夾", folder.name)?.trim();
-      if (!name || name === folder.name) {
-        return;
-      }
-      const updated = await updateItineraryFolder(folder.id, { name });
-      setFolders((items) => items.map((item) => (item.id === updated.id ? updated : item)));
-      void loadTripLibrary();
+    (folder: ItineraryFolderDto) => {
+      setRenameFolderTarget(folder);
+      setRenameFolderDraft(folder.name);
     },
-    [loadTripLibrary],
+    [],
   );
 
+  const closeRenameFolderDialog = useCallback(() => {
+    if (folderDialogSaving) {
+      return;
+    }
+    setRenameFolderTarget(null);
+    setRenameFolderDraft("");
+  }, [folderDialogSaving]);
+
+  const handleConfirmRenameFolder = useCallback(async () => {
+    if (!renameFolderTarget) {
+      return;
+    }
+    const name = renameFolderDraft.trim();
+    if (!name || name === renameFolderTarget.name) {
+      closeRenameFolderDialog();
+      return;
+    }
+    setFolderDialogSaving(true);
+    setFolderError(null);
+    try {
+      const updated = await updateItineraryFolder(renameFolderTarget.id, { name });
+      setFolders((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+      setRenameFolderTarget(null);
+      setRenameFolderDraft("");
+      void loadTripLibrary();
+    } catch (error) {
+      setFolderError(error instanceof Error ? error.message : t.itineraryPage.renameFolderFailed);
+    } finally {
+      setFolderDialogSaving(false);
+    }
+  }, [closeRenameFolderDialog, loadTripLibrary, renameFolderDraft, renameFolderTarget]);
+
   const handleDeleteFolder = useCallback(
-    async (folder: ItineraryFolderDto) => {
-      if (!window.confirm(`刪除「${folder.name}」？行程會移出資料夾，不會被刪除。`)) {
-        return;
-      }
+    (folder: ItineraryFolderDto) => {
+      setDeleteFolderTarget(folder);
+    },
+    [],
+  );
+
+  const closeDeleteFolderDialog = useCallback(() => {
+    if (folderDialogSaving) {
+      return;
+    }
+    setDeleteFolderTarget(null);
+  }, [folderDialogSaving]);
+
+  const handleConfirmDeleteFolder = useCallback(async () => {
+    if (!deleteFolderTarget) {
+      return;
+    }
+    const folder = deleteFolderTarget;
+    setFolderDialogSaving(true);
+    setFolderError(null);
+    try {
       await deleteItineraryFolder(folder.id);
       setFolders((items) => items.filter((item) => item.id !== folder.id));
       if (currentFolderId === folder.id) {
         setCurrentFolderId(null);
       }
+      setDeleteFolderTarget(null);
       void loadTripLibrary();
-    },
-    [currentFolderId, loadTripLibrary],
-  );
+    } catch (error) {
+      setFolderError(error instanceof Error ? error.message : t.itineraryPage.deleteFolderFailed);
+    } finally {
+      setFolderDialogSaving(false);
+    }
+  }, [currentFolderId, deleteFolderTarget, loadTripLibrary]);
 
   const handleMoveCurrentTripToFolder = useCallback(
     async (folderId: string | null) => {
@@ -425,20 +496,19 @@ export default function ItineraryPage() {
       setTripSwitching(true);
       setLibraryError(null);
       try {
-        await setActiveTrip(item.id);
-        const snapshot = await syncService.loadBootstrap();
-        syncService.applyBootstrap(snapshot, { source: "trip-switch", forceTrip: true });
+        setCollaborators([]);
+        const snapshot = await setActiveTrip(item.id);
+        syncService.applyTripSwitch(snapshot);
         syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
         setCurrentFolderId(item.folderId ?? null);
-        await loadTripLibrary();
-        await refreshCollaboratorsForTrip(item.id);
+        void refreshCollaboratorsForTrip(item.id);
       } catch (error) {
         setLibraryError(error instanceof Error ? error.message : t.itineraryPage.libraryLoadFailed);
       } finally {
         setTripSwitching(false);
       }
     },
-    [loadTripLibrary, refreshCollaboratorsForTrip, requireAuthenticated, tripId],
+    [refreshCollaboratorsForTrip, requireAuthenticated, tripId],
   );
 
   const handleEditTripFromLibrary = useCallback(
@@ -474,37 +544,59 @@ export default function ItineraryPage() {
     [loadTripLibrary, requireAuthenticated],
   );
 
-  const handleDeleteTrip = useCallback(
+  const handleRequestDeleteTrip = useCallback(
+    (item: ItineraryListItem) => {
+      if (!item.isOwner || !requireAuthenticated("/itinerary")) {
+        return;
+      }
+      setDeleteTarget(item);
+    },
+    [requireAuthenticated],
+  );
+
+  const closeDeleteDialog = useCallback(() => {
+    if (tripDeletingId) {
+      return;
+    }
+    setDeleteTarget(null);
+  }, [tripDeletingId]);
+
+  const handleConfirmDeleteTrip = useCallback(
     async (item: ItineraryListItem) => {
       if (!item.isOwner || !requireAuthenticated("/itinerary")) {
         return;
       }
-      if (!window.confirm(t.itineraryPage.deleteTripConfirm.replace("{title}", item.title))) {
-        return;
-      }
+      const previousTripLibrary = tripLibrary;
+      const wasActiveTrip = useTripStore.getState().tripId === item.id;
       setLibraryError(null);
+      setDeleteTarget(null);
       setTripDeletingId(item.id);
+      setTripLibrary((items) => items.filter((candidate) => candidate.id !== item.id));
       try {
         await deleteTrip(item.id);
-        await loadTripLibrary();
-        const activeTripId = useTripStore.getState().tripId;
-        if (activeTripId === item.id) {
-          const snapshot = await syncService.loadBootstrap();
-          syncService.applyBootstrap(snapshot, { source: "trip-delete", forceTrip: true });
-          syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
-          await loadTripLibrary();
+        if (wasActiveTrip) {
+          setRecoveringTrip(true);
+          try {
+            const snapshot = await syncService.loadBootstrap();
+            syncService.applyBootstrap(snapshot, { source: "trip-delete", forceTrip: true });
+            syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
+          } finally {
+            setRecoveringTrip(false);
+          }
           const replacementId = useTripStore.getState().tripId;
           if (replacementId) {
-            await refreshCollaboratorsForTrip(replacementId);
+            void refreshCollaboratorsForTrip(replacementId);
           }
         }
+        void loadTripLibrary();
       } catch (error) {
+        setTripLibrary(previousTripLibrary);
         setLibraryError(error instanceof Error ? error.message : t.itineraryPage.deleteTripFailed);
       } finally {
         setTripDeletingId(null);
       }
     },
-    [loadTripLibrary, refreshCollaboratorsForTrip, requireAuthenticated],
+    [loadTripLibrary, refreshCollaboratorsForTrip, requireAuthenticated, tripLibrary],
   );
 
   const handleLibraryEditCoverFiles = useCallback(async (files: FileList | null) => {
@@ -649,9 +741,13 @@ export default function ItineraryPage() {
     [libraryScopeTab, myId, presence],
   );
 
+  const currentLibraryItem = useMemo(
+    () => tripLibrary.find((item) => item.id === tripId),
+    [tripId, tripLibrary],
+  );
   const currentRole =
     collaborators.find((member) => member.userId === myId)?.role ||
-    (status === "authenticated" ? "owner" : "viewer");
+    (status === "authenticated" && currentLibraryItem?.isOwner !== false ? "owner" : "viewer");
   const canEdit = canCollaborator(currentRole, "edit");
   const canManageShare = canCollaborator(currentRole, "managePermissions");
   const emptyTripLibraryHint =
@@ -716,6 +812,19 @@ export default function ItineraryPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [renameTarget, closeRenameDialog]);
 
+  const showTripSummaryRow = useMemo(() => {
+    if (!tripId) {
+      return false;
+    }
+    const hasItems = itinerary.some((day) => day.items.length > 0);
+    return (
+      hasItems ||
+      destination.trim().length > 0 ||
+      days > 1 ||
+      budget > 0
+    );
+  }, [budget, days, destination, itinerary, tripId]);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-5 py-8 lg:px-8">
@@ -730,6 +839,7 @@ export default function ItineraryPage() {
           isInteractive={isInteractive}
           canEdit={status === "authenticated" && canEdit}
           recoveringTrip={recoveringTrip}
+          showTripSummaryRow={showTripSummaryRow}
           onShare={() => setShareOpen(true)}
           onAddDay={() => void handleAddDay()}
           onOpenMap={() => router.push("/map")}
@@ -769,7 +879,7 @@ export default function ItineraryPage() {
             onSelectTrip={(item) => void handleSelectTripFromLibrary(item)}
             onEditTrip={handleEditTripFromLibrary}
             onDuplicateTrip={(item) => void handleDuplicateTrip(item)}
-            onDeleteTrip={(item) => void handleDeleteTrip(item)}
+            onDeleteTrip={handleRequestDeleteTrip}
           />
 
           <ItineraryEditorSection
@@ -826,6 +936,62 @@ export default function ItineraryPage() {
         onClearCover={clearLibraryEditCover}
         onSave={() => void handleSaveLibraryRename()}
         onClose={closeRenameDialog}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteDayTarget)}
+        title={t.itineraryPage.deleteDayDialogTitle}
+        description={
+          deleteDayTarget
+            ? t.itineraryPage.deleteDayConfirm.replace("{n}", String(deleteDayTarget.displayOrdinal))
+            : ""
+        }
+        confirmLabel={t.itineraryPage.deleteDayConfirmAction}
+        cancelLabel={t.itineraryPage.deleteDayCancel}
+        variant="danger"
+        onCancel={() => setDeleteDayTarget(null)}
+        onConfirm={handleConfirmDeleteDay}
+      />
+
+      <PromptDialog
+        open={Boolean(renameFolderTarget)}
+        title={t.itineraryPage.renameFolderDialogTitle}
+        label={t.itineraryPage.renameFolderLabel}
+        value={renameFolderDraft}
+        confirmLabel={t.itineraryPage.renameFolderSave}
+        cancelLabel={t.itineraryPage.renameFolderCancel}
+        pending={folderDialogSaving}
+        onValueChange={setRenameFolderDraft}
+        onCancel={closeRenameFolderDialog}
+        onConfirm={() => void handleConfirmRenameFolder()}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteFolderTarget)}
+        title={t.itineraryPage.deleteFolderDialogTitle}
+        description={
+          deleteFolderTarget
+            ? t.itineraryPage.deleteFolderConfirm.replace("{name}", deleteFolderTarget.name)
+            : ""
+        }
+        confirmLabel={t.itineraryPage.deleteFolderConfirmAction}
+        cancelLabel={t.itineraryPage.deleteFolderCancel}
+        pending={folderDialogSaving}
+        pendingLabel={t.itineraryPage.deleteFolderDeleting}
+        variant="danger"
+        onCancel={closeDeleteFolderDialog}
+        onConfirm={() => void handleConfirmDeleteFolder()}
+      />
+
+      <DeleteTripDialog
+        target={deleteTarget}
+        deleting={Boolean(tripDeletingId)}
+        onCancel={closeDeleteDialog}
+        onConfirm={() => {
+          if (deleteTarget) {
+            void handleConfirmDeleteTrip(deleteTarget);
+          }
+        }}
       />
     </div>
   );

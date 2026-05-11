@@ -54,12 +54,11 @@ export async function POST(request: Request) {
         passwordHash,
         profile: {
           create: {
-            budget: 50000,
+            budget: null,
             destination: null,
             preferences: {
               interests: [],
-              preferredTransport: "Train",
-              pace: "moderate",
+              preferredTransport: "",
             },
           },
         },

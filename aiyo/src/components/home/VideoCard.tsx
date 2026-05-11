@@ -55,7 +55,7 @@ function VideoCard({ video, index, onClick }: VideoCardProps) {
       role="button"
       tabIndex={0}
       aria-label={`${t.videoCard.openVideoSummary}：${video.title}`}
-      data-testid="recommended-video"
+      data-testid="video-card"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.08 }}
@@ -118,9 +118,9 @@ function VideoCard({ video, index, onClick }: VideoCardProps) {
                 {t.home.sourceFallback}
               </span>
             )}
-            {video.extractedLocations.slice(0, 2).map((location) => (
+            {video.extractedLocations.slice(0, 2).map((location, locIdx) => (
               <span
-                key={`${video.id}_${location.name}`}
+                key={`${video.id}_loc_${locIdx}_${location.name}`}
                 className="text-[10px] px-1.5 py-0.5 bg-tertiary/20 text-foreground/70 rounded-full"
               >
                 {location.name}

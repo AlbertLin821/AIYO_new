@@ -115,12 +115,29 @@ function haystackIncludesToken(haystack: string, token: string): boolean {
   if (normalizedHay.includes(nt) || haystack.includes(t)) {
     return true;
   }
+  const compactPlaceToken = nt.replace(
+    /(兩天一夜|二天一夜|三天兩夜|一日遊|二日遊|三日遊|自由行|旅遊|美食|景點|攻略)$/u,
+    "",
+  );
+  if (
+    compactPlaceToken.length >= 2 &&
+    normalizedHay.includes(normalizePlaceText(compactPlaceToken))
+  ) {
+    return true;
+  }
   const aliases = PLACE_ALIASES[t] || PLACE_ALIASES[t.toLowerCase()];
   if (aliases) {
     return aliases.some(
       (a) =>
         normalizedHay.includes(normalizePlaceText(a.toLowerCase())) ||
         haystack.includes(a),
+    );
+  }
+  const compactAliases =
+    PLACE_ALIASES[compactPlaceToken] || PLACE_ALIASES[compactPlaceToken.toLowerCase()];
+  if (compactAliases) {
+    return compactAliases.some((a) =>
+      normalizedHay.includes(normalizePlaceText(a.toLowerCase())),
     );
   }
   return false;
@@ -148,7 +165,11 @@ export function hasQueryPlaceRelevance(
     return haystack.includes(raw) || lowerIncludesPhrase(haystack, raw);
   }
 
-  return core.every((token) => haystackIncludesToken(haystack, token));
+  const matchedCount = core.filter((token) => haystackIncludesToken(haystack, token)).length;
+  if (core.length >= 3) {
+    return matchedCount > 0;
+  }
+  return matchedCount === core.length;
 }
 
 function lowerIncludesPhrase(haystack: string, phrase: string): boolean {

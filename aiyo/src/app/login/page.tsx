@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Globe, Lock, Mail, KeyRound, UserPlus, LogIn } from "lucide-react";
-import { getProviders, signIn } from "next-auth/react";
+import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { apiPost } from "@/services/apiClient";
 import { zhTW as t } from "@/locales/zh-TW";
@@ -93,10 +93,17 @@ async function signInWithCredentials(input: {
 function LoginPageContent() {
   const searchParams = useSearchParams();
 
-  const callbackUrl = useMemo(
-    () => searchParams.get("callbackUrl") || "/profile",
-    [searchParams],
-  );
+  const callbackUrl = useMemo(() => {
+    const direct = searchParams.get("callbackUrl");
+    if (direct) {
+      return direct;
+    }
+    const legacyRedirect = searchParams.get("redirect");
+    if (legacyRedirect) {
+      return legacyRedirect;
+    }
+    return "/";
+  }, [searchParams]);
   const initialError = useMemo(() => searchParams.get("error"), [searchParams]);
 
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -109,12 +116,13 @@ function LoginPageContent() {
 
   useEffect(() => {
     let mounted = true;
-    void getProviders()
-      .then((providers) => {
+    void fetch("/api/runtime-config", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((config: { googleAuthEnabled?: boolean } | null) => {
         if (!mounted) {
           return;
         }
-        setGoogleEnabled(Boolean(providers?.google));
+        setGoogleEnabled(Boolean(config?.googleAuthEnabled));
       })
       .catch(() => {
         if (!mounted) {

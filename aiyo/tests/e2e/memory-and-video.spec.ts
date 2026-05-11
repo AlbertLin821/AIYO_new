@@ -129,12 +129,14 @@ test("AI planning, video indexing, and map pins workflow works end to end", asyn
 
   await page.goto("/");
   await page.getByTestId("video-search-input").fill("https://www.youtube.com/watch?v=I2kIaEGUiY0");
-  await page.getByTestId("video-search-button").click();
+  await page.getByTestId("video-search-submit").click();
 
   await expect(page.getByTestId("video-summary-drawer")).toBeVisible({ timeout: 180000 });
   await expect(page.getByTestId("video-location-item").first()).toBeVisible({ timeout: 30000 });
 
   await page.getByTestId("video-add-to-itinerary-button").click();
+  await expect(page.getByTestId("video-import-day-dialog")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("video-import-day-confirm-button").click();
   await expect(page).toHaveURL(/\/itinerary/, { timeout: 30000 });
   await expect.poll(() => page.getByTestId("activity-card").count()).toBeGreaterThan(plannedActivityCount);
 

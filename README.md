@@ -1,157 +1,375 @@
 # AIYO_new
 
-`AIYO_new` is the current working repository for the AIYO application.
-The active app lives in `aiyo/`, and the root folder provides shared docs plus the local Docker setup used for team development.
+本儲存庫為 AIYO 應用程式目前的主要工作區：可執行的 Next.js 應用位於 `aiyo/`，儲存庫根目錄提供共用說明與以 Docker Compose 為主的本地開發環境。
 
-## Repository layout
+## 儲存庫結構
 
-- `aiyo/`: main Next.js application, Prisma schema, seed scripts, and app-level docs
-- `docs/`: architecture notes, migration notes, implementation reports, and Docker migration guidance
-- `docker-compose.yml`: local development services for this repo
+| 路徑 | 說明 |
+|------|------|
+| `aiyo/` | Next.js 16 應用程式、Prisma 綱要、遷移、種子腳本與應用層文件 |
+| `docs/` | 架構說明、遷移筆記、實作報告等（若專案內有） |
+| `docker-compose.yml` | 本地 PostgreSQL、Redis、選用應用容器與選用 Mem0 相關服務 |
+| `dev-up.ps1` | Windows 上一鍵啟動開發用 Compose 設定檔（含 `dev` 與 `mem0` 設定檔） |
 
-## Stack
+## 技術棧（摘要）
 
-- Next.js 16 App Router
-- React 19
-- TypeScript
-- Prisma + PostgreSQL
-- NextAuth
-- Ollama
+- Next.js 16（App Router）、React 19、TypeScript
+- Prisma + PostgreSQL（含 pgvector 映像）
+- NextAuth（Google OAuth 與電子郵件／密碼）
+- Ollama（伺服器端呼叫；容器內預設連到宿主 `host.docker.internal:11434`）
+- 選用：Mem0 相關服務（需額外設定檔與本機路徑，見下文）
 
-## Team quick start
+---
 
-### 1. Prerequisites
+## 開發模式（Docker）：啟動所有服務
 
-Install these on your machine first:
+此處的**開發模式**指：在儲存庫根目錄用 Compose **設定檔 `dev`** 啟動 **`app-dev`**，容器內執行 `npm run dev`（熱重載），並連同 **PostgreSQL**、**Redis** 一併啟動。這是目前團隊在容器內開發時的建議組合。
 
-- Node.js 20+
-- npm
-- Docker Desktop
-- Ollama
+### 開發模式會啟動哪些服務？
 
-### 2. Start Docker services
+| Compose 服務 | 容器名稱 | 說明 |
+|----------------|----------|------|
+| `app-dev` | `aiyo-new-app-dev` | Next.js 開發伺服器，`http://localhost:3000` |
+| `postgres` | `aiyo-new-postgres` | `localhost:5432`，資料庫 `aiyo_new_db` |
+| `redis` | `aiyo-new-redis` | `localhost:6379` |
 
-From the repository root:
+**未包含在上一列指令內（可另外啟動）：**
+
+- **pgAdmin**：`docker compose up -d pgadmin`（見下節「二、2.1」）
+- **Mem0**：需 `--profile mem0` 且本機須有 `docker-compose.yml` 內所設 mem0 原始碼路徑；多數開發者可**不啟動** Mem0，並在 `aiyo/.env` 將 `MEM0_ENABLED` 設為 `false`，避免應用連線到不存在的 `mem0-memory`。
+
+**宿主機須另外執行（不在 Docker 內）：**
+
+- **Ollama**：在 Windows／macOS 本機執行 `ollama serve`，並依 `aiyo/.env` 或 Compose 覆寫的模型名稱執行 `ollama pull …`。`app-dev` 預設透過 `host.docker.internal:11434` 連到宿主 Ollama。
+
+### 記憶架構（Mem0）要不要啟動？
+
+目前與「對話長期記憶」相關、且由本專案 **選用** 連線的外部服務，主要是 **Mem0**（`MEM0_BASE_URL` 指向的 HTTP API，Compose 內預設主機名為 `mem0-memory`）。**沒有**另一套與 Mem0 並列、卻又必須在預設開發指令裡一併啟動的「第二種記憶容器」。
+
+| 情境 | 是否需要啟動 Mem0 容器 |
+|------|-------------------------|
+| `aiyo/.env` 內 **`MEM0_ENABLED=false`**（或未設定；程式預設為 `false`，見 `aiyo/src/server/config.ts`） | **不必**。聊天與行程規劃仍會執行，只是略過 Mem0 的搜尋／寫入記憶。 |
+| **`MEM0_ENABLED=true`**（例如沿用 `.env.example`）且希望對話能寫入／查詢 Mem0 | **要**。需能成功建置並啟動 `--profile mem0` 下的 `mem0-memory` 等服務（並確認 `docker-compose.yml` 內 mem0 建置路徑適用你的機器）。 |
+
+**與 PostgreSQL 的區別：** 行程、個人檔、聊天訊息等**主要持久化**仍由 **PostgreSQL（Prisma）** 負責；Mem0 額外提供的是可檢索的「記憶」語境（例如對話前後文補強），兩者層級不同。因此一般開發只要 DB + Redis + 應用即可；**只有在你明確要驗 Mem0 行為時**，才需要把 Mem0 一併拉起，或暫時關閉 `MEM0_ENABLED` 直到環境就緒。
+
+### 啟動前檢查清單
+
+1. **Docker Desktop** 已開啟（Windows／macOS）。
+2. **`aiyo/.env` 已建立**：`docker-compose.yml` 中 `app-dev` 使用 `env_file: ./aiyo/.env`。請複製 `aiyo/.env.example` 為 `aiyo/.env`，並補上 `NEXTAUTH_SECRET` 等必填值（勿將含密鑰檔案提交至 Git）。
+3. **埠 3000 未被占用**：若本機另有 `npm run dev` 或其他程式占用 `3000`，請先關閉，否則 `app-dev` 無法綁定埠。
+4. **（建議）未啟 Mem0 時**：在 `aiyo/.env` 設定 `MEM0_ENABLED=false`。
+5. **（選用）Google 地圖前端金鑰**：若要在開發模式使用地圖 SDK，請在**建置映像前**讓 Compose 能讀到 `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` 等（見「一、1.2」）；首次建置後若曾改動這些變數，請重新 `docker compose --profile dev build app-dev` 再啟動。
+
+### 啟動指令（建議：不含 Mem0）
+
+在儲存庫**根目錄**（與 `docker-compose.yml` 同層）執行：
 
 ```bash
-docker compose up -d --build
+docker compose --profile dev up -d --build postgres redis app-dev
 ```
 
-This starts the full local Docker stack:
+- **首次建置**或曾修改 Dockerfile／依賴時，保留 `--build`。  
+- 上述指令會依 `depends_on` 等待 `postgres`、`redis` 健康後再啟動 `app-dev`；`app-dev` 啟動後會執行 `prisma generate`、`prisma migrate deploy`，再跑 `npm run dev`。
 
-- `aiyo-new-app`: Next.js app and backend API on `http://localhost:3000`
-- `aiyo-new-postgres`: PostgreSQL + pgvector on `localhost:5432`
-- `aiyo-new-redis`: Redis on `localhost:6379`
-- `aiyo-new-pgadmin`: pgAdmin on `http://localhost:5050`
+### 確認容器是否正常
 
-The app container waits for PostgreSQL and Redis, runs `prisma migrate deploy`, then starts `next start`.
+```bash
+docker compose --profile dev ps
+```
 
-Verify the backend/database path:
+預期 **`aiyo-new-app-dev`**、**`aiyo-new-postgres`**、**`aiyo-new-redis`** 的 **STATUS** 為 **`Up`**，且於欄位中顯示 **`healthy`**（健康檢查通過）。若 `app-dev` 長時間非 `healthy`，請查看日誌：
+
+```bash
+docker compose --profile dev logs -f app-dev --tail=120
+```
+
+常見問題：**資料庫連線失敗（Prisma P1001）** 多半是容器未在同一 Compose 網路；請勿只對單一容器執行 `docker start`，應一律用上面的 `docker compose --profile dev up …` 啟動（見「二、2.3」網路提醒）。
+
+### 驗證應用程式
 
 ```bash
 curl http://localhost:3000/api/health
 ```
 
-This repo's compose file creates the development database `aiyo_new_db` automatically.
+瀏覽器開啟：`http://localhost:3000`。
 
-### 3. Configure the app
+### Windows：一鍵腳本（會嘗試啟動 Mem0）
 
-Move into the app directory and create local env files:
+專案根目錄的 `dev-up.ps1` 會執行：
+
+`docker compose --profile dev --profile mem0 up -d postgres redis mem0-memory-postgres mem0-memory app-dev`
+
+若你**沒有** `docker-compose.yml` 內所設的 mem0 原始碼路徑，腳本可能**建置失敗**；此時請改用上方的**建議指令**（僅 `dev` 設定檔、不含 `mem0`）。
+
+### 停止開發用容器
+
+```bash
+docker compose --profile dev down
+```
+
+若僅想暫停而不刪網路／卷，可使用 `stop`；細節請參考 Docker Compose 文件。
+
+---
+
+## 啟動方式總覽
+
+可依團隊習慣擇一或並用：
+
+1. **開發模式（Docker 跑 `app-dev`）**  
+   見上一節 **「開發模式（Docker）：啟動所有服務」**（PostgreSQL + Redis + `app-dev` + 宿主 Ollama）。
+
+2. **僅資料庫／快取用 Docker，本機跑 Next**  
+   在根目錄啟動 `postgres`（與選用的 `redis`），於 `aiyo/` 執行 `npm install`、`prisma migrate`、`npm run dev`。
+
+3. **應用程式在 Docker 內跑正式建置**  
+   使用 Compose 服務 `app`（`next start`，容器名 `aiyo-new-app`），見下節「二、2.1」。
+
+以下分節說明前置需求、環境變數、資料庫與其他啟動流程。
+
+---
+
+## 前置需求
+
+請先安裝：
+
+- **Node.js** 20 或以上（專案使用 npm 與 `package-lock.json`）
+- **npm**
+- **Docker Desktop**（用於 PostgreSQL、Redis；選用則包含應用容器）
+- **Ollama**（本機執行；容器內的應用預設改連宿主機的 Ollama）
+
+---
+
+## 一、環境變數與設定檔
+
+### 1.1 檔案位置
+
+在 `aiyo/` 目錄內：
 
 ```bash
 cd aiyo
 cp .env.example .env.local
 ```
 
-If Prisma commands cannot see `DATABASE_URL`, also create `.env` with the same database connection string as `.env.local`.
+**重要：Prisma CLI**（`prisma migrate`、`prisma generate` 等）預設讀取 **`aiyo/.env`**，**不會**自動讀 `.env.local`。因此請擇一處理：
 
-Default local database URL:
+- 在 `aiyo/` 建立 **`.env`**，至少含 `DATABASE_URL`（內容可與 `.env.local` 相同）；或  
+- 每次執行 Prisma 前在終端機 **匯出** `DATABASE_URL`。
 
-```env
-DATABASE_URL=postgresql://aiyo:aiyo_password@localhost:5432/aiyo_new_db?schema=public
-```
+Next.js 執行時會讀 `.env.local`（與 `.env` 等 Next 規則）；建議本機開發時 **`.env` 與 `.env.local` 的 `DATABASE_URL` 保持一致**，避免 Prisma 與應用程式各指不同資料庫。
 
-Required environment variables:
+**請勿將含密鑰的檔案提交到 Git。** 本說明不涵蓋修改你本機既有 `.env` 的內容；僅說明應有哪些鍵與範例來源可參考 `aiyo/.env.example`。
 
-- `DATABASE_URL`
-- `NEXTAUTH_URL`
-- `NEXTAUTH_SECRET`
-- `OLLAMA_BASE_URL`
-- `OLLAMA_MODEL`
+### 1.2 Docker 建置與 `NEXT_PUBLIC_*`
 
-Optional environment variables:
+前端在建置時會內嵌 `NEXT_PUBLIC_*` 變數。若使用 **`docker compose build`** 建映像，請在 **建置當下** 讓 Compose 能取得這些變數（例如專案根目錄的 `.env` 供 `${NEXT_PUBLIC_...}` 替換，或於建置指令的環境中提供）。僅在執行中的容器改 `env_file` 而**未重新建置**，可能無法修正已編進前端的空值。
 
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
-- `YOUTUBE_API_KEY`
-- `GOOGLE_MAPS_API_KEY`
-- `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`
-- `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID`
+`docker-compose.yml` 檔首註解亦說明此點；詳見官方文件：  
+https://docs.docker.com/compose/how-tos/environment-variables/set-environment-variables/
 
-### 4. Install dependencies and initialize the database
+### 1.3 變數清單（對照 `aiyo/.env.example`）
 
-From `AIYO_new/aiyo`:
+**建議至少設定（本機／開發）：**
+
+| 變數 | 說明 |
+|------|------|
+| `DATABASE_URL` | PostgreSQL 連線字串。與 Docker 預設本機埠對應範例：`postgresql://aiyo:aiyo_password@localhost:5432/aiyo_new_db?schema=public`（應用跑在宿主、DB 在容器時主機用 `localhost`；應用跑在同一 Compose 網路內時主機名為 `postgres`，見 Compose 內 `app`／`app-dev` 的覆寫） |
+| `NEXTAUTH_URL` | 本機通常為 `http://localhost:3000` |
+| `NEXTAUTH_SECRET` | 請改為足夠長度的隨機字串 |
+| `OLLAMA_BASE_URL` | 本機 Ollama 通常為 `http://localhost:11434`；在 Compose 的 `app`／`app-dev` 內已預設改為 `http://host.docker.internal:11434` 以連宿主 |
+| `OLLAMA_MODEL` | 與 `ollama pull` 的模型名稱一致；`.env.example` 預設為較大模型，Compose 內對未設環境變數的預設常為 `qwen3.5:9b`（以 `docker-compose.yml` 為準） |
+
+**Ollama 相關（影片摘要、地點等流程）：**
+
+| 變數 | 說明（預設見 `.env.example`） |
+|------|------------------------------|
+| `OLLAMA_VIDEO_SUMMARY_MODEL` | 影片摘要用模型 |
+| `OLLAMA_VIDEO_SUMMARY_FAST_MODEL` | 較快階段用模型 |
+| `OLLAMA_VIDEO_SUMMARY_FINAL_MODEL` | 彙整／定稿用模型 |
+| `OLLAMA_LOCATION_MODEL` | 地點相關推論用模型 |
+| `OLLAMA_TIMEOUT_MS` | 逾時毫秒 |
+
+**Mem0（記憶／檢索；`docker-compose.yml` 與 `.env.example`）：**
+
+| 變數 | 說明 |
+|------|------|
+| `MEM0_BASE_URL` | Mem0 HTTP 服務位址；本機預設範例 `http://localhost:8890`，Compose 內應用服務常指向 `http://mem0-memory:8000` |
+| `MEM0_ENABLED` | 是否啟用 |
+| `MEM0_TOP_K` | 取回筆數上限等 |
+| `MEM0_TIMEOUT_MS` | 逾時 |
+
+**選用：Google／YouTube／地圖**
+
+| 變數 | 說明 |
+|------|------|
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google 登入 |
+| `YOUTUBE_API_KEY` | YouTube Data API v3 |
+| `GOOGLE_MAPS_API_KEY` | 伺服器端（例如 Geocoding） |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | 瀏覽器端 Maps JavaScript API |
+| `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID` | 選用；向量地圖與 `AdvancedMarkerElement`；未設定時會退回傳統標記 |
+
+**其他：**
+
+| 變數 | 說明 |
+|------|------|
+| `NEXT_PUBLIC_APP_NAME` | 應用顯示名稱等 |
+| `ENABLE_MOCK_VIDEO_PROVIDER` | 設為 `true` 時強制使用本地假資料影片來源 |
+| `ENABLE_MOCK_MAPS` | 保留；地圖是否在無金鑰等情況自動降級請以程式行為為準 |
+
+---
+
+## 二、使用 Docker 啟動基礎設施與應用
+
+### 2.1 預設服務（不含 `profiles` 的服務）
+
+在儲存庫**根目錄**執行：
 
 ```bash
+docker compose up -d --build
+```
+
+通常會啟動（服務名稱／容器名稱以 `docker-compose.yml` 為準）：
+
+- **PostgreSQL**：`postgres`／`aiyo-new-postgres`，埠 `localhost:5432`，資料庫 `aiyo_new_db`，使用者 `aiyo`，密碼 `aiyo_password`
+- **Redis**：`redis`／`aiyo-new-redis`，埠 `localhost:6379`
+- **pgAdmin**：`pgadmin`／`aiyo-new-pgadmin`，網頁 `http://localhost:5050`（預設帳密見 Compose 檔内 `PGADMIN_DEFAULT_*`）
+- **Next 應用（`app`）**：`aiyo-new-app`，網頁 `http://localhost:3000`；啟動命令含 `prisma migrate deploy` 後執行 `next start`
+
+健康檢查可測：
+
+```bash
+curl http://localhost:3000/api/health
+```
+
+### 2.2 開發模式（熱重載，`app-dev`）
+
+完整步驟、檢查清單、驗證方式與 `dev-up.ps1` 差異請見本文最前段的 **「開發模式（Docker）：啟動所有服務」**。此處僅摘要指令：
+
+```bash
+docker compose --profile dev up -d --build postgres redis app-dev
+```
+
+`app-dev` 會掛載 `./aiyo` 到容器內，並將 `.next` 綁到宿主 `./aiyo/.next`；啟動流程含 `prisma generate`、`prisma migrate deploy` 後再執行 `npm run dev`。
+
+### 2.3 Mem0 設定檔（`mem0`）與 `dev-up.ps1` 注意事項
+
+`docker-compose.yml` 內 **`mem0-memory`** 的建置內容與掛載路徑目前指向本機固定路徑 `F:/Projects/Githubs/mem0`。若你的環境沒有該目錄，**`--profile mem0` 或 `dev-up.ps1` 可能建置失敗**。團隊成員可擇一：
+
+- 僅啟動應用與 DB／Redis（不使用 `mem0` 設定檔），並將 `MEM0_ENABLED` 設為 `false` 或調整 `MEM0_BASE_URL`；或  
+- 自行將 Compose 內 Mem0 的 `context`／`volumes` 改為你本機的 mem0 原始碼路徑後再啟動。
+
+**網路提醒：** 註解說明請透過 `docker compose` 或 `dev-up.ps1` 啟動，避免只對單一容器 `docker start`，以免容器未接上 Compose 建立的 `backend` 網路而無法解析主機名 `postgres`、`redis` 等。
+
+---
+
+## 三、本機跑 Next（Docker 只負責 PostgreSQL／Redis）
+
+適合在本機除錯、跑 Playwright 或較快迭代。
+
+### 3.1 啟動資料庫（與選用 Redis）
+
+在儲存庫根目錄：
+
+```bash
+docker compose up -d postgres redis
+```
+
+（若也需要 pgAdmin，可加上 `pgadmin`。）
+
+### 3.2 安裝依賴與資料庫遷移
+
+```bash
+cd aiyo
 npm install
 npm run prisma:generate
 npx prisma migrate deploy
 npm run db:seed
 ```
 
-If `prisma migrate deploy` fails on a fresh local machine, apply migrations manually in order:
+`DATABASE_URL` 請指向 `localhost:5432` 的 `aiyo_new_db`（與上節 Docker 預設一致）。
 
-```bash
-npx prisma db execute --file prisma/migrations/20260416_000001_phase3_init/migration.sql --schema prisma/schema.prisma
-npx prisma db execute --file prisma/migrations/20260416_000002_add_password_hash/migration.sql --schema prisma/schema.prisma
-npx prisma db execute --file prisma/migrations/20260417_000003_add_trip_days/migration.sql --schema prisma/schema.prisma
-```
+### 3.3 啟動 Ollama
 
-### 5. Start Ollama
+另開終端機：
 
 ```bash
 ollama serve
-ollama pull <your-model>
 ```
 
-Set `OLLAMA_MODEL` to the same model you pulled. The current default in `aiyo/.env.example` is `qwen3.5:9b`.
-
-### 6. Start the app
-
-From `AIYO_new/aiyo`:
+並依 `.env` 中所設模型名稱拉取映像，例如（請與你的 `OLLAMA_MODEL` 等一致）：
 
 ```bash
+ollama pull qwen3.5:9b
+```
+
+若使用 `.env.example` 中的大型模型名稱，請改為你機器可負荷的模型或調整變數。
+
+### 3.4 啟動開發伺服器
+
+```bash
+cd aiyo
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+瀏覽器開啟：`http://localhost:3000`。
 
-## Daily development notes
+---
 
-- Treat `AIYO_new/docker-compose.yml` as the only supported shared Docker setup for this repo.
-- Do not depend on `../AIYO/docker-compose.yml` for onboarding or day-to-day work.
-- PostgreSQL is required for normal development.
-- `pgadmin` and `redis` are available in the compose file; the app container depends on PostgreSQL and Redis healthchecks.
+## 四、遷移失敗時的備援（手動執行 SQL）
 
-## Main app capabilities
+若全新環境上 `npx prisma migrate deploy` 失敗，可改為依序手動執行遷移檔（路徑與檔名以儲存庫內 `aiyo/prisma/migrations/` 為準），例如歷史檔：
 
-- AI chat and trip planning routes
-- PostgreSQL persistence through Prisma
-- NextAuth with Google OAuth and credentials login
-- Collaboration room comments, presence, and realtime stream endpoints
-- Video recommendation and summarization flows
-- Google Maps and YouTube integration paths with fallback flags
+```bash
+cd aiyo
+npx prisma db execute --file prisma/migrations/20260416_000001_phase3_init/migration.sql --schema prisma/schema.prisma
+npx prisma db execute --file prisma/migrations/20260416_000002_add_password_hash/migration.sql --schema prisma/schema.prisma
+```
 
-## Key documents
+之後若有新增遷移目錄，請依時間序補執行。**若資料庫內已有舊版非 Prisma 綱要，遷移可能衝突**；建議開發用專用資料庫 `aiyo_new_db`。
 
-- `aiyo/README.md`: app-level setup and route overview
-- `docs/docker_dev_migration.md`: Docker migration notes for existing local machines
-- `docs/architecture.md`: architecture summary
-- `docs/implementation_report.md`: implementation report
-- `docs/aiyo_migration_analysis.md`: migration analysis from the legacy repo
-- `aiyo/docs/phase3_production_upgrade_report.md`: latest app upgrade notes
+---
 
-## Notes for existing contributors
+## 五、啟動後建議驗證項目
 
-If your local machine is still using containers created from the legacy `AIYO` repository, do not assume that setup is shareable.
-Before asking teammates to follow your environment, migrate your local workflow to `AIYO_new/docker-compose.yml`.
+- **驗證後端與資料庫**：`GET http://localhost:3000/api/health`
+- **驗證登入**：未登入造訪 `/profile` 應導向 `/login`；可用 Google（需設定 OAuth）或電子郵件註冊／登入  
+  - Google OAuth 重新導向 URI 範例：`http://localhost:3000/api/auth/callback/google`
+- **驗證持久化**：於 `/profile` 修改後重新整理；於 `/itinerary` 編輯後重新整理應保留
+- **驗證協作／即時**：兩個視窗同一使用者，於 `/collaborate`（或導向後的行程頁面）操作，另一視窗應於下次快照更新時反映（實際間隔依實作為準）
+- **若 API 回傳 401**：檢查是否已登入，以及 `NEXTAUTH_SECRET`、`NEXTAUTH_URL` 是否設定正確
+- **若聊天／規劃失敗**：確認 Ollama 已啟動、`OLLAMA_BASE_URL` 正確，且 `OLLAMA_MODEL` 等已 `ollama pull`
+
+---
+
+## 六、日常開發約定
+
+- 請以本儲存庫根目錄的 **`docker-compose.yml`** 作為團隊共用的 Docker 基準；**不要**假設舊儲存庫 `../AIYO/docker-compose.yml` 仍為唯一標準。
+- 一般功能開發需要 **PostgreSQL**；Redis 與 pgAdmin 依 Compose 提供，應用是否強制依賴 Redis 請以程式與部署設定為準。
+- 本機腳本：`npm run dev` 使用 `next dev --webpack`（見 `aiyo/package.json`）。
+
+---
+
+## 七、應用能力摘要
+
+- AI 對話與行程規劃相關 API 與頁面
+- 以 Prisma 寫入 PostgreSQL
+- NextAuth（Google 與憑證登入）
+- 協作室留言、在線狀態與即時串流端點
+- 影片推薦與摘要流程
+- Google Maps 與 YouTube 整合（可搭配後端／公開金鑰與降級行為）
+
+---
+
+## 八、延伸閱讀
+
+| 文件 | 內容 |
+|------|------|
+| `aiyo/README.md` | 應用目錄結構、主要 API 路由、環境變數補充 |
+| `docs/README.md` | 專案層 `docs/` 目錄索引 |
+| `aiyo/docs/README.md` | 應用層文件與 `testing/` 子目錄索引 |
+| `aiyo/docs/startup.md` | 捷徑至本檔（完整啟動步驟以本 README 為準） |
+| `docs/docker_dev_migration.md` | 既有機器遷移到本儲存庫 Docker 流程 |
+| `docs/architecture.md` | 架構摘要 |
+| `docs/implementation_report.md` | 實作報告 |
+| `docs/aiyo_migration_analysis.md` | 自舊儲存庫遷移的分析紀錄 |
+| `aiyo/docs/phase3_production_upgrade_report.md` | 升級與上線相關筆記 |

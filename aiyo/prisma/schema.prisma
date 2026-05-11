@@ -111,17 +111,32 @@ model TripDay {
 }
 
 model TripItem {
-  id          String   @id @default(cuid())
-  tripId      String
-  day         Int
-  title       String
-  description String?
-  timeSlot    String?
-  location    String?
-  latitude    Float?
-  longitude   Float?
-  order       Int
-  trip        Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  id               String   @id @default(cuid())
+  tripId           String
+  day              Int
+  title            String
+  description      String?
+  timeSlot         String?
+  itemType         String?
+  source           String?
+  location         String?
+  latitude         Float?
+  longitude        Float?
+  locationDesc     String?
+  locationAddress  String?
+  placeId          String?
+  photoUrl         String?
+  thumbnail        String?
+  openingHours     String?
+  phoneNumber      String?
+  website          String?
+  googleMapsUrl    String?
+  rating           Float?
+  userRatingsTotal Int?
+  confidence       Float?
+  verified         Boolean?
+  order            Int
+  trip             Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
 
   @@index([tripId, day, order])
   @@map("trip_items")
@@ -135,6 +150,19 @@ model MapPin {
   lng              Float
   description      String?
   address          String?
+  placeId          String?
+  photoUrl         String?
+  thumbnail        String?
+  openingHours     String?
+  phoneNumber      String?
+  website          String?
+  googleMapsUrl    String?
+  rating           Float?
+  userRatingsTotal Int?
+  color            String?
+  source           String?
+  confidence       Float?
+  verified         Boolean?
   linkedTripItemId String?
   dayNumber        Int?
   trip             Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
@@ -156,6 +184,16 @@ model ChatMessage {
   @@index([userId, createdAt])
   @@index([tripId, createdAt])
   @@map("chat_messages")
+}
+
+model VideoSummaryCache {
+  id        String   @id @default(cuid())
+  videoId   String   @unique
+  result    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("video_summary_caches")
 }
 
 model CollaborationRoom {

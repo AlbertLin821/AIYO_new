@@ -14,9 +14,9 @@ export const useUserStore = create<UserState>((set) => ({
   travelPreferences: [],
   budget: 0,
   destination: "",
-  travelDays: 1,
+  travelDays: 0,
   preferredTransport: "",
-  travelPace: "moderate",
+  travelPace: "",
   interests: [],
   isFirstVisit: true,
   updateProfile: (updates) =>

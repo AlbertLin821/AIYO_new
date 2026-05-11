@@ -60,6 +60,8 @@ const COMMON_FILLERS = [
   "보시면",
 ];
 
+const TAIWAN_EXTRA_GENERIC_TERMS = ["嘉義兩天一夜", "嘉義旅遊"] as const;
+
 export const taiwanProfile: TravelExtractionProfile = {
   id: "taiwan",
   country: "Taiwan",
@@ -93,7 +95,7 @@ export const taiwanProfile: TravelExtractionProfile = {
     "嘉義市",
     "嘉義縣",
   ],
-  genericTravelTerms: [...COMMON_GENERIC_TRAVEL_TERMS],
+  genericTravelTerms: [...COMMON_GENERIC_TRAVEL_TERMS, ...TAIWAN_EXTRA_GENERIC_TERMS],
   placeSuffixes: [
     "夜市",
     "市場",
@@ -113,6 +115,9 @@ export const taiwanProfile: TravelExtractionProfile = {
     "漁港",
     "森林遊樂區",
     "風景區",
+    "村",
+    "驛",
+    "園區",
   ],
   foodTerms: [
     "火雞肉飯",
@@ -130,7 +135,7 @@ export const taiwanProfile: TravelExtractionProfile = {
   ],
   fillerPrefixes: [...COMMON_FILLERS],
   poiPatterns: [
-    /[\u3400-\u9fffA-Za-z0-9]{2,20}(夜市|市場|老街|公園|博物館|美術館|車站|火車站|廟|寺|咖啡廳|餐廳|飯店)/g,
+    /[\u3400-\u9fffA-Za-z0-9]{2,24}(夜市|市場|老街|公園|博物館|美術館|車站|火車站|廟|寺|咖啡廳|餐廳|飯店|村|驛|園區)/g,
   ],
 };
 

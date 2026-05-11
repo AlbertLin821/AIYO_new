@@ -17,6 +17,8 @@ export interface VideoSearchDebugInfo {
   relevanceLanguage: string;
   selectedStrategy: "high-intent" | "literal-fallback";
   fallbackReasons: string[];
+  cacheStatus?: "memory-hit" | "miss";
+  cacheKey?: string;
 }
 
 export interface TranscriptEntry {
@@ -24,6 +26,8 @@ export interface TranscriptEntry {
   startSeconds: number;
   durationSeconds: number;
   text: string;
+  timestampSource?: "youtube-transcript" | "description-fallback";
+  timestampConfidence?: "high" | "low";
 }
 
 export interface YouTubeChapter {
@@ -137,6 +141,10 @@ function parseDisplayDurationToSeconds(input?: string): number | null {
   }
   return null;
 }
+
+const YOUTUBE_SEARCH_PIPELINE_VERSION = "youtube-search-v2";
+const YOUTUBE_SEARCH_CACHE_MS = 20 * 60 * 1000;
+const youtubeSearchCache = new Map<string, { expiresAt: number; videos: VideoRecommendation[]; debug: VideoSearchDebugInfo }>();
 
 const DESCRIPTION_NOISE_PATTERNS = [
   /請(記得)?訂閱.*$/i,
@@ -462,6 +470,25 @@ export async function searchYouTubeVideos(input: SearchInput): Promise<{
   }
 
   const limit = Math.max(1, Math.min(input.limit || 6, 10));
+  const cacheKey = [
+    YOUTUBE_SEARCH_PIPELINE_VERSION,
+    input.destination?.trim() || "any-destination",
+    rawUserQuery.trim(),
+    "zh-Hant",
+    limit,
+  ].join(":");
+  const cached = youtubeSearchCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return {
+      videos: cached.videos,
+      provider: "youtube-data-api",
+      debug: {
+        ...cached.debug,
+        cacheStatus: "memory-hit",
+        cacheKey,
+      },
+    };
+  }
   const searchFetchCount = Math.min(30, Math.max(limit * 4, 16));
   const searchOpts = {
     regionCode: "TW",
@@ -583,19 +610,29 @@ export async function searchYouTubeVideos(input: SearchInput): Promise<{
 
   const videos = pool.slice(0, limit);
 
+  const debug: VideoSearchDebugInfo = {
+    rawInput: rawUserQuery,
+    searchQueries: primaryQueries,
+    executedQueries,
+    regionCode: searchOpts.regionCode,
+    relevanceLanguage: searchOpts.relevanceLanguage,
+    selectedStrategy:
+      executedQueries.length > primaryQueries.length ? "literal-fallback" : "high-intent",
+    fallbackReasons,
+    cacheStatus: "miss",
+    cacheKey,
+  };
+
+  youtubeSearchCache.set(cacheKey, {
+    expiresAt: Date.now() + YOUTUBE_SEARCH_CACHE_MS,
+    videos,
+    debug,
+  });
+
   return {
     videos,
     provider: "youtube-data-api",
-    debug: {
-      rawInput: rawUserQuery,
-      searchQueries: primaryQueries,
-      executedQueries,
-      regionCode: searchOpts.regionCode,
-      relevanceLanguage: searchOpts.relevanceLanguage,
-      selectedStrategy:
-        executedQueries.length > primaryQueries.length ? "literal-fallback" : "high-intent",
-      fallbackReasons,
-    },
+    debug,
   };
 }
 

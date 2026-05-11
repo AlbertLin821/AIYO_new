@@ -61,6 +61,7 @@ export async function apiGet<T>(path: string): Promise<T> {
     const response = await fetch(path, {
       method: "GET",
       cache: "no-store",
+      credentials: "include",
     });
     return parseResponse<T>(response);
   } catch (error) {
@@ -100,6 +101,7 @@ export async function apiPost<TRequest, TResponse>(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
+      credentials: "include",
       ...(signal ? { signal } : {}),
     });
     return parseResponse<TResponse>(response);
@@ -150,6 +152,7 @@ export async function apiPostWithMeta<TRequest, TResponse>(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
+      credentials: "include",
       ...(signal ? { signal } : {}),
     });
     return parseResponseWithMeta<TResponse>(response);
@@ -173,6 +176,7 @@ export async function apiPostWithMeta<TRequest, TResponse>(
 export async function apiPut<TRequest, TResponse>(
   path: string,
   body: TRequest,
+  options?: { keepalive?: boolean },
 ): Promise<TResponse> {
   try {
     const response = await fetch(path, {
@@ -181,6 +185,8 @@ export async function apiPut<TRequest, TResponse>(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
+      credentials: "include",
+      ...(options?.keepalive ? { keepalive: true as boolean } : {}),
     });
     return parseResponse<TResponse>(response);
   } catch (error) {
@@ -201,6 +207,7 @@ export async function apiPatch<TRequest, TResponse>(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
+      credentials: "include",
     });
     return parseResponse<TResponse>(response);
   } catch (error) {
@@ -214,6 +221,7 @@ export async function apiDelete<TResponse>(path: string): Promise<TResponse> {
   try {
     const response = await fetch(path, {
       method: "DELETE",
+      credentials: "include",
     });
     return parseResponse<TResponse>(response);
   } catch (error) {

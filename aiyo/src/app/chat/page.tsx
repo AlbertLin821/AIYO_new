@@ -17,22 +17,27 @@ import {
   Mic,
   Plus,
   Send,
-  Sparkles,
   Trash2,
 } from "lucide-react";
 import MarkdownMessage from "@/components/chat/MarkdownMessage";
 import VideoCard from "@/components/home/VideoCard";
 import { zhTW as t } from "@/locales/zh-TW";
-import { applyPlanningUpdateToStores, derivePlanningSnapshot, extractPlanningUpdateFromText } from "@/lib/planningContext";
+import {
+  applyPlanningUpdateToStores,
+  derivePlanningSnapshot,
+  extractIsoDateRangeFromText,
+  extractPlanningUpdateFromText,
+} from "@/lib/planningContext";
 import { cn } from "@/lib/utils";
 import { sendChatMessage } from "@/services/aiClient";
-import { fetchVideoRecommendations, summarizeVideo } from "@/services/videoClient";
+import { syncService } from "@/services/syncService";
+import { fetchVideoRecommendations, shouldSkipClientVideoSummarize, summarizeVideo } from "@/services/videoClient";
 import { useChatStore } from "@/stores/useChatStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
 import { useUserStore } from "@/stores/useUserStore";
 import { useVideoStore } from "@/stores/useVideoStore";
-import type { ChatMessage, VideoRecommendation } from "@/types";
+import type { AiProposedChange, ChatMessage, TripPlanItem, VideoRecommendation } from "@/types";
 
 const VideoSummaryDrawer = dynamic(
   () => import("@/components/home/VideoSummaryDrawer"),
@@ -53,6 +58,20 @@ function buildUserMessage(content: string): ChatMessage {
 
 function shouldRecommendVideos(message: string): boolean {
   return /影片|youtube|YouTube|video|vlog|推薦.*看|找.*看|旅遊.*看|景點.*影片/i.test(message);
+}
+
+function buildItineraryItemFromAiChange(change: AiProposedChange): TripPlanItem {
+  const title = change.title.trim() || change.locationName?.trim() || "AI 建議行程";
+  return {
+    id: `ai_chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    dayNumber: change.day,
+    time: change.time,
+    title,
+    type: /夜市|飯|餐|小吃|美食|魚頭/.test(title) ? "restaurant" : "attraction",
+    notes: [change.locationName ? `地點：${change.locationName}` : "", change.notes || ""].filter(Boolean).join("\n") || undefined,
+    source: "ai",
+    location: undefined,
+  };
 }
 
 const CHAT_HISTORY_SIDEBAR_KEY = "aiyo:chat-history-sidebar-expanded";
@@ -107,6 +126,30 @@ export default function ChatPage() {
     }
   }, []);
 
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace(`/login?callbackUrl=${encodeURIComponent("/chat")}`);
+    }
+  }, [router, status]);
+
+  const planningSnapshot = derivePlanningSnapshot({
+    trip: tripStore,
+    user: userStore,
+  });
+
+  const extractedValues = [
+    planningSnapshot.hasDestination ? planningSnapshot.destination : t.chat.valueUnset,
+    planningSnapshot.hasPlannedDays
+      ? `${planningSnapshot.days} ${t.chat.daysUnit}`
+      : t.chat.valueUnset,
+    planningSnapshot.hasBudget
+      ? `${t.chat.currencyPrefix}${planningSnapshot.budget.toLocaleString()}`
+      : t.chat.valueUnset,
+    planningSnapshot.hasItinerary
+      ? t.chat.plannedStops.replace("{n}", String(planningSnapshot.plannedStopCount))
+      : t.chat.valueUnset,
+  ];
+
   function persistHistorySidebarExpanded(next: boolean) {
     setHistorySidebarExpanded(next);
     try {
@@ -128,6 +171,7 @@ export default function ChatPage() {
       trip: useTripStore.getState(),
       user: useUserStore.getState(),
     });
+    const dateRange = extractIsoDateRangeFromText(message);
 
     const previousMessages = useChatStore.getState().messages;
     appendMessage(buildUserMessage(message));
@@ -144,9 +188,11 @@ export default function ChatPage() {
           days: planningSnapshot.days,
           budget: planningSnapshot.budget,
           itinerary: useTripStore.getState().itinerary,
+          tripStartDate: dateRange.tripStartDate,
+          tripEndDate: dateRange.tripEndDate,
           preferences: {
             interests: useUserStore.getState().interests,
-            pace: useUserStore.getState().travelPace,
+            pace: useUserStore.getState().travelPace || "moderate",
             transportPreference: useUserStore.getState().preferredTransport,
             budget: planningSnapshot.budget,
           },
@@ -202,6 +248,35 @@ export default function ChatPage() {
     }
   }
 
+  async function applyAiProposedChanges(changes: AiProposedChange[]) {
+    if (!changes.length) {
+      return;
+    }
+    const trip = useTripStore.getState();
+    if (trip.itinerary.length === 0) {
+      trip.addDay();
+    }
+    const days = useTripStore.getState().itinerary;
+    const maxDay = Math.max(1, ...days.map((day) => day.dayNumber));
+    for (const change of changes) {
+      const targetDay = Math.max(1, Math.floor(Number(change.day) || 1));
+      while (!useTripStore.getState().itinerary.some((day) => day.dayNumber === targetDay)) {
+        useTripStore.getState().addDay();
+        if (useTripStore.getState().itinerary.length > Math.max(targetDay, maxDay + 3)) {
+          break;
+        }
+      }
+      useTripStore.getState().addItineraryItem(targetDay, buildItineraryItemFromAiChange({ ...change, day: targetDay }));
+    }
+    await syncService.flushTripSyncNow({ force: true });
+    pushToast({
+      variant: "success",
+      title: "已套用 AI 建議",
+      description: `已新增 ${changes.length} 筆行程候選。`,
+    });
+    router.push("/itinerary");
+  }
+
   function handleVoiceHint() {
     pushToast({
       variant: "info",
@@ -216,7 +291,7 @@ export default function ChatPage() {
     setSummaryDiagnostics(null);
     setSelectedVideo(video);
 
-    if (!video.videoId || video.summarySegments?.length || video.extractedLocations.length > 0) {
+    if (shouldSkipClientVideoSummarize(video)) {
       return;
     }
 
@@ -254,26 +329,20 @@ export default function ChatPage() {
     }
   }
 
-  const planningSnapshot = derivePlanningSnapshot({
-    trip: tripStore,
-    user: userStore,
-  });
-
-  const extractedValues = [
-    planningSnapshot.hasDestination ? planningSnapshot.destination : t.chat.valueUnset,
-    planningSnapshot.hasPlannedDays
-      ? `${planningSnapshot.days} ${t.chat.daysUnit}`
-      : t.chat.valueUnset,
-    planningSnapshot.hasBudget
-      ? `${t.chat.currencyPrefix}${planningSnapshot.budget.toLocaleString()}`
-      : t.chat.valueUnset,
-    planningSnapshot.hasItinerary
-      ? t.chat.plannedStops.replace("{n}", String(planningSnapshot.plannedStopCount))
-      : t.chat.valueUnset,
-  ];
-
   const emptyChatHint =
     status === "authenticated" ? t.chat.emptyHintAuthed : t.chat.emptyHintGuest;
+
+  if (status === "loading") {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center p-8">
+        <p className="text-sm text-muted">{t.login.suspenseFallback}</p>
+      </div>
+    );
+  }
+
+  if (status === "unauthenticated") {
+    return null;
+  }
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem-env(safe-area-inset-bottom,0px))] min-h-0 lg:h-screen">
@@ -330,7 +399,6 @@ export default function ChatPage() {
                   <History className="size-4 shrink-0 text-primary" aria-hidden />
                   <span className="truncate">{t.chat.sidebarTitle}</span>
                 </h2>
-                <p className="mt-1 text-xs text-muted">{t.chat.sidebarHint}</p>
               </div>
               <button
                 type="button"
@@ -393,14 +461,8 @@ export default function ChatPage() {
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="border-b border-border-light px-6 py-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-lavender to-primary">
-                <Sparkles className="size-5 text-white" aria-hidden />
-              </div>
-              <div>
-                <h1 className="font-semibold text-foreground">{t.chat.pageTitle}</h1>
-                <p className="text-xs text-muted">{t.chat.pageSubtitle}</p>
-              </div>
+            <div>
+              <h1 className="font-semibold text-foreground">{t.chat.pageTitle}</h1>
             </div>
             <button
               type="button"
@@ -486,6 +548,16 @@ export default function ChatPage() {
                   >
                     {message.timestamp}
                   </p>
+                  {message.role !== "user" && (message.proposedChanges || []).length > 0 && (
+                    <button
+                      type="button"
+                      data-testid="chat-apply-proposed-changes"
+                      onClick={() => void applyAiProposedChanges(message.proposedChanges || [])}
+                      className="mt-2 rounded-xl bg-primary px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-primary-dark"
+                    >
+                      套用建議到行程
+                    </button>
+                  )}
                 </div>
               </div>
             </motion.div>
@@ -580,11 +652,8 @@ export default function ChatPage() {
         </div>
       </div>
 
-      <div className="hidden w-72 overflow-y-auto border-l border-border-light bg-surface/50 p-5 lg:block">
-        <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
-          <Sparkles className="size-4 text-lavender" aria-hidden />
-          {t.chat.contextTitle}
-        </h3>
+        <div className="hidden w-72 overflow-y-auto border-l border-border-light bg-surface/50 p-5 lg:block">
+        <h3 className="mb-4 text-sm font-semibold text-foreground">{t.chat.contextTitle}</h3>
 
         {planningSnapshot.hasPlanningContext ? (
           <div className="flex flex-col gap-3">
@@ -612,11 +681,6 @@ export default function ChatPage() {
             <p className="mt-2 text-xs leading-relaxed text-muted">{t.chat.contextEmptyBody}</p>
           </div>
         )}
-
-        <div className="mt-6 rounded-2xl border border-lavender/15 bg-gradient-to-br from-lavender/10 to-primary/10 p-4">
-          <h4 className="mb-2 text-sm font-semibold text-foreground">{t.chat.planningNoteTitle}</h4>
-          <p className="text-xs leading-relaxed text-muted">{t.chat.planningNoteBody}</p>
-        </div>
       </div>
 
       <VideoSummaryDrawer

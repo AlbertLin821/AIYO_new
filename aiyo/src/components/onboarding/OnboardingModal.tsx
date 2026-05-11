@@ -1,44 +1,57 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { CalendarDays, MapPin, Sparkles, X } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { zhTW as t } from "@/locales/zh-TW";
+import { syncService } from "@/services/syncService";
 import { useTripStore } from "@/stores/useTripStore";
 import { useUIStore } from "@/stores/useUIStore";
 import { useUserStore } from "@/stores/useUserStore";
 
 export default function OnboardingModal() {
-  const router = useRouter();
   const { status } = useSession();
   const { showOnboarding, setShowOnboarding } = useUIStore();
   const { setDestination, setDays } = useTripStore();
   const { setFirstVisit, updateProfile } = useUserStore();
   const [destinationInput, setDestinationInput] = useState("");
   const [daysInput, setDaysInput] = useState("");
+  const [isFinishing, setIsFinishing] = useState(false);
 
-  useEffect(() => {
-    if (showOnboarding && status === "unauthenticated") {
-      router.replace("/login");
+  async function finish(skip: boolean) {
+    if (isFinishing) {
+      return;
     }
-  }, [router, showOnboarding, status]);
+    setIsFinishing(true);
+    try {
+      if (!skip) {
+        if (destinationInput.trim()) {
+          setDestination(destinationInput.trim());
+          updateProfile({ destination: destinationInput.trim() });
+        }
+        if (daysInput.trim()) {
+          const parsedDays = Math.max(1, parseInt(daysInput, 10) || 5);
+          setDays(parsedDays);
+          updateProfile({ travelDays: parsedDays });
+        }
+      }
 
-  function finish(skip: boolean) {
-    if (!skip) {
-      if (destinationInput.trim()) {
-        setDestination(destinationInput.trim());
-        updateProfile({ destination: destinationInput.trim() });
+      const saveBody: Parameters<typeof syncService.saveProfile>[0] = { welcomeCompleted: true };
+      if (!skip && destinationInput.trim()) {
+        saveBody.destination = destinationInput.trim();
       }
-      if (daysInput.trim()) {
-        const parsedDays = parseInt(daysInput, 10) || 5;
-        setDays(parsedDays);
-        updateProfile({ travelDays: parsedDays });
+      if (!skip && daysInput.trim()) {
+        saveBody.travelDays = Math.max(1, parseInt(daysInput, 10) || 5);
       }
+      await syncService.saveProfile(saveBody);
+    } catch {
+      // 仍關閉面板，避免卡住；使用者可稍後於個人檔補齊。
+    } finally {
+      setFirstVisit(false);
+      setShowOnboarding(false);
+      setIsFinishing(false);
     }
-    setFirstVisit(false);
-    setShowOnboarding(false);
   }
 
   return (
@@ -57,7 +70,9 @@ export default function OnboardingModal() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="absolute inset-0 bg-foreground/20 backdrop-blur-sm"
-            onClick={() => finish(true)}
+            onClick={() => void finish(true)}
+            aria-disabled={isFinishing}
+            style={isFinishing ? { pointerEvents: "none" } : undefined}
           />
 
           <motion.div
@@ -74,8 +89,10 @@ export default function OnboardingModal() {
             <button
               data-testid="onboarding-close-button"
               aria-label={t.onboarding.closeModalAria}
-              onClick={() => finish(true)}
-              className="absolute right-4 top-4 z-10 cursor-pointer rounded-full p-1.5 text-muted transition-colors hover:bg-border-light hover:text-foreground"
+              type="button"
+              disabled={isFinishing}
+              onClick={() => void finish(true)}
+              className="absolute right-4 top-4 z-10 cursor-pointer rounded-full p-1.5 text-muted transition-colors hover:bg-border-light hover:text-foreground disabled:cursor-wait disabled:opacity-50"
             >
               <X className="size-4" />
             </button>
@@ -102,6 +119,7 @@ export default function OnboardingModal() {
                     value={destinationInput}
                     onChange={(event) => setDestinationInput(event.target.value)}
                     placeholder={t.onboarding.destinationPh}
+                    data-testid="onboarding-destination-input"
                     className="w-full rounded-xl border border-border bg-cream/50 px-4 py-3 text-sm text-foreground transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
                   />
                 </div>
@@ -118,6 +136,7 @@ export default function OnboardingModal() {
                     placeholder={t.onboarding.daysPlaceholder}
                     min={1}
                     max={30}
+                    data-testid="onboarding-days-input"
                     className="w-full rounded-xl border border-border bg-cream/50 px-4 py-3 text-sm text-foreground transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
                   />
                 </div>
@@ -126,15 +145,19 @@ export default function OnboardingModal() {
               <div className="mt-8 flex items-center justify-between">
                 <button
                   data-testid="onboarding-skip-button"
-                  onClick={() => finish(true)}
-                  className="cursor-pointer rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-border-light hover:text-foreground"
+                  type="button"
+                  disabled={isFinishing}
+                  onClick={() => void finish(true)}
+                  className="cursor-pointer rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-border-light hover:text-foreground disabled:cursor-wait disabled:opacity-50"
                 >
                   {t.onboarding.skip}
                 </button>
                 <button
-                  data-testid="onboarding-complete-button"
-                  onClick={() => finish(false)}
-                  className="cursor-pointer rounded-xl bg-gradient-to-r from-primary to-primary-dark px-6 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]"
+                  data-testid="onboarding-start-button"
+                  type="button"
+                  disabled={isFinishing}
+                  onClick={() => void finish(false)}
+                  className="cursor-pointer rounded-xl bg-gradient-to-r from-primary to-primary-dark px-6 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98] disabled:cursor-wait disabled:opacity-50"
                 >
                   {t.onboarding.start}
                 </button>

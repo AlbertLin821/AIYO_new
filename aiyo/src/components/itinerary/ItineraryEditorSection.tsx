@@ -113,7 +113,7 @@ function ItineraryEditorSection({
           )}
         </div>
 
-        <div id="itinerary-editor" className="flex flex-col gap-6">
+        <div id="itinerary-editor" data-testid="itinerary-editor" className="flex flex-col gap-6">
           {isAuthenticated && !tripId ? (
             <div className="rounded-2xl border border-dashed border-border-light bg-surface px-5 py-8">
               <p className="text-base font-medium text-foreground">{t.itineraryPage.noActiveTripTitle}</p>

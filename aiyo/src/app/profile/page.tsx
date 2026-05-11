@@ -2,14 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Check, Globe, Heart, Mail, MapPin, Pencil, RefreshCcw, Save, Trash2, User, Wallet } from "lucide-react";
+import { Check, Globe, Heart, Mail, MapPin, Pencil, RefreshCcw, Save, Trash2, User as UserIcon, Wallet } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { zhTW as t } from "@/locales/zh-TW";
 import { deleteMemory, listMemories, updateMemory } from "@/services/aiClient";
 import { syncService } from "@/services/syncService";
 import { useProfileStore } from "@/stores/useProfileStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
-import type { MemoryRecord } from "@/types";
+import type { MemoryRecord, User } from "@/types";
 
 const transportOptions = [
   { value: "Train", label: t.profile.transportTrain },
@@ -19,10 +21,10 @@ const transportOptions = [
   { value: "Mixed", label: t.profile.transportMixed },
 ];
 
-const paceOptions = [
-  { value: "relaxed" as const, label: t.profile.paceRelaxed, desc: t.profile.paceRelaxedDesc },
-  { value: "moderate" as const, label: t.profile.paceModerate, desc: t.profile.paceModerateDesc },
-  { value: "intensive" as const, label: t.profile.paceIntensive, desc: t.profile.paceIntensiveDesc },
+const paceOptions: { value: User["travelPace"]; label: string; desc: string }[] = [
+  { value: "relaxed", label: t.profile.paceRelaxed, desc: t.profile.paceRelaxedDesc },
+  { value: "moderate", label: t.profile.paceModerate, desc: t.profile.paceModerateDesc },
+  { value: "intensive", label: t.profile.paceIntensive, desc: t.profile.paceIntensiveDesc },
 ];
 
 const preferenceOptions = [
@@ -37,6 +39,8 @@ const preferenceOptions = [
 ];
 
 export default function ProfilePage() {
+  const router = useRouter();
+  const { status } = useSession();
   const store = useProfileStore();
   const pushToast = useToastStore((state) => state.pushToast);
   const setTripDestination = useTripStore((state) => state.setDestination);
@@ -44,10 +48,10 @@ export default function ProfilePage() {
   const [name, setName] = useState(store.name);
   const [email, setEmail] = useState(store.email);
   const [destination, setDestination] = useState(store.destination);
-  const [budget, setBudget] = useState(store.budget.toString());
+  const [budget, setBudget] = useState(store.budget > 0 ? String(store.budget) : "");
   const [preferences, setPreferences] = useState<string[]>(store.travelPreferences);
   const [transport, setTransport] = useState(store.preferredTransport);
-  const [pace, setPace] = useState(store.travelPace);
+  const [pace, setPace] = useState<User["travelPace"]>(store.travelPace);
   const [interests, setInterests] = useState<string[]>(store.interests);
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -79,10 +83,16 @@ export default function ProfilePage() {
   }, [pushToast]);
 
   useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace(`/login?callbackUrl=${encodeURIComponent("/profile")}`);
+    }
+  }, [router, status]);
+
+  useEffect(() => {
     setName(store.name);
     setEmail(store.email);
     setDestination(store.destination);
-    setBudget(store.budget.toString());
+    setBudget(store.budget > 0 ? String(store.budget) : "");
     setPreferences(store.travelPreferences);
     setTransport(store.preferredTransport);
     setPace(store.travelPace);
@@ -102,6 +112,18 @@ export default function ProfilePage() {
     void loadMemories();
   }, [loadMemories]);
 
+  if (status === "loading") {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-8">
+        <p className="text-sm text-muted">{t.login.suspenseFallback}</p>
+      </div>
+    );
+  }
+
+  if (status === "unauthenticated") {
+    return null;
+  }
+
   function togglePreference(preference: string) {
     setPreferences((current) =>
       current.includes(preference)
@@ -116,7 +138,7 @@ export default function ProfilePage() {
   }
 
   async function handleSave() {
-    const parsedBudget = parseInt(budget, 10) || 0;
+    const parsedBudget = budget.trim() === "" ? 0 : parseInt(budget, 10) || 0;
     const nextProfile = {
       name,
       email,
@@ -212,7 +234,7 @@ export default function ProfilePage() {
     <div className="min-h-screen max-w-3xl mx-auto p-6 lg:p-8">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
-          <User className="size-6 text-primary" />
+          <UserIcon className="size-6 text-primary" />
           {t.profile.title}
         </h1>
         <p className="mt-1 text-sm text-muted">{t.profile.subtitle}</p>
@@ -224,7 +246,7 @@ export default function ProfilePage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <label className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
-                <User className="size-4 text-muted" />
+                <UserIcon className="size-4 text-muted" />
                 {t.profile.name}
               </label>
               <input type="text" value={name} onChange={(event) => setName(event.target.value)} className="w-full rounded-xl border border-border bg-cream/50 px-4 py-2.5 text-sm text-foreground transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30" />
@@ -259,7 +281,10 @@ export default function ProfilePage() {
                 {transportOptions.map((option) => (
                   <button
                     key={option.value}
-                    onClick={() => setTransport(option.value)}
+                    type="button"
+                    onClick={() =>
+                      setTransport((current: string) => (current === option.value ? "" : option.value))
+                    }
                     className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-medium transition-all ${transport === option.value ? "bg-primary text-white" : "bg-border-light text-muted hover:bg-primary/10 hover:text-primary"}`}
                   >
                     {option.label}
@@ -276,7 +301,10 @@ export default function ProfilePage() {
             {paceOptions.map((option) => (
               <button
                 key={option.value}
-                onClick={() => setPace(option.value)}
+                type="button"
+                onClick={() =>
+                  setPace((current: User["travelPace"]) => (current === option.value ? "" : option.value))
+                }
                 className={`cursor-pointer rounded-xl border-2 p-4 text-center transition-all ${pace === option.value ? "border-primary bg-primary/5" : "border-border-light hover:border-primary/30"}`}
               >
                 <p className="text-sm font-medium text-foreground">{option.label}</p>

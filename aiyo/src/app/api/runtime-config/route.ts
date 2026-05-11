@@ -24,5 +24,6 @@ export async function GET() {
       readString("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY") || readString("GOOGLE_MAPS_API_KEY"),
     googleMapsMapId: normalizeMapId(readString("NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID")),
     enableMockMaps: readBoolean("NEXT_PUBLIC_ENABLE_MOCK_MAPS", "ENABLE_MOCK_MAPS"),
+    googleAuthEnabled: Boolean(readString("GOOGLE_CLIENT_ID") && readString("GOOGLE_CLIENT_SECRET")),
   });
 }
