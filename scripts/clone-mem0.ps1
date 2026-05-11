@@ -8,7 +8,7 @@ if (Test-Path $marker) {
     exit 0
 }
 
-Write-Host "Cloning mem0ai/mem0 into vendor/mem0 (shallow, ~once per machine)..."
+Write-Host "Cloning mem0ai/mem0 into vendor/mem0 (shallow; 儲存庫已同捆時通常不會執行到此)..."
 New-Item -ItemType Directory -Force -Path (Join-Path $root "vendor") | Out-Null
 git clone --depth 1 https://github.com/mem0ai/mem0.git $target
 if ($LASTEXITCODE -ne 0) {

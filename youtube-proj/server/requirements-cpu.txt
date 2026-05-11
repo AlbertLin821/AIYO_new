@@ -1,0 +1,5 @@
+# 無 NVIDIA GPU 或僅需 CPU 推論時使用（macOS / 無 CUDA 環境）
+--extra-index-url https://download.pytorch.org/whl/cpu
+-r requirements-base.txt
+torch==2.11.0
+torchaudio==2.11.0

@@ -112,7 +112,7 @@ services:
 
   mem0-memory:
     build:
-      # 預設為本儲存庫 vendor/mem0（執行 scripts/clone-mem0.ps1 或 .sh 取得）；可用 MEM0_REPO_PATH 覆寫。
+      # 預設為本儲存庫 vendor/mem0（已同捆；若目錄缺失可執行 scripts/clone-mem0.ps1 或 .sh）；可用 MEM0_REPO_PATH 覆寫。
       context: ${MEM0_REPO_PATH:-./vendor/mem0}
       dockerfile: server/dev.Dockerfile
     container_name: mem0-memory

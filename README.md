@@ -8,6 +8,8 @@
 |------|------|
 | `aiyo/` | Next.js 16 應用程式、Prisma 綱要、遷移、種子腳本與應用層文件 |
 | `docs/` | 架構說明、遷移筆記、實作報告等（若專案內有） |
+| `youtube-proj/` | 舊版 YouTube 字幕／outline 參考實作（Vite＋Python server），已去除巢狀 `.git`，與主專案一併版本化 |
+| `vendor/mem0/` | Mem0 上游原始碼快照（已去除 `.git`），供 `docker-compose.yml` 的 `mem0-memory` 建置使用；可用環境變數 `MEM0_REPO_PATH` 覆寫 |
 | `docker-compose.yml` | 本地 PostgreSQL、Redis、選用應用容器與選用 Mem0 相關服務 |
 | `dev-up.ps1` | Windows 上一鍵啟動開發用 Compose 設定檔（含 `dev` 與 `mem0` 設定檔） |
 
@@ -17,7 +19,7 @@
 - Prisma + PostgreSQL（含 pgvector 映像）
 - NextAuth（Google OAuth 與電子郵件／密碼）
 - Ollama（伺服器端呼叫；容器內預設連到宿主 `host.docker.internal:11434`）
-- 選用：Mem0 相關服務（需額外設定檔與本機路徑，見下文）
+- 選用：Mem0 相關服務（原始碼已同捆於 `vendor/mem0/`，見下文）
 
 ---
 
@@ -36,7 +38,7 @@
 **未包含在上一列指令內（可另外啟動）：**
 
 - **pgAdmin**：`docker compose up -d pgadmin`（見下節「二、2.1」）
-- **Mem0**：需 `--profile mem0` 且本機須有 `docker-compose.yml` 內所設 mem0 原始碼路徑；多數開發者可**不啟動** Mem0，並在 `aiyo/.env` 將 `MEM0_ENABLED` 設為 `false`，避免應用連線到不存在的 `mem0-memory`。
+- **Mem0**：需 `--profile mem0`；建置內容預設使用儲存庫內 `vendor/mem0/`。多數開發者可**不啟動** Mem0，並在 `aiyo/.env` 將 `MEM0_ENABLED` 設為 `false`，避免應用連線到不存在的 `mem0-memory`。
 
 **宿主機須另外執行（不在 Docker 內）：**
 
@@ -49,7 +51,7 @@
 | 情境 | 是否需要啟動 Mem0 容器 |
 |------|-------------------------|
 | `aiyo/.env` 內 **`MEM0_ENABLED=false`**（或未設定；程式預設為 `false`，見 `aiyo/src/server/config.ts`） | **不必**。聊天與行程規劃仍會執行，只是略過 Mem0 的搜尋／寫入記憶。 |
-| **`MEM0_ENABLED=true`**（例如沿用 `.env.example`）且希望對話能寫入／查詢 Mem0 | **要**。需能成功建置並啟動 `--profile mem0` 下的 `mem0-memory` 等服務（並確認 `docker-compose.yml` 內 mem0 建置路徑適用你的機器）。 |
+| **`MEM0_ENABLED=true`**（例如沿用 `.env.example`）且希望對話能寫入／查詢 Mem0 | **要**。需能成功建置並啟動 `--profile mem0` 下的 `mem0-memory` 等服務（預設自 `vendor/mem0/` 建置；若要改用本機其他路徑可設 `MEM0_REPO_PATH`）。 |
 
 **與 PostgreSQL 的區別：** 行程、個人檔、聊天訊息等**主要持久化**仍由 **PostgreSQL（Prisma）** 負責；Mem0 額外提供的是可檢索的「記憶」語境（例如對話前後文補強），兩者層級不同。因此一般開發只要 DB + Redis + 應用即可；**只有在你明確要驗 Mem0 行為時**，才需要把 Mem0 一併拉起，或暫時關閉 `MEM0_ENABLED` 直到環境就緒。
 
@@ -100,7 +102,7 @@ curl http://localhost:3000/api/health
 
 `docker compose --profile dev --profile mem0 up -d postgres redis mem0-memory-postgres mem0-memory app-dev`
 
-若你**沒有** `docker-compose.yml` 內所設的 mem0 原始碼路徑，腳本可能**建置失敗**；此時請改用上方的**建議指令**（僅 `dev` 設定檔、不含 `mem0`）。
+`dev-up.ps1` 會先執行 `scripts/clone-mem0.ps1`：若 `vendor/mem0/` 已存在（隨儲存庫一併 clone 取得），會直接略過。若你刻意刪除該目錄，腳本會嘗試自 GitHub 再 clone；失敗時請改用上方的**建議指令**（僅 `dev` 設定檔、不含 `mem0`）。
 
 ### 停止開發用容器
 
@@ -253,10 +255,9 @@ docker compose --profile dev up -d --build postgres redis app-dev
 
 ### 2.3 Mem0 設定檔（`mem0`）與 `dev-up.ps1` 注意事項
 
-`docker-compose.yml` 內 **`mem0-memory`** 的建置內容與掛載路徑目前指向本機固定路徑 `F:/Projects/Githubs/mem0`。若你的環境沒有該目錄，**`--profile mem0` 或 `dev-up.ps1` 可能建置失敗**。團隊成員可擇一：
+`docker-compose.yml` 內 **`mem0-memory`** 的建置內容預設為 **`./vendor/mem0`**（與本儲存庫一併版本化，clone 後即可建置）。若要以本機其他目錄取代，請設定環境變數 **`MEM0_REPO_PATH`** 覆寫 Compose 的 `context`。
 
-- 僅啟動應用與 DB／Redis（不使用 `mem0` 設定檔），並將 `MEM0_ENABLED` 設為 `false` 或調整 `MEM0_BASE_URL`；或  
-- 自行將 Compose 內 Mem0 的 `context`／`volumes` 改為你本機的 mem0 原始碼路徑後再啟動。
+團隊成員若暫不需要 Mem0，可僅啟動應用與 DB／Redis（不使用 `mem0` 設定檔），並將 `MEM0_ENABLED` 設為 `false` 或調整 `MEM0_BASE_URL`。
 
 **網路提醒：** 註解說明請透過 `docker compose` 或 `dev-up.ps1` 啟動，避免只對單一容器 `docker start`，以免容器未接上 Compose 建立的 `backend` 網路而無法解析主機名 `postgres`、`redis` 等。
 

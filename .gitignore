@@ -4,6 +4,3 @@
 
 # Environment files are local-only; app templates live under aiyo/.env.example.
 .env*
-
-# Mem0 upstream clone (see scripts/clone-mem0.ps1); do not commit.
-/vendor/mem0/

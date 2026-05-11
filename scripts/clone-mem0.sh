@@ -9,7 +9,7 @@ if [ -f "$MARKER" ]; then
   exit 0
 fi
 
-echo "Cloning mem0ai/mem0 into vendor/mem0..."
+echo "Cloning mem0ai/mem0 into vendor/mem0 (repo may already vendor this path)..."
 mkdir -p "$ROOT/vendor"
 git clone --depth 1 https://github.com/mem0ai/mem0.git "$TARGET"
 echo "Done: $TARGET"
