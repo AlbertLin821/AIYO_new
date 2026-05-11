@@ -532,7 +532,7 @@ export default function MapView() {
     const mapsApi = maps;
 
     let cancelled = false;
-    let directionsTimer: ReturnType<typeof setTimeout> | undefined;
+    let directionsTimer: number | NodeJS.Timeout | undefined;
 
     markersRef.current.forEach((marker) => marker.setMap(null));
     markersRef.current.clear();

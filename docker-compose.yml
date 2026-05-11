@@ -146,6 +146,7 @@ services:
       - "8890:8000"
     volumes:
       - "./docker/mem0/patch_main_for_ollama.py:/tmp/patch_main_for_ollama.py:ro"
+      - "./docker/mem0/ensure_mem0_app_db.py:/tmp/ensure_mem0_app_db.py:ro"
     command: |
       sh -c "python - <<'PY'
       import os, time, urllib.request
@@ -165,7 +166,9 @@ services:
       python /tmp/patch_main_for_ollama.py &&
       rm -rf /app/packages &&
       # mem0ai 的 Ollama LLM/嵌入需 PyPI 套件 ollama（僅 HTTP client，連 host 上的 ollama serve；非安裝 Ollama 本體）
-      pip install -q --force-reinstall --no-deps mem0ai "ollama>=0.3.0" &&
+      # 勿用雙引號包住 ollama 版本：Compose 會誤判插值，截斷後續 && alembic / uvicorn。
+      pip install -q --force-reinstall --no-deps mem0ai 'ollama>=0.3.0' &&
+      python /tmp/ensure_mem0_app_db.py &&
       alembic upgrade head &&
       uvicorn main:app --host 0.0.0.0 --port 8000"
     healthcheck:
