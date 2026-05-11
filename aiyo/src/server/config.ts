@@ -40,4 +40,6 @@ export const serverConfig = {
   enableMockMaps: readBoolean("ENABLE_MOCK_MAPS", false),
   youtubeApiKey: readString("YOUTUBE_API_KEY", ""),
   googleMapsApiKey: readString("GOOGLE_MAPS_API_KEY", ""),
+  /** Tavily Search API (https://tavily.com) for web research in travel chat and segment hints. */
+  tavilyApiKey: readString("TAVILY_API_KEY", ""),
 };

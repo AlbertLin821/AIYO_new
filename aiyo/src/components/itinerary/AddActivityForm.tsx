@@ -77,6 +77,7 @@ function AddActivityForm({ draft, onDraftChange, onSave, onCancel }: Props) {
           <label className="text-xs font-medium text-muted">
             {t.itineraryPage.activityType}
             <select
+              data-testid="activity-type-select"
               value={draft.type}
               onChange={(event) => updateDraft({ type: event.target.value as TripPlanItem["type"] })}
               className="mt-1 w-full cursor-pointer rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"

@@ -8,12 +8,15 @@ interface MapState {
   selectedPinId: string | null;
   panelOpen: boolean;
   lastSyncedAt: string | null;
+  /** 行程路段 id（見 routeSegments）對應 Google Directions 換算後的分鐘數；缺鍵時 UI 退回直線估算。 */
+  segmentDirectionsMinutes: Record<string, number>;
   setPins: (pins: MapPin[], source?: SyncMutationSource) => void;
   addPins: (pins: MapPin[]) => void;
   removePin: (id: string) => void;
   setSelectedPinId: (id: string | null) => void;
   setPanelOpen: (open: boolean) => void;
   clearPins: () => void;
+  setItinerarySegmentDurations: (minutesBySegmentId: Record<string, number>) => void;
 }
 
 export const useMapStore = create<MapState>((set) => ({
@@ -21,6 +24,7 @@ export const useMapStore = create<MapState>((set) => ({
   selectedPinId: null,
   panelOpen: true,
   lastSyncedAt: null,
+  segmentDirectionsMinutes: {},
   setPins: (pins, source: SyncMutationSource = "local-user-edit") =>
     withSyncMutationSource(source, () =>
       set((state) => ({
@@ -62,6 +66,12 @@ export const useMapStore = create<MapState>((set) => ({
   setPanelOpen: (panelOpen) => set({ panelOpen }),
   clearPins: () =>
     withSyncMutationSource("bootstrap", () =>
-      set({ pins: [], selectedPinId: null, lastSyncedAt: null }),
+      set({
+        pins: [],
+        selectedPinId: null,
+        lastSyncedAt: null,
+        segmentDirectionsMinutes: {},
+      }),
     ),
+  setItinerarySegmentDurations: (minutesBySegmentId) => set({ segmentDirectionsMinutes: { ...minutesBySegmentId } }),
 }));

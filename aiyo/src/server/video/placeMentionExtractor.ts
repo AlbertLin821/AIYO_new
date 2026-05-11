@@ -1,5 +1,6 @@
 import type { NormalizedTranscriptLine } from "@/server/video/transcriptProcessing";
 import { isGenericTravelLocation } from "@/server/video/genericLocationFilter";
+import { cleanPlaceMentionName } from "@/server/video/placeMentionNormalizer";
 import type { TravelExtractionProfile } from "@/server/video/travelExtractionProfiles";
 
 export type PlaceMention = {
@@ -14,6 +15,8 @@ export type PlaceMention = {
   matchedPattern?: string;
   foods?: string[];
   sourceTranscriptLineIds?: string[];
+  timestampSource?: "youtube-transcript" | "description-fallback";
+  timestampConfidence?: "high" | "low";
 };
 
 function normalizeName(name: string): string {
@@ -48,11 +51,17 @@ function collectFoods(text: string, profile: TravelExtractionProfile): string[] 
   return profile.foodTerms.filter((term) => lower.includes(term.toLowerCase()));
 }
 
+/** 僅允許短店名前綴；林聰明、民主等通常 <=3 字，過長易誤掃整句。 */
+const MAX_FOOD_STORE_PREFIX_CHARS = 3;
+
 function extractByFoodTerms(text: string, profile: TravelExtractionProfile): string[] {
   const out = new Set<string>();
   for (const food of profile.foodTerms) {
     const escaped = food.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`([\\p{L}\\p{N}A-Za-z]{0,10}${escaped})`, "giu");
+    const re = new RegExp(
+      `([\\p{L}\\p{N}A-Za-z]{0,${MAX_FOOD_STORE_PREFIX_CHARS}}${escaped})`,
+      "giu",
+    );
     let match: RegExpExecArray | null = re.exec(text);
     while (match) {
       const candidate = match[1]?.trim();
@@ -63,6 +72,16 @@ function extractByFoodTerms(text: string, profile: TravelExtractionProfile): str
     }
   }
   return Array.from(out);
+}
+
+/** 純食物詞不應成為地點 mention（可留在 collectFoods／segments 的 foods）。具名店家保留。 */
+function isPureFoodName(name: string, profile: TravelExtractionProfile): boolean {
+  const n = name.trim();
+  if (!n) {
+    return false;
+  }
+  const lower = n.toLowerCase();
+  return profile.foodTerms.some((term) => n === term || lower === term.toLowerCase());
 }
 
 function extractBySuffix(text: string, profile: TravelExtractionProfile): string[] {
@@ -112,8 +131,16 @@ export function extractTimestampAwarePlaceMentions(input: {
     quoted.forEach((v) => candidates.add(v.replace(/["「『」』]/g, "")));
 
     for (const rawCandidate of candidates) {
-      const cleaned = stripPrefix(normalizeName(rawCandidate), input.profile);
+      const prefixed = stripPrefix(normalizeName(rawCandidate), input.profile);
+      const cleanResult = cleanPlaceMentionName(prefixed || rawCandidate, input.profile, input.destinationHint);
+      const cleaned = cleanResult.cleanedName;
       if (!cleaned || cleaned.length < 2) {
+        continue;
+      }
+      if (cleanResult.rejectedReason) {
+        continue;
+      }
+      if (isPureFoodName(cleaned, input.profile)) {
         continue;
       }
       if (isGenericTravelLocation({ name: cleaned, destinationHint: input.destinationHint, profile: input.profile })) {
@@ -135,6 +162,8 @@ export function extractTimestampAwarePlaceMentions(input: {
         matchedPattern: hasSuffix ? "suffix" : "pattern",
         foods: lineFoods.length ? lineFoods : undefined,
         sourceTranscriptLineIds: [line.id],
+        timestampSource: line.timestampSource,
+        timestampConfidence: line.timestampConfidence,
       });
     }
   }

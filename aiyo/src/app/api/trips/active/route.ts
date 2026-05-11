@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
 import { toApiError } from "@/server/apiErrors";
 import { requireSessionUser } from "@/server/auth";
-import { setUserActiveTripId } from "@/server/data/appStateService";
+import { getTripSwitchPayload, setUserActiveTripId } from "@/server/data/appStateService";
 import { requireTripAccess } from "@/server/tripAccess";
 
 export const runtime = "nodejs";
@@ -18,7 +18,8 @@ export async function POST(request: Request) {
     }
     await requireTripAccess(userId, tripId, "view");
     await setUserActiveTripId(userId, tripId);
-    return NextResponse.json(createSuccess({ ok: true }));
+    const payload = await getTripSwitchPayload(userId, tripId);
+    return NextResponse.json(createSuccess(payload));
   } catch (error) {
     return toApiError(error, "Failed to set active trip.");
   }

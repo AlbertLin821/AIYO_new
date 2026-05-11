@@ -8,7 +8,7 @@ import VideoCard from "@/components/home/VideoCard";
 import VideoSearchBar from "@/components/home/VideoSearchBar";
 import { getDefaultTaiwanCityVideos } from "@/data/defaultTaiwanCityVideos";
 import { zhTW as t } from "@/locales/zh-TW";
-import { fetchVideoRecommendations, summarizeVideo } from "@/services/videoClient";
+import { fetchVideoRecommendations, shouldSkipClientVideoSummarize, summarizeVideo } from "@/services/videoClient";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
 import { useVideoStore } from "@/stores/useVideoStore";
@@ -82,9 +82,7 @@ export default function HomePage() {
         setRecommendationSource("default-taiwan-cities");
       })
       .finally(() => {
-        if (!cancelled) {
-          setIsSearching(false);
-        }
+        setIsSearching(false);
       });
     return () => {
       cancelled = true;
@@ -106,12 +104,7 @@ export default function HomePage() {
     setSummaryDiagnostics(null);
     setSelectedVideo(video);
 
-    if (
-      video.listProvenance === "default-taiwan-cities" ||
-      !video.videoId ||
-      video.summarySegments?.length ||
-      video.extractedLocations.length > 0
-    ) {
+    if (shouldSkipClientVideoSummarize(video)) {
       return;
     }
 

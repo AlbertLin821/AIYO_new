@@ -27,7 +27,7 @@ services:
       OLLAMA_VIDEO_SUMMARY_FAST_MODEL: ${OLLAMA_VIDEO_SUMMARY_FAST_MODEL:-qwen3.5:9b}
       OLLAMA_VIDEO_SUMMARY_FINAL_MODEL: ${OLLAMA_VIDEO_SUMMARY_FINAL_MODEL:-qwen3.5:9b}
       OLLAMA_LOCATION_MODEL: ${OLLAMA_LOCATION_MODEL:-qwen3.5:9b}
-      MEM0_BASE_URL: ${MEM0_BASE_URL:-http://mem0-memory:8000}
+      MEM0_BASE_URL: http://mem0-memory:8000
       MEM0_ENABLED: ${MEM0_ENABLED:-true}
       MEM0_TOP_K: ${MEM0_TOP_K:-5}
       NODE_ENV: development
@@ -83,7 +83,7 @@ services:
       OLLAMA_VIDEO_SUMMARY_FAST_MODEL: ${OLLAMA_VIDEO_SUMMARY_FAST_MODEL:-qwen3.5:9b}
       OLLAMA_VIDEO_SUMMARY_FINAL_MODEL: ${OLLAMA_VIDEO_SUMMARY_FINAL_MODEL:-qwen3.5:9b}
       OLLAMA_LOCATION_MODEL: ${OLLAMA_LOCATION_MODEL:-qwen3.5:9b}
-      MEM0_BASE_URL: ${MEM0_BASE_URL:-http://mem0-memory:8000}
+      MEM0_BASE_URL: http://mem0-memory:8000
       MEM0_ENABLED: ${MEM0_ENABLED:-true}
       MEM0_TOP_K: ${MEM0_TOP_K:-5}
       HOSTNAME: 0.0.0.0
@@ -112,7 +112,8 @@ services:
 
   mem0-memory:
     build:
-      context: "F:/Projects/Githubs/mem0"
+      # 預設為本儲存庫 vendor/mem0（執行 scripts/clone-mem0.ps1 或 .sh 取得）；可用 MEM0_REPO_PATH 覆寫。
+      context: ${MEM0_REPO_PATH:-./vendor/mem0}
       dockerfile: server/dev.Dockerfile
     container_name: mem0-memory
     environment:
@@ -133,12 +134,18 @@ services:
       MEM0_DEFAULT_EMBEDDING_DIMS: 768
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       MEM0_TELEMETRY: "false"
+      # mem0 預設寫入 /app/history/history.db，映像內常無此目錄
+      HISTORY_DB_PATH: /tmp/mem0_history.db
       REQUEST_LOG_RETENTION_DAYS: 30
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
       PYTHONPATH: ""
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    ports:
+      - "8890:8000"
+    volumes:
+      - "./docker/mem0/patch_main_for_ollama.py:/tmp/patch_main_for_ollama.py:ro"
     command: |
       sh -c "python - <<'PY'
       import os, time, urllib.request
@@ -155,8 +162,10 @@ services:
               time.sleep(5)
       raise SystemExit('Ollama did not become reachable; start Ollama or update OLLAMA_BASE_URL.')
       PY
+      python /tmp/patch_main_for_ollama.py &&
       rm -rf /app/packages &&
-      pip install -q --force-reinstall --no-deps mem0ai &&
+      # mem0ai 的 Ollama LLM/嵌入需 PyPI 套件 ollama（僅 HTTP client，連 host 上的 ollama serve；非安裝 Ollama 本體）
+      pip install -q --force-reinstall --no-deps mem0ai "ollama>=0.3.0" &&
       alembic upgrade head &&
       uvicorn main:app --host 0.0.0.0 --port 8000"
     healthcheck:
@@ -186,7 +195,7 @@ services:
       POSTGRES_DB: postgres
     volumes:
       - mem0_memory_postgres_data:/var/lib/postgresql/data
-      - "F:/Projects/Githubs/mem0/server/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro"
+      - "./docker/mem0/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro"
     restart: unless-stopped
     profiles: ["mem0"]
     healthcheck:

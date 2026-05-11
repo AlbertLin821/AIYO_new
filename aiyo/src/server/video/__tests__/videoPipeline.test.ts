@@ -1,16 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { buildVideoSegmentPrompt } from "@/server/ai/promptBuilder";
 import { isGenericTravelLocation } from "@/server/video/genericLocationFilter";
 import { buildMomentSegments } from "@/server/video/momentSegmentBuilder";
 import { dedupePlaceMentions, normalizePlaceMentionName } from "@/server/video/placeMentionNormalizer";
 import { extractTimestampAwarePlaceMentions } from "@/server/video/placeMentionExtractor";
-import { preprocessTranscript } from "@/server/video/transcriptProcessing";
+import { preprocessTranscript, transcriptPreprocess } from "@/server/video/transcriptProcessing";
 import {
   englishGlobalProfile,
   japanProfile,
   selectTravelExtractionProfile,
   taiwanProfile,
 } from "@/server/video/travelExtractionProfiles";
+import {
+  youtubeOutlineExpectedPlaces,
+  youtubeOutlineTranscriptFixture,
+} from "@/server/video/__tests__/fixtures/youtubeTranscriptOutlineFixture";
 
 test("profile selection supports Taiwan/Japan/English", () => {
   assert.equal(selectTravelExtractionProfile({ destinationHint: "嘉義" }).id, "taiwan");
@@ -38,6 +43,30 @@ test("transcript preprocessing removes filler prefixes but keeps timestamps", ()
   assert.ok(lines[0].text.includes("文化路夜市"));
   assert.equal(lines[0].startSeconds, 10);
   assert.equal(lines[1].endSeconds >= 24, true);
+});
+
+test("youtube-proj outline fixture preprocesses duplicate subtitles and concrete places", () => {
+  const lines = transcriptPreprocess(youtubeOutlineTranscriptFixture, taiwanProfile);
+  assert.equal(lines.filter((line) => line.text.includes("文化路夜市")).length, 1);
+
+  const mentions = dedupePlaceMentions(
+    extractTimestampAwarePlaceMentions({
+      lines,
+      profile: taiwanProfile,
+      destinationHint: "嘉義市",
+    }),
+  );
+  const names = mentions.map((mention) => mention.name);
+  for (const expected of youtubeOutlineExpectedPlaces) {
+    assert.ok(names.includes(expected), `expected ${expected} in ${names.join(", ")}`);
+  }
+  assert.ok(!names.includes("嘉義市"));
+
+  const segments = buildMomentSegments({ mentions, videoDurationSeconds: 120, maxSegments: 8 });
+  assert.deepEqual(
+    segments.map((segment) => segment.startSeconds),
+    [...segments.map((segment) => segment.startSeconds)].sort((a, b) => a - b),
+  );
 });
 
 test("Taiwan extraction keeps concrete POI and food mentions", () => {
@@ -164,4 +193,25 @@ test("moment segment generation produces non-transcript dump text", () => {
   assert.ok(!segments[0].text.includes("我們現在來到文化路夜市然後這邊很多吃的"));
   assert.ok(!segments[0].highlights.join(" ").includes("我們現在來到文化路夜市然後這邊很多吃的"));
   assert.ok((segments[0].locationHints || []).length > 0);
+});
+
+test("buildVideoSegmentPrompt requests strict JSON output for transcript chunks", () => {
+  const prompt = buildVideoSegmentPrompt({
+    title: "嘉義美食影片",
+    description: "文化路夜市、郭家火雞肉飯與林聰明砂鍋魚頭。",
+    destination: "嘉義市",
+    transcriptSegments: [
+      {
+        timestamp: "00:18",
+        startSeconds: 18,
+        endSeconds: 23,
+        text: "接著走到郭家火雞肉飯，點一碗火雞肉飯。",
+      },
+    ],
+  });
+
+  assert.match(prompt, /Return valid JSON only/);
+  assert.match(prompt, /"segments"/);
+  assert.match(prompt, /"extractedLocations"/);
+  assert.match(prompt, /Do not use Simplified Chinese/);
 });

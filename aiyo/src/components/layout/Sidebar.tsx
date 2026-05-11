@@ -122,7 +122,9 @@ export default function Sidebar() {
 
           <button
             onClick={() =>
-              status === "authenticated" ? void signOut({ callbackUrl: "/" }) : void signIn()
+              status === "authenticated"
+                ? void signOut({ callbackUrl: "/" })
+                : void signIn(undefined, { callbackUrl: "/" })
             }
             className={cn(
               "mt-3 flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-colors",

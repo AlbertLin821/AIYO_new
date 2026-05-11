@@ -2,6 +2,21 @@ import { isApiError } from "@/lib/api-response";
 import type { ApiResponse } from "@/types";
 import type { VideoRecommendation, VideoSummaryResult } from "@/types";
 
+/** 客戶端已有可顯示的摘要資料時，略過 POST /api/videos/summarize 以縮短等待（伺服端仍會在必要時快取命中）。 */
+export function shouldSkipClientVideoSummarize(video: VideoRecommendation): boolean {
+  if (!video.videoId?.trim()) {
+    return true;
+  }
+  if (video.listProvenance === "default-taiwan-cities") {
+    return true;
+  }
+  const segments = video.summarySegments?.length ?? 0;
+  const locations = video.extractedLocations?.length ?? 0;
+  const stamps = video.timestamps?.length ?? 0;
+  /** 不將僅有 description 剪貼的 `summary` 視為已分析：搜尋 API 影片常帶長篇說明但仍須跑摘要管線。 */
+  return segments > 0 || locations > 0 || stamps > 0;
+}
+
 export type VideoSearchDebugInfo = {
   rawInput: string;
   searchQueries: string[];

@@ -151,6 +151,9 @@ Compatibility routes retained:
 
 ## Additional docs
 
+- `../README.md`（儲存庫根目錄：啟動與 Docker 主說明）
+- `../docs/README.md`（專案層 `docs/` 索引）
+- `docs/README.md`（本目錄 `aiyo/docs/` 與 `testing/` 索引）
 - `../docs/architecture.md`
 - `../docs/implementation_report.md`
 - `docs/phase3_production_upgrade_report.md`

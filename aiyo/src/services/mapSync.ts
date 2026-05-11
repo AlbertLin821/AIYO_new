@@ -101,6 +101,12 @@ export function buildPinsFromTripPlan(days: TripPlanDay[]): MapPin[] {
  */
 export function mergeTripItineraryPins(currentPins: MapPin[], days: TripPlanDay[]): MapPin[] {
   const preserved = currentPins.filter((pin) => pin.source !== "itinerary");
-  const itineraryPins = buildPinsFromTripPlan(days);
+  const preservedKeys = new Set(
+    preserved.map((pin) => `${pin.dayNumber || 0}:${pin.name.trim().toLowerCase()}:${pin.lat.toFixed(5)}:${pin.lng.toFixed(5)}`),
+  );
+  const itineraryPins = buildPinsFromTripPlan(days).filter((pin) => {
+    const key = `${pin.dayNumber || 0}:${pin.name.trim().toLowerCase()}:${pin.lat.toFixed(5)}:${pin.lng.toFixed(5)}`;
+    return !preservedKeys.has(key);
+  });
   return [...preserved, ...itineraryPins];
 }

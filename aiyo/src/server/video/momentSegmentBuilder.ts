@@ -14,6 +14,8 @@ export type TravelMomentSegment = {
   foods?: string[];
   sourceTranscriptLineIds?: string[];
   confidence?: number;
+  timestampSource?: "youtube-transcript" | "description-fallback";
+  timestampConfidence?: "high" | "low";
 };
 
 function formatSeconds(seconds: number): string {
@@ -108,10 +110,14 @@ export function buildMomentSegments(input: {
       foods: mention.foods,
       sourceTranscriptLineIds: mention.sourceTranscriptLineIds,
       confidence: mention.confidence,
+      timestampSource: mention.timestampSource,
+      timestampConfidence: mention.timestampConfidence,
     });
   }
 
-  return segments.slice(0, Math.max(3, Math.min(maxSegments, segments.length)));
+  const chronological = [...segments].sort((a, b) => a.startSeconds - b.startSeconds);
+  const cap = Math.max(3, Math.min(maxSegments, chronological.length));
+  return chronological.slice(0, cap);
 }
 
 export function toVideoSummarySegments(segments: TravelMomentSegment[]): VideoSummarySegment[] {
@@ -129,6 +135,8 @@ export function toVideoSummarySegments(segments: TravelMomentSegment[]): VideoSu
     endSeconds: segment.endSeconds,
     foods: segment.foods,
     confidence: segment.confidence,
+    timestampSource: segment.timestampSource,
+    timestampConfidence: segment.timestampConfidence,
     sourceTranscriptLineIds: segment.sourceTranscriptLineIds,
     extractionSource: "deterministic",
   }));

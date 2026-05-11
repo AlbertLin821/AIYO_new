@@ -17,6 +17,8 @@ type Props = {
   isInteractive: boolean;
   canEdit: boolean;
   recoveringTrip: boolean;
+  /** 尚無目的地、天數、預算與行程內容時不顯示摘要格 */
+  showTripSummaryRow: boolean;
   onShare: () => void;
   onAddDay: () => void;
   onOpenMap: () => void;
@@ -33,6 +35,7 @@ function ItineraryPageHeader({
   isInteractive,
   canEdit,
   recoveringTrip,
+  showTripSummaryRow,
   onShare,
   onAddDay,
   onOpenMap,
@@ -97,26 +100,28 @@ function ItineraryPageHeader({
             )}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-4">
-            <div className="rounded-xl bg-cream/45 px-3 py-2">
-              <p className="text-[11px] text-muted">目的地</p>
-              <p className="truncate text-sm font-semibold text-foreground">{displayDestination}</p>
+          {showTripSummaryRow && (
+            <div className="grid gap-3 sm:grid-cols-4">
+              <div className="rounded-xl bg-cream/45 px-3 py-2">
+                <p className="text-[11px] text-muted">目的地</p>
+                <p className="truncate text-sm font-semibold text-foreground">{displayDestination}</p>
+              </div>
+              <div className="rounded-xl bg-cream/45 px-3 py-2">
+                <p className="text-[11px] text-muted">{t.itineraryPage.metaDays}</p>
+                <p className="text-sm font-semibold text-foreground">{days}</p>
+              </div>
+              <div className="rounded-xl bg-cream/45 px-3 py-2">
+                <p className="text-[11px] text-muted">預算</p>
+                <p className="truncate text-sm font-semibold text-foreground">
+                  {budget > 0 ? `NT$${budget.toLocaleString("zh-TW")}` : t.common.notSet}
+                </p>
+              </div>
+              <div className="rounded-xl bg-cream/45 px-3 py-2">
+                <p className="text-[11px] text-muted">狀態</p>
+                <p className="truncate text-sm font-semibold text-foreground">{updatedLabel}</p>
+              </div>
             </div>
-            <div className="rounded-xl bg-cream/45 px-3 py-2">
-              <p className="text-[11px] text-muted">{t.itineraryPage.metaDays}</p>
-              <p className="text-sm font-semibold text-foreground">{days}</p>
-            </div>
-            <div className="rounded-xl bg-cream/45 px-3 py-2">
-              <p className="text-[11px] text-muted">預算</p>
-              <p className="truncate text-sm font-semibold text-foreground">
-                {budget > 0 ? `NT$${budget.toLocaleString("zh-TW")}` : t.common.notSet}
-              </p>
-            </div>
-            <div className="rounded-xl bg-cream/45 px-3 py-2">
-              <p className="text-[11px] text-muted">狀態</p>
-              <p className="truncate text-sm font-semibold text-foreground">{updatedLabel}</p>
-            </div>
-          </div>
+          )}
 
           <div className="flex flex-wrap items-center gap-2">
             {canEdit && (

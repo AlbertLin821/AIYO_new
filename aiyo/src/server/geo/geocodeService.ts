@@ -39,6 +39,8 @@ type GooglePlaceDetailsResponse = {
   status: string;
   error_message?: string;
   result?: {
+    name?: string;
+    types?: string[];
     formatted_phone_number?: string;
     international_phone_number?: string;
     website?: string;
@@ -109,7 +111,32 @@ function expectedCountryFromDestination(hint?: string): string | null {
   if (korea.some((h) => n.includes(h))) {
     return "KR";
   }
-  const taiwan = ["taiwan", "台灣", "臺灣", "台北", "高雄", "台中"];
+  const taiwan = [
+    "taiwan",
+    "台灣",
+    "臺灣",
+    "台北",
+    "臺北",
+    "新北",
+    "桃園",
+    "台中",
+    "臺中",
+    "台南",
+    "臺南",
+    "高雄",
+    "嘉義",
+    "苗栗",
+    "彰化",
+    "南投",
+    "雲林",
+    "屏東",
+    "宜蘭",
+    "花蓮",
+    "台東",
+    "臺東",
+    "基隆",
+    "新竹",
+  ];
   if (taiwan.some((h) => n.includes(h))) {
     return "TW";
   }
@@ -146,6 +173,143 @@ function scoreGeocodeTypes(types: string[]): number {
     return 0.12;
   }
   return 0.55;
+}
+
+function compactComparable(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/臺/g, "台")
+    .replace(/[^\p{Letter}\p{Number}]+/gu, "")
+    .trim();
+}
+
+function similarityScore(left: string, right: string): number {
+  const a = compactComparable(left);
+  const b = compactComparable(right);
+  if (!a || !b) {
+    return 0;
+  }
+  if (a.includes(b) || b.includes(a)) {
+    return Math.min(1, Math.min(a.length, b.length) / Math.max(a.length, b.length) + 0.35);
+  }
+  const chars = new Set([...a]);
+  const overlap = [...new Set([...b])].filter((char) => chars.has(char)).length;
+  return overlap / Math.max(new Set([...a, ...b]).size, 1);
+}
+
+function isSentenceLikeMention(raw: string, cleaned: string): boolean {
+  const compactRaw = compactComparable(raw);
+  const compactCleaned = compactComparable(cleaned);
+  if (!compactRaw || compactRaw === compactCleaned) {
+    return false;
+  }
+  return (
+    compactRaw.length - compactCleaned.length >= 3 ||
+    /(?:來到|前往|接著|然後|走路|就能|等.*回|附近很多|不用煩惱|可以|先|再)/u.test(raw)
+  );
+}
+
+function isCityLevelTypes(types: string[]): boolean {
+  const t = new Set(types);
+  return (
+    t.has("locality") ||
+    t.has("administrative_area_level_1") ||
+    t.has("administrative_area_level_2") ||
+    t.has("political")
+  ) && !(
+    t.has("establishment") ||
+    t.has("point_of_interest") ||
+    t.has("tourist_attraction") ||
+    t.has("restaurant") ||
+    t.has("food") ||
+    t.has("park") ||
+    t.has("museum") ||
+    t.has("transit_station")
+  );
+}
+
+function isPreferredPlaceType(types: string[]): boolean {
+  const t = new Set(types);
+  return (
+    t.has("establishment") ||
+    t.has("tourist_attraction") ||
+    t.has("point_of_interest") ||
+    t.has("restaurant") ||
+    t.has("food") ||
+    t.has("park") ||
+    t.has("museum") ||
+    t.has("transit_station")
+  );
+}
+
+export function evaluateGeocodeConfidenceGate(input: {
+  rawMention: string;
+  cleanedName: string;
+  formattedAddress: string;
+  resultName?: string;
+  types: string[];
+  placeId?: string;
+  baseConfidence: number;
+}): {
+  accepted: boolean;
+  confidence: number;
+  matchReason: string;
+  rejectedReason?: string;
+} {
+  const nameSimilarity = Math.max(
+    similarityScore(input.cleanedName, input.resultName || ""),
+    similarityScore(input.cleanedName, input.formattedAddress),
+  );
+  const cityLevel = isCityLevelTypes(input.types);
+  const preferredType = isPreferredPlaceType(input.types);
+  const sentenceLike = isSentenceLikeMention(input.rawMention, input.cleanedName);
+  let confidence = input.baseConfidence;
+  confidence = Math.min(1, confidence * 0.72 + nameSimilarity * 0.28);
+  if (preferredType) {
+    confidence += 0.08;
+  }
+  if (cityLevel) {
+    confidence -= 0.28;
+  }
+  if (sentenceLike) {
+    confidence -= 0.08;
+  }
+  if (!input.placeId) {
+    confidence -= 0.1;
+  }
+  confidence = Math.max(0, Math.min(1, confidence));
+
+  if (cityLevel && !preferredType) {
+    return {
+      accepted: false,
+      confidence,
+      matchReason: `similarity=${nameSimilarity.toFixed(2)}; types=${input.types.join("|") || "none"}`,
+      rejectedReason: "city-level-geocode-result",
+    };
+  }
+  if (nameSimilarity < 0.34 && !preferredType) {
+    return {
+      accepted: false,
+      confidence,
+      matchReason: `similarity=${nameSimilarity.toFixed(2)}; types=${input.types.join("|") || "none"}`,
+      rejectedReason: "low-name-address-similarity",
+    };
+  }
+  if (sentenceLike && confidence < 0.62) {
+    return {
+      accepted: false,
+      confidence,
+      matchReason: `similarity=${nameSimilarity.toFixed(2)}; sentence-like raw mention`,
+      rejectedReason: "sentence-like-mention-low-confidence",
+    };
+  }
+
+  return {
+    accepted: confidence >= 0.52,
+    confidence,
+    matchReason: `similarity=${nameSimilarity.toFixed(2)}; preferredType=${preferredType}; types=${input.types.join("|") || "none"}`,
+    rejectedReason: confidence >= 0.52 ? undefined : "below-confidence-threshold",
+  };
 }
 
 function formattedAddressMentionsCandidate(
@@ -213,7 +377,9 @@ function buildPhotoUrl(photoReference?: string): string | undefined {
   return `https://maps.googleapis.com/maps/api/place/photo?${params.toString()}`;
 }
 
-async function fetchPlaceDetails(placeId?: string): Promise<Partial<LocationReference>> {
+export async function fetchGooglePlaceDetailsByPlaceId(
+  placeId?: string,
+): Promise<Partial<LocationReference>> {
   if (!placeId || !serverConfig.googleMapsApiKey) {
     return {};
   }
@@ -397,21 +563,31 @@ export async function resolvePlaceExtractionsHybrid(
         confidence *= 0.35;
       }
 
+      const gate = evaluateGeocodeConfidenceGate({
+        rawMention: extraction.raw,
+        cleanedName: extraction.displayName,
+        formattedAddress: result.formattedAddress,
+        types: result.types,
+        placeId: result.placeId,
+        baseConfidence: confidence,
+      });
+      confidence = gate.confidence;
+
       const verified =
-        confidence >= 0.52 &&
+        gate.accepted &&
         countryMatch &&
         typeScore >= 0.25 &&
         !(result.types.length <= 1 && result.types.includes("country"));
 
-      if (confidence < DROP_CONFIDENCE_BELOW) {
+      if (!gate.accepted || confidence < DROP_CONFIDENCE_BELOW) {
         failures.push(
-          `${extraction.displayName}：信心過低（${confidence.toFixed(2)}），已略過。`,
+          `${extraction.displayName}：${gate.rejectedReason || "信心過低"}（${confidence.toFixed(2)}），已略過。`,
         );
         continue;
       }
 
       googleCount += 1;
-      const details = await fetchPlaceDetails(result.placeId);
+      const details = await fetchGooglePlaceDetailsByPlaceId(result.placeId);
       locations.push({
         name: extraction.displayName,
         lat: result.lat,
@@ -427,7 +603,12 @@ export async function resolvePlaceExtractionsHybrid(
         raw: extraction.raw,
         normalized: extraction.normalized,
         normalizedName: extraction.displayName,
+        cleanedName: extraction.displayName,
+        rawMention: extraction.raw,
         confidence,
+        geocodeConfidence: confidence,
+        geocodeMatchReason: gate.matchReason,
+        geocodeRejectedReason: gate.rejectedReason,
         verified,
       });
       continue;

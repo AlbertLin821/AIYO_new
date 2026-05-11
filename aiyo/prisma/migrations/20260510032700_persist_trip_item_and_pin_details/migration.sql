@@ -1,0 +1,30 @@
+-- Preserve rich itinerary item and map pin data across trip sync reloads.
+ALTER TABLE "trip_items" ADD COLUMN "itemType" TEXT;
+ALTER TABLE "trip_items" ADD COLUMN "source" TEXT;
+ALTER TABLE "trip_items" ADD COLUMN "locationDesc" TEXT;
+ALTER TABLE "trip_items" ADD COLUMN "locationAddress" TEXT;
+ALTER TABLE "trip_items" ADD COLUMN "placeId" TEXT;
+ALTER TABLE "trip_items" ADD COLUMN "photoUrl" TEXT;
+ALTER TABLE "trip_items" ADD COLUMN "thumbnail" TEXT;
+ALTER TABLE "trip_items" ADD COLUMN "openingHours" TEXT;
+ALTER TABLE "trip_items" ADD COLUMN "phoneNumber" TEXT;
+ALTER TABLE "trip_items" ADD COLUMN "website" TEXT;
+ALTER TABLE "trip_items" ADD COLUMN "googleMapsUrl" TEXT;
+ALTER TABLE "trip_items" ADD COLUMN "rating" DOUBLE PRECISION;
+ALTER TABLE "trip_items" ADD COLUMN "userRatingsTotal" INTEGER;
+ALTER TABLE "trip_items" ADD COLUMN "confidence" DOUBLE PRECISION;
+ALTER TABLE "trip_items" ADD COLUMN "verified" BOOLEAN;
+
+ALTER TABLE "map_pins" ADD COLUMN "placeId" TEXT;
+ALTER TABLE "map_pins" ADD COLUMN "photoUrl" TEXT;
+ALTER TABLE "map_pins" ADD COLUMN "thumbnail" TEXT;
+ALTER TABLE "map_pins" ADD COLUMN "openingHours" TEXT;
+ALTER TABLE "map_pins" ADD COLUMN "phoneNumber" TEXT;
+ALTER TABLE "map_pins" ADD COLUMN "website" TEXT;
+ALTER TABLE "map_pins" ADD COLUMN "googleMapsUrl" TEXT;
+ALTER TABLE "map_pins" ADD COLUMN "rating" DOUBLE PRECISION;
+ALTER TABLE "map_pins" ADD COLUMN "userRatingsTotal" INTEGER;
+ALTER TABLE "map_pins" ADD COLUMN "color" TEXT;
+ALTER TABLE "map_pins" ADD COLUMN "source" TEXT;
+ALTER TABLE "map_pins" ADD COLUMN "confidence" DOUBLE PRECISION;
+ALTER TABLE "map_pins" ADD COLUMN "verified" BOOLEAN;

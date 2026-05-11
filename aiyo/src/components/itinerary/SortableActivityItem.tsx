@@ -178,6 +178,7 @@ function SortableActivityItem({
           <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
             <button
               type="button"
+              data-testid="activity-toolbar-edit"
               onClick={() => (isEditing ? setIsEditing(false) : openEdit())}
               className="rounded-lg p-1.5 text-muted transition-colors hover:bg-primary/10 hover:text-primary"
               aria-label={`編輯活動 ${item.title}`}
@@ -203,6 +204,7 @@ function SortableActivityItem({
             <label className="sm:col-span-2 text-xs font-medium text-muted">
               {t.itineraryPage.activityTitle}
               <input
+                data-testid="activity-edit-title-input"
                 value={draft.title}
                 onChange={(event) => updateDraft({ title: event.target.value })}
                 className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -269,6 +271,7 @@ function SortableActivityItem({
               </button>
               <button
                 type="button"
+                data-testid="activity-edit-save-button"
                 onClick={saveEdit}
                 disabled={!draft.title.trim()}
                 className="inline-flex items-center gap-2 rounded-xl bg-primary px-3 py-2 text-xs font-medium text-white hover:bg-primary-dark disabled:opacity-50"

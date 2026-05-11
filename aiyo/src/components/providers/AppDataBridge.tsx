@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { zhTW as t } from "@/locales/zh-TW";
 import { clearPersistedState } from "@/services/persistence";
-import { ApiRequestError } from "@/services/apiClient";
+import { ApiRequestError, apiGet } from "@/services/apiClient";
 import { mergeTripItineraryPins } from "@/services/mapSync";
 import { syncService } from "@/services/syncService";
 import { useChatStore } from "@/stores/useChatStore";
@@ -17,6 +17,13 @@ import { useToastStore } from "@/stores/useToastStore";
 import { useUIStore } from "@/stores/useUIStore";
 import { useUserStore } from "@/stores/useUserStore";
 
+type OllamaStatusPayload = {
+  ollamaReachable: boolean;
+  ollamaStatus: "ready" | "model_missing" | "error" | "unreachable";
+};
+
+const ollamaStatusWarnedUserKeys = new Set<string>();
+
 export default function AppDataBridge() {
   const pathname = usePathname();
   const { data: session, status } = useSession();
@@ -27,6 +34,36 @@ export default function AppDataBridge() {
     status === "authenticated"
       ? (session?.user?.id || session?.user?.email || "guest")
       : null;
+
+  useEffect(() => {
+    if (status !== "authenticated" || !userKey || ollamaStatusWarnedUserKeys.has(userKey)) {
+      return;
+    }
+
+    let mounted = true;
+
+    void apiGet<OllamaStatusPayload>("/api/ai/ollama-status")
+      .then((payload) => {
+        if (!mounted) {
+          return;
+        }
+        if (!payload.ollamaReachable || payload.ollamaStatus === "unreachable") {
+          ollamaStatusWarnedUserKeys.add(userKey);
+          pushToast({
+            variant: "warning",
+            title: t.ollama.offlineTitle,
+            description: t.ollama.offlineDesc,
+          });
+        }
+      })
+      .catch(() => {
+        // 避免因驗證、啟動資料或網路失敗而顯示誤導性的 Ollama 警告。
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [pushToast, status, userKey]);
 
   useEffect(() => {
     if (status !== "authenticated" || !userKey || initializedRef.current) {
@@ -82,15 +119,15 @@ export default function AppDataBridge() {
             travelPreferences: [],
             budget: 0,
             destination: "",
-            travelDays: 1,
+            travelDays: 0,
             preferredTransport: "",
-            travelPace: "moderate",
+            travelPace: "",
             interests: [],
             isFirstVisit: true,
             updateProfile: useUserStore.getState().updateProfile,
             setFirstVisit: useUserStore.getState().setFirstVisit,
           });
-          useUIStore.setState({ showOnboarding: true });
+          useUIStore.setState({ showOnboarding: false });
           void signOut({ callbackUrl: "/login" });
           return;
         }
@@ -143,6 +180,17 @@ export default function AppDataBridge() {
       initializedRef.current = false;
     };
   }, [pushToast, status, userKey]);
+
+  useEffect(() => {
+    if (status !== "authenticated") {
+      return;
+    }
+    const flushOnLeave = () => {
+      syncService.flushTripSyncNow({ keepalive: true });
+    };
+    window.addEventListener("pagehide", flushOnLeave);
+    return () => window.removeEventListener("pagehide", flushOnLeave);
+  }, [status]);
 
   useEffect(() => {
     if (status !== "authenticated" || !collabRoomId) {

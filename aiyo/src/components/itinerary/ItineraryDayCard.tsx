@@ -71,6 +71,7 @@ function ItineraryDayCard({
 
   return (
     <motion.div
+      data-testid="itinerary-day-card"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: dayIndex * 0.04 }}

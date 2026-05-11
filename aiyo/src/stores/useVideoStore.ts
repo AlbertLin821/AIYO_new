@@ -9,7 +9,12 @@ export type SummaryDiagnostics = {
     | "ollama-description-fallback"
     | "ollama-synthetic-fallback"
     | "unavailable";
-  segmentSource?: "transcript-chunks" | "description-fallback" | "synthetic-fallback" | "unavailable";
+  segmentSource?:
+    | "transcript-chunks"
+    | "deterministic-mentions"
+    | "description-fallback"
+    | "synthetic-fallback"
+    | "unavailable";
   captionLanguage?: string;
   captionKind?: "manual" | "asr";
   captionSource?: "watch-page-captions" | "timedtext" | "youtube-transcript-package";

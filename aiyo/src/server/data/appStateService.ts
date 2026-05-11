@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getTripAccess, requireTripAccess } from "@/server/tripAccess";
 import type {
@@ -17,7 +18,7 @@ function buildInviteCode(tripId: string): string {
   return `AIYO-${tripId.replace(/-/g, "").toUpperCase()}`;
 }
 
-function toUserProfile(input: {
+export function toUserProfile(input: {
   name?: string | null;
   email: string;
   preferences?: unknown;
@@ -27,8 +28,18 @@ function toUserProfile(input: {
   const preferences = (input.preferences || {}) as {
     interests?: string[];
     preferredTransport?: string;
-    pace?: User["travelPace"];
+    pace?: User["travelPace"] | null;
+    travelDays?: number;
   };
+
+  const rawPace = preferences.pace;
+  const travelPace: User["travelPace"] =
+    rawPace === "relaxed" || rawPace === "moderate" || rawPace === "intensive" ? rawPace : "";
+
+  const travelDays =
+    typeof preferences.travelDays === "number" && Number.isFinite(preferences.travelDays)
+      ? Math.max(0, Math.min(30, Math.floor(preferences.travelDays)))
+      : 0;
 
   return {
     name: input.name || input.email.split("@")[0],
@@ -36,9 +47,9 @@ function toUserProfile(input: {
     travelPreferences: preferences.interests || [],
     budget: input.budget ?? 0,
     destination: input.destination?.trim() || "",
-    travelDays: 1,
+    travelDays,
     preferredTransport: preferences.preferredTransport?.trim() || "",
-    travelPace: preferences.pace || "moderate",
+    travelPace,
     interests: preferences.interests || [],
   };
 }
@@ -102,9 +113,24 @@ function serializeTrip(trip: {
     title: string;
     description: string | null;
     timeSlot: string | null;
+    itemType: string | null;
+    source: string | null;
     location: string | null;
     latitude: number | null;
     longitude: number | null;
+    locationDesc: string | null;
+    locationAddress: string | null;
+    placeId: string | null;
+    photoUrl: string | null;
+    thumbnail: string | null;
+    openingHours: string | null;
+    phoneNumber: string | null;
+    website: string | null;
+    googleMapsUrl: string | null;
+    rating: number | null;
+    userRatingsTotal: number | null;
+    confidence: number | null;
+    verified: boolean | null;
     order: number;
   }>;
   pins: Array<{
@@ -114,6 +140,19 @@ function serializeTrip(trip: {
     lng: number;
     description: string | null;
     address: string | null;
+    placeId: string | null;
+    photoUrl: string | null;
+    thumbnail: string | null;
+    openingHours: string | null;
+    phoneNumber: string | null;
+    website: string | null;
+    googleMapsUrl: string | null;
+    rating: number | null;
+    userRatingsTotal: number | null;
+    color: string | null;
+    source: string | null;
+    confidence: number | null;
+    verified: boolean | null;
     linkedTripItemId: string | null;
     dayNumber: number | null;
   }>;
@@ -146,7 +185,7 @@ function serializeTrip(trip: {
       dayNumber: item.day,
       time: item.timeSlot || "09:00",
       title: item.title,
-      type: "activity",
+      type: (item.itemType || "activity") as PersistedTripPayload["itinerary"][number]["items"][number]["type"],
       notes: item.description || undefined,
       location:
         item.location && item.latitude != null && item.longitude != null
@@ -154,11 +193,22 @@ function serializeTrip(trip: {
               name: item.location,
               lat: item.latitude,
               lng: item.longitude,
-              description: item.description || `${item.location} stop`,
-              address: item.location,
+              description: item.locationDesc || item.description || `${item.location} stop`,
+              address: item.locationAddress || item.location,
+              placeId: item.placeId || undefined,
+              photoUrl: item.photoUrl || undefined,
+              thumbnail: item.thumbnail || undefined,
+              openingHours: item.openingHours || undefined,
+              phoneNumber: item.phoneNumber || undefined,
+              website: item.website || undefined,
+              googleMapsUrl: item.googleMapsUrl || undefined,
+              rating: item.rating ?? undefined,
+              userRatingsTotal: item.userRatingsTotal ?? undefined,
+              confidence: item.confidence ?? undefined,
+              verified: item.verified ?? undefined,
             }
           : undefined,
-      source: "manual",
+      source: (item.source || "manual") as PersistedTripPayload["itinerary"][number]["items"][number]["source"],
     });
   }
 
@@ -170,9 +220,21 @@ function serializeTrip(trip: {
     lng: pin.lng,
     description: pin.description || pin.label,
     address: pin.address || undefined,
+    placeId: pin.placeId || undefined,
+    photoUrl: pin.photoUrl || undefined,
+    thumbnail: pin.thumbnail || undefined,
+    openingHours: pin.openingHours || undefined,
+    phoneNumber: pin.phoneNumber || undefined,
+    website: pin.website || undefined,
+    googleMapsUrl: pin.googleMapsUrl || undefined,
+    rating: pin.rating ?? undefined,
+    userRatingsTotal: pin.userRatingsTotal ?? undefined,
+    color: pin.color || undefined,
     linkedTripItemId: pin.linkedTripItemId || undefined,
     dayNumber: pin.dayNumber || undefined,
-    source: "itinerary",
+    source: (pin.source || "itinerary") as MapPin["source"],
+    confidence: pin.confidence ?? undefined,
+    verified: pin.verified ?? undefined,
   }));
 
   return {
@@ -202,7 +264,6 @@ export async function ensureProfile(userId: string) {
         preferences: {
           interests: [],
           preferredTransport: "",
-          pace: "moderate",
         },
       },
     });
@@ -487,6 +548,20 @@ export async function getBootstrapPayload(userId: string): Promise<BootstrapPayl
     chatMessages,
   });
 
+  const prefs = parseProfilePreferencesRecord(user.profile?.preferences);
+  const welcomeSaved = prefs.welcomeCompleted === true;
+  const tripStopCount = tripPayload.itinerary.reduce((count, day) => count + day.items.length, 0);
+  const onboardingCompleted =
+    welcomeSaved ||
+    Boolean(user.profile?.destination?.trim()) ||
+    (user.profile?.budget ?? 0) > 0 ||
+    tripStopCount > 0 ||
+    tripPayload.pins.length > 0 ||
+    tripPayload.days > 1 ||
+    Boolean(tripPayload.title?.trim()) ||
+    Boolean(tripPayload.destination?.trim()) ||
+    chatMessages.length > 0;
+
   return {
     user: {
       id: user.id,
@@ -495,17 +570,63 @@ export async function getBootstrapPayload(userId: string): Promise<BootstrapPayl
       image: user.image,
     },
     profile,
+    onboardingCompleted,
     trip: tripPayload,
     chatMessages,
     collaboration: serializeCollaboration(room),
   };
 }
 
-export async function updateProfile(userId: string, input: Partial<User>) {
+export async function getTripSwitchPayload(userId: string, tripId: string) {
+  const [user, tripRecord] = await Promise.all([
+    ensureProfile(userId),
+    prisma.trip.findUnique({
+      where: { id: tripId },
+      include: tripIncludeFull,
+    }),
+  ]);
+
+  if (!tripRecord) {
+    throw new Error("not_found");
+  }
+
+  const room = await ensureCollaborationRoom(tripRecord.id);
+  return {
+    trip: {
+      ...serializeTrip({
+        ...tripRecord,
+        itineraryDays: tripRecord.itineraryDays,
+        items: tripRecord.items,
+        pins: tripRecord.pins,
+      }),
+      budget: user.profile?.budget ?? 0,
+    },
+    collaboration: serializeCollaboration(room),
+  };
+}
+
+export async function updateProfile(userId: string, input: Partial<User> & { welcomeCompleted?: boolean }) {
   const existing = await prisma.user.findUnique({ where: { id: userId }, include: { profile: true } });
   const prev = parseProfilePreferencesRecord(existing?.profile?.preferences);
   const prevInterests = Array.isArray(prev.interests) ? (prev.interests as string[]) : [];
-  const preferences = {
+  const prevPace = prev.pace;
+  const nextPace =
+    input.travelPace !== undefined
+      ? input.travelPace === ""
+        ? null
+        : input.travelPace
+      : prevPace === "relaxed" || prevPace === "moderate" || prevPace === "intensive"
+        ? prevPace
+        : null;
+
+  const nextTravelDays =
+    typeof input.travelDays === "number" && Number.isFinite(input.travelDays)
+      ? Math.max(0, Math.min(30, Math.floor(input.travelDays)))
+      : typeof prev.travelDays === "number"
+        ? Math.max(0, Math.min(30, Math.floor(prev.travelDays as number)))
+        : undefined;
+
+  const preferences: Record<string, unknown> = {
     ...prev,
     interests: input.interests ?? input.travelPreferences ?? prevInterests,
     preferredTransport:
@@ -514,8 +635,25 @@ export async function updateProfile(userId: string, input: Partial<User>) {
         : typeof prev.preferredTransport === "string"
           ? prev.preferredTransport
           : "",
-    pace: input.travelPace ?? prev.pace ?? "moderate",
   };
+
+  if (nextPace === null) {
+    delete preferences.pace;
+  } else {
+    preferences.pace = nextPace;
+  }
+
+  if (nextTravelDays !== undefined) {
+    if (nextTravelDays <= 0) {
+      delete preferences.travelDays;
+    } else {
+      preferences.travelDays = nextTravelDays;
+    }
+  }
+
+  if (input.welcomeCompleted === true) {
+    preferences.welcomeCompleted = true;
+  }
 
   const user = await prisma.user.update({
     where: { id: userId },
@@ -527,12 +665,12 @@ export async function updateProfile(userId: string, input: Partial<User>) {
           update: {
             budget: input.budget,
             destination: input.destination,
-            preferences,
+            preferences: preferences as Prisma.InputJsonValue,
           },
           create: {
             budget: input.budget,
             destination: input.destination,
-            preferences,
+            preferences: preferences as Prisma.InputJsonValue,
           },
         },
       },
@@ -621,14 +759,30 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
 
   const items = normalizedDays.flatMap((day) =>
     day.items.map((item, index) => ({
+      id: item.id,
       tripId: trip.id,
       day: day.dayNumber,
       title: item.title,
       description: item.notes || null,
       timeSlot: item.time,
+      itemType: item.type,
+      source: item.source || "manual",
       location: item.location?.name || null,
-      latitude: item.location?.lat || null,
-      longitude: item.location?.lng || null,
+      latitude: item.location?.lat ?? null,
+      longitude: item.location?.lng ?? null,
+      locationDesc: item.location?.description || null,
+      locationAddress: item.location?.address || null,
+      placeId: item.location?.placeId || null,
+      photoUrl: item.location?.photoUrl || null,
+      thumbnail: item.location?.thumbnail || null,
+      openingHours: item.location?.openingHours || null,
+      phoneNumber: item.location?.phoneNumber || null,
+      website: item.location?.website || null,
+      googleMapsUrl: item.location?.googleMapsUrl || null,
+      rating: item.location?.rating ?? null,
+      userRatingsTotal: item.location?.userRatingsTotal ?? null,
+      confidence: item.location?.confidence ?? null,
+      verified: item.location?.verified ?? null,
       order: index,
     })),
   );
@@ -640,12 +794,26 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
   if (input.pins.length > 0) {
     await prisma.mapPin.createMany({
       data: input.pins.map((pin) => ({
+        id: pin.id,
         tripId: trip.id,
         label: pin.name,
         lat: pin.lat,
         lng: pin.lng,
         description: pin.description,
         address: pin.address || null,
+        placeId: pin.placeId || null,
+        photoUrl: pin.photoUrl || null,
+        thumbnail: pin.thumbnail || null,
+        openingHours: pin.openingHours || null,
+        phoneNumber: pin.phoneNumber || null,
+        website: pin.website || null,
+        googleMapsUrl: pin.googleMapsUrl || null,
+        rating: pin.rating ?? null,
+        userRatingsTotal: pin.userRatingsTotal ?? null,
+        color: pin.color || null,
+        source: pin.source || "manual",
+        confidence: pin.confidence ?? null,
+        verified: pin.verified ?? null,
         linkedTripItemId: pin.linkedTripItemId || null,
         dayNumber: pin.dayNumber || null,
       })),

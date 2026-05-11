@@ -182,6 +182,7 @@ function ItineraryLibraryPanel({
           </div>
           {activeTripId && (
             <select
+              aria-label={t.itineraryPage.filterCurrentTripFolder}
               value={currentFolderId ?? ""}
               disabled={!canEdit}
               onChange={(event) => onMoveCurrentTripToFolder(event.target.value || null)}

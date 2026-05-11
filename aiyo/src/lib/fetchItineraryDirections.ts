@@ -9,10 +9,18 @@ export type ResolvedRoutePath = {
   path: LatLngPoint[];
   /** 是否為 Directions API 回傳的實際路徑（否則為兩點直線後備）。 */
   usedDirections: boolean;
+  /** Directions 各路段时间加總（秒）；僅在 usedDirections 為 true 且可讀取 legs 時有意義。 */
+  durationSeconds?: number;
+};
+
+type DirectionsLeg = { duration?: { value?: number } };
+type DirectionsRouteTyped = {
+  overview_path?: Array<{ lat(): number; lng(): number } | LatLngPoint>;
+  legs?: DirectionsLeg[];
 };
 
 type DirectionsCallbackResult = {
-  routes: Array<{ overview_path?: Array<{ lat(): number; lng(): number } | LatLngPoint> }>;
+  routes: DirectionsRouteTyped[];
 } | null;
 
 type DirectionsServiceInstance = {
@@ -34,6 +42,21 @@ type MapsWithDirections = GoogleMapsApi & {
   DirectionsService?: new () => DirectionsServiceInstance;
   TravelMode?: Record<string, string>;
 };
+
+function sumLegDurationSeconds(route: DirectionsRouteTyped): number {
+  const legs = route.legs;
+  if (!legs?.length) {
+    return 0;
+  }
+  let total = 0;
+  for (const leg of legs) {
+    const v = leg.duration?.value;
+    if (typeof v === "number" && v > 0) {
+      total += v;
+    }
+  }
+  return total;
+}
 
 /**
  * 循序呼叫 DirectionsService（降低 OVER_QUERY_LIMIT 風險），失敗時以兩點直線後備。
@@ -63,7 +86,7 @@ export async function fetchItineraryRoutePaths(
     segment: ItineraryRouteSegment,
     travelModeKey: ReturnType<typeof resolveGoogleTravelMode>,
     useTransitTime = false,
-  ): Promise<LatLngPoint[] | null> {
+  ): Promise<{ path: LatLngPoint[]; durationSeconds: number } | null> {
     const travelMode = api.TravelMode![travelModeKey];
     if (!travelMode) {
       return null;
@@ -82,15 +105,24 @@ export async function fetchItineraryRoutePaths(
       };
     }
 
-    return await new Promise<LatLngPoint[] | null>((resolve) => {
+    return await new Promise<{ path: LatLngPoint[]; durationSeconds: number } | null>((resolve) => {
       try {
         service.route(request, (result, status) => {
-          if (status !== statusOk || !result?.routes?.[0]?.overview_path?.length) {
+          if (status !== statusOk || !result?.routes?.[0]) {
             resolve(null);
             return;
           }
-          const overview = result.routes[0].overview_path;
-          resolve(overview.map(normalizeOverviewPoint));
+          const route0 = result.routes[0];
+          const overview = route0.overview_path;
+          if (!overview?.length) {
+            resolve(null);
+            return;
+          }
+          const durationSeconds = sumLegDurationSeconds(route0);
+          resolve({
+            path: overview.map(normalizeOverviewPoint),
+            durationSeconds,
+          });
         });
       } catch {
         resolve(null);
@@ -104,18 +136,27 @@ export async function fetchItineraryRoutePaths(
     }
 
     const travelModeKey = resolveGoogleTravelMode(segment.transport);
-    let path: LatLngPoint[] | null = await requestPath(segment, travelModeKey, travelModeKey === "TRANSIT");
+    let best: { path: LatLngPoint[]; durationSeconds: number } | null = await requestPath(
+      segment,
+      travelModeKey,
+      travelModeKey === "TRANSIT",
+    );
 
-    if (!path?.length && travelModeKey === "TRANSIT") {
-      path = await requestPath(segment, "DRIVING", false);
+    if (!best?.path.length && travelModeKey === "TRANSIT") {
+      best = await requestPath(segment, "DRIVING", false);
     }
 
-    if (!path?.length && travelModeKey === "BICYCLING") {
-      path = await requestPath(segment, "DRIVING", false);
+    if (!best?.path.length && travelModeKey === "BICYCLING") {
+      best = await requestPath(segment, "DRIVING", false);
     }
 
-    if (path && path.length > 0) {
-      out.push({ segment, path, usedDirections: true });
+    if (best && best.path.length > 0) {
+      out.push({
+        segment,
+        path: best.path,
+        usedDirections: true,
+        durationSeconds: best.durationSeconds > 0 ? best.durationSeconds : undefined,
+      });
     } else {
       out.push({
         segment,

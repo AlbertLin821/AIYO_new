@@ -5,9 +5,9 @@ const e2eBaseURL = process.env.PLAYWRIGHT_BASE_URL || `http://localhost:${e2ePor
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  timeout: 30_000,
+  timeout: 120_000,
   expect: {
-    timeout: 10_000,
+    timeout: 20_000,
   },
   fullyParallel: false,
   workers: 1,

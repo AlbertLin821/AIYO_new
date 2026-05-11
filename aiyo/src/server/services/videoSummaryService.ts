@@ -1,11 +1,17 @@
+import { randomUUID } from "crypto";
+import { normalizeOllamaPlainText } from "@/server/ai/ollamaResponseNormalizer";
 import { OllamaRequestError, chatWithOllama } from "@/server/ai/ollamaClient";
 import { buildVideoMomentPolishingPrompt } from "@/server/ai/promptBuilder";
 import { parseVideoMomentPolishingResponse } from "@/server/ai/responseParser";
+import { prisma } from "@/lib/prisma";
+import { segmentTitleMatchesAnyPlace } from "@/server/ai/placeNameMatch";
 import { resolvePlaceMentionsWithGeocode } from "@/server/geo/geocodeService";
+import { searchPlacesByText } from "@/server/geo/placesSearchService";
 import {
   extractYouTubeVideoId,
   fetchYouTubeMetadata,
   fetchYouTubeTranscript,
+  type TranscriptEntry,
 } from "@/server/providers/youtubeProvider";
 import { isGenericTravelLocation } from "@/server/video/genericLocationFilter";
 import { buildMomentSegments, toVideoSummarySegments } from "@/server/video/momentSegmentBuilder";
@@ -21,14 +27,116 @@ import type {
   VideoSummarySegment,
 } from "@/types";
 
+const VIDEO_PIPELINE_VERSION = "video-quality-v3";
 const videoSummaryCache = new Map<string, { expiresAt: number; result: VideoSummaryResult }>();
 const VIDEO_SUMMARY_CACHE_MS = 30 * 60 * 1000;
+
+type VideoSummaryCacheRow = {
+  result: unknown;
+};
 
 interface VideoSummaryInput {
   url?: string;
   videoId?: string;
   title?: string;
   destination?: string;
+}
+
+function isVideoSummaryResult(value: unknown): value is VideoSummaryResult {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const result = value as Partial<VideoSummaryResult>;
+  return (
+    result.source === "youtube-summary-service" &&
+    typeof result.title === "string" &&
+    typeof result.summary === "string" &&
+    Array.isArray(result.segments) &&
+    Array.isArray(result.extractedLocations) &&
+    !!result.video &&
+    typeof result.video === "object"
+  );
+}
+
+function buildSummaryCacheKey(input: { videoId: string; destination?: string; language?: string }): string {
+  return [
+    VIDEO_PIPELINE_VERSION,
+    input.videoId.trim(),
+    (input.destination || "").trim() || "any-destination",
+    (input.language || "zh-Hant").trim(),
+  ].join(":");
+}
+
+async function readPersistedVideoSummary(cacheKey: string): Promise<VideoSummaryResult | null> {
+  try {
+    const rows = await prisma.$queryRaw<VideoSummaryCacheRow[]>`
+      SELECT "result"
+      FROM "video_summary_caches"
+      WHERE "videoId" = ${cacheKey}
+      LIMIT 1
+    `;
+    const result = rows[0]?.result;
+    return isVideoSummaryResult(result) ? result : null;
+  } catch (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[video-summary-cache] Failed to read persisted summary.", error);
+    }
+    return null;
+  }
+}
+
+async function writePersistedVideoSummary(cacheKey: string, result: VideoSummaryResult): Promise<void> {
+  try {
+    const id = randomUUID();
+    await prisma.$executeRaw`
+      INSERT INTO "video_summary_caches" ("id", "videoId", "result", "updatedAt")
+      VALUES (${id}, ${cacheKey}, CAST(${JSON.stringify(result)} AS JSONB), NOW())
+      ON CONFLICT ("videoId") DO UPDATE SET
+        "result" = EXCLUDED."result",
+        "updatedAt" = NOW()
+    `;
+  } catch (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[video-summary-cache] Failed to persist summary.", error);
+    }
+  }
+}
+
+async function getCachedVideoSummary(cacheKey: string): Promise<VideoSummaryResult | null> {
+  const cached = videoSummaryCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    if (cached.result.segments.length === 0) {
+      videoSummaryCache.delete(cacheKey);
+    } else {
+      return {
+        ...cached.result,
+        debug: { ...cached.result.debug, cacheStatus: "memory-hit" } as VideoSummaryResult["debug"],
+      };
+    }
+  }
+
+  const persisted = await readPersistedVideoSummary(cacheKey);
+  if (!persisted || persisted.segments.length === 0) {
+    return null;
+  }
+
+  videoSummaryCache.set(cacheKey, {
+    expiresAt: Date.now() + VIDEO_SUMMARY_CACHE_MS,
+    result: persisted,
+  });
+  return {
+    ...persisted,
+    debug: { ...persisted.debug, cacheStatus: "persisted-hit" } as VideoSummaryResult["debug"],
+  };
+}
+
+async function cacheVideoSummary(cacheKey: string, result: VideoSummaryResult): Promise<void> {
+  videoSummaryCache.set(cacheKey, {
+    expiresAt: Date.now() + VIDEO_SUMMARY_CACHE_MS,
+    result,
+  });
+  await writePersistedVideoSummary(cacheKey, result);
 }
 
 function compactSummaryFromSegments(segments: VideoSummarySegment[]): string {
@@ -52,6 +160,44 @@ function parseDurationToSeconds(duration: string): number {
     return parts[0] * 60 + parts[1];
   }
   return parts[0] || 0;
+}
+
+function formatTimestampFromSeconds(seconds: number): string {
+  const safe = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(safe / 60);
+  const remainingSeconds = safe % 60;
+  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
+}
+
+export function buildDescriptionFallbackTranscriptEntries(input: {
+  title: string;
+  description: string;
+}): TranscriptEntry[] {
+  const chunks = [input.title, ...input.description.split(/\n{2,}/u)]
+    .map((chunk) =>
+      chunk
+        .split(/\n/u)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .join(" "),
+    )
+    .flatMap((chunk) => chunk.split(/(?<=[。！？!?])\s*|[•●◆◇▪︎✔✅🌟📍]/u))
+    .map((chunk) => chunk.replace(/https?:\/\/\S+/gi, " ").replace(/#[\p{Letter}\p{Number}_-]+/gu, " ").trim())
+    .filter((chunk) => !/(請(記得)?訂閱|別忘了|按讚|分享|小鈴鐺|合作邀約|商業合作|follow|instagram|facebook|music by|音樂)/i.test(chunk))
+    .filter((chunk) => chunk.length >= 4 && chunk.length <= 120)
+    .slice(0, 18);
+
+  return chunks.map((text, index) => {
+    const startSeconds = index * 60;
+    return {
+      timestamp: formatTimestampFromSeconds(startSeconds),
+      startSeconds,
+      durationSeconds: 45,
+      text,
+      timestampSource: "description-fallback",
+      timestampConfidence: "low",
+    };
+  });
 }
 
 async function polishMomentsWithAi(input: {
@@ -105,9 +251,11 @@ async function polishMomentsWithAi(input: {
         }
         return {
           ...original,
-          title: moment.title || original.title,
-          text: moment.text || original.text,
-          summary: moment.summary || original.summary || original.text,
+          title: normalizeOllamaPlainText(moment.title ?? original.title ?? ""),
+          text: normalizeOllamaPlainText(moment.text ?? original.text),
+          summary: normalizeOllamaPlainText(
+            moment.summary ?? original.summary ?? original.text,
+          ),
           extractionSource: "ai-polished" as const,
         };
       })
@@ -120,6 +268,28 @@ async function polishMomentsWithAi(input: {
     }
     return input.segments;
   }
+}
+
+async function verifySegmentTitlesWithPlaces(
+  segments: VideoSummarySegment[],
+  destination?: string,
+): Promise<VideoSummarySegment[]> {
+  const hint = destination?.trim();
+  if (!hint) {
+    return segments;
+  }
+  const next: VideoSummarySegment[] = [];
+  for (const seg of segments) {
+    const title = seg.title?.trim();
+    if (!title) {
+      next.push(seg);
+      continue;
+    }
+    const res = await searchPlacesByText(title, hint, { maxResults: 5 });
+    const verified = res.ok ? segmentTitleMatchesAnyPlace(title, res.places) : undefined;
+    next.push({ ...seg, titlePlaceVerified: verified });
+  }
+  return next;
 }
 
 function toTimestamps(segments: VideoSummarySegment[]): Timestamp[] {
@@ -137,6 +307,12 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
   }
 
   const videoId = idFromField || idFromUrl;
+  const inputCacheKey = buildSummaryCacheKey({ videoId, destination: input.destination });
+  const inputVideoIdCache = await getCachedVideoSummary(inputCacheKey);
+  if (inputVideoIdCache) {
+    return inputVideoIdCache;
+  }
+
   const canonicalUrl = input.url?.trim() || `https://www.youtube.com/watch?v=${videoId}`;
   const metadata = await fetchYouTubeMetadata({
     url: canonicalUrl,
@@ -144,14 +320,27 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
   });
   const resolvedVideoId = metadata.videoId || videoId;
 
-  const cached = videoSummaryCache.get(resolvedVideoId);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.result;
+  if (resolvedVideoId !== videoId) {
+    const resolvedVideoIdCache = await getCachedVideoSummary(
+      buildSummaryCacheKey({ videoId: resolvedVideoId, destination: input.destination }),
+    );
+    if (resolvedVideoIdCache) {
+      return resolvedVideoIdCache;
+    }
   }
+  const resolvedCacheKey = buildSummaryCacheKey({ videoId: resolvedVideoId, destination: input.destination });
 
   const transcriptResult = await fetchYouTubeTranscript(resolvedVideoId);
+  const descriptionFallbackEntries = buildDescriptionFallbackTranscriptEntries({
+    title: metadata.title,
+    description: metadata.description,
+  });
+  const transcriptEntries =
+    transcriptResult.entries.length > 0
+      ? [...transcriptResult.entries, ...descriptionFallbackEntries]
+      : descriptionFallbackEntries;
 
-  if (transcriptResult.entries.length === 0) {
+  if (transcriptEntries.length === 0) {
     const unavailableReason = "無法取得逐字稿，暫時無法產生精準摘要。";
     const video: VideoRecommendation = {
       id: metadata.id,
@@ -190,26 +379,27 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
         captionLanguage: transcriptResult.captionLanguage,
         captionKind: transcriptResult.captionKind,
         captionSource: transcriptResult.captionSource,
+        cacheStatus: "miss",
+        pipelineVersion: VIDEO_PIPELINE_VERSION,
       },
     };
 
-    videoSummaryCache.set(resolvedVideoId, {
-      expiresAt: Date.now() + VIDEO_SUMMARY_CACHE_MS,
-      result: unavailableResult,
-    });
+    await cacheVideoSummary(resolvedCacheKey, unavailableResult);
 
     return unavailableResult;
   }
 
-  const transcriptEntries = transcriptResult.entries;
-  const transcriptSource = "youtube" as const;
+  const transcriptSource: VideoSummaryDebugMeta["transcriptSource"] =
+    transcriptResult.entries.length > 0 ? "youtube" : "fallback-description";
   const profile = selectTravelExtractionProfile({
     destinationHint: input.destination,
     transcriptLanguage: transcriptResult.captionLanguage,
     title: metadata.title,
     description: metadata.description,
   });
-  const preprocessedLines = preprocessTranscript(transcriptEntries, profile);
+  const preprocessedLines = preprocessTranscript(transcriptEntries, profile, {
+    captionLanguage: transcriptResult.captionLanguage,
+  });
   const rawMentions = extractTimestampAwarePlaceMentions({
     lines: preprocessedLines,
     profile,
@@ -222,7 +412,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
       name: normalizedName,
       normalizedName: normalizedName.toLowerCase().replace(/\s+/g, ""),
     };
-  });
+  }).filter((mention) => mention.name.length > 0);
   const mentions = dedupePlaceMentions(normalizedMentions).filter(
     (mention) =>
       mention.name &&
@@ -267,15 +457,21 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     destination: input.destination,
     segments: deterministicSegments,
   });
-  const resolvedSegmentLocations = polishedSegments.filter(
+  const polishedWithPlaceTitles = await verifySegmentTitlesWithPlaces(polishedSegments, input.destination);
+  const resolvedSegmentLocations = polishedWithPlaceTitles.filter(
     (segment) => (segment.locationHints || []).length > 0,
   );
   const summary = compactSummaryFromSegments(resolvedSegmentLocations);
+  const usedDescriptionFallback = transcriptSource === "fallback-description";
   const summarySource: VideoSummaryDebugMeta["summarySource"] =
     resolvedSegmentLocations.some((segment) => segment.extractionSource === "ai-polished")
-      ? "ollama-transcript"
+      ? usedDescriptionFallback
+        ? "ollama-description-fallback"
+        : "ollama-transcript"
       : "heuristic-transcript-fallback";
-  const segmentSource: VideoSummaryDebugMeta["segmentSource"] = "transcript-chunks";
+  const segmentSource: VideoSummaryDebugMeta["segmentSource"] = usedDescriptionFallback
+    ? "description-fallback"
+    : "deterministic-mentions";
 
   const video: VideoRecommendation = {
     id: metadata.id,
@@ -317,13 +513,12 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
       captionLanguage: transcriptResult.captionLanguage,
       captionKind: transcriptResult.captionKind,
       captionSource: transcriptResult.captionSource,
+      cacheStatus: "miss",
+      pipelineVersion: VIDEO_PIPELINE_VERSION,
     },
   };
 
-  videoSummaryCache.set(resolvedVideoId, {
-    expiresAt: Date.now() + VIDEO_SUMMARY_CACHE_MS,
-    result,
-  });
+  await cacheVideoSummary(resolvedCacheKey, result);
 
   return result;
 }

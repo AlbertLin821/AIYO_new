@@ -8,6 +8,7 @@ import { zhTW as t } from "@/locales/zh-TW";
 import {
   applyPlanningUpdateToStores,
   derivePlanningSnapshot,
+  extractIsoDateRangeFromText,
   extractPlanningUpdateFromText,
 } from "@/lib/planningContext";
 import { sendChatMessage } from "@/services/aiClient";
@@ -80,6 +81,7 @@ export default function FloatingAIChat() {
       user: useUserStore.getState(),
       pinCount: useMapStore.getState().pins.length,
     });
+    const dateRange = extractIsoDateRangeFromText(content);
 
     const userMessage = buildUserMessage(content);
     appendMessage(userMessage);
@@ -95,6 +97,8 @@ export default function FloatingAIChat() {
           days: nextPlanningSnapshot.days,
           budget: nextPlanningSnapshot.budget,
           itinerary: useTripStore.getState().itinerary,
+          tripStartDate: dateRange.tripStartDate,
+          tripEndDate: dateRange.tripEndDate,
         },
       });
       appendMessage(response.reply);

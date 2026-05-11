@@ -27,6 +27,7 @@ if (process.env.NODE_ENV !== "production") {
   if (!process.env.NEXTAUTH_URL) {
     console.warn("[auth] NEXTAUTH_URL is missing; set it in .env.local");
   }
+  // 開發時請讓 NEXTAUTH_URL 與瀏覽器實際網址一致（含 http/https、主機名與埠號），否則 Cookie／Session 可能與 API 驗證不一致。
 }
 
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {

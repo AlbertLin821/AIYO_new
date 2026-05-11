@@ -139,7 +139,7 @@ export default function VideoSearchBar() {
         <button
           onClick={() => void handleSearch()}
           disabled={isBusy || !trimmed}
-          data-testid="video-search-button"
+          data-testid="video-search-submit"
           className="px-5 py-3.5 bg-gradient-to-r from-primary to-primary-dark text-white rounded-2xl font-medium text-sm hover:shadow-md transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2"
         >
           {isBusy ? (

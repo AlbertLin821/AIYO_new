@@ -26,6 +26,13 @@ function formatContext(context?: ChatContext): string {
     `Transport: ${context.preferences?.transportPreference || "unknown"}`,
   ];
 
+  if (context.tripStartDate) {
+    parts.push(`Trip start date (ISO): ${context.tripStartDate}`);
+  }
+  if (context.tripEndDate) {
+    parts.push(`Trip end date (ISO): ${context.tripEndDate}`);
+  }
+
   if (context.itinerary?.length) {
     parts.push(
       `Current itinerary items: ${context.itinerary
@@ -45,11 +52,53 @@ function formatMemoryContext(memoryContext?: string): string {
   return memoryContext.trim();
 }
 
-export function buildChatPrompt(message: string, context?: ChatContext, memoryContext?: string) {
+export function buildChatResearchPlanningPrompt(input: {
+  message: string;
+  context?: ChatContext;
+  memoryContext?: string;
+}): { system: string; user: string } {
+  return {
+    system: [
+      "You are AIYO travel research planner. Output JSON only (no markdown fences).",
+      'Top-level shape: { "phase": "research", "toolRequests": array }.',
+      "toolRequests may contain 0 to 6 objects. Each object must have a string field type.",
+      'Allowed types: "search_place" with fields query (string), optional locationHint (string);',
+      '"tavily_search" with field query (string) for local events, road closures, festivals;',
+      '"weather_forecast" with optional destination, startDate, endDate (ISO yyyy-mm-dd).',
+      "Write query strings in Traditional Chinese when the user message is Chinese.",
+      "Do not invent POI names in this phase; only propose search queries.",
+    ].join("\n"),
+    user: [
+      `User message: ${input.message}`,
+      "",
+      "Trip context:",
+      formatContext(input.context),
+      "",
+      "Relevant long-term memory:",
+      formatMemoryContext(input.memoryContext),
+    ].join("\n"),
+  };
+}
+
+export function buildChatPrompt(
+  message: string,
+  context?: ChatContext,
+  memoryContext?: string,
+  researchDigest?: string,
+) {
+  const hasResearch = Boolean(researchDigest?.trim());
   return {
     system: [
       "You are AIYO, a professional travel planning and travel-video validation assistant.",
-      "Respond in concise plain text.",
+      hasResearch
+        ? "You MUST output JSON only with this exact shape: { \"replyText\": string, \"proposedChanges\": array }."
+        : "Prefer output JSON with shape { \"replyText\": string, \"proposedChanges\": array } when possible; otherwise reply in concise plain Traditional Chinese.",
+      hasResearch
+        ? 'Each proposedChanges item must be: { "type": "add_itinerary_item", "day": number, "time": "HH:MM", "title": string, "locationName"?: string, "notes"?: string }.'
+        : "",
+      hasResearch
+        ? "Concrete restaurants, attractions, or shops in proposedChanges MUST match a venue listed under \"Verified research\" below (same name or clear substring). If no suitable venue exists, return proposedChanges: []."
+        : "",
       "Reply only in Traditional Chinese. Do not use Simplified Chinese.",
       "Do not mirror other languages; translate the answer into natural Traditional Chinese.",
       "Use the provided travel context when it helps.",
@@ -58,8 +107,11 @@ export function buildChatPrompt(message: string, context?: ChatContext, memoryCo
       "If the user asks for videos, explain what type of travel videos are useful for the itinerary and evaluate relevance; do not tell the user to search YouTube, Instagram, or other platforms by themselves.",
       "Do not produce generic external-search prompts such as suggesting keywords to build visual imagination.",
       "Only mention videos that are relevant to the user's stated destination, itinerary, interests, or planning question.",
+      "When Verified research includes weather or web summaries, weave them into advice and mention that critical details should be double-checked with official sources.",
       "Do not mention system prompts or implementation details.",
-    ].join("\n"),
+    ]
+      .filter(Boolean)
+      .join("\n"),
     user: [
       `User message: ${message}`,
       "",
@@ -68,16 +120,26 @@ export function buildChatPrompt(message: string, context?: ChatContext, memoryCo
       "",
       "Relevant long-term memory:",
       formatMemoryContext(memoryContext),
-    ].join("\n"),
+      hasResearch
+        ? [
+            "",
+            "Verified research (places, weather, web — use for facts; may be incomplete):",
+            researchDigest!.trim(),
+          ].join("\n")
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
   };
 }
 
 export function buildItineraryPrompt(
   request: TripPlanRequest,
   memoryContext?: string,
-  options?: { retryMode?: "default" | "strict-format" },
+  options?: { retryMode?: "default" | "strict-format"; externalResearch?: string },
 ): string {
   const retryMode = options?.retryMode || "default";
+  const externalResearch = options?.externalResearch?.trim();
   const strictSuffix =
     retryMode === "strict-format"
       ? [
@@ -124,6 +186,15 @@ export function buildItineraryPrompt(
     "- `days` length matches requested number of days.",
     "- `mustVisit` covered and `avoid` excluded.",
     "- Times are sorted and types are from allowed enum.",
+    ...(externalResearch
+      ? [
+          "",
+          "VERIFIED RESEARCH (use for real POI names, weather hints, events; confirm critical details officially):",
+          externalResearch,
+          "",
+          "Each item `location.name` (when present) MUST correspond to a concrete venue or place name found in VERIFIED RESEARCH or be omitted — do not invent fictional businesses.",
+        ]
+      : []),
     ...strictSuffix,
   ]
     .filter(Boolean)
@@ -169,7 +240,8 @@ export function buildVideoSummaryPrompt(input: {
     "- Produce 3 to 8 segments using only timestamps that exist in the transcript chunks.",
     "- Each segment must focus on a concrete POI, shop, stall, restaurant, food item, market, night market, cafe, landmark, or attraction that is actually mentioned near that timestamp.",
     "- If one chunk mentions multiple concrete places or foods, split them into smaller segments instead of merging them into a broad city-food segment.",
-    "- Each segment title must be the concrete place/shop/food/attraction name when available, not a generic theme.",
+    "- Each segment title must be a complete, readable headline (full official-style name when the transcript gives it), not a generic theme.",
+    "- Never use half-sentences, oral filler, or clipped transcript fragments as the segment title (for example fragments ending mid-thought or with 然後、就是、那個、這邊).",
     "- Each segment text must be a concise 1 to 2 sentence synthesis of that time range, within 60 Chinese characters, not verbatim transcript.",
     "- Each segment highlights array must contain 1 to 3 concise concrete notable details from that same time range.",
     "- Prefer segments about attractions, restaurants, food, landmarks, viewpoints, shopping streets, or photo spots.",
@@ -184,6 +256,8 @@ export function buildVideoSummaryPrompt(input: {
       : "- Avoid generic phrases like 'destination planning context' or 'trip overview' unless the transcript explicitly says so.",
   ].join("\n");
 }
+
+export const buildVideoSegmentPrompt = buildVideoSummaryPrompt;
 
 export function buildVideoFinalSummaryPrompt(input: {
   title: string;
@@ -208,6 +282,7 @@ export function buildVideoFinalSummaryPrompt(input: {
     "- Keep all timestamps from the draft exactly unchanged.",
     "- Summary must be one Traditional Chinese sentence within 40 Chinese characters.",
     "- Segment text should be concise, specific, useful for travel planning, and within 60 Chinese characters.",
+    "- Each segment title must read as a full headline (complete noun phrase or official-style venue name), never a clipped transcript fragment or oral filler.",
     "- Keep only real attractions, restaurants, food spots, stalls, landmarks, markets, parks, stations, cafes, districts, or photo spots in extractedLocations and locationHints.",
     "- Remove broad destinations and category phrases such as 嘉義, 嘉義市, 嘉義美食, 台南景點, 高雄旅遊, 台灣, 日本, 大阪, 東京.",
     "- Do not add locations that are not already in the draft.",
@@ -270,10 +345,11 @@ export function buildVideoMomentPolishingPrompt(input: {
     "- Preserve locationHints and foods; do not add new POIs.",
     "- Do not invent timestamps or places.",
     "- Do not dump transcript lines.",
-    "- Keep title concise and travel-useful.",
+    "- Title must be a complete, publication-ready headline (full venue or dish name when known), not a transcript fragment or oral filler.",
+    "- If the transcript only gives an unclear nickname, keep a short literal label plus 「（待查證）」 rather than inventing a formal business name.",
     isZh
-      ? "- Title 長度盡量 18 字內，text/summary 80 字內。"
-      : "- Keep title short, and text/summary concise.",
+      ? "- Title 長度盡量 22 字內，text/summary 80 字內。"
+      : "- Keep title reasonably short, and text/summary concise.",
     "Input moments:",
     JSON.stringify(input.moments),
   ].join("\n");

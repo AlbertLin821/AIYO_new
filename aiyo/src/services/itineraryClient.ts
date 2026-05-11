@@ -1,6 +1,7 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/services/apiClient";
 import type { ItineraryListItem } from "@/lib/itinerary-sort";
 import type { CollaboratorRole } from "@/lib/permissions";
+import type { CollaborationPresenceState, PersistedTripPayload } from "@/types";
 
 export type ItineraryFolderDto = {
   id: string;
@@ -22,6 +23,11 @@ export type TripCollaboratorDto = {
   };
 };
 
+export type TripSwitchPayload = {
+  trip: PersistedTripPayload;
+  collaboration: CollaborationPresenceState | null;
+};
+
 export function listItineraryFolders() {
   return apiGet<ItineraryFolderDto[]>("/api/itinerary-folders");
 }
@@ -33,7 +39,7 @@ export function listTripsForLibrary(scope: "recent" | "mine" | "shared") {
 }
 
 export function setActiveTrip(tripId: string) {
-  return apiPost<{ tripId: string }, { ok: boolean }>("/api/trips/active", { tripId });
+  return apiPost<{ tripId: string }, TripSwitchPayload>("/api/trips/active", { tripId });
 }
 
 export function createItineraryFolder(input: { name: string; sortOrder?: number }) {

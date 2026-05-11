@@ -104,6 +104,7 @@ export function buildItineraryRouteSegments(days: TripPlanDay[]): ItineraryRoute
 
       const transport = item.transport?.trim() || "Mixed";
       const distanceKm = estimateDistanceKm(from, to);
+      const legColor = DAY_ROUTE_COLORS[index % DAY_ROUTE_COLORS.length];
       return {
         id: `day_${day.dayNumber}_${previous.id}_${item.id}`,
         dayNumber: day.dayNumber,
@@ -116,7 +117,7 @@ export function buildItineraryRouteSegments(days: TripPlanDay[]): ItineraryRoute
         transport,
         distanceKm,
         estimatedMinutes: estimateTravelMinutes(distanceKm, transport),
-        color: DAY_ROUTE_COLORS[(day.dayNumber - 1) % DAY_ROUTE_COLORS.length],
+        color: legColor,
         from,
         to,
         ...(previous.location?.placeId ? { fromPlaceId: previous.location.placeId } : {}),

@@ -41,7 +41,7 @@ test("first-time login shows clean onboarding then six Taiwan-city recommendatio
   const modal = page.getByTestId("onboarding-modal");
   await expect(modal).toBeVisible();
   await expect(modal).toContainText("歡迎使用 AIYO 設定目的地與旅遊天數");
-  await expect(modal.getByTestId("recommended-video")).toHaveCount(0);
+  await expect(modal.getByTestId("video-card")).toHaveCount(0);
   await expect(modal.getByText("推薦影片")).toHaveCount(0);
 
   await page.getByTestId("onboarding-skip-button").dispatchEvent("click");
@@ -49,7 +49,7 @@ test("first-time login shows clean onboarding then six Taiwan-city recommendatio
 
   await expect(page.getByText("推薦影片")).toBeVisible();
   await expect(page.getByText("預設推薦").first()).toBeVisible();
-  await expect(page.getByTestId("recommended-video")).toHaveCount(6);
+  await expect(page.getByTestId("video-card")).toHaveCount(6);
   await expect(page.getByText(/台北|新北|桃園|台中|台南|高雄/).first()).toBeVisible();
   expect(recommendationCalls).toBe(0);
 });
@@ -76,7 +76,10 @@ test("keyword search updates video cards and hides noisy description text", asyn
             channelTitle: "QA Travel",
             publishedAt: "2026-01-01T00:00:00.000Z",
             timestamps: [],
-            extractedLocations: [],
+            extractedLocations: [
+              { name: "阿宏師火雞肉飯" },
+              { name: "林聰明砂鍋魚頭" },
+            ],
             summarySegments: [],
             listProvenance: "youtube-data-api",
           },
@@ -92,9 +95,9 @@ test("keyword search updates video cards and hides noisy description text", asyn
   await expect(page.getByTestId("onboarding-modal")).toBeHidden();
 
   await page.getByTestId("video-search-input").fill("嘉義美食");
-  await page.getByTestId("video-search-button").click();
+  await page.getByTestId("video-search-submit").dispatchEvent("click");
 
-  const card = page.getByTestId("recommended-video").filter({ hasText: "嘉義美食一日遊" });
+  const card = page.getByTestId("video-card").filter({ hasText: "嘉義美食一日遊" });
   await expect(card).toBeVisible();
   await expect(card).toContainText("阿宏師火雞肉飯");
   await expect(card).not.toContainText("訂閱");
