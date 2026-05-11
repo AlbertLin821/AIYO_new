@@ -11,7 +11,8 @@
 | `youtube-proj/` | 舊版 YouTube 字幕／outline 參考實作（Vite＋Python server），已去除巢狀 `.git`，與主專案一併版本化 |
 | `vendor/mem0/` | Mem0 上游原始碼快照（已去除 `.git`），供 `docker-compose.yml` 的 `mem0-memory` 建置使用；可用環境變數 `MEM0_REPO_PATH` 覆寫 |
 | `docker-compose.yml` | 本地 PostgreSQL、Redis、選用應用容器與選用 Mem0 相關服務 |
-| `dev-up.ps1` | Windows 上一鍵啟動開發用 Compose 設定檔（含 `dev` 與 `mem0` 設定檔） |
+| `dev-up.ps1` | Windows 上僅啟動 Docker Compose（含 `dev` 與 `mem0` 設定檔），不安裝 npm／不檢查 Ollama |
+| `dev-deploy.ps1` | Windows 開發模式一鍵部署：`npm install`、依 `aiyo/.env` 拉取缺少的 Ollama 模型、再啟動 Compose（預設含 mem0，可用參數關閉） |
 
 ## 技術棧（摘要）
 
@@ -96,7 +97,17 @@ curl http://localhost:3000/api/health
 
 瀏覽器開啟：`http://localhost:3000`。
 
-### Windows：一鍵腳本（會嘗試啟動 Mem0）
+### Windows：完整開發部署（建議）
+
+專案根目錄執行：
+
+```powershell
+.\dev-deploy.ps1
+```
+
+會依序：`npm install`（`aiyo/`）、確認本機 Ollama 可連線並**僅拉取缺少的**模型（自 `aiyo/.env` 讀取 `OLLAMA_*`；若啟用 Mem0 另含 `qwen3.5:9b`、`nomic-embed-text`）、`scripts/clone-mem0.ps1`，再以 `docker compose --env-file ./aiyo/.env` 啟動 `postgres`、`redis`、`app-dev`（及 mem0 相關容器）。若不需要 Mem0：`.\dev-deploy.ps1 -NoMem0`。
+
+### Windows：僅 Docker（會嘗試啟動 Mem0）
 
 專案根目錄的 `dev-up.ps1` 會執行：
 
