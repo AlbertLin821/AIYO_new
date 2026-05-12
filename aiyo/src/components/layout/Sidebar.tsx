@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowRightToLine,
   CalendarDays,
@@ -8,14 +8,20 @@ import {
   Home,
   LogOut,
   Map,
+  Menu,
   MessageCircle,
+  Settings,
   User,
 } from "lucide-react";
-import { signIn, signOut, useSession } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { zhTW as t } from "@/locales/zh-TW";
+import { useUIStore } from "@/stores/useUIStore";
+
+const EXPANDED_W = 240;
+const COLLAPSED_W = 68;
 
 const navItems = [
   { icon: Home, labelKey: "home" as const, href: "/" },
@@ -28,30 +34,51 @@ const navItems = [
 export default function Sidebar() {
   const pathname = usePathname();
   const { data: session, status } = useSession();
+  const setLoginModalOpen = useUIStore((s) => s.setLoginModalOpen);
+  const setSettingsModalOpen = useUIStore((s) => s.setSettingsModalOpen);
+  const collapsed = useUIStore((s) => s.sidebarCollapsed);
+  const toggleSidebar = useUIStore((s) => s.toggleSidebar);
+
+  const width = collapsed ? COLLAPSED_W : EXPANDED_W;
 
   return (
     <motion.aside
       initial={false}
-      animate={{ width: 240 }}
+      animate={{ width }}
       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
       className="fixed left-0 top-0 z-40 hidden h-screen flex-col border-r-2 border-border bg-surface shadow-soft lg:flex"
     >
-      <div className="flex h-16 items-center gap-3 border-b border-border bg-surface-elevated/60 px-4">
-        <div className="flex items-center justify-center size-10 rounded-xl bg-gradient-to-br from-primary to-lavender text-white flex-shrink-0">
-          <Compass className="size-5" />
-        </div>
-        <motion.div
-          initial={{ opacity: 0, x: -10 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.2 }}
-          className="overflow-hidden"
+      <div className="flex h-16 items-center gap-3 border-b border-border bg-surface-elevated/60 px-3">
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          className="flex size-10 items-center justify-center rounded-xl text-muted transition-colors hover:bg-primary/8 hover:text-foreground flex-shrink-0"
+          aria-label={collapsed ? "展開側邊欄" : "收合側邊欄"}
         >
-          <h1 className="font-bold text-lg text-foreground tracking-tight">AIYO</h1>
-          <p className="text-[11px] text-muted leading-none">{t.nav.brandSubtitle}</p>
-        </motion.div>
+          <Menu className="size-5" />
+        </button>
+        <AnimatePresence>
+          {!collapsed && (
+            <motion.div
+              initial={{ opacity: 0, width: 0 }}
+              animate={{ opacity: 1, width: "auto" }}
+              exit={{ opacity: 0, width: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden flex items-center gap-3"
+            >
+              <div className="flex items-center justify-center size-10 rounded-xl bg-gradient-to-br from-primary to-lavender text-white flex-shrink-0">
+                <Compass className="size-5" />
+              </div>
+              <div className="overflow-hidden">
+                <h1 className="font-bold text-lg text-foreground tracking-tight whitespace-nowrap">AIYO</h1>
+                <p className="text-[11px] text-muted leading-none whitespace-nowrap">{t.nav.brandSubtitle}</p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      <nav className="flex-1 py-4 px-3 flex flex-col gap-1">
+      <nav className="flex-1 py-4 px-2 flex flex-col gap-1">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
@@ -61,9 +88,11 @@ export default function Sidebar() {
               href={item.href}
               prefetch
               aria-current={isActive ? "page" : undefined}
+              title={collapsed ? t.nav[item.labelKey] : undefined}
               className={cn(
-                "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer",
+                "group flex items-center gap-3 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer",
                 "hover:bg-primary/8",
+                collapsed ? "justify-center px-2 py-2.5" : "px-3 py-2.5",
                 isActive
                   ? "bg-primary/15 text-primary shadow-sm ring-2 ring-primary/25"
                   : "text-muted hover:text-foreground",
@@ -75,15 +104,20 @@ export default function Sidebar() {
                   isActive ? "text-primary" : "text-muted group-hover:text-foreground",
                 )}
               />
-              <motion.span
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.15 }}
-                className="whitespace-nowrap overflow-hidden"
-              >
-                {t.nav[item.labelKey]}
-              </motion.span>
-              {isActive && (
+              <AnimatePresence>
+                {!collapsed && (
+                  <motion.span
+                    initial={{ opacity: 0, width: 0 }}
+                    animate={{ opacity: 1, width: "auto" }}
+                    exit={{ opacity: 0, width: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="whitespace-nowrap overflow-hidden"
+                  >
+                    {t.nav[item.labelKey]}
+                  </motion.span>
+                )}
+              </AnimatePresence>
+              {isActive && !collapsed && (
                 <motion.div
                   layoutId="activeNav"
                   className="ml-auto size-1.5 rounded-full bg-primary"
@@ -95,54 +129,105 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div className="px-3 pb-3">
-        <div className="mb-2 rounded-2xl border border-border bg-peach-light/40 p-3">
-          <div className="flex items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded-full bg-primary/15 text-sm font-semibold text-primary">
+      <div className="px-2 pb-3">
+        <div className={cn(
+          "mb-2 rounded-2xl border border-border bg-peach-light/40",
+          collapsed ? "p-2" : "p-3",
+        )}>
+          <div className={cn("flex items-center", collapsed ? "justify-center" : "gap-3")}>
+            <div className="flex size-9 items-center justify-center rounded-full bg-primary/15 text-sm font-semibold text-primary flex-shrink-0">
               {(session?.user?.name || session?.user?.email || "A")[0]?.toUpperCase()}
             </div>
-            <motion.div
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.15 }}
-              className="min-w-0 flex-1"
-            >
-              <p className="truncate text-sm font-medium text-foreground">
-                {status === "authenticated"
-                  ? session?.user?.name || session?.user?.email || t.sidebar.guest
-                  : t.sidebar.guest}
-              </p>
-              <p className="truncate text-[11px] text-muted">
-                {status === "authenticated"
-                  ? session?.user?.email || ""
-                  : t.sidebar.signInHint}
-              </p>
-            </motion.div>
+            <AnimatePresence>
+              {!collapsed && (
+                <motion.div
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: "auto" }}
+                  exit={{ opacity: 0, width: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="min-w-0 flex-1 overflow-hidden"
+                >
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {status === "authenticated"
+                      ? session?.user?.name || session?.user?.email || t.sidebar.guest
+                      : t.sidebar.guest}
+                  </p>
+                  <p className="truncate text-[11px] text-muted">
+                    {status === "authenticated"
+                      ? session?.user?.email || ""
+                      : t.sidebar.signInHint}
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
-          <button
-            onClick={() =>
-              status === "authenticated"
-                ? void signOut({ callbackUrl: "/" })
-                : void signIn(undefined, { callbackUrl: pathname || "/" })
-            }
-            className={cn(
-              "mt-3 flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-colors",
-              status === "authenticated"
-                ? "bg-border-light text-foreground hover:bg-border"
-                : "bg-primary text-white hover:bg-primary-dark",
+          <div className={cn("mt-3 flex gap-2", collapsed ? "flex-col" : "")}>
+            {status === "authenticated" && (
+              <button
+                onClick={() => setSettingsModalOpen(true)}
+                className={cn(
+                  "flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-colors",
+                  "bg-border-light text-foreground hover:bg-border",
+                  collapsed ? "w-full" : "flex-1",
+                )}
+                title="設定"
+              >
+                <Settings className="size-4" />
+                <AnimatePresence>
+                  {!collapsed && (
+                    <motion.span
+                      initial={{ opacity: 0, width: 0 }}
+                      animate={{ opacity: 1, width: "auto" }}
+                      exit={{ opacity: 0, width: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="whitespace-nowrap overflow-hidden"
+                    >
+                      設定
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </button>
             )}
-            title={status === "authenticated" ? t.sidebar.signOut : t.sidebar.signIn}
-          >
-            {status === "authenticated" ? (
-              <LogOut className="size-4" />
-            ) : (
-              <ArrowRightToLine className="size-4" />
-            )}
-            <span>{status === "authenticated" ? t.sidebar.signOut : t.sidebar.signIn}</span>
-          </button>
+            <button
+              onClick={() =>
+                status === "authenticated"
+                  ? void signOut({ callbackUrl: "/" })
+                  : setLoginModalOpen(true)
+              }
+              className={cn(
+                "flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-colors",
+                status === "authenticated"
+                  ? "bg-border-light text-foreground hover:bg-border"
+                  : "bg-primary text-white hover:bg-primary-dark",
+                collapsed ? "w-full" : status === "authenticated" ? "flex-1" : "w-full",
+              )}
+              title={status === "authenticated" ? t.sidebar.signOut : t.sidebar.signIn}
+            >
+              {status === "authenticated" ? (
+                <LogOut className="size-4" />
+              ) : (
+                <ArrowRightToLine className="size-4" />
+              )}
+              <AnimatePresence>
+                {!collapsed && (
+                  <motion.span
+                    initial={{ opacity: 0, width: 0 }}
+                    animate={{ opacity: 1, width: "auto" }}
+                    exit={{ opacity: 0, width: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="whitespace-nowrap overflow-hidden"
+                  >
+                    {status === "authenticated" ? t.sidebar.signOut : t.sidebar.signIn}
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </button>
+          </div>
         </div>
       </div>
     </motion.aside>
   );
 }
+
+export { EXPANDED_W, COLLAPSED_W };

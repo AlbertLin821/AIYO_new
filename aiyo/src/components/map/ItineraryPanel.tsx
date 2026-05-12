@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSession } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   closestCenter,
@@ -13,12 +14,16 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CalendarPlus, ChevronDown, ChevronUp, GripVertical, MapPin, Plus, X } from "lucide-react";
+import { CalendarPlus, ChevronDown, ChevronUp, GripVertical, Loader2, MapPin, Plus, X } from "lucide-react";
+import type { ItineraryListItem } from "@/lib/itinerary-sort";
 import { zhTW as t } from "@/locales/zh-TW";
 import { buildItineraryRouteSegments } from "@/lib/routeSegments";
 import { getRegionalTransitOptions } from "@/lib/tripTransportRegion";
 import { cn } from "@/lib/utils";
+import { listTripsForLibrary, setActiveTrip } from "@/services/itineraryClient";
+import { syncService } from "@/services/syncService";
 import { useMapStore } from "@/stores/useMapStore";
+import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
 import type { MapPin as TripMapPin, TripPlanItem } from "@/types";
 
@@ -242,13 +247,16 @@ function typeLabel(itemType: TripPlanItem["type"]) {
 }
 
 export default function ItineraryPanel() {
+  const { status } = useSession();
   const itinerary = useTripStore((state) => state.itinerary);
   const tripDestination = useTripStore((state) => state.destination);
+  const currentTripId = useTripStore((state) => state.tripId);
   const addItineraryItem = useTripStore((state) => state.addItineraryItem);
   const updateItineraryItem = useTripStore((state) => state.updateItineraryItem);
   const updateItineraryItemTransport = useTripStore((state) => state.updateItineraryItemTransport);
   const reorderItineraryItem = useTripStore((state) => state.reorderItineraryItem);
   const { panelOpen, setPanelOpen, pins, selectedPinId, setSelectedPinId } = useMapStore();
+  const pushToast = useToastStore((state) => state.pushToast);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -259,6 +267,44 @@ export default function ItineraryPanel() {
   const routeSegments = useMemo(() => buildItineraryRouteSegments(itinerary), [itinerary]);
   const segmentDirectionsMinutes = useMapStore((s) => s.segmentDirectionsMinutes);
   const transportOptions = useMemo(() => transportSelectRows(tripDestination), [tripDestination]);
+
+  const [tripList, setTripList] = useState<ItineraryListItem[]>([]);
+  const [tripListLoading, setTripListLoading] = useState(false);
+  const [tripSwitching, setTripSwitching] = useState(false);
+  const [tripPickerOpen, setTripPickerOpen] = useState(false);
+
+  useEffect(() => {
+    if (status !== "authenticated" || !panelOpen) return;
+    let cancelled = false;
+    setTripListLoading(true);
+    listTripsForLibrary("recent")
+      .then((rows) => { if (!cancelled) setTripList(rows); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setTripListLoading(false); });
+    return () => { cancelled = true; };
+  }, [status, panelOpen]);
+
+  const handleSwitchTrip = useCallback(
+    async (tripId: string) => {
+      if (tripId === currentTripId || tripSwitching) return;
+      setTripSwitching(true);
+      try {
+        const snapshot = await setActiveTrip(tripId);
+        syncService.applyTripSwitch(snapshot);
+        syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
+        setExpandedDay(1);
+      } catch (error) {
+        pushToast({
+          variant: "error",
+          title: t.itineraryPanel.title,
+          description: error instanceof Error ? error.message : "無法切換行程",
+        });
+      } finally {
+        setTripSwitching(false);
+      }
+    },
+    [currentTripId, pushToast, tripSwitching],
+  );
 
   const addQuickStop = useCallback((dayNumber: number) => {
     manualItemCounter.current += 1;
@@ -328,6 +374,115 @@ export default function ItineraryPanel() {
               </button>
             </div>
           </div>
+
+          <div className="border-b border-border-light bg-cream/30 px-5 py-3">
+            <button
+              type="button"
+              disabled={tripSwitching}
+              onClick={() => setTripPickerOpen(true)}
+              className={cn(
+                "flex w-full items-center justify-between rounded-xl border border-border-light bg-surface px-3 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-cream/40",
+                tripSwitching && "opacity-60",
+              )}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] text-muted">切換行程</p>
+                <p className="truncate text-sm font-medium text-foreground">
+                  {useTripStore.getState().title || tripDestination || "目前行程"}
+                </p>
+              </div>
+              {tripSwitching ? (
+                <Loader2 className="ml-2 size-4 shrink-0 animate-spin text-primary" aria-hidden />
+              ) : (
+                <ChevronDown className="ml-2 size-4 shrink-0 text-muted" aria-hidden />
+              )}
+            </button>
+          </div>
+
+          <AnimatePresence>
+            {tripPickerOpen && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 z-30 flex flex-col bg-black/40"
+                onClick={() => { if (!tripSwitching) setTripPickerOpen(false); }}
+              >
+                <motion.div
+                  initial={{ opacity: 0, y: -12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -12 }}
+                  transition={{ duration: 0.2 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="m-4 flex max-h-[70%] flex-col rounded-2xl border border-border-light bg-surface shadow-soft-lg"
+                >
+                  <div className="flex items-center justify-between border-b border-border-light px-5 py-4">
+                    <h4 className="text-sm font-semibold text-foreground">選擇行程</h4>
+                    <button
+                      type="button"
+                      onClick={() => setTripPickerOpen(false)}
+                      className="rounded-lg p-1 text-muted transition-colors hover:bg-border-light hover:text-foreground"
+                    >
+                      <X className="size-4" aria-hidden />
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-2">
+                    {tripListLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="size-5 animate-spin text-primary" aria-hidden />
+                      </div>
+                    ) : tripList.length === 0 ? (
+                      <div className="px-4 py-8 text-center text-xs text-muted">
+                        尚無行程
+                      </div>
+                    ) : (
+                      tripList.map((trip) => {
+                        const isActive = trip.id === currentTripId;
+                        return (
+                          <button
+                            key={trip.id}
+                            type="button"
+                            disabled={tripSwitching}
+                            onClick={() => {
+                              if (isActive) {
+                                setTripPickerOpen(false);
+                                return;
+                              }
+                              void handleSwitchTrip(trip.id).then(() => setTripPickerOpen(false));
+                            }}
+                            className={cn(
+                              "flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors",
+                              isActive
+                                ? "bg-primary/10 ring-1 ring-primary/25"
+                                : "hover:bg-cream/60",
+                              tripSwitching && "opacity-60",
+                            )}
+                          >
+                            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
+                              {trip.days} 天
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium text-foreground">
+                                {trip.title || "未命名行程"}
+                              </p>
+                              <p className="mt-0.5 truncate text-[11px] text-muted">
+                                {trip.destination || "未設定目的地"}
+                                {isActive ? " (目前)" : ""}
+                              </p>
+                            </div>
+                            {isActive && (
+                              <div className="size-2 shrink-0 rounded-full bg-primary" />
+                            )}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div className="flex-1 overflow-y-auto">
             {itinerary.map((day) => (

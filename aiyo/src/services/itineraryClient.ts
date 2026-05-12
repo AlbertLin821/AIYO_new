@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPatch, apiPost } from "@/services/apiClient";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/services/apiClient";
 import type { ItineraryListItem } from "@/lib/itinerary-sort";
 import type { CollaboratorRole } from "@/lib/permissions";
 import type { CollaborationPresenceState, PersistedTripPayload } from "@/types";
@@ -107,5 +107,37 @@ export function patchTripDetails(
 
 export function updateTripTitle(tripId: string, title: string) {
   return patchTripDetails(tripId, { title });
+}
+
+export type JoinCollabResult = {
+  tripId: string;
+  tripName: string;
+  role: string;
+  members: number;
+};
+
+export function joinCollabTrip(inviteCode: string) {
+  return apiPost<{ inviteCode: string }, JoinCollabResult>("/api/collab/join", { inviteCode });
+}
+
+export function createNewTrip() {
+  const payload: PersistedTripPayload = {
+    tripId: "",
+    title: "",
+    destination: "",
+    days: 1,
+    budget: 0,
+    coverImageUrl: null,
+    itinerary: [
+      {
+        dayNumber: 1,
+        theme: "Day 1",
+        summary: "",
+        items: [],
+      },
+    ],
+    pins: [],
+  };
+  return apiPut<PersistedTripPayload, PersistedTripPayload>("/api/trips/current", payload);
 }
 

@@ -3,7 +3,6 @@
 import { memo } from "react";
 import { Plus, MousePointer2 } from "lucide-react";
 import type { DragEndEvent } from "@dnd-kit/core";
-import { cn } from "@/lib/utils";
 import { zhTW as t } from "@/locales/zh-TW";
 import type { EditingPresence, TripPlanDay, TripPlanItem } from "@/types";
 import ItineraryCollaborationSidebar from "./ItineraryCollaborationSidebar";
@@ -57,12 +56,7 @@ function ItineraryEditorSection({
   onReorderItem,
 }: Props) {
   return (
-    <div
-      className={cn(
-        "grid items-start gap-6",
-        isSharedTrips && "lg:grid-cols-[minmax(0,1fr)_320px]",
-      )}
-    >
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div
         className="relative min-w-0 space-y-5"
         onMouseMove={(event) => {
@@ -172,11 +166,9 @@ function ItineraryEditorSection({
         </div>
       </div>
 
-      {isSharedTrips && (
-        <aside className="flex flex-col gap-4 lg:sticky lg:top-24">
-          <ItineraryCollaborationSidebar />
-        </aside>
-      )}
+      <aside className="flex flex-col gap-4 lg:sticky lg:top-24">
+        <ItineraryCollaborationSidebar />
+      </aside>
     </div>
   );
 }

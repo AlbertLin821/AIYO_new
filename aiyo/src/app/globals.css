@@ -140,6 +140,40 @@ body {
   background-size: 32px 32px;
 }
 
+@property --rainbow-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes rainbowSpin {
+  to { --rainbow-angle: 360deg; }
+}
+
+.rainbow-border {
+  position: relative;
+  border: none !important;
+  background-clip: padding-box;
+}
+
+.rainbow-border::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--rainbow-angle),
+    #ffb6c1, #ffdab9, #ffffba, #baffc9, #bae1ff, #ddb6ff, #ffb6ef, #ffb6c1
+  );
+  animation: rainbowSpin 3s linear infinite;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
 .map-mock-shell {
   background:
     radial-gradient(ellipse 120% 80% at 50% 100%, rgb(218 228 216 / 0.95), transparent 55%),
