@@ -20,7 +20,8 @@ interface OllamaChatOptions {
     | "video-summary-fast"
     | "video-summary-final"
     | "location-filter"
-    | "video-moment-polish";
+    | "video-moment-polish"
+    | "video-place-candidate-extract";
 }
 
 export class OllamaRequestError extends Error {
@@ -50,6 +51,9 @@ export function resolveModelForTask(
     return serverConfig.ollamaSummaryModel;
   }
   if (task === "location-filter" && serverConfig.ollamaLocationModel) {
+    return serverConfig.ollamaLocationModel;
+  }
+  if (task === "video-place-candidate-extract" && serverConfig.ollamaLocationModel) {
     return serverConfig.ollamaLocationModel;
   }
   if (task === "trip-plan" && serverConfig.ollamaTripPlanModel) {

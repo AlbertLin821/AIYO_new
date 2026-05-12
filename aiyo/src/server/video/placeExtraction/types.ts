@@ -33,6 +33,7 @@ export type CanonicalPlaceCandidate = {
   rejectedReason?: string;
   sourceTranscriptLineIds?: string[];
   evidenceTexts?: string[];
+  evidenceSource?: "title" | "description" | "transcript" | "chapter" | "llm";
 };
 
 export type VerifiedVideoPlace = {

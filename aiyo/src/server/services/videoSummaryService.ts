@@ -1,7 +1,6 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { serverConfig } from "@/server/config";
-import { resolveLocationReference } from "@/server/geo/locationCatalog";
 import {
   extractYouTubeVideoId,
   fetchYouTubeMetadata,
@@ -25,6 +24,7 @@ import type {
 } from "@/types";
 
 const VIDEO_PIPELINE_VERSION = "video-quality-v6";
+const NO_VERIFIED_PLACES_MESSAGE = "此影片未擷取到足夠明確且可驗證的地點名稱。";
 
 function dedupeLocationsByNormalizedName<T extends Pick<LocationReference, "name">>(locations: T[]): T[] {
   const seen = new Set<string>();
@@ -368,46 +368,51 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     enableSearch: serverConfig.searxngEnabled,
   });
   const finalPlaces = finalPlaceResult.places;
-  const mapReadyLocations = dedupeLocationsByNormalizedName(
-    finalPlaces.map((place) => {
-      const fallbackLocation =
-        place.lat !== undefined && place.lng !== undefined
-          ? null
-          : resolveLocationReference(place.name, input.destination);
-      return {
-        name: place.name,
-        lat: place.lat ?? fallbackLocation?.lat ?? 0,
-        lng: place.lng ?? fallbackLocation?.lng ?? 0,
-        description: place.evidenceTexts[0] || `${place.name}，影片中提及的行程候選地點。`,
-        address: place.address ?? fallbackLocation?.address,
-        normalizedName: place.canonicalName,
-        cleanedName: place.canonicalName,
-        raw: place.aliases[0] || place.name,
-        rawMention: place.aliases[0] || place.name,
-        confidence: place.confidence,
-        verified: place.source === "geocode" || place.source === "gazetteer",
-        resolvedFrom: place.source === "geocode" ? "google-geocode" : "heuristic",
-        sourceTranscriptLineIds: place.sourceTranscriptLineIds,
-        extractionSource: "deterministic" as const,
-      } satisfies LocationReference;
-    }),
-  ).slice(0, 16);
-  const extractedLocationNames = mapReadyLocations.map((loc) => loc.name);
+  /** 正式 UI：不含僅 heuristic 通過的地點（需 VIDEO_PLACE_ALLOW_HEURISTIC_FALLBACK 才可能進入 pipeline）。 */
+  const formalUiPlaces = finalPlaces.filter((place) => place.source !== "heuristic");
+  const mapReadyLocations =
+    formalUiPlaces.length === 0
+      ? []
+      : dedupeLocationsByNormalizedName(
+          formalUiPlaces
+            .filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lng))
+            .map((place) => ({
+              name: place.name,
+              lat: place.lat as number,
+              lng: place.lng as number,
+              description: place.evidenceTexts[0] || `${place.name}，影片中提及的行程候選地點。`,
+              address: place.address,
+              normalizedName: place.canonicalName,
+              cleanedName: place.canonicalName,
+              raw: place.aliases[0] || place.name,
+              rawMention: place.aliases[0] || place.name,
+              confidence: place.confidence,
+              verified: place.source === "geocode" || place.source === "gazetteer",
+              resolvedFrom: place.source === "geocode" ? ("google-geocode" as const) : ("heuristic" as const),
+              sourceTranscriptLineIds: place.sourceTranscriptLineIds,
+              extractionSource: "deterministic" as const,
+            })),
+        ).slice(0, 16);
+  const extractedLocationNames = formalUiPlaces.map((place) => place.name);
   const geocodeWarnings = finalPlaceResult.rejectedCandidates.length
     ? finalPlaceResult.rejectedCandidates
         .slice(0, 8)
         .map((candidate) => `${candidate.rawText}：${candidate.rejectedReason}`)
     : undefined;
 
-  const deterministicSegments = buildSegmentsFromVerifiedPlaces({
-    places: finalPlaces,
-    videoDurationSeconds: parseDurationToSeconds(metadata.duration),
-    maxSegments: 8,
-  });
+  const deterministicSegments =
+    formalUiPlaces.length === 0
+      ? []
+      : buildSegmentsFromVerifiedPlaces({
+          places: formalUiPlaces,
+          videoDurationSeconds: parseDurationToSeconds(metadata.duration),
+          maxSegments: 8,
+        });
   const resolvedSegmentLocations = mergeVideoSummarySegmentsByStartSeconds(deterministicSegments).filter(
     (segment) => (segment.locationHints || []).length > 0,
   );
-  const summary = compactSummaryFromSegments(resolvedSegmentLocations);
+  const summary =
+    formalUiPlaces.length === 0 ? NO_VERIFIED_PLACES_MESSAGE : compactSummaryFromSegments(resolvedSegmentLocations);
   const usedDescriptionFallback = transcriptSource === "fallback-description";
   const summarySource: VideoSummaryDebugMeta["summarySource"] = usedDescriptionFallback
     ? "ollama-description-fallback"
@@ -445,9 +450,11 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     mapsProvenance: deriveMapsProvenance(mapReadyLocations),
     geocodeWarnings,
     fallbackReason:
-      resolvedSegmentLocations.length === 0
-        ? "無法建立穩定的重點片段，已套用 deterministic fallback。"
-        : undefined,
+      formalUiPlaces.length === 0
+        ? NO_VERIFIED_PLACES_MESSAGE
+        : resolvedSegmentLocations.length === 0
+          ? "無法建立穩定的重點片段，已套用 deterministic fallback。"
+          : undefined,
     video,
     debug: {
       transcriptSource,

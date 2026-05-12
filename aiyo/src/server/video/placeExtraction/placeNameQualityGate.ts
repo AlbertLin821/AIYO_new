@@ -34,6 +34,7 @@ const ROUTING_PREFIXES = [
 const COMMENTARY_PREFIX_PATTERNS = [
   /^(?:市的靈魂|城市的靈魂)\s*/u,
   /^(?:體驗|是體驗|最棒的是|重建後的|對長輩友善的|適合拍照的|必去的|推薦的|走進對長輩極度友善的)\s*/u,
+  /^(?:這次會去|這次要去|這次先去)\s*/u,
 ];
 
 const LEADING_FILLERS = [
@@ -43,6 +44,7 @@ const LEADING_FILLERS = [
   "晚上可以",
   "晚上去",
   "推薦",
+  "這次會去",
   "這裡有",
   "這裡",
   "那裡",

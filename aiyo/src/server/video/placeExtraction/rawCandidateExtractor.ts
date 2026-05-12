@@ -10,9 +10,25 @@ const NAMED_FOOD_SHOP_PATTERN =
 
 function splitMetadata(text: string): string[] {
   return text
-    .split(/\n|(?<=[。！？!?])\s*/u)
+    .split(/\n|(?<=[。！？!?])\s*|[、,，|／/]/u)
     .map((chunk) => chunk.trim())
     .filter((chunk) => chunk.length >= 2 && chunk.length <= 120);
+}
+
+function looksLikeCompactPoiChunk(text: string): boolean {
+  if (!text.trim()) {
+    return false;
+  }
+  if (/[。！？!?]/u.test(text)) {
+    return false;
+  }
+  if (text.length > 12) {
+    return false;
+  }
+  if (/(我們|今天|接著|然後|推薦|附近|美食|景點|交通|攻略|travel|amazing)/iu.test(text)) {
+    return false;
+  }
+  return /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}A-Za-z0-9'&.\-\s]{2,12}$/u.test(text);
 }
 
 function extractExplicitMatches(text: string): string[] {
@@ -54,16 +70,18 @@ export function extractRawPlaceCandidates(input: {
   const candidates: RawPlaceCandidate[] = [];
 
   for (const line of input.transcriptLines) {
-    candidates.push({
-      rawText: line.text,
-      cleanedText: line.text,
-      source: "transcript",
-      startSeconds: line.startSeconds,
-      endSeconds: line.endSeconds,
-      context: line.text,
-      confidence: 0.62,
-      sourceTranscriptLineIds: [line.id],
-    });
+    if (looksLikeCompactPoiChunk(line.text)) {
+      candidates.push({
+        rawText: line.text.trim(),
+        cleanedText: line.text.trim(),
+        source: "transcript",
+        startSeconds: line.startSeconds,
+        endSeconds: line.endSeconds,
+        context: line.text,
+        confidence: 0.68,
+        sourceTranscriptLineIds: [line.id],
+      });
+    }
     for (const match of extractExplicitMatches(line.text)) {
       candidates.push({
         rawText: match,
@@ -79,13 +97,15 @@ export function extractRawPlaceCandidates(input: {
   }
 
   for (const text of splitMetadata(input.title)) {
-    candidates.push({
-      rawText: text,
-      cleanedText: text,
-      source: "title",
-      context: input.title,
-      confidence: 0.58,
-    });
+    if (looksLikeCompactPoiChunk(text)) {
+      candidates.push({
+        rawText: text,
+        cleanedText: text,
+        source: "title",
+        context: input.title,
+        confidence: 0.6,
+      });
+    }
     for (const match of extractExplicitMatches(text)) {
       candidates.push({
         rawText: match,
@@ -98,13 +118,15 @@ export function extractRawPlaceCandidates(input: {
   }
 
   for (const text of splitMetadata(input.description || "")) {
-    candidates.push({
-      rawText: text,
-      cleanedText: text,
-      source: "description",
-      context: text,
-      confidence: 0.48,
-    });
+    if (looksLikeCompactPoiChunk(text)) {
+      candidates.push({
+        rawText: text,
+        cleanedText: text,
+        source: "description",
+        context: text,
+        confidence: 0.56,
+      });
+    }
     for (const match of extractExplicitMatches(text)) {
       candidates.push({
         rawText: match,

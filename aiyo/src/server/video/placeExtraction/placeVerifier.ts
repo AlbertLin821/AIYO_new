@@ -1,7 +1,9 @@
+import { serverConfig } from "@/server/config";
 import { evaluateGeocodeConfidenceGate, geocodeWithGoogle } from "@/server/geo/geocodeService";
 import { findKnownLocationReference, resolveLocationReference } from "@/server/geo/locationCatalog";
 import { searchWeb } from "@/server/search/searxngClient";
 import { validatePoiNameQuality } from "@/server/video/placeExtraction/placeNameQualityGate";
+import { scoreSearchEvidence } from "@/server/video/placeExtraction/searchEvidenceScorer";
 import type { CanonicalPlaceCandidate, VerifiedVideoPlace } from "@/server/video/placeExtraction/types";
 
 function isMapLikePlaceName(name: string): boolean {
@@ -91,46 +93,44 @@ export async function verifyCanonicalPlaces(
       }
     }
 
-    if (options?.enableSearch) {
-      const searchResults = await searchWeb({
-        query: options.destinationHint
-          ? `${candidate.canonicalName} ${options.destinationHint}`
-          : candidate.canonicalName,
-        limit: 3,
-      });
-      const matched = searchResults.find((result) =>
-        `${result.title} ${result.content}`.toLowerCase().includes(candidate.canonicalName.toLowerCase()),
-      );
-      if (matched) {
-        verified.push(
-          buildVerifiedPlace(candidate, {
-            source: "search",
-            address: matched.url,
-            confidence: Math.min(1, candidate.confidence + 0.05),
-          }),
-        );
+    if (serverConfig.videoPlaceEnableNominatim) {
+      const nominatim = await verifyWithNominatim(candidate.canonicalName, options?.destinationHint);
+      if (nominatim) {
+        verified.push(buildVerifiedPlace(candidate, nominatim));
         continue;
       }
     }
 
-    if (candidate.confidence >= 0.72 && isMapLikePlaceName(candidate.canonicalName)) {
-      const fallback = resolveLocationReference(candidate.canonicalName, options?.destinationHint);
-      verified.push(
-        buildVerifiedPlace(candidate, {
-          source: "heuristic",
-          lat: fallback.lat,
-          lng: fallback.lng,
-          address: fallback.address,
-          confidence: Math.min(0.82, candidate.confidence),
-        }),
-      );
-    } else if (candidate.confidence >= 0.84) {
-      verified.push(
-        buildVerifiedPlace(candidate, {
-          source: "heuristic",
-          confidence: Math.min(0.78, candidate.confidence),
-        }),
-      );
+    if (options?.enableSearch) {
+      const searchEvidence = await verifyWithSearchEvidence(candidate, options?.destinationHint);
+      if (searchEvidence) {
+        verified.push(buildVerifiedPlace(candidate, searchEvidence));
+        continue;
+      }
+    }
+
+    if (serverConfig.videoPlaceAllowHeuristicFallback) {
+      const cappedHeuristicConfidence = Math.min(0.65, candidate.confidence);
+
+      if (candidate.confidence >= 0.72 && isMapLikePlaceName(candidate.canonicalName)) {
+        const fallback = resolveLocationReference(candidate.canonicalName, options?.destinationHint);
+        verified.push(
+          buildVerifiedPlace(candidate, {
+            source: "heuristic",
+            lat: fallback.lat,
+            lng: fallback.lng,
+            address: fallback.address,
+            confidence: cappedHeuristicConfidence,
+          }),
+        );
+      } else if (candidate.confidence >= 0.84) {
+        verified.push(
+          buildVerifiedPlace(candidate, {
+            source: "heuristic",
+            confidence: cappedHeuristicConfidence,
+          }),
+        );
+      }
     }
   }
 
@@ -139,4 +139,98 @@ export async function verifyCanonicalPlaces(
     const bStart = b.firstMentionStartSeconds ?? Number.MAX_SAFE_INTEGER;
     return aStart - bStart;
   });
+}
+
+async function verifyWithSearchEvidence(
+  candidate: CanonicalPlaceCandidate,
+  destinationHint?: string,
+): Promise<Partial<VerifiedVideoPlace> | null> {
+  const queries = buildSearchQueries(candidate, destinationHint);
+  const results = (
+    await Promise.all(
+      queries.map((query) =>
+        searchWeb({
+          query,
+          limit: 5,
+        }),
+      ),
+    )
+  ).flat();
+  const score = scoreSearchEvidence({
+    candidateName: candidate.cleanedName,
+    canonicalName: candidate.canonicalName,
+    aliases: candidate.aliases,
+    destinationHint,
+    results,
+  });
+  if (!score.accepted) {
+    return null;
+  }
+  return {
+    source: "search",
+    address: score.bestResult?.url,
+    confidence: Math.min(1, Math.max(candidate.confidence, score.score)),
+  };
+}
+
+function buildSearchQueries(candidate: CanonicalPlaceCandidate, destinationHint?: string): string[] {
+  const queries = new Set<string>();
+  const base = candidate.canonicalName;
+  const destination = destinationHint?.trim();
+  if (candidate.type === "station" || candidate.type === "transport_hub") {
+    queries.add(`${base} 地址`);
+    queries.add(`${base} station`);
+  } else if (candidate.type === "restaurant" || candidate.type === "shop") {
+    queries.add(`${base}${destination ? ` ${destination}` : ""} 地址`);
+    queries.add(`${base}${destination ? ` ${destination}` : ""} restaurant`);
+  } else {
+    queries.add(`${base}${destination ? ` ${destination}` : ""} 景點 地址`);
+    queries.add(`${base} travel attraction`);
+    queries.add(`${base} Google Maps`);
+  }
+  if (destination) {
+    queries.add(`${base} ${destination} 景點`);
+  }
+  return Array.from(queries);
+}
+
+async function verifyWithNominatim(
+  name: string,
+  destinationHint?: string,
+): Promise<Partial<VerifiedVideoPlace> | null> {
+  const query = [name, destinationHint].filter(Boolean).join(", ");
+  if (!query) {
+    return null;
+  }
+  try {
+    const params = new URLSearchParams({
+      q: query,
+      format: "jsonv2",
+      limit: "1",
+    });
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        "User-Agent": "AIYO_new/1.0",
+      },
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const payload = (await response.json()) as Array<{ lat?: string; lon?: string; display_name?: string }>;
+    const first = payload[0];
+    if (!first?.lat || !first?.lon) {
+      return null;
+    }
+    return {
+      source: "geocode",
+      lat: Number(first.lat),
+      lng: Number(first.lon),
+      address: first.display_name,
+      confidence: 0.74,
+    };
+  } catch {
+    return null;
+  }
 }
