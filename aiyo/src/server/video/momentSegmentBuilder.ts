@@ -1,5 +1,6 @@
 import type { VideoSummarySegment } from "@/types";
 import type { PlaceMention } from "@/server/video/placeMentionExtractor";
+import type { VerifiedVideoPlace } from "@/server/video/placeExtraction";
 import { shouldExcludeAsPoiTitle } from "@/server/video/placeMentionNormalizer";
 
 export type TravelMomentSegment = {
@@ -191,4 +192,46 @@ export function mergeVideoSummarySegmentsByStartSeconds(segments: VideoSummarySe
     }
   }
   return out;
+}
+
+export function buildSegmentsFromVerifiedPlaces(input: {
+  places: VerifiedVideoPlace[];
+  videoDurationSeconds?: number;
+  maxSegments?: number;
+}): VideoSummarySegment[] {
+  const maxSegments = input.maxSegments ?? 8;
+  const videoDuration = input.videoDurationSeconds ?? Number.MAX_SAFE_INTEGER;
+
+  const segments = input.places
+    .slice()
+    .sort((a, b) => {
+      const aStart = a.firstMentionStartSeconds ?? Number.MAX_SAFE_INTEGER;
+      const bStart = b.firstMentionStartSeconds ?? Number.MAX_SAFE_INTEGER;
+      return aStart - bStart;
+    })
+    .slice(0, maxSegments)
+    .map((place, index) => {
+      const startSeconds = Math.max(0, Math.floor(place.firstMentionStartSeconds ?? videoDuration + index));
+      const endSeconds = place.firstMentionEndSeconds
+        ? Math.max(startSeconds + 1, Math.floor(place.firstMentionEndSeconds))
+        : Math.min(videoDuration, startSeconds + 1);
+      const timestamp = formatSeconds(startSeconds);
+      return {
+        id: `verified_place_${index + 1}`,
+        timestamp,
+        title: place.name,
+        text: "影片在此時間點提到此地點，可作為行程候選點。",
+        summary: "影片在此時間點提到此地點，可作為行程候選點。",
+        locationHints: [place.name],
+        startLabel: timestamp,
+        endLabel: formatSeconds(endSeconds),
+        startSeconds: place.firstMentionStartSeconds,
+        endSeconds: place.firstMentionEndSeconds ?? endSeconds,
+        confidence: place.confidence,
+        sourceTranscriptLineIds: place.sourceTranscriptLineIds,
+        extractionSource: "deterministic",
+      } satisfies VideoSummarySegment;
+    });
+
+  return mergeVideoSummarySegmentsByStartSeconds(segments);
 }

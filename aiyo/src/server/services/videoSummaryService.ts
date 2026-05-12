@@ -1,28 +1,19 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { serverConfig } from "@/server/config";
-import { resolvePlaceMentionsWithGeocode } from "@/server/geo/geocodeService";
+import { resolveLocationReference } from "@/server/geo/locationCatalog";
 import {
   extractYouTubeVideoId,
   fetchYouTubeMetadata,
   fetchYouTubeTranscript,
   type TranscriptEntry,
 } from "@/server/providers/youtubeProvider";
-import { isGenericTravelLocation } from "@/server/video/genericLocationFilter";
 import {
-  buildMomentSegments,
+  buildSegmentsFromVerifiedPlaces,
   mergeVideoSummarySegmentsByStartSeconds,
-  toVideoSummarySegments,
 } from "@/server/video/momentSegmentBuilder";
-import {
-  dedupePlaceMentions,
-  fuzzyDedupePlaceMentions,
-  normalizePlaceMentionName,
-} from "@/server/video/placeMentionNormalizer";
-import { extractTimestampAwarePlaceMentions } from "@/server/video/placeMentionExtractor";
-import { filterPlaceMentionsWithLocationJson } from "@/server/video/locationMentionJsonFilter";
+import { extractFinalVideoPlaces } from "@/server/video/placeExtraction";
 import { preprocessTranscript } from "@/server/video/transcriptProcessing";
-import { polishVideoSummarySegmentsWithOllama } from "@/server/video/videoSegmentJsonPolish";
 import { selectTravelExtractionProfile } from "@/server/video/travelExtractionProfiles";
 import type {
   LocationReference,
@@ -243,6 +234,18 @@ function toTimestamps(segments: VideoSummarySegment[]): Timestamp[] {
   }));
 }
 
+function deriveMapsProvenance(locations: Array<{ resolvedFrom?: string }>): VideoSummaryResult["mapsProvenance"] {
+  const hasGeocode = locations.some((location) => location.resolvedFrom === "google-geocode");
+  const hasFallback = locations.some((location) => location.resolvedFrom !== "google-geocode");
+  if (hasGeocode && hasFallback) {
+    return "mixed";
+  }
+  if (hasGeocode) {
+    return "google-geocoding";
+  }
+  return "catalog-fallback";
+}
+
 export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSummaryResult> {
   const idFromField = input.videoId?.trim();
   const idFromUrl = extractYouTubeVideoId(input.url || "") || "";
@@ -356,85 +359,62 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
   const preprocessedLines = preprocessTranscript(transcriptEntries, profile, {
     captionLanguage: transcriptResult.captionLanguage,
   });
-  const rawMentions = extractTimestampAwarePlaceMentions({
-    lines: preprocessedLines,
-    profile,
+  const finalPlaceResult = await extractFinalVideoPlaces({
+    transcriptLines: preprocessedLines,
+    title: metadata.title,
+    description: metadata.description,
     destinationHint: input.destination,
+    enableGeocode: Boolean(serverConfig.googleMapsApiKey),
+    enableSearch: serverConfig.searxngEnabled,
   });
-  const normalizedMentions = rawMentions.map((mention) => {
-    const normalizedName = normalizePlaceMentionName(mention.name, profile);
-    return {
-      ...mention,
-      name: normalizedName,
-      normalizedName: normalizedName.toLowerCase().replace(/\s+/g, ""),
-    };
-  }).filter((mention) => mention.name.length > 0);
-  let mentions = fuzzyDedupePlaceMentions(dedupePlaceMentions(normalizedMentions)).filter(
-    (mention) =>
-      mention.name &&
-      !isGenericTravelLocation({
-        name: mention.name,
-        destinationHint: input.destination,
-        profile,
-      }),
-  );
-
-  mentions = await filterPlaceMentionsWithLocationJson(mentions, {
-    videoTitle: metadata.title,
-    destination: input.destination,
-    preprocessedLines,
-  });
-
-  const geo = await resolvePlaceMentionsWithGeocode({
-    mentions,
-    profile,
-    destinationHint: input.destination,
-  });
-
+  const finalPlaces = finalPlaceResult.places;
   const mapReadyLocations = dedupeLocationsByNormalizedName(
-    geo.locations
-      .filter((loc) => loc.verified === true)
-      .filter(
-        (loc) =>
-          !isGenericTravelLocation({
-            name: loc.name,
-            destinationHint: input.destination,
-            profile,
-          }),
-      ),
+    finalPlaces.map((place) => {
+      const fallbackLocation =
+        place.lat !== undefined && place.lng !== undefined
+          ? null
+          : resolveLocationReference(place.name, input.destination);
+      return {
+        name: place.name,
+        lat: place.lat ?? fallbackLocation?.lat ?? 0,
+        lng: place.lng ?? fallbackLocation?.lng ?? 0,
+        description: place.evidenceTexts[0] || `${place.name}，影片中提及的行程候選地點。`,
+        address: place.address ?? fallbackLocation?.address,
+        normalizedName: place.canonicalName,
+        cleanedName: place.canonicalName,
+        raw: place.aliases[0] || place.name,
+        rawMention: place.aliases[0] || place.name,
+        confidence: place.confidence,
+        verified: place.source === "geocode" || place.source === "gazetteer",
+        resolvedFrom: place.source === "geocode" ? "google-geocode" : "heuristic",
+        sourceTranscriptLineIds: place.sourceTranscriptLineIds,
+        extractionSource: "deterministic" as const,
+      } satisfies LocationReference;
+    }),
   ).slice(0, 16);
   const extractedLocationNames = mapReadyLocations.map((loc) => loc.name);
-  const geocodeWarnings = geo.failures.length ? geo.failures : undefined;
+  const geocodeWarnings = finalPlaceResult.rejectedCandidates.length
+    ? finalPlaceResult.rejectedCandidates
+        .slice(0, 8)
+        .map((candidate) => `${candidate.rawText}：${candidate.rejectedReason}`)
+    : undefined;
 
-  const deterministicMoments = buildMomentSegments({
-    mentions,
+  const deterministicSegments = buildSegmentsFromVerifiedPlaces({
+    places: finalPlaces,
     videoDurationSeconds: parseDurationToSeconds(metadata.duration),
     maxSegments: 8,
   });
-  const deterministicSegments = mergeVideoSummarySegmentsByStartSeconds(
-    toVideoSummarySegments(deterministicMoments),
-  );
-  let resolvedSegmentLocations = deterministicSegments.filter(
+  const resolvedSegmentLocations = mergeVideoSummarySegmentsByStartSeconds(deterministicSegments).filter(
     (segment) => (segment.locationHints || []).length > 0,
   );
-  resolvedSegmentLocations = await polishVideoSummarySegmentsWithOllama(resolvedSegmentLocations, {
-    videoTitle: metadata.title,
-    destination: input.destination,
-  });
   const summary = compactSummaryFromSegments(resolvedSegmentLocations);
   const usedDescriptionFallback = transcriptSource === "fallback-description";
   const summarySource: VideoSummaryDebugMeta["summarySource"] = usedDescriptionFallback
     ? "ollama-description-fallback"
     : "heuristic-transcript-fallback";
-  let segmentSource: VideoSummaryDebugMeta["segmentSource"] = usedDescriptionFallback
+  const segmentSource: VideoSummaryDebugMeta["segmentSource"] = usedDescriptionFallback
     ? "description-fallback"
     : "deterministic-mentions";
-  if (
-    serverConfig.ollamaVideoSegmentJsonPolish &&
-    resolvedSegmentLocations.some((s) => s.extractionSource === "ai-polished")
-  ) {
-    segmentSource = "deterministic-mentions-json-polished";
-  }
 
   const video: VideoRecommendation = {
     id: metadata.id,
@@ -462,7 +442,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     summary,
     segments: resolvedSegmentLocations,
     extractedLocations: extractedLocationNames,
-    mapsProvenance: geo.mapsProvenance,
+    mapsProvenance: deriveMapsProvenance(mapReadyLocations),
     geocodeWarnings,
     fallbackReason:
       resolvedSegmentLocations.length === 0
@@ -478,6 +458,10 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
       captionSource: transcriptResult.captionSource,
       cacheStatus: "miss",
       pipelineVersion: VIDEO_PIPELINE_VERSION,
+      finalPlaceCount: finalPlaces.length,
+      rejectedPlaceCandidateCount: finalPlaceResult.rejectedCandidates.length,
+      placeExtractionPipelineVersion:
+        (finalPlaceResult.debug as { placeExtractionPipelineVersion?: string } | undefined)?.placeExtractionPipelineVersion,
     },
   };
 

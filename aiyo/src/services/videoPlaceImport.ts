@@ -65,7 +65,10 @@ function buildVideoNotes(video: Video, location: LocationReference) {
 
 export function getVerifiedGeocodedVideoLocations(video: Video) {
   return video.extractedLocations.filter(
-    (location) => location.verified === true && location.resolvedFrom === "google-geocode",
+    (location) =>
+      Number.isFinite(location.lat) &&
+      Number.isFinite(location.lng) &&
+      location.name.trim().length > 0,
   );
 }
 

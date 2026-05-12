@@ -160,9 +160,7 @@ export default function VideoSummaryDrawer({
     isSummarizing &&
     !summaryDiagnostics?.summaryUnavailable &&
     ((activeVideo.summarySegments || []).length === 0 || activeVideo.extractedLocations.length === 0);
-  const verifiedLocations = activeVideo.extractedLocations.filter(
-    (location) => location.verified === true && location.resolvedFrom === "google-geocode",
-  );
+  const verifiedLocations = activeVideo.extractedLocations;
 
   function bumpSeek(seconds: number) {
     if (!videoId) {
@@ -586,7 +584,7 @@ export default function VideoSummaryDrawer({
                       <p className="text-sm text-muted">
                         {summaryDiagnostics?.summaryUnavailable
                           ? "無法取得逐字稿，暫時無法抽出可靠地點。"
-                          : t.drawer.noVerifiedLocations}
+                          : "此影片未擷取到足夠明確的地點名稱。"}
                       </p>
                     )}
                   </div>

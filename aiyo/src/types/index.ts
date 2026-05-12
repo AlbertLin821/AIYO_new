@@ -241,6 +241,9 @@ export interface VideoSummaryDebugMeta {
   captionSource?: "watch-page-captions" | "timedtext" | "youtube-transcript-package";
   cacheStatus?: "memory-hit" | "persisted-hit" | "miss";
   pipelineVersion?: string;
+  finalPlaceCount?: number;
+  rejectedPlaceCandidateCount?: number;
+  placeExtractionPipelineVersion?: string;
 }
 
 export interface VideoRecommendation {

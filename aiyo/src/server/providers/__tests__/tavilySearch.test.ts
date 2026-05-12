@@ -5,16 +5,15 @@ test("tavilySearch returns parsed results when API succeeds", async () => {
   process.env.TAVILY_API_KEY = "tvly-test";
 
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = (async () =>
-    new Response(
-      JSON.stringify({
-        answer: "測試摘要",
-        results: [
-          { title: "新聞一", url: "https://a.test/1", content: "內容片段", score: 0.9 },
-        ],
-      }),
-      { status: 200 },
-    )) as typeof fetch;
+  globalThis.fetch = (async () => new Response(
+    JSON.stringify({
+      answer: "測試摘要",
+      results: [
+        { title: "新聞一", url: "https://a.test/1", content: "內容片段", score: 0.9 },
+      ],
+    }),
+    { status: 200 },
+  )) as typeof fetch;
 
   try {
     const { tavilySearch, formatTavilyForPrompt } = await import("@/server/providers/tavilySearch");
@@ -36,9 +35,10 @@ test("tavilySearch returns parsed results when API succeeds", async () => {
 
 test("tavilySearch returns ok false when Tavily HTTP errors or key unset", async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = (async () =>
-    new Response(JSON.stringify({ detail: { error: "bad request" } }), { status: 400 }),
-  ) as typeof fetch;
+  globalThis.fetch = (async () => new Response(
+    JSON.stringify({ detail: { error: "bad request" } }),
+    { status: 400 },
+  )) as typeof fetch;
   try {
     const { tavilySearch } = await import("@/server/providers/tavilySearch");
     const res = await tavilySearch({ query: "台南 活動" });
