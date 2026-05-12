@@ -391,6 +391,21 @@ const LOW_VALUE_PATTERNS = [
   /promo/i,
 ];
 
+function expandShortKeywordQueries(raw: string): string[] {
+  const compact = raw.replace(/[\s\u3000]+/g, "");
+  if (compact.length < 2 || compact.length > 6) {
+    return [];
+  }
+  const extras: string[] = [];
+  if (compact.includes("情侶")) {
+    extras.push(`${raw.trim()} 約會 景點`, `${raw.trim()} 約會 vlog`, `${raw.trim()} 景點 推薦`);
+  }
+  if (compact === "約會" || compact.endsWith("約會")) {
+    extras.push(`${raw.trim()} 景點 情侶`, `${raw.trim()} 旅遊 vlog`);
+  }
+  return extras;
+}
+
 export function buildExpandedTravelSearchQueries(userQuery: string): string[] {
   const raw = userQuery.trim();
   if (!raw) {
@@ -403,6 +418,7 @@ export function buildExpandedTravelSearchQueries(userQuery: string): string[] {
   return Array.from(
     new Set([
       ...expanded,
+      ...expandShortKeywordQueries(raw),
       buildTravelBiasedSearchQuery(raw),
       raw,
     ]),

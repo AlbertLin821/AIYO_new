@@ -64,7 +64,7 @@ export function buildMomentSegments(input: {
     .slice(0, MAX_CANDIDATE_MENTIONS);
   const uniqueChrono = pickFirstOccurrenceMentions(filteredMentions).slice(0, maxSegments);
 
-  return uniqueChrono.map((mention, index) => {
+  const rawSegments = uniqueChrono.map((mention, index) => {
     const startSeconds = Math.max(0, Math.floor(mention.startSeconds));
     const endSeconds = Math.min(
       videoDuration,
@@ -89,6 +89,45 @@ export function buildMomentSegments(input: {
       timestampConfidence: mention.timestampConfidence,
     };
   });
+
+  return mergeMomentSegmentsByStartSeconds(rawSegments);
+}
+
+function dedupeHintList(hints: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const h of hints) {
+    const k = h.replace(/\s+/g, "").toLowerCase();
+    if (!k || seen.has(k)) {
+      continue;
+    }
+    seen.add(k);
+    out.push(h);
+  }
+  return out;
+}
+
+/** 合併相同 startSeconds 的連續片段，避免同一時間戳重複列出多個地點列。 */
+export function mergeMomentSegmentsByStartSeconds(segments: TravelMomentSegment[]): TravelMomentSegment[] {
+  const sorted = [...segments].sort((a, b) => a.startSeconds - b.startSeconds);
+  const out: TravelMomentSegment[] = [];
+  for (const seg of sorted) {
+    const last = out[out.length - 1];
+    if (last && last.startSeconds === seg.startSeconds) {
+      const mergedHints = dedupeHintList([...(last.locationHints || []), ...(seg.locationHints || [])]);
+      last.locationHints = mergedHints;
+      last.title = mergedHints[0] || last.title;
+      last.endSeconds = Math.max(last.endSeconds, seg.endSeconds);
+      last.confidence = Math.max(last.confidence ?? 0, seg.confidence ?? 0);
+      const foods = new Set([...(last.foods || []), ...(seg.foods || [])]);
+      last.foods = foods.size ? Array.from(foods) : undefined;
+      const ids = new Set([...(last.sourceTranscriptLineIds || []), ...(seg.sourceTranscriptLineIds || [])]);
+      last.sourceTranscriptLineIds = ids.size ? Array.from(ids) : undefined;
+    } else {
+      out.push({ ...seg });
+    }
+  }
+  return out;
 }
 
 export function toVideoSummarySegments(segments: TravelMomentSegment[]): VideoSummarySegment[] {
@@ -111,4 +150,45 @@ export function toVideoSummarySegments(segments: TravelMomentSegment[]): VideoSu
     sourceTranscriptLineIds: segment.sourceTranscriptLineIds,
     extractionSource: "deterministic",
   }));
+}
+
+function dedupeSegmentHints(hints: string[] | undefined): string[] | undefined {
+  if (!hints?.length) {
+    return hints;
+  }
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const h of hints) {
+    const k = h.replace(/\s+/g, "").toLowerCase();
+    if (!k || seen.has(k)) {
+      continue;
+    }
+    seen.add(k);
+    out.push(h);
+  }
+  return out.length ? out : undefined;
+}
+
+export function mergeVideoSummarySegmentsByStartSeconds(segments: VideoSummarySegment[]): VideoSummarySegment[] {
+  const sorted = [...segments].sort((a, b) => (a.startSeconds ?? 0) - (b.startSeconds ?? 0));
+  const out: VideoSummarySegment[] = [];
+  for (const seg of sorted) {
+    const start = Math.floor(seg.startSeconds ?? 0);
+    const last = out[out.length - 1];
+    if (last && Math.floor(last.startSeconds ?? 0) === start) {
+      const merged = dedupeSegmentHints([...(last.locationHints || []), ...(seg.locationHints || [])]);
+      last.locationHints = merged;
+      last.title = merged?.[0] || last.title || seg.title;
+      last.endSeconds = Math.max(last.endSeconds ?? 0, seg.endSeconds ?? 0);
+      last.endLabel = formatSeconds(last.endSeconds ?? 0);
+      last.confidence = Math.max(last.confidence ?? 0, seg.confidence ?? 0);
+      const foods = new Set([...(last.foods || []), ...(seg.foods || [])]);
+      last.foods = foods.size ? Array.from(foods) : undefined;
+      const ids = new Set([...(last.sourceTranscriptLineIds || []), ...(seg.sourceTranscriptLineIds || [])]);
+      last.sourceTranscriptLineIds = ids.size ? Array.from(ids) : undefined;
+    } else {
+      out.push({ ...seg });
+    }
+  }
+  return out;
 }

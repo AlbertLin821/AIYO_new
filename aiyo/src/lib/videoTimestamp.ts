@@ -1,5 +1,14 @@
 import type { VideoSummarySegment } from "@/types";
 
+function isValidClockParts(parts: number[], mode: "hms" | "ms"): boolean {
+  if (mode === "ms") {
+    const [m, s] = parts;
+    return m >= 0 && m < 60 && s >= 0 && s < 60;
+  }
+  const [h, m, s] = parts;
+  return h >= 0 && h < 100 && m >= 0 && m < 60 && s >= 0 && s < 60;
+}
+
 export function parseTimestampToSeconds(timestamp?: string): number {
   if (!timestamp) {
     return 0;
@@ -13,9 +22,15 @@ export function parseTimestampToSeconds(timestamp?: string): number {
     .map((part) => Number.parseInt(part, 10))
     .filter((part) => Number.isFinite(part));
   if (parts.length === 3) {
+    if (!isValidClockParts(parts, "hms")) {
+      return 0;
+    }
     return parts[0] * 3600 + parts[1] * 60 + parts[2];
   }
   if (parts.length === 2) {
+    if (!isValidClockParts(parts, "ms")) {
+      return 0;
+    }
     return parts[0] * 60 + parts[1];
   }
   return parts[0] || 0;

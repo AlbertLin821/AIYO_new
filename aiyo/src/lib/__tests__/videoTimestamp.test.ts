@@ -9,6 +9,12 @@ test("parseTimestampToSeconds accepts mm:ss and hh:mm:ss only", () => {
   assert.equal(parseTimestampToSeconds("約三分鐘"), 0);
 });
 
+test("parseTimestampToSeconds rejects invalid minute or second ranges", () => {
+  assert.equal(parseTimestampToSeconds("01:99"), 0);
+  assert.equal(parseTimestampToSeconds("99:30"), 0);
+  assert.equal(parseTimestampToSeconds("01:02:99"), 0);
+});
+
 test("getSegmentSeekSeconds prefers numeric startSeconds", () => {
   assert.equal(
     getSegmentSeekSeconds({

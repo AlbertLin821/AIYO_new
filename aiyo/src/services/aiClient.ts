@@ -8,7 +8,11 @@ import type {
   TripPlanResult,
 } from "@/types";
 
-const VOICE_PLAN_TIMEOUT_MS = 28_000;
+/**
+ * 語音／逐字稿行程規劃會觸發網搜、Mem0 與一或多輪 Ollama JSON（伺服端單輪最高約 120s）。
+ * 28s 過短易誤判逾時；與 `OLLAMA_TIMEOUT_MS`、重試疊加後須留足緩衝。
+ */
+export const VOICE_PLAN_CLIENT_TIMEOUT_MS = 300_000;
 
 export async function sendChatMessage(input: {
   message: string;
@@ -34,7 +38,7 @@ export async function generatePlanFromVoice(
   options?: { signal?: AbortSignal; timeoutMs?: number },
 ): Promise<{ plan: TripPlanResult; meta?: Record<string, unknown> }> {
   const { data, meta } = await apiPostWithMeta<typeof input, TripPlanResult>("/api/ai/plan", input, {
-    timeoutMs: options?.timeoutMs ?? VOICE_PLAN_TIMEOUT_MS,
+    timeoutMs: options?.timeoutMs ?? VOICE_PLAN_CLIENT_TIMEOUT_MS,
     signal: options?.signal,
   });
   return { plan: data, meta };

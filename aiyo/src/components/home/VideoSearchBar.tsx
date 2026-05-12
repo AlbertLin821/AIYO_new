@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Link2, Loader2, Search } from "lucide-react";
 import { zhTW as t } from "@/locales/zh-TW";
 import { useTripStore } from "@/stores/useTripStore";
@@ -8,10 +8,14 @@ import { useToastStore } from "@/stores/useToastStore";
 import { useVideoStore } from "@/stores/useVideoStore";
 import { fetchVideoRecommendations, summarizeVideo } from "@/services/videoClient";
 
-export default function VideoSearchBar() {
+const VideoSearchBar = forwardRef<HTMLInputElement>(function VideoSearchBar(_, ref) {
   const [input, setInput] = useState("");
+  const innerRef = useRef<HTMLInputElement>(null);
+  useImperativeHandle(ref, () => innerRef.current as HTMLInputElement, []);
+
   const tripDestination = useTripStore((state) => state.destination);
   const pushToast = useToastStore((state) => state.pushToast);
+  const searchBarResetNonce = useVideoStore((state) => state.searchBarResetNonce);
   const {
     isSearching,
     isSummarizing,
@@ -25,6 +29,12 @@ export default function VideoSearchBar() {
     setRecommendationSource,
     setSummaryDiagnostics,
   } = useVideoStore();
+
+  useEffect(() => {
+    if (searchBarResetNonce > 0) {
+      setInput("");
+    }
+  }, [searchBarResetNonce]);
 
   const trimmed = input.trim();
   const isUrl =
@@ -48,6 +58,8 @@ export default function VideoSearchBar() {
           url: trimmed,
           destination: tripDestination,
         });
+        setVideos([result.video]);
+        setRecommendationSource("single-video-url");
         upsertVideo(result.video);
         setSelectedVideo(result.video);
         setSummaryDiagnostics({
@@ -127,6 +139,7 @@ export default function VideoSearchBar() {
             {isUrl ? <Link2 className="size-4" /> : <Search className="size-4" />}
           </div>
           <input
+            ref={innerRef}
             type="text"
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -157,4 +170,8 @@ export default function VideoSearchBar() {
       <p className="text-xs text-muted mt-2 text-center">{t.video.searchHelper}</p>
     </div>
   );
-}
+});
+
+VideoSearchBar.displayName = "VideoSearchBar";
+
+export default VideoSearchBar;

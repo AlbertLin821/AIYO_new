@@ -11,6 +11,8 @@ import type { TravelPreferences, TripPlanRequest } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/** 與客戶端 `VOICE_PLAN_CLIENT_TIMEOUT_MS` 對齊；Vercel 等環境需足夠上限才能完成網搜＋多輪模型。 */
+export const maxDuration = 300;
 
 function normalizePreferences(input: Partial<TravelPreferences> | undefined): TravelPreferences {
   return {

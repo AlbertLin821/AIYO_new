@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cleanPlaceMentionName, shouldExcludeAsPoiTitle } from "@/server/video/placeMentionNormalizer";
+import {
+  cleanPlaceMentionName,
+  dedupePlaceMentions,
+  fuzzyDedupePlaceMentions,
+  shouldExcludeAsPoiTitle,
+} from "@/server/video/placeMentionNormalizer";
 import { buildDescriptionFallbackTranscriptEntries } from "@/server/services/videoSummaryService";
 import { extractTimestampAwarePlaceMentions } from "@/server/video/placeMentionExtractor";
 import { preprocessTranscript } from "@/server/video/transcriptProcessing";
@@ -9,6 +14,7 @@ import {
   selectTravelExtractionProfile,
   taiwanProfile,
 } from "@/server/video/travelExtractionProfiles";
+import { isGenericTravelLocation } from "@/server/video/genericLocationFilter";
 
 function clean(value: string) {
   return cleanPlaceMentionName(value, taiwanProfile, "嘉義市");
@@ -111,4 +117,55 @@ test("shouldExcludeAsPoiTitle blocks multi-clause glued titles", () => {
 
 test("日光關鍵字會選擇 japan profile", () => {
   assert.equal(selectTravelExtractionProfile({ destinationHint: "日光", transcriptLanguage: "zh-TW" }).id, "japan");
+});
+
+test("cleanPlaceMentionName strips leading 的 and maps 嘉義市立美術館 alias", () => {
+  assert.equal(clean("的嘉義美術館").cleanedName, "嘉義美術館");
+  assert.equal(clean("嘉義市立美術館").cleanedName, "嘉義美術館");
+});
+
+test("cleanPlaceMentionName rejects Arabic-only script without CJK/Latin", () => {
+  const r = cleanPlaceMentionName("القاهرة", taiwanProfile, "台北");
+  assert.equal(r.cleanedName, "");
+  assert.equal(r.rejectedReason, "unsupported-script");
+});
+
+test("fuzzyDedupePlaceMentions merges similar names near same timestamp", () => {
+  const merged = fuzzyDedupePlaceMentions(
+    dedupePlaceMentions([
+      {
+        rawText: "國立故宮博物院",
+        name: "國立故宮博物院",
+        normalizedName: "國立故宮博物院",
+        startSeconds: 10,
+        endSeconds: 20,
+        context: "",
+        source: "regex",
+        confidence: 0.8,
+      },
+      {
+        rawText: "故宮博物院",
+        name: "故宮博物院",
+        normalizedName: "故宮博物院",
+        startSeconds: 25,
+        endSeconds: 35,
+        context: "",
+        source: "regex",
+        confidence: 0.7,
+      },
+    ]),
+  );
+  assert.equal(merged.length, 1);
+  assert.ok(merged[0]?.name === "故宮博物院" || merged[0]?.name === "國立故宮博物院");
+});
+
+test("isGenericTravelLocation flags searchy list labels", () => {
+  assert.equal(
+    isGenericTravelLocation({ name: "5間私藏咖啡廳", profile: taiwanProfile }),
+    true,
+  );
+  assert.equal(
+    isGenericTravelLocation({ name: "大稻埕老宅咖啡廳", profile: taiwanProfile }),
+    true,
+  );
 });

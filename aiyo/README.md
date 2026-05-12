@@ -104,10 +104,12 @@ Set these for production-like behavior (see also `next.config.ts` for `NEXT_PUBL
 - `GOOGLE_MAPS_API_KEY` — server-side Geocoding API
 - `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` — browser Maps JavaScript API (same key is fine if APIs are enabled for it)
 - `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID` — optional Map ID from Cloud Console (Map Management); enables vector map + `AdvancedMarkerElement`. If omitted, classic markers are used
-- `OLLAMA_BASE_URL` / `OLLAMA_MODEL` — Ollama model endpoint; defaults to `gemma4:26B`
-- `OLLAMA_VIDEO_SUMMARY_FAST_MODEL` — defaults to `mistral-small:24b`
-- `OLLAMA_VIDEO_SUMMARY_FINAL_MODEL` — defaults to `gemma4:26B`
-- `OLLAMA_LOCATION_MODEL` — defaults to `qwen3.6:27b`
+- `OLLAMA_BASE_URL` / **`OLLAMA_MODEL`** — 預設端點與後備模型；預設 `gemma4:26B`
+- **`OLLAMA_VIDEO_SUMMARY_MODEL`** / **`OLLAMA_VIDEO_SUMMARY_FAST_MODEL`** / **`OLLAMA_VIDEO_SUMMARY_FINAL_MODEL`** — 影片摘要與段落 JSON 拋光（`video-moment-polish` 走 FINAL）；FAST 預設 `mistral-small:24b`，其餘預設與 `OLLAMA_MODEL` 同系
+- **`OLLAMA_LOCATION_MODEL`** — `location-filter`（可選）；預設 `qwen3.6:27b`
+- **`OLLAMA_TRIP_PLAN_MODEL`** — 僅行程 JSON（`trip-plan`／語音建行程）；未設則同 `OLLAMA_MODEL`。強結構化 JSON 可試 **IBM Granite 4.1**（如 `granite4.1:3b`），見 `docs/ollama-prompts.md`
+- `OLLAMA_VIDEO_SEGMENT_JSON_POLISH` — defaults to `true`（影片段落 JSON 拋光，見 `docs/ollama-prompts.md`）
+- `OLLAMA_VIDEO_LOCATION_JSON_FILTER` — defaults to `false`（可選地名 JSON 篩選）
 
 Fallback switches (default `false`):
 

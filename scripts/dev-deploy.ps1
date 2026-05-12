@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-# Dev mode: npm install in aiyo/, ensure Ollama models from aiyo/.env, docker compose dev (+ mem0 by default).
+# Dev mode: npm install in aiyo/, ensure Ollama models from aiyo/.env, docker compose dev (+ SearXNG; + mem0 by default).
 # Switches: -NoMem0 -SkipNpmInstall -SkipDocker -SkipOllama
 param(
     [switch] $NoMem0,
@@ -9,7 +9,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+# Same repo root resolution as scripts/clone-mem0.ps1 (this file lives in scripts/).
+$Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
 function Read-DotEnvMap {
@@ -102,12 +103,14 @@ if (-not (Test-Path $envFile)) {
 }
 
 $envMap = Read-DotEnvMap $envFile
+# Fallbacks when aiyo/.env omits these keys: match docker-compose.yml ${VAR:-…} for app-dev / app.
 $defaults = @{
-    OLLAMA_MODEL                     = "gemma4:26B"
-    OLLAMA_VIDEO_SUMMARY_MODEL       = "gemma4:26B"
-    OLLAMA_VIDEO_SUMMARY_FAST_MODEL  = "mistral-small:24b"
-    OLLAMA_VIDEO_SUMMARY_FINAL_MODEL = "gemma4:26B"
-    OLLAMA_LOCATION_MODEL            = "qwen3.6:27b"
+    OLLAMA_MODEL                     = "qwen3.5:9b"
+    OLLAMA_TRIP_PLAN_MODEL           = "qwen3.5:9b"
+    OLLAMA_VIDEO_SUMMARY_MODEL       = "qwen3.5:9b"
+    OLLAMA_VIDEO_SUMMARY_FAST_MODEL  = "qwen3.5:9b"
+    OLLAMA_VIDEO_SUMMARY_FINAL_MODEL = "qwen3.5:9b"
+    OLLAMA_LOCATION_MODEL            = "qwen3.5:9b"
 }
 
 $mem0On = -not $NoMem0
@@ -118,6 +121,7 @@ if ($mem0On -and $envMap.ContainsKey("MEM0_ENABLED")) {
 
 $models = New-Object "System.Collections.Generic.List[string]"
 Add-UniqueModel $models (Get-EnvOrDefaultValue $envMap $defaults "OLLAMA_MODEL")
+Add-UniqueModel $models (Get-EnvOrDefaultValue $envMap $defaults "OLLAMA_TRIP_PLAN_MODEL")
 Add-UniqueModel $models (Get-EnvOrDefaultValue $envMap $defaults "OLLAMA_VIDEO_SUMMARY_MODEL")
 Add-UniqueModel $models (Get-EnvOrDefaultValue $envMap $defaults "OLLAMA_VIDEO_SUMMARY_FAST_MODEL")
 Add-UniqueModel $models (Get-EnvOrDefaultValue $envMap $defaults "OLLAMA_VIDEO_SUMMARY_FINAL_MODEL")
@@ -216,8 +220,10 @@ if (-not $SkipDocker) {
 
     Write-Host ""
     Write-Host "Container status:" -ForegroundColor Cyan
-    $psArgs = @("compose", "--profile", "dev", "ps")
-    if ($mem0On) { $psArgs = @("compose", "--profile", "dev", "--profile", "mem0", "ps") }
+    $psArgs = @("compose", "--env-file", "./aiyo/.env", "--profile", "dev", "ps")
+    if ($mem0On) {
+        $psArgs = @("compose", "--env-file", "./aiyo/.env", "--profile", "dev", "--profile", "mem0", "ps")
+    }
     & docker @psArgs
 }
 else {

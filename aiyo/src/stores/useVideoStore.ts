@@ -28,20 +28,30 @@ interface VideoState {
   videos: VideoRecommendation[];
   selectedVideo: VideoRecommendation | null;
   searchQuery: string;
-  recommendationSource: "youtube-data-api" | "mock-fallback" | "default-taiwan-cities" | null;
+  recommendationSource:
+    | "youtube-data-api"
+    | "mock-fallback"
+    | "default-taiwan-cities"
+    | "single-video-url"
+    | null;
   summaryDiagnostics: SummaryDiagnostics | null;
   isSearching: boolean;
   isSummarizing: boolean;
   errorMessage: string | null;
+  /** Incremented when the home drawer closes so VideoSearchBar can clear URL text (not persisted). */
+  searchBarResetNonce: number;
   setVideos: (videos: VideoRecommendation[]) => void;
   upsertVideo: (video: VideoRecommendation) => void;
   setSelectedVideo: (video: VideoRecommendation | null) => void;
   setSearchQuery: (query: string) => void;
-  setRecommendationSource: (source: "youtube-data-api" | "mock-fallback" | "default-taiwan-cities" | null) => void;
+  setRecommendationSource: (
+    source: "youtube-data-api" | "mock-fallback" | "default-taiwan-cities" | "single-video-url" | null,
+  ) => void;
   setSummaryDiagnostics: (value: SummaryDiagnostics | null) => void;
   setIsSearching: (searching: boolean) => void;
   setIsSummarizing: (summarizing: boolean) => void;
   setErrorMessage: (message: string | null) => void;
+  bumpSearchBarReset: () => void;
 }
 
 export const useVideoStore = create<VideoState>((set) => ({
@@ -53,6 +63,7 @@ export const useVideoStore = create<VideoState>((set) => ({
   isSearching: false,
   isSummarizing: false,
   errorMessage: null,
+  searchBarResetNonce: 0,
   setVideos: (videos) => set({ videos }),
   upsertVideo: (video) =>
     set((state) => {
@@ -71,4 +82,8 @@ export const useVideoStore = create<VideoState>((set) => ({
   setIsSearching: (isSearching) => set({ isSearching }),
   setIsSummarizing: (isSummarizing) => set({ isSummarizing }),
   setErrorMessage: (errorMessage) => set({ errorMessage }),
+  bumpSearchBarReset: () =>
+    set((state) => ({
+      searchBarResetNonce: state.searchBarResetNonce + 1,
+    })),
 }));

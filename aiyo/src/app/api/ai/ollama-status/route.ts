@@ -26,6 +26,8 @@ export async function GET() {
   const videoSummaryModel = resolveModelForTask("video-summary");
   const videoSummaryFastModel = resolveModelForTask("video-summary-fast");
   const videoSummaryFinalModel = resolveModelForTask("video-summary-final");
+  const locationFilterModel = resolveModelForTask("location-filter");
+  const videoMomentPolishModel = resolveModelForTask("video-moment-polish");
   const baseUrl = serverConfig.ollamaBaseUrl.replace(/\/$/, "");
 
   try {
@@ -46,6 +48,10 @@ export async function GET() {
           videoSummaryModel,
           videoSummaryFastModel,
           videoSummaryFinalModel,
+          locationFilterModel,
+          videoMomentPolishModel,
+          videoSegmentJsonPolish: serverConfig.ollamaVideoSegmentJsonPolish,
+          videoLocationJsonFilter: serverConfig.ollamaVideoLocationJsonFilter,
           ollamaReachable: false,
           modelPresent: false,
           ollamaStatus: "error",
@@ -68,12 +74,18 @@ export async function GET() {
         videoSummaryModel,
         videoSummaryFastModel,
         videoSummaryFinalModel,
+        locationFilterModel,
+        videoMomentPolishModel,
+        videoSegmentJsonPolish: serverConfig.ollamaVideoSegmentJsonPolish,
+        videoLocationJsonFilter: serverConfig.ollamaVideoLocationJsonFilter,
         ollamaReachable: true,
         modelPresent,
         videoSummaryModelsPresent: {
           default: isModelPresent(videoSummaryModel),
           fast: isModelPresent(videoSummaryFastModel),
           final: isModelPresent(videoSummaryFinalModel),
+          locationFilter: isModelPresent(locationFilterModel),
+          videoMomentPolish: isModelPresent(videoMomentPolishModel),
         },
         ollamaStatus: modelPresent ? "ready" : "model_missing",
         modelCount: payload.models?.length ?? 0,
@@ -87,6 +99,10 @@ export async function GET() {
         videoSummaryModel,
         videoSummaryFastModel,
         videoSummaryFinalModel,
+        locationFilterModel,
+        videoMomentPolishModel,
+        videoSegmentJsonPolish: serverConfig.ollamaVideoSegmentJsonPolish,
+        videoLocationJsonFilter: serverConfig.ollamaVideoLocationJsonFilter,
         ollamaReachable: false,
         modelPresent: false,
         ollamaStatus: "unreachable",

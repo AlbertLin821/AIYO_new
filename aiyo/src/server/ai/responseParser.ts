@@ -1,3 +1,5 @@
+import { parseTimestampToSeconds } from "@/lib/videoTimestamp";
+import { mergeVideoSummarySegmentsByStartSeconds } from "@/server/video/momentSegmentBuilder";
 import type {
   ChatMessage,
   ChatResponsePayload,
@@ -380,31 +382,38 @@ export function parseVideoSummaryResponse(
       };
 
       const segments: VideoSummarySegment[] = Array.isArray(parsed.segments)
-        ? parsed.segments.map((segment, index) => ({
-            id: String(segment.id || `segment_${index + 1}`),
-            timestamp: String(segment.timestamp || fallback.segments[index]?.timestamp || "00:00"),
-            title: segment.title ? String(segment.title) : undefined,
-            text: String(segment.text || segment.summary || fallback.segments[index]?.text || ""),
-            locationHints: sanitizeLocationNames(
-              Array.isArray(segment.locationHints)
-                ? segment.locationHints.map((value) => String(value))
-                : [],
-            ),
-            highlights: Array.isArray(segment.highlights)
-              ? segment.highlights
-                  .map((value) => String(value).trim())
-                  .filter((value) => value.length > 1 && value.length < 160)
-                  .slice(0, 3)
-              : undefined,
-            startLabel: String(segment.timestamp || fallback.segments[index]?.timestamp || "00:00"),
-            startSeconds: Number(
-              segment.startSeconds ?? fallback.segments[index]?.startSeconds ?? 0,
-            ),
-            endSeconds: Number(
-              segment.endSeconds ?? fallback.segments[index]?.endSeconds ?? 0,
-            ),
-            summary: String(segment.text || segment.summary || fallback.segments[index]?.text || ""),
-          }))
+        ? mergeVideoSummarySegmentsByStartSeconds(
+            parsed.segments.map((segment, index) => {
+              const ts = String(segment.timestamp || fallback.segments[index]?.timestamp || "00:00");
+              const fromTs = parseTimestampToSeconds(ts);
+              const rawStart = Number(segment.startSeconds ?? fallback.segments[index]?.startSeconds ?? 0);
+              const startSeconds =
+                Number.isFinite(rawStart) && rawStart > 0 ? rawStart : fromTs > 0 ? fromTs : 0;
+              const rawEnd = Number(segment.endSeconds ?? fallback.segments[index]?.endSeconds ?? 0);
+              const endSeconds = Number.isFinite(rawEnd) && rawEnd > startSeconds ? rawEnd : startSeconds;
+              return {
+                id: String(segment.id || `segment_${index + 1}`),
+                timestamp: ts,
+                title: segment.title ? String(segment.title) : undefined,
+                text: String(segment.text || segment.summary || fallback.segments[index]?.text || ""),
+                locationHints: sanitizeLocationNames(
+                  Array.isArray(segment.locationHints)
+                    ? segment.locationHints.map((value) => String(value))
+                    : [],
+                ),
+                highlights: Array.isArray(segment.highlights)
+                  ? segment.highlights
+                      .map((value) => String(value).trim())
+                      .filter((value) => value.length > 1 && value.length < 160)
+                      .slice(0, 3)
+                  : undefined,
+                startLabel: ts,
+                startSeconds,
+                endSeconds,
+                summary: String(segment.text || segment.summary || fallback.segments[index]?.text || ""),
+              };
+            }),
+          )
         : fallback.segments;
 
       return {

@@ -66,6 +66,12 @@ export default function AppDataBridge() {
   }, [pushToast, status, userKey]);
 
   useEffect(() => {
+    if (status === "unauthenticated") {
+      syncService.resetSessionState();
+    }
+  }, [status]);
+
+  useEffect(() => {
     if (status !== "authenticated" || !userKey || initializedRef.current) {
       return;
     }

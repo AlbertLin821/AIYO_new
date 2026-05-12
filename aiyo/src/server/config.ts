@@ -20,10 +20,14 @@ function readBoolean(name: string, fallback: boolean): boolean {
   return raw.toLowerCase() === "true";
 }
 
+const ollamaModel = readString("OLLAMA_MODEL", "gemma4:26B");
+
 export const serverConfig = {
   appName: readString("NEXT_PUBLIC_APP_NAME", "AIYO"),
   ollamaBaseUrl: readString("OLLAMA_BASE_URL", "http://localhost:11434"),
-  ollamaModel: readString("OLLAMA_MODEL", "gemma4:26B"),
+  ollamaModel,
+  /** 語音／POST /api/ai/plan 行程 JSON；未設定時與 `OLLAMA_MODEL` 相同。 */
+  ollamaTripPlanModel: readString("OLLAMA_TRIP_PLAN_MODEL", ollamaModel),
   ollamaSummaryModel: readString(
     "OLLAMA_VIDEO_SUMMARY_MODEL",
     readString("OLLAMA_SUMMARY_MODEL", "gemma4:26B"),
@@ -31,6 +35,16 @@ export const serverConfig = {
   ollamaFastSummaryModel: readString("OLLAMA_VIDEO_SUMMARY_FAST_MODEL", "mistral-small:24b"),
   ollamaFinalSummaryModel: readString("OLLAMA_VIDEO_SUMMARY_FINAL_MODEL", "gemma4:26B"),
   ollamaLocationModel: readString("OLLAMA_LOCATION_MODEL", "qwen3.6:27b"),
+  /**
+   * 影片時間段落：在規則錨點產生後，以 Ollama `format: "json"` 拋光標題／摘要／地點提示。
+   * 失敗時自動退回原片段，不影響地圖座標管線。
+   */
+  ollamaVideoSegmentJsonPolish: readBoolean("OLLAMA_VIDEO_SEGMENT_JSON_POLISH", true),
+  /**
+   * 在地理編碼前，以 `OLLAMA_LOCATION_MODEL` + JSON 再過濾候選地名（偏寬泛詞剔除）。
+   * 預設關閉；與 `isGenericTravelLocation` 並存時為第二道閘門。
+   */
+  ollamaVideoLocationJsonFilter: readBoolean("OLLAMA_VIDEO_LOCATION_JSON_FILTER", false),
   ollamaTimeoutMs: readNumber("OLLAMA_TIMEOUT_MS", 45000),
   mem0BaseUrl: readString("MEM0_BASE_URL", "http://localhost:8890"),
   mem0Enabled: readBoolean("MEM0_ENABLED", false),

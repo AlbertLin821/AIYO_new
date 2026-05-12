@@ -5,14 +5,17 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Loader2, Mic } from "lucide-react";
 import { zhTW as t } from "@/locales/zh-TW";
 import { applyPlanningUpdateToStores, extractPlanningUpdateFromText } from "@/lib/planningContext";
-import { fetchOllamaStatusForVoicePlan, generatePlanFromVoice } from "@/services/aiClient";
+import {
+  fetchOllamaStatusForVoicePlan,
+  generatePlanFromVoice,
+  VOICE_PLAN_CLIENT_TIMEOUT_MS,
+} from "@/services/aiClient";
 import { useChatStore } from "@/stores/useChatStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
 import { useUIStore } from "@/stores/useUIStore";
 import { useUserStore } from "@/stores/useUserStore";
 
-const VOICE_PLAN_REQUEST_TIMEOUT_MS = 28_000;
 const VOICE_DEBUG_TAG = "[AIYO 語音規劃]";
 
 type SpeechRecognitionAlternativeLike = {
@@ -165,7 +168,7 @@ export default function VoicePlanningButton() {
       }
       planningAbortReasonRef.current = "timeout";
       controller.abort();
-    }, VOICE_PLAN_REQUEST_TIMEOUT_MS);
+    }, VOICE_PLAN_CLIENT_TIMEOUT_MS);
 
     voiceStateRef.current = "processing";
     setVoiceState("processing");
@@ -196,7 +199,7 @@ export default function VoicePlanningButton() {
         transportPreference: profile.preferredTransport,
       }, {
         signal: controller.signal,
-        timeoutMs: VOICE_PLAN_REQUEST_TIMEOUT_MS,
+        timeoutMs: VOICE_PLAN_CLIENT_TIMEOUT_MS,
       });
 
       console.info(VOICE_DEBUG_TAG, "API 回應 meta", meta ?? null);

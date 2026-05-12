@@ -26,7 +26,7 @@
 
 ## 開發模式（Docker）：啟動所有服務
 
-此處的**開發模式**指：在儲存庫根目錄用 Compose **設定檔 `dev`** 啟動 **`app-dev`**，容器內執行 `npm run dev`（熱重載），並連同 **PostgreSQL**、**Redis** 一併啟動。這是目前團隊在容器內開發時的建議組合。
+此處的**開發模式**指：在儲存庫根目錄用 Compose **設定檔 `dev`** 啟動 **`app-dev`**，容器內執行 `npm run dev`（熱重載），並連同 **PostgreSQL**、**Redis**、**SearXNG**（站內搜尋／AI 網搜後端）一併啟動。這是目前團隊在容器內開發時的建議組合。
 
 ### 開發模式會啟動哪些服務？
 
@@ -35,6 +35,7 @@
 | `app-dev` | `aiyo-new-app-dev` | Next.js 開發伺服器，`http://localhost:3000` |
 | `postgres` | `aiyo-new-postgres` | `localhost:5432`，資料庫 `aiyo_new_db` |
 | `redis` | `aiyo-new-redis` | `localhost:6379` |
+| `searxng` | `aiyo-new-searxng` | `localhost:8081`（對應容器內 `8080`），`app-dev` 的 `depends_on` 會一併拉起 |
 
 **未包含在上一列指令內（可另外啟動）：**
 
@@ -54,7 +55,7 @@
 | `aiyo/.env` 內 **`MEM0_ENABLED=false`**（或未設定；程式預設為 `false`，見 `aiyo/src/server/config.ts`） | **不必**。聊天與行程規劃仍會執行，只是略過 Mem0 的搜尋／寫入記憶。 |
 | **`MEM0_ENABLED=true`**（例如沿用 `.env.example`）且希望對話能寫入／查詢 Mem0 | **要**。需能成功建置並啟動 `--profile mem0` 下的 `mem0-memory` 等服務（預設自 `vendor/mem0/` 建置；若要改用本機其他路徑可設 `MEM0_REPO_PATH`）。 |
 
-**與 PostgreSQL 的區別：** 行程、個人檔、聊天訊息等**主要持久化**仍由 **PostgreSQL（Prisma）** 負責；Mem0 額外提供的是可檢索的「記憶」語境（例如對話前後文補強），兩者層級不同。因此一般開發只要 DB + Redis + 應用即可；**只有在你明確要驗 Mem0 行為時**，才需要把 Mem0 一併拉起，或暫時關閉 `MEM0_ENABLED` 直到環境就緒。
+**與 PostgreSQL 的區別：** 行程、個人檔、聊天訊息等**主要持久化**仍由 **PostgreSQL（Prisma）** 負責；Mem0 額外提供的是可檢索的「記憶」語境（例如對話前後文補強），兩者層級不同。因此一般開發只要 DB + Redis + SearXNG + 應用即可；**只有在你明確要驗 Mem0 行為時**，才需要把 Mem0 一併拉起，或暫時關閉 `MEM0_ENABLED` 直到環境就緒。
 
 ### 啟動前檢查清單
 
@@ -62,29 +63,30 @@
 2. **`aiyo/.env` 已建立**：`docker-compose.yml` 中 `app-dev` 使用 `env_file: ./aiyo/.env`。請複製 `aiyo/.env.example` 為 `aiyo/.env`，並補上 `NEXTAUTH_SECRET` 等必填值（勿將含密鑰檔案提交至 Git）。
 3. **埠 3000 未被占用**：若本機另有 `npm run dev` 或其他程式占用 `3000`，請先關閉，否則 `app-dev` 無法綁定埠。
 4. **（建議）未啟 Mem0 時**：在 `aiyo/.env` 設定 `MEM0_ENABLED=false`。
-5. **（選用）Google 地圖前端金鑰**：若要在開發模式使用地圖 SDK，請在**建置映像前**讓 Compose 能讀到 `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` 等（見「一、1.2」）；首次建置後若曾改動這些變數，請重新 `docker compose --profile dev build app-dev` 再啟動。
+5. **（選用）Google 地圖前端金鑰**：若要在開發模式使用地圖 SDK，請在**建置映像前**讓 Compose 能讀到 `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` 等（見「一、1.2」）；首次建置後若曾改動這些變數，請重新 `docker compose --env-file ./aiyo/.env --profile dev build app-dev` 再啟動。
 
 ### 啟動指令（建議：不含 Mem0）
 
 在儲存庫**根目錄**（與 `docker-compose.yml` 同層）執行：
 
 ```bash
-docker compose --profile dev up -d --build postgres redis app-dev
+docker compose --env-file ./aiyo/.env --profile dev up -d --build postgres redis searxng app-dev
 ```
 
-- **首次建置**或曾修改 Dockerfile／依賴時，保留 `--build`。  
-- 上述指令會依 `depends_on` 等待 `postgres`、`redis` 健康後再啟動 `app-dev`；`app-dev` 啟動後會執行 `prisma generate`、`prisma migrate deploy`，再跑 `npm run dev`。
+- **首次建置**或曾修改 Dockerfile／依賴時，保留 `--build**。  
+- **`--env-file ./aiyo/.env`** 與 `scripts/dev-deploy.ps1`、`dev-up.ps1` 一致，讓 Compose 的 `${…}` 替換與容器內 `OLLAMA_*`、`MEM0_*` 等與 `aiyo/.env` 對齊。  
+- 上述指令會依 `depends_on` 等待 `postgres`、`redis` 健康、`searxng` 已啟動後再啟動 `app-dev`；`app-dev` 啟動後會執行 `prisma generate`、`prisma migrate deploy`，再跑 `npm run dev`。
 
 ### 確認容器是否正常
 
 ```bash
-docker compose --profile dev ps
+docker compose --env-file ./aiyo/.env --profile dev ps
 ```
 
-預期 **`aiyo-new-app-dev`**、**`aiyo-new-postgres`**、**`aiyo-new-redis`** 的 **STATUS** 為 **`Up`**，且於欄位中顯示 **`healthy`**（健康檢查通過）。若 `app-dev` 長時間非 `healthy`，請查看日誌：
+預期 **`aiyo-new-app-dev`**、**`aiyo-new-postgres`**、**`aiyo-new-redis`**、**`aiyo-new-searxng`** 的 **STATUS** 為 **`Up`**（資料庫與 Redis 另應顯示 **`healthy`**）。若 `app-dev` 長時間非 `healthy`，請查看日誌：
 
 ```bash
-docker compose --profile dev logs -f app-dev --tail=120
+docker compose --env-file ./aiyo/.env --profile dev logs -f app-dev --tail=120
 ```
 
 常見問題：**資料庫連線失敗（Prisma P1001）** 多半是容器未在同一 Compose 網路；請勿只對單一容器執行 `docker start`，應一律用上面的 `docker compose --profile dev up …` 啟動（見「二、2.3」網路提醒）。
@@ -105,15 +107,15 @@ curl http://localhost:3000/api/health
 .\dev-deploy.ps1
 ```
 
-會依序：`npm install`（`aiyo/`）、確認本機 Ollama 可連線並**僅拉取缺少的**模型（自 `aiyo/.env` 讀取 `OLLAMA_*`；若啟用 Mem0 另含 `qwen3.5:9b`、`nomic-embed-text`）、`scripts/clone-mem0.ps1`，再以 `docker compose --env-file ./aiyo/.env` 啟動 `postgres`、`redis`、`app-dev`（及 mem0 相關容器）。若不需要 Mem0：`.\dev-deploy.ps1 -NoMem0`。
+會依序：`npm install`（`aiyo/`）、確認本機 Ollama 可連線並**僅拉取缺少的**模型（自 `aiyo/.env` 讀取 `OLLAMA_*`；若 `.env` 未寫某鍵則以與 `docker-compose.yml` 相同的預設 `qwen3.5:9b` 補齊；若啟用 Mem0 另含 `qwen3.5:9b`、`nomic-embed-text`）、`scripts/clone-mem0.ps1`，再以 `docker compose --env-file ./aiyo/.env` 啟動 `postgres`、`redis`、`searxng`、`app-dev`（及 mem0 相關容器）。若不需要 Mem0：`.\dev-deploy.ps1 -NoMem0`。
 
 ### Windows：僅 Docker（會嘗試啟動 Mem0）
 
-專案根目錄的 `dev-up.ps1` 會執行：
+專案根目錄的 `dev-up.ps1` 會：若尚無 `aiyo/.env` 則自 `aiyo/.env.example` 建立；執行 `scripts/clone-mem0.ps1`（若 `vendor/mem0/` 已存在則略過，否則嘗試自 GitHub shallow clone；失敗時請改用手動指令）；再執行：
 
-`docker compose --profile dev --profile mem0 up -d postgres redis mem0-memory-postgres mem0-memory app-dev`
+`docker compose --env-file ./aiyo/.env --profile dev --profile mem0 up -d postgres redis searxng mem0-memory-postgres mem0-memory app-dev`
 
-`dev-up.ps1` 會先執行 `scripts/clone-mem0.ps1`：若 `vendor/mem0/` 已存在（隨儲存庫一併 clone 取得），會直接略過。若你刻意刪除該目錄，腳本會嘗試自 GitHub 再 clone；失敗時請改用上方的**建議指令**（僅 `dev` 設定檔、不含 `mem0`）。
+若不需要 Mem0，請勿使用 `dev-up.ps1`，改用上節「啟動指令（建議：不含 Mem0）」的 `docker compose …`（不加 `--profile mem0`）。
 
 ### 停止開發用容器
 
@@ -130,7 +132,7 @@ docker compose --profile dev down
 可依團隊習慣擇一或並用：
 
 1. **開發模式（Docker 跑 `app-dev`）**  
-   見上一節 **「開發模式（Docker）：啟動所有服務」**（PostgreSQL + Redis + `app-dev` + 宿主 Ollama）。
+   見上一節 **「開發模式（Docker）：啟動所有服務」**（PostgreSQL + Redis + SearXNG + `app-dev` + 宿主 Ollama）。
 
 2. **僅資料庫／快取用 Docker，本機跑 Next**  
    在根目錄啟動 `postgres`（與選用的 `redis`），於 `aiyo/` 執行 `npm install`、`prisma migrate`、`npm run dev`。
@@ -196,6 +198,7 @@ https://docs.docker.com/compose/how-tos/environment-variables/set-environment-va
 
 | 變數 | 說明（預設見 `.env.example`） |
 |------|------------------------------|
+| `OLLAMA_TRIP_PLAN_MODEL` | 語音／行程規劃 API（`task: trip-plan`）產生 JSON 用模型；未設定則同 `OLLAMA_MODEL`（`.env.example` 預設 `gemma4:e4b`） |
 | `OLLAMA_VIDEO_SUMMARY_MODEL` | 影片摘要用模型 |
 | `OLLAMA_VIDEO_SUMMARY_FAST_MODEL` | 較快階段用模型 |
 | `OLLAMA_VIDEO_SUMMARY_FINAL_MODEL` | 彙整／定稿用模型 |
@@ -385,3 +388,4 @@ npx prisma db execute --file prisma/migrations/20260416_000002_add_password_hash
 | `docs/implementation_report.md` | 實作報告 |
 | `docs/aiyo_migration_analysis.md` | 自舊儲存庫遷移的分析紀錄 |
 | `aiyo/docs/phase3_production_upgrade_report.md` | 升級與上線相關筆記 |
+| `aiyo/docs/ollama-prompts.md` | Ollama prompt／呼叫鏈／模型環境變數說明 |

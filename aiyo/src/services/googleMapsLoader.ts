@@ -31,6 +31,9 @@ export interface GoogleMapsApi {
     element: HTMLElement,
     options: Record<string, unknown>,
   ) => GoogleMapInstance;
+  /** Legacy Marker icon sizing / anchor (maps.Size, maps.Point). */
+  Size: new (width: number, height: number) => unknown;
+  Point: new (x: number, y: number) => unknown;
   Marker: new (options: Record<string, unknown>) => GoogleMarkerInstance;
   Polyline: new (options: Record<string, unknown>) => GooglePolylineInstance;
   InfoWindow: new () => GoogleInfoWindowInstance;
@@ -38,8 +41,8 @@ export interface GoogleMapsApi {
   SymbolPath: {
     CIRCLE: unknown;
   };
-  /** Dynamic import for AdvancedMarkerElement (marker library). */
-  importLibrary?: (name: string) => Promise<unknown>;
+  /** Dynamic import for AdvancedMarkerElement (marker library) and Routes API, etc. */
+  importLibrary?: (name: string) => Promise<Record<string, unknown>>;
 }
 
 let googleMapsPromise: Promise<GoogleMapsApi> | null = null;

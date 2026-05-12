@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
+import { serverConfig } from "@/server/config";
 import { resolvePlaceMentionsWithGeocode } from "@/server/geo/geocodeService";
 import {
   extractYouTubeVideoId,
@@ -8,10 +9,20 @@ import {
   type TranscriptEntry,
 } from "@/server/providers/youtubeProvider";
 import { isGenericTravelLocation } from "@/server/video/genericLocationFilter";
-import { buildMomentSegments, toVideoSummarySegments } from "@/server/video/momentSegmentBuilder";
-import { dedupePlaceMentions, normalizePlaceMentionName } from "@/server/video/placeMentionNormalizer";
+import {
+  buildMomentSegments,
+  mergeVideoSummarySegmentsByStartSeconds,
+  toVideoSummarySegments,
+} from "@/server/video/momentSegmentBuilder";
+import {
+  dedupePlaceMentions,
+  fuzzyDedupePlaceMentions,
+  normalizePlaceMentionName,
+} from "@/server/video/placeMentionNormalizer";
 import { extractTimestampAwarePlaceMentions } from "@/server/video/placeMentionExtractor";
+import { filterPlaceMentionsWithLocationJson } from "@/server/video/locationMentionJsonFilter";
 import { preprocessTranscript } from "@/server/video/transcriptProcessing";
+import { polishVideoSummarySegmentsWithOllama } from "@/server/video/videoSegmentJsonPolish";
 import { selectTravelExtractionProfile } from "@/server/video/travelExtractionProfiles";
 import type {
   LocationReference,
@@ -22,7 +33,7 @@ import type {
   VideoSummarySegment,
 } from "@/types";
 
-const VIDEO_PIPELINE_VERSION = "video-quality-v5";
+const VIDEO_PIPELINE_VERSION = "video-quality-v6";
 
 function dedupeLocationsByNormalizedName<T extends Pick<LocationReference, "name">>(locations: T[]): T[] {
   const seen = new Set<string>();
@@ -330,7 +341,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
       normalizedName: normalizedName.toLowerCase().replace(/\s+/g, ""),
     };
   }).filter((mention) => mention.name.length > 0);
-  const mentions = dedupePlaceMentions(normalizedMentions).filter(
+  let mentions = fuzzyDedupePlaceMentions(dedupePlaceMentions(normalizedMentions)).filter(
     (mention) =>
       mention.name &&
       !isGenericTravelLocation({
@@ -339,6 +350,12 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
         profile,
       }),
   );
+
+  mentions = await filterPlaceMentionsWithLocationJson(mentions, {
+    videoTitle: metadata.title,
+    destination: input.destination,
+    preprocessedLines,
+  });
 
   const geo = await resolvePlaceMentionsWithGeocode({
     mentions,
@@ -366,18 +383,30 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     videoDurationSeconds: parseDurationToSeconds(metadata.duration),
     maxSegments: 8,
   });
-  const deterministicSegments = toVideoSummarySegments(deterministicMoments);
-  const resolvedSegmentLocations = deterministicSegments.filter(
+  const deterministicSegments = mergeVideoSummarySegmentsByStartSeconds(
+    toVideoSummarySegments(deterministicMoments),
+  );
+  let resolvedSegmentLocations = deterministicSegments.filter(
     (segment) => (segment.locationHints || []).length > 0,
   );
+  resolvedSegmentLocations = await polishVideoSummarySegmentsWithOllama(resolvedSegmentLocations, {
+    videoTitle: metadata.title,
+    destination: input.destination,
+  });
   const summary = compactSummaryFromSegments(resolvedSegmentLocations);
   const usedDescriptionFallback = transcriptSource === "fallback-description";
   const summarySource: VideoSummaryDebugMeta["summarySource"] = usedDescriptionFallback
     ? "ollama-description-fallback"
     : "heuristic-transcript-fallback";
-  const segmentSource: VideoSummaryDebugMeta["segmentSource"] = usedDescriptionFallback
+  let segmentSource: VideoSummaryDebugMeta["segmentSource"] = usedDescriptionFallback
     ? "description-fallback"
     : "deterministic-mentions";
+  if (
+    serverConfig.ollamaVideoSegmentJsonPolish &&
+    resolvedSegmentLocations.some((s) => s.extractionSource === "ai-polished")
+  ) {
+    segmentSource = "deterministic-mentions-json-polished";
+  }
 
   const video: VideoRecommendation = {
     id: metadata.id,

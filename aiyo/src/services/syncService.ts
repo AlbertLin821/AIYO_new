@@ -59,6 +59,15 @@ class SyncService {
     void this.syncTripState("debounced");
   }, 350);
 
+  /** Call when session ends so guests do not reuse a prior authenticated hydrate flag. */
+  resetSessionState() {
+    this.debouncedTripSync.cancel();
+    this.hydrated = false;
+    this.lastSyncedPayloadKey = null;
+    this.isSyncing = false;
+    this.isApplyingRemote = false;
+  }
+
   flushTripSyncNow(options?: { keepalive?: boolean; force?: boolean }) {
     if ((!this.hydrated && !options?.force) || this.isApplyingRemote) {
       return Promise.resolve();

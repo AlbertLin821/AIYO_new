@@ -154,6 +154,9 @@ export default function ItineraryPage() {
 
   const requireAuthenticated = useCallback(
     (redirectPath: string) => {
+      if (status === "loading") {
+        return false;
+      }
       if (status === "authenticated") {
         return true;
       }

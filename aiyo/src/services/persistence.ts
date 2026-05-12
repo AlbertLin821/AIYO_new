@@ -217,6 +217,7 @@ function resetInMemoryStores(): void {
     isSearching: false,
     isSummarizing: false,
     errorMessage: null,
+    searchBarResetNonce: 0,
   });
 }
 

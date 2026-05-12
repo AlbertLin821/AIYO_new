@@ -8,6 +8,7 @@
 | [mock-audit-phase36.md](./mock-audit-phase36.md) | Mock 稽核（Phase 3.6） |
 | [video-poi-extraction-redesign.md](./video-poi-extraction-redesign.md) | 影片 POI 擷取改版說明 |
 | [youtube-transcript-migration-report.md](./youtube-transcript-migration-report.md) | YouTube 逐字稿遷移報告 |
+| [ollama-prompts.md](./ollama-prompts.md) | Ollama 呼叫鏈、全域 system、已／未接線 prompt 與環境變數說明 |
 | [qa_test_report.md](./qa_test_report.md) | QA 驗證報告（單次彙整） |
 | [testing/](./testing/) | 測試計畫、品質報告、技術債紀錄（見下表） |
 

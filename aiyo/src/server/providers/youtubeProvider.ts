@@ -489,7 +489,8 @@ export async function searchYouTubeVideos(input: SearchInput): Promise<{
       },
     };
   }
-  const searchFetchCount = Math.min(30, Math.max(limit * 4, 16));
+  const compactQueryLen = rawUserQuery.replace(/[\s\u3000]+/g, "").length;
+  const searchFetchCount = Math.min(30, Math.max(limit * 4, compactQueryLen <= 6 ? 24 : 16));
   const searchOpts = {
     regionCode: "TW",
     relevanceLanguage: "zh-Hant",
@@ -554,6 +555,27 @@ export async function searchYouTubeVideos(input: SearchInput): Promise<{
 
   let mapped = mergeDedupe(collected);
   let pool = buildPool(mapped);
+
+  if (pool.length < limit) {
+    const relaxedCollected: VideoRecommendation[] = [];
+    for (const q of primaryQueries) {
+      executedQueries.push(`(caption:any) ${q}`);
+      const batch = await fetchMappedVideosForQuery(q, searchFetchCount, {
+        ...searchOpts,
+        videoCaption: "any",
+      });
+      if (batch.ok) {
+        relaxedCollected.push(...batch.videos);
+      } else {
+        fallbackReasons.push(`caption:any ${q}: ${batch.message}`);
+      }
+    }
+    if (relaxedCollected.length) {
+      mapped = mergeDedupe([...mapped, ...relaxedCollected]);
+      pool = buildPool(mapped);
+      fallbackReasons.push("Re-ran expanded queries with relaxed caption filter.");
+    }
+  }
 
   if (pool.length < limit) {
     executedQueries.push(rawUserQuery.trim());
@@ -981,7 +1003,7 @@ export async function fetchYouTubeTranscript(videoId: string): Promise<Transcrip
     try {
       const { YoutubeTranscript } = await import("youtube-transcript");
       const packageEntries = await YoutubeTranscript.fetchTranscript(videoId);
-      const entries = packageEntries
+      let entries = packageEntries
         .map((entry) => ({
           timestamp: formatSeconds(entry.offset > 10_000 ? entry.offset / 1000 : entry.offset),
           startSeconds: entry.offset > 10_000 ? entry.offset / 1000 : entry.offset,
@@ -989,6 +1011,35 @@ export async function fetchYouTubeTranscript(videoId: string): Promise<Transcrip
           text: decodeTranscriptText(entry.text),
         }))
         .filter((entry) => entry.text);
+      if (
+        entries.length > 1 &&
+        entries.every((entry) => entry.startSeconds === 0) &&
+        packageEntries.some((e) => e.offset > 500)
+      ) {
+        entries = packageEntries.map((entry) => {
+          const startSeconds = entry.offset / 1000;
+          return {
+            timestamp: formatSeconds(startSeconds),
+            startSeconds,
+            durationSeconds: entry.duration > 10_000 ? entry.duration / 1000 : Math.max(0.5, entry.duration / 1000),
+            text: decodeTranscriptText(entry.text),
+          };
+        }).filter((entry) => entry.text);
+      }
+      if (entries.length > 1 && entries.every((entry) => entry.startSeconds === 0)) {
+        let acc = 0;
+        entries = entries.map((entry, index) => {
+          const dur = Math.max(2, Math.min(12, entry.durationSeconds || 4));
+          const startSeconds = index === 0 ? 0 : acc;
+          acc += dur;
+          return {
+            ...entry,
+            startSeconds,
+            timestamp: formatSeconds(startSeconds),
+            durationSeconds: dur,
+          };
+        });
+      }
       if (entries.length > 0) {
         return {
           entries,

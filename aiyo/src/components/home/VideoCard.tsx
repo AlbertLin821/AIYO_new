@@ -90,8 +90,8 @@ function VideoCard({ video, index, onClick }: VideoCardProps) {
           {video.duration}
         </div>
 
-        <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/10 transition-all duration-300 flex items-center justify-center">
-          <div className="size-12 rounded-full bg-white/90 shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 scale-75 group-hover:scale-100">
+        <div className="absolute inset-0 flex items-center justify-center bg-foreground/0 transition-all duration-300 group-hover:bg-foreground/10 motion-reduce:group-hover:bg-foreground/0">
+          <div className="flex size-12 scale-75 items-center justify-center rounded-full bg-white/90 opacity-0 shadow-lg transition-all duration-300 group-hover:scale-100 group-hover:opacity-100 group-focus-within:scale-100 group-focus-within:opacity-100 motion-reduce:group-hover:scale-75 motion-reduce:group-hover:opacity-0">
             <Play className="size-5 text-primary ml-0.5" fill="currentColor" />
           </div>
         </div>

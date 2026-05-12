@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertCircle,
@@ -16,6 +17,11 @@ import {
 } from "lucide-react";
 import type { Video } from "@/types";
 import { getSegmentSeekSeconds, parseTimestampToSeconds } from "@/lib/videoTimestamp";
+import {
+  clearPendingVideoImport,
+  readPendingVideoImport,
+  savePendingVideoImport,
+} from "@/lib/pendingVideoImport";
 import { zhTW as t } from "@/locales/zh-TW";
 import {
   getVideoImportCandidateLocations,
@@ -23,13 +29,47 @@ import {
 } from "@/services/videoPlaceImport";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
-import { useVideoStore } from "@/stores/useVideoStore";
+import { useVideoStore, type SummaryDiagnostics } from "@/stores/useVideoStore";
 import YoutubeIframePlayer from "@/components/home/YoutubeIframePlayer";
 
 interface VideoSummaryDrawerProps {
   video: Video | null;
   open: boolean;
   onClose: () => void;
+}
+
+function drawerSummarySourceLabel(key: SummaryDiagnostics["summarySource"]): string | null {
+  switch (key) {
+    case "ollama-transcript":
+      return t.drawer.sourceSummaryModel;
+    case "heuristic-transcript-fallback":
+      return t.drawer.sourceSummaryHeuristic;
+    case "ollama-description-fallback":
+      return t.drawer.sourceSummaryDescription;
+    case "ollama-synthetic-fallback":
+      return t.drawer.sourceSummaryHeuristic;
+    case "unavailable":
+      return t.drawer.sourceSummaryUnavailable;
+    default:
+      return null;
+  }
+}
+
+function drawerSegmentSourceLabel(key: SummaryDiagnostics["segmentSource"]): string | null {
+  switch (key) {
+    case "transcript-chunks":
+      return t.drawer.sourceSegmentsTranscript;
+    case "deterministic-mentions":
+      return t.drawer.sourceSegmentsMentions;
+    case "description-fallback":
+      return t.drawer.sourceSegmentsDescription;
+    case "synthetic-fallback":
+      return t.drawer.sourceSegmentsSynthetic;
+    case "unavailable":
+      return t.drawer.sourceSegmentsUnavailable;
+    default:
+      return null;
+  }
 }
 
 function ProcessingRow({ label }: { label: string }) {
@@ -47,6 +87,7 @@ export default function VideoSummaryDrawer({
   onClose,
 }: VideoSummaryDrawerProps) {
   const router = useRouter();
+  const { status: sessionStatus } = useSession();
   const summaryDiagnostics = useVideoStore((state) => state.summaryDiagnostics);
   const isSummarizing = useVideoStore((state) => state.isSummarizing);
   const pushToast = useToastStore((state) => state.pushToast);
@@ -77,9 +118,22 @@ export default function VideoSummaryDrawer({
       return;
     }
     const candidates = getVideoImportCandidateLocations(video);
-    setSelectedLocationNames(new Set(candidates.map((loc) => loc.name)));
-    const firstDay = useTripStore.getState().itinerary[0]?.dayNumber ?? 1;
-    setImportTargetDay(firstDay);
+    const pending = readPendingVideoImport();
+    if (pending && pending.videoId === video.videoId) {
+      const allowed = new Set(candidates.map((c) => c.name));
+      const names = pending.selectedNames.filter((n) => allowed.has(n));
+      setSelectedLocationNames(
+        names.length > 0 ? new Set(names) : new Set(candidates.map((c) => c.name)),
+      );
+      const days = useTripStore.getState().itinerary.map((d) => d.dayNumber);
+      const dayOk = days.includes(pending.targetDay);
+      setImportTargetDay(dayOk ? pending.targetDay : (days[0] ?? pending.targetDay));
+      clearPendingVideoImport();
+    } else {
+      setSelectedLocationNames(new Set(candidates.map((loc) => loc.name)));
+      const firstDay = useTripStore.getState().itinerary[0]?.dayNumber ?? 1;
+      setImportTargetDay(firstDay);
+    }
   }, [open, video?.id, video]);
 
   useEffect(() => {
@@ -117,7 +171,53 @@ export default function VideoSummaryDrawer({
     window.setTimeout(() => setToast(null), 1800);
   }
 
+  function promptLoginToSave(names: string[], targetDay: number) {
+    pushToast({
+      variant: "info",
+      title: t.drawer.loginRequiredTitle,
+      description: t.drawer.loginRequiredDesc,
+      actionLabel: t.drawer.loginRequiredAction,
+      action: () => {
+        if (!activeVideo.videoId) {
+          return;
+        }
+        savePendingVideoImport({
+          videoId: activeVideo.videoId,
+          selectedNames: names,
+          targetDay,
+        });
+        router.push(`/login?callbackUrl=${encodeURIComponent("/?resumeVideoImport=1")}`);
+      },
+    });
+  }
+
   function openImportDayPicker() {
+    if (sessionStatus === "loading") {
+      return;
+    }
+    if (sessionStatus !== "authenticated") {
+      if (importCandidates.length === 0) {
+        pushToast({
+          variant: "warning",
+          title: t.drawer.noLocationsToastTitle,
+          description: t.drawer.noLocationsToastDesc,
+        });
+        return;
+      }
+      const names = importCandidates
+        .map((loc) => loc.name)
+        .filter((name) => selectedLocationNames.has(name));
+      if (names.length === 0) {
+        pushToast({
+          variant: "warning",
+          title: t.drawer.noLocationsToastTitle,
+          description: t.drawer.selectAtLeastOneLocation,
+        });
+        return;
+      }
+      promptLoginToSave(names, importTargetDay);
+      return;
+    }
     if (importCandidates.length === 0) {
       pushToast({
         variant: "warning",
@@ -146,6 +246,15 @@ export default function VideoSummaryDrawer({
       .filter((name) => selectedLocationNames.has(name));
     if (names.length === 0) {
       setImportDayPickerOpen(false);
+      return;
+    }
+
+    if (sessionStatus === "loading") {
+      return;
+    }
+    if (sessionStatus !== "authenticated") {
+      setImportDayPickerOpen(false);
+      promptLoginToSave(names, importTargetDay);
       return;
     }
 
@@ -206,29 +315,29 @@ export default function VideoSummaryDrawer({
                           ? t.video.transcriptNone
                           : t.video.transcriptFallback}
                     </span>
-                    {process.env.NODE_ENV !== "production" && summaryDiagnostics.mapsProvenance === "catalog-fallback" && (
-                      <span className="rounded-full bg-secondary/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/80">
+                    {summaryDiagnostics.mapsProvenance === "catalog-fallback" && (
+                      <span className="rounded-full bg-secondary/15 px-2 py-0.5 text-[10px] tracking-wide text-foreground/80">
                         {t.video.mapsCatalog}
                       </span>
                     )}
-                    {process.env.NODE_ENV !== "production" && summaryDiagnostics.mapsProvenance === "google-geocoding" && (
-                      <span className="rounded-full bg-tertiary/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/80">
+                    {summaryDiagnostics.mapsProvenance === "google-geocoding" && (
+                      <span className="rounded-full bg-tertiary/15 px-2 py-0.5 text-[10px] tracking-wide text-foreground/80">
                         {t.video.mapsGoogle}
                       </span>
                     )}
-                    {process.env.NODE_ENV !== "production" && summaryDiagnostics.mapsProvenance === "mixed" && (
-                      <span className="rounded-full bg-tertiary/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/80">
+                    {summaryDiagnostics.mapsProvenance === "mixed" && (
+                      <span className="rounded-full bg-tertiary/15 px-2 py-0.5 text-[10px] tracking-wide text-foreground/80">
                         {t.video.mapsMixed}
                       </span>
                     )}
-                    {process.env.NODE_ENV !== "production" && summaryDiagnostics.summarySource && (
-                      <span className="rounded-full bg-border-light px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/70">
-                        {summaryDiagnostics.summarySource}
+                    {drawerSummarySourceLabel(summaryDiagnostics.summarySource) && (
+                      <span className="rounded-full bg-border-light px-2 py-0.5 text-[10px] tracking-wide text-foreground/70">
+                        {drawerSummarySourceLabel(summaryDiagnostics.summarySource)}
                       </span>
                     )}
-                    {process.env.NODE_ENV !== "production" && summaryDiagnostics.segmentSource && (
-                      <span className="rounded-full bg-border-light px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/70">
-                        {summaryDiagnostics.segmentSource}
+                    {drawerSegmentSourceLabel(summaryDiagnostics.segmentSource) && (
+                      <span className="rounded-full bg-border-light px-2 py-0.5 text-[10px] tracking-wide text-foreground/70">
+                        {drawerSegmentSourceLabel(summaryDiagnostics.segmentSource)}
                       </span>
                     )}
                     {process.env.NODE_ENV !== "production" && summaryDiagnostics.captionLanguage && (
