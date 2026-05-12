@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildChatPrompt, buildItineraryPrompt, buildVideoMomentPolishingPrompt } from "@/server/ai/promptBuilder";
+import { buildChatPrompt, buildItineraryPrompt, buildVideoFinalSummaryPrompt, buildVideoMomentPolishingPrompt } from "@/server/ai/promptBuilder";
 import type { TripPlanRequest } from "@/types";
 
 const request: TripPlanRequest = {
@@ -77,6 +77,32 @@ test("buildVideoMomentPolishingPrompt enforces preserve rules", () => {
   assert.match(prompt, /Preserve id, timestamp, startSeconds, endSeconds exactly/);
   assert.match(prompt, /do not add new POIs/);
   assert.match(prompt, /Never repeat the same POI string/);
+  assert.match(prompt, /closed_vocab_synonym_groups_by_id/);
+  assert.match(prompt, /CLOSED-VOCAB RULE/);
   assert.match(prompt, /Title 長度盡量 22 字內/);
   assert.match(prompt, /standalone vague words/);
+});
+
+test("buildVideoFinalSummaryPrompt injects closed_vocab synonym groups by timestamp", () => {
+  const prompt = buildVideoFinalSummaryPrompt({
+    title: "熊本散步",
+    destination: "熊本市",
+    draft: {
+      summary: "車站與古城一日動線。",
+      segments: [
+        {
+          timestamp: "01:00",
+          title: "熊本車站抵達",
+          text: "適合轉乘與買伴手禮。",
+          highlights: ["電鐵"],
+          locationHints: ["熊本車站"],
+        },
+      ],
+      extractedLocations: ["熊本車站"],
+    },
+  });
+  assert.match(prompt, /closed_vocab_synonym_groups_by_timestamp/);
+  assert.match(prompt, /CLOSED-VOCAB/);
+  assert.match(prompt, /canonical place names only/);
+  assert.match(prompt, /Never output transcript fragments as place names/);
 });

@@ -3,6 +3,7 @@
 | 路徑 | 說明 |
 |------|------|
 | [startup.md](./startup.md) | 捷徑：指向根目錄 [README.md](../../README.md)（完整啟動步驟） |
+| [video-place-extraction.md](./video-place-extraction.md) | 影片地點擷取 deterministic pipeline、quality gate、canonicalization、dedupe、verification 與 fallback |
 | [phase3_production_upgrade_report.md](./phase3_production_upgrade_report.md) | Phase 3 升級與上線相關筆記 |
 | [phase36_stability_and_mock_removal_report.md](./phase36_stability_and_mock_removal_report.md) | 穩定性與 mock 移除報告 |
 | [mock-audit-phase36.md](./mock-audit-phase36.md) | Mock 稽核（Phase 3.6） |

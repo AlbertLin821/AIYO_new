@@ -251,4 +251,5 @@ test("buildVideoSegmentPrompt requests strict JSON output for transcript chunks"
   assert.match(prompt, /"segments"/);
   assert.match(prompt, /"extractedLocations"/);
   assert.match(prompt, /Do not use Simplified Chinese/);
+  assert.match(prompt, /CLOSED-VOCAB per segment/);
 });

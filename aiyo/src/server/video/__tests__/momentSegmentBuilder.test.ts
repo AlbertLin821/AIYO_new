@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { VerifiedVideoPlace } from "@/server/video/placeExtraction";
 import type { PlaceMention } from "@/server/video/placeMentionExtractor";
-import { buildMomentSegments, pickFirstOccurrenceMentions } from "@/server/video/momentSegmentBuilder";
+import {
+  buildMomentSegments,
+  buildSegmentsFromVerifiedPlaces,
+  pickFirstOccurrenceMentions,
+} from "@/server/video/momentSegmentBuilder";
 
 function mention(partial: Partial<PlaceMention> & Pick<PlaceMention, "name" | "startSeconds">): PlaceMention {
   const name = partial.name.trim();
@@ -56,4 +61,25 @@ test("toVideoSummarySegments path is covered via buildMomentSegments shape", () 
   });
   assert.equal(segments[0].id, "moment_1");
   assert.equal(segments[0].title, segments[0].locationHints[0]);
+});
+
+test("buildSegmentsFromVerifiedPlaces uses verified place names only", () => {
+  const places: VerifiedVideoPlace[] = [
+    {
+      id: "kumamoto-station",
+      name: "熊本車站",
+      canonicalName: "熊本車站",
+      aliases: ["熊本站"],
+      source: "gazetteer",
+      confidence: 0.9,
+      firstMentionStartSeconds: 30,
+      firstMentionEndSeconds: 35,
+      evidenceTexts: ["熊本站"],
+    },
+  ];
+  const segments = buildSegmentsFromVerifiedPlaces({ places });
+  assert.equal(segments.length, 1);
+  assert.equal(segments[0].title, "熊本車站");
+  assert.deepEqual(segments[0].locationHints, ["熊本車站"]);
+  assert.match(segments[0].text, /影片在此時間點提到此地點/);
 });
