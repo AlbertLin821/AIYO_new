@@ -299,17 +299,18 @@ export default function VideoSummaryDrawer({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-40 bg-foreground/10"
+              transition={{ duration: 0.35, ease: "easeOut" }}
+              className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
               onClick={onClose}
             />
 
             <motion.div
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              initial={{ opacity: 0, scale: 0.85, y: 50 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 30 }}
+              transition={{ type: "spring", damping: 22, stiffness: 180, mass: 0.9 }}
               data-testid="video-summary-drawer"
-              className="fixed right-0 top-0 z-50 flex h-screen w-full max-w-lg flex-col bg-surface shadow-soft-lg"
+              className="fixed inset-4 z-50 mx-auto my-auto flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-surface shadow-soft-lg sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2"
             >
             <div className="flex items-center justify-between border-b border-border-light px-6 py-4">
               <div className="flex min-w-0 flex-1 items-start gap-2">

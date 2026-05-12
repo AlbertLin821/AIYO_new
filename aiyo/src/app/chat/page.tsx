@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
+import PastelRainbowBackground from "@/components/effects/PastelRainbowBackground";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
@@ -458,7 +459,7 @@ export default function ChatPage() {
               </button>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+            <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-[3px]">
               {conversations.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-border-light bg-cream/40 px-4 py-6 text-center text-xs text-muted">
                   {t.chat.emptyConversationsHint}
@@ -469,7 +470,7 @@ export default function ChatPage() {
                     key={conversation.id}
                     className={`group relative rounded-2xl border transition-colors ${
                       conversation.id === activeConversationId
-                        ? "border-primary/40 bg-primary/10"
+                        ? "rainbow-border bg-primary/10"
                         : "border-border-light bg-surface hover:bg-cream/50"
                     }`}
                   >
@@ -503,8 +504,9 @@ export default function ChatPage() {
         )}
       </aside>
 
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="border-b border-border-light px-6 py-4">
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <PastelRainbowBackground />
+        <div className="relative z-10 border-b border-border-light bg-white/60 px-6 py-4 backdrop-blur-sm">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="font-semibold text-foreground">{t.chat.pageTitle}</h1>
@@ -515,7 +517,7 @@ export default function ChatPage() {
                 createConversation();
                 setInput("");
               }}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-border-light bg-surface px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-cream/60 md:hidden"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-border-light bg-white/70 px-3 py-2 text-xs font-medium text-foreground backdrop-blur-sm transition-colors hover:bg-white/90 md:hidden"
             >
               <Plus className="size-3.5" aria-hidden />
               {t.chat.newConversation}
@@ -523,7 +525,7 @@ export default function ChatPage() {
           </div>
         </div>
         {conversations.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto border-b border-border-light px-4 py-3 md:hidden">
+          <div className="relative z-10 flex gap-2 overflow-x-auto border-b border-border-light bg-white/40 px-4 py-3 backdrop-blur-sm md:hidden">
             {conversations.map((conversation) => (
               <button
                 type="button"
@@ -532,7 +534,7 @@ export default function ChatPage() {
                 className={`shrink-0 rounded-full border px-3 py-1.5 text-xs ${
                   conversation.id === activeConversationId
                     ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-border-light bg-surface text-muted"
+                    : "border-border-light bg-white/60 text-muted"
                 }`}
               >
                 {conversation.title}
@@ -541,9 +543,9 @@ export default function ChatPage() {
           </div>
         )}
 
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 py-6">
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 py-6">
           {messages.length === 0 && !isSending && !errorMessage && (
-            <div className="rounded-2xl border border-dashed border-border-light bg-cream/40 px-4 py-8 text-center text-sm text-muted">
+            <div className="rounded-2xl border border-dashed border-border-light bg-white/60 px-4 py-8 text-center text-sm text-muted backdrop-blur-sm">
               <p className="font-medium text-foreground">{t.chat.emptyTitle}</p>
               <p className="mt-2 text-xs">{emptyChatHint}</p>
             </div>
@@ -578,7 +580,7 @@ export default function ChatPage() {
                     className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                       message.role === "user"
                         ? "rounded-br-md bg-primary text-white"
-                        : "rounded-bl-md border border-border-light bg-surface text-foreground shadow-soft"
+                        : "rounded-bl-md border border-border-light bg-white/80 text-foreground shadow-soft backdrop-blur-md"
                     }`}
                   >
                     <MarkdownMessage
@@ -630,7 +632,7 @@ export default function ChatPage() {
               <div className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-lavender to-primary text-xs text-white">
                 {t.chat.aiShort}
               </div>
-              <div className="rounded-2xl rounded-bl-md border border-border-light bg-surface px-4 py-3 shadow-soft">
+              <div className="rounded-2xl rounded-bl-md border border-border-light bg-white/80 px-4 py-3 shadow-soft backdrop-blur-md">
                 <div className="flex items-center gap-1">
                   <div className="size-2 animate-bounce rounded-full bg-muted-light" style={{ animationDelay: "0ms" }} />
                   <div className="size-2 animate-bounce rounded-full bg-muted-light" style={{ animationDelay: "150ms" }} />
@@ -641,13 +643,13 @@ export default function ChatPage() {
           )}
 
           {errorMessage && (
-            <div className="rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">
+            <div className="rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger backdrop-blur-sm">
               {errorMessage}
             </div>
           )}
 
           {(isLoadingVideos || videoError || recommendedVideos.length > 0) && (
-            <section className="rounded-2xl border border-border-light bg-surface px-4 py-4 shadow-soft">
+            <section className="rounded-2xl border border-border-light bg-white/80 px-4 py-4 shadow-soft backdrop-blur-md">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold text-foreground">AI 推薦影片</h2>
                 {isLoadingVideos && (
@@ -676,8 +678,8 @@ export default function ChatPage() {
           <div ref={messagesEndRef} aria-hidden className="h-px shrink-0" />
         </div>
 
-        <div className="px-6 pb-6 pt-3">
-          <div className="flex items-center gap-3 rounded-2xl border border-border-light bg-surface px-4 py-2 shadow-soft">
+        <div className="relative z-10 px-6 pb-6 pt-3">
+          <div className="flex items-center gap-3 rounded-2xl border border-border-light bg-white/80 px-4 py-2 shadow-soft backdrop-blur-md">
             <motion.button
               type="button"
               whileHover={{ scale: 1.05 }}
