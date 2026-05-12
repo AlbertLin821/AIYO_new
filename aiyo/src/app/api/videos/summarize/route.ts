@@ -13,6 +13,7 @@ export async function POST(request: Request) {
       videoId?: string;
       title?: string;
       destination?: string;
+      refresh?: boolean;
     };
 
     if (!body.url?.trim() && !body.videoId?.trim()) {

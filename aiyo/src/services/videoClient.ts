@@ -116,6 +116,8 @@ export async function summarizeVideo(input: {
   videoId?: string;
   title?: string;
   destination?: string;
+  /** 清除伺服端快取並強制重新分析（重新呼叫 AI／擷取管線） */
+  refresh?: boolean;
 }): Promise<VideoSummaryResult> {
   const response = await fetch("/api/videos/summarize", {
     method: "POST",

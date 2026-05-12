@@ -60,6 +60,8 @@ interface VideoSummaryInput {
   videoId?: string;
   title?: string;
   destination?: string;
+  /** 略過記憶體／資料庫快取並重新跑完整摘要管線 */
+  refresh?: boolean;
 }
 
 function isVideoSummaryResult(value: unknown): value is VideoSummaryResult {
@@ -119,6 +121,20 @@ async function writePersistedVideoSummary(cacheKey: string, result: VideoSummary
   } catch (error) {
     if (process.env.NODE_ENV !== "production") {
       console.warn("[video-summary-cache] Failed to persist summary.", error);
+    }
+  }
+}
+
+async function invalidateVideoSummaryCache(cacheKey: string): Promise<void> {
+  videoSummaryCache.delete(cacheKey);
+  try {
+    await prisma.$executeRaw`
+      DELETE FROM "video_summary_caches"
+      WHERE "videoId" = ${cacheKey}
+    `;
+  } catch (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[video-summary-cache] Failed to invalidate cache row.", error);
     }
   }
 }
@@ -236,7 +252,10 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
 
   const videoId = idFromField || idFromUrl;
   const inputCacheKey = buildSummaryCacheKey({ videoId, destination: input.destination });
-  const inputVideoIdCache = await getCachedVideoSummary(inputCacheKey);
+  if (input.refresh) {
+    await invalidateVideoSummaryCache(inputCacheKey);
+  }
+  const inputVideoIdCache = input.refresh ? null : await getCachedVideoSummary(inputCacheKey);
   if (inputVideoIdCache) {
     return inputVideoIdCache;
   }
@@ -247,16 +266,25 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     title: input.title,
   });
   const resolvedVideoId = metadata.videoId || videoId;
+  const resolvedCacheKeyEarly = buildSummaryCacheKey({
+    videoId: resolvedVideoId,
+    destination: input.destination,
+  });
+  if (input.refresh && resolvedCacheKeyEarly !== inputCacheKey) {
+    await invalidateVideoSummaryCache(resolvedCacheKeyEarly);
+  }
 
   if (resolvedVideoId !== videoId) {
-    const resolvedVideoIdCache = await getCachedVideoSummary(
-      buildSummaryCacheKey({ videoId: resolvedVideoId, destination: input.destination }),
-    );
+    const resolvedVideoIdCache = input.refresh
+      ? null
+      : await getCachedVideoSummary(
+          buildSummaryCacheKey({ videoId: resolvedVideoId, destination: input.destination }),
+        );
     if (resolvedVideoIdCache) {
       return resolvedVideoIdCache;
     }
   }
-  const resolvedCacheKey = buildSummaryCacheKey({ videoId: resolvedVideoId, destination: input.destination });
+  const resolvedCacheKey = resolvedCacheKeyEarly;
 
   const transcriptResult = await fetchYouTubeTranscript(resolvedVideoId);
   const descriptionFallbackEntries = buildDescriptionFallbackTranscriptEntries({

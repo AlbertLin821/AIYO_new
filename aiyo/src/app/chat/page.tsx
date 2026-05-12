@@ -103,6 +103,7 @@ export default function ChatPage() {
   const userStore = useUserStore();
   const pushToast = useToastStore((state) => state.pushToast);
   const setSummaryDiagnostics = useVideoStore((state) => state.setSummaryDiagnostics);
+  const setIsSummarizing = useVideoStore((state) => state.setIsSummarizing);
 
   const tagConfigs = [
     { icon: MapPin, label: t.chat.tagDestination },
@@ -296,6 +297,7 @@ export default function ChatPage() {
     }
 
     setIsLoadingVideos(true);
+    setIsSummarizing(true);
     try {
       const result = await summarizeVideo({
         videoId: video.videoId,
@@ -326,6 +328,49 @@ export default function ChatPage() {
       });
     } finally {
       setIsLoadingVideos(false);
+      setIsSummarizing(false);
+    }
+  }
+
+  async function refreshVideoSummary(video: VideoRecommendation) {
+    if (!video.videoId?.trim()) {
+      return;
+    }
+    setSummaryDiagnostics(null);
+    setIsLoadingVideos(true);
+    setIsSummarizing(true);
+    try {
+      const result = await summarizeVideo({
+        videoId: video.videoId,
+        title: video.title,
+        destination: planningSnapshot.destination,
+        refresh: true,
+      });
+      setRecommendedVideos((videos) =>
+        videos.map((item) => (item.id === video.id ? result.video : item)),
+      );
+      setSelectedVideo(result.video);
+      setSummaryDiagnostics({
+        transcriptSource: result.transcriptSource,
+        summarySource: result.summarySource,
+        segmentSource: result.segmentSource,
+        captionLanguage: result.debug?.captionLanguage,
+        captionKind: result.debug?.captionKind,
+        captionSource: result.debug?.captionSource,
+        mapsProvenance: result.mapsProvenance,
+        geocodeWarnings: result.geocodeWarnings,
+        summaryUnavailable: result.summaryUnavailable,
+        unavailableReason: result.unavailableReason,
+      });
+    } catch (error) {
+      pushToast({
+        variant: "error",
+        title: t.video.requestFailed,
+        description: error instanceof Error ? error.message : t.video.requestFailedGeneric,
+      });
+    } finally {
+      setIsLoadingVideos(false);
+      setIsSummarizing(false);
     }
   }
 
@@ -704,6 +749,9 @@ export default function ChatPage() {
         video={selectedVideo}
         open={selectedVideo !== null}
         onClose={() => setSelectedVideo(null)}
+        onRefreshSummary={
+          selectedVideo?.videoId ? () => refreshVideoSummary(selectedVideo) : undefined
+        }
       />
     </div>
   );

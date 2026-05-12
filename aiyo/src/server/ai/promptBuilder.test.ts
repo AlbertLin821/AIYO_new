@@ -76,6 +76,7 @@ test("buildVideoMomentPolishingPrompt enforces preserve rules", () => {
   });
   assert.match(prompt, /Preserve id, timestamp, startSeconds, endSeconds exactly/);
   assert.match(prompt, /do not add new POIs/);
+  assert.match(prompt, /Never repeat the same POI string/);
   assert.match(prompt, /Title 長度盡量 22 字內/);
   assert.match(prompt, /standalone vague words/);
 });

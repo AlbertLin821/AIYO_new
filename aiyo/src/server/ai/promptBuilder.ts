@@ -282,6 +282,7 @@ export function buildVideoSummaryPrompt(input: {
     "- Each segment text must state what the place is, why it matters for travelers, and how it fits an itinerary (time-of-day, pacing, or connection to the next stop).",
     "- Never use half-sentences, oral filler, or clipped transcript fragments as the segment title (for example fragments ending mid-thought or with 然後、就是、那個、這邊).",
     "- Each segment text must be a concise 1 to 2 sentence synthesis of that time range, within 60 Chinese characters, not verbatim transcript.",
+    "- Do not repeat the same POI name (or synonymous variants such as X站 vs X車站 vs X駅) multiple times in one segment text; mention it at most once, then use 該站／該景點／此區 or omit the name if locationHints already identify it.",
     "- Each segment highlights array must contain 1 to 3 concise concrete notable details from that same time range.",
     "- Prefer segments about attractions, restaurants, food, landmarks, viewpoints, shopping streets, or photo spots.",
     "- Extract only specific place names, restaurants, food spots, stalls, attractions, landmarks, markets, parks, stations, or districts when actually mentioned in transcript chunks.",
@@ -325,6 +326,7 @@ export function buildVideoFinalSummaryPrompt(input: {
     "- Prefer map-ready strings: full POI / night market / restaurant names as spoken or as official signage (good for geocoding). Ban vague-only labels: 夜市、老街、小吃、附近、這裡、周邊、當地 作為唯一名稱.",
     "- Food must be named concretely when known; otherwise drop the food clause instead of guessing.",
     "- Segment text should explain what the stop is, why it is worth visiting, and itinerary relevance (meal slot, walking cluster, transit hub).",
+    "- Avoid repeating the same place label or synonymous variants (e.g. 熊本站、熊本車站、JR熊本站) within one segment; single mention only.",
     "- Keep only real attractions, restaurants, food spots, stalls, landmarks, markets, parks, stations, cafes, districts, or photo spots in extractedLocations and locationHints.",
     "- Remove broad destinations and category phrases such as 嘉義, 嘉義市, 嘉義美食, 台南景點, 高雄旅遊, 台灣, 日本, 大阪, 東京.",
     "- Do not add locations that are not already in the draft.",
@@ -390,6 +392,7 @@ export function buildVideoMomentPolishingPrompt(input: {
     "- Title must be a complete, publication-ready headline (full venue or dish name when known), not a transcript fragment or oral filler.",
     "- Expand titles and summaries to use fully qualified names when hints already contain them (e.g. merge 夜市 into 嘉義文化路夜市 if hints justify it); never output standalone vague words (夜市、老街、小吃 alone) as the title.",
     "- Summary (and text when used) must say what is featured, why travelers care, and how it fits a day plan; mention concrete dishes only when tied to a named POI or dish in hints/foods.",
+    "- Never repeat the same POI string or synonymous variants (X站 vs X車站 vs X駅 vs JR+X站) inside summary/text for one moment; use one wording once—after that use 該站／該景點 or omit since locationHints already carry the map-ready name.",
     "- If the transcript only gives an unclear nickname, keep a short literal label plus 「（待查證）」 rather than inventing a formal business name.",
     isZh
       ? "- Title 長度盡量 22 字內，text/summary 80 字內。"

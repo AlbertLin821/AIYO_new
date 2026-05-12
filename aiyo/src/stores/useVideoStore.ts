@@ -12,6 +12,7 @@ export type SummaryDiagnostics = {
   segmentSource?:
     | "transcript-chunks"
     | "deterministic-mentions"
+    | "deterministic-mentions-json-polished"
     | "description-fallback"
     | "synthetic-fallback"
     | "unavailable";

@@ -2,6 +2,7 @@ import { chatWithOllama } from "@/server/ai/ollamaClient";
 import { buildVideoMomentPolishingPrompt } from "@/server/ai/promptBuilder";
 import { parseVideoMomentPolishingResponse } from "@/server/ai/responseParser";
 import { serverConfig } from "@/server/config";
+import { dedupeRepeatedPlaceNamesInText } from "@/server/video/segmentPlaceDedupe";
 import type { VideoSummarySegment } from "@/types";
 
 type PolishedMoment = {
@@ -33,8 +34,12 @@ export function mergeVideoMomentPolishIntoSegments(
     const hints =
       m.locationHints && m.locationHints.length > 0 ? m.locationHints : seg.locationHints;
     const title = m.title?.trim() ? m.title.trim() : seg.title;
-    const summary = m.summary?.trim() ? m.summary.trim() : seg.summary;
-    const text = m.text?.trim() ? m.text.trim() : summary || seg.text;
+    let summary = m.summary?.trim() ? m.summary.trim() : seg.summary;
+    let text = m.text?.trim() ? m.text.trim() : summary || seg.text;
+    const hintList = hints ?? [];
+    summary =
+      summary !== undefined ? dedupeRepeatedPlaceNamesInText(summary, hintList) : undefined;
+    text = dedupeRepeatedPlaceNamesInText(text ?? summary ?? "", hintList);
     return {
       ...seg,
       timestamp: seg.timestamp,

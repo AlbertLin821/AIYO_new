@@ -13,9 +13,11 @@ import {
   MapPin,
   Play,
   Plus,
+  RefreshCw,
   X,
 } from "lucide-react";
 import type { Video } from "@/types";
+import { cn } from "@/lib/utils";
 import { getSegmentSeekSeconds, parseTimestampToSeconds } from "@/lib/videoTimestamp";
 import {
   clearPendingVideoImport,
@@ -36,6 +38,8 @@ interface VideoSummaryDrawerProps {
   video: Video | null;
   open: boolean;
   onClose: () => void;
+  /** 清除伺服端已存摘要並重新跑摘要／AI 管線（首頁／聊天由父層實作） */
+  onRefreshSummary?: () => void | Promise<void>;
 }
 
 function drawerSummarySourceLabel(key: SummaryDiagnostics["summarySource"]): string | null {
@@ -61,6 +65,8 @@ function drawerSegmentSourceLabel(key: SummaryDiagnostics["segmentSource"]): str
       return t.drawer.sourceSegmentsTranscript;
     case "deterministic-mentions":
       return t.drawer.sourceSegmentsMentions;
+    case "deterministic-mentions-json-polished":
+      return t.drawer.sourceSegmentsMentionsPolished;
     case "description-fallback":
       return t.drawer.sourceSegmentsDescription;
     case "synthetic-fallback":
@@ -85,6 +91,7 @@ export default function VideoSummaryDrawer({
   video,
   open,
   onClose,
+  onRefreshSummary,
 }: VideoSummaryDrawerProps) {
   const router = useRouter();
   const { status: sessionStatus } = useSession();
@@ -98,6 +105,7 @@ export default function VideoSummaryDrawer({
   const [selectedLocationNames, setSelectedLocationNames] = useState<Set<string>>(() => new Set());
   const [importTargetDay, setImportTargetDay] = useState(1);
   const [importDayPickerOpen, setImportDayPickerOpen] = useState(false);
+  const [refreshingSummary, setRefreshingSummary] = useState(false);
   const tripItinerary = useTripStore((state) => state.itinerary);
   const videoId = video?.videoId;
 
@@ -304,7 +312,8 @@ export default function VideoSummaryDrawer({
               className="fixed right-0 top-0 z-50 flex h-screen w-full max-w-lg flex-col bg-surface shadow-soft-lg"
             >
             <div className="flex items-center justify-between border-b border-border-light px-6 py-4">
-              <div className="flex flex-col gap-2">
+              <div className="flex min-w-0 flex-1 items-start gap-2">
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
                 <h2 className="font-semibold text-foreground">{t.drawer.title}</h2>
                 {summaryDiagnostics && (
                   <div className="flex flex-wrap gap-2">
@@ -352,6 +361,34 @@ export default function VideoSummaryDrawer({
                     )}
                   </div>
                 )}
+                </div>
+                {onRefreshSummary && videoId ? (
+                  <button
+                    type="button"
+                    title={t.drawer.refreshSummaryTitle}
+                    aria-label={t.drawer.refreshSummaryAria}
+                    disabled={isSummarizing || refreshingSummary}
+                    onClick={() => {
+                      void (async () => {
+                        setRefreshingSummary(true);
+                        try {
+                          await onRefreshSummary();
+                        } finally {
+                          setRefreshingSummary(false);
+                        }
+                      })();
+                    }}
+                    className="mt-0.5 shrink-0 cursor-pointer rounded-full p-2 text-muted transition-colors hover:bg-border-light hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+                  >
+                    <RefreshCw
+                      className={cn(
+                        "size-4",
+                        (isSummarizing || refreshingSummary) && "animate-spin",
+                      )}
+                      aria-hidden
+                    />
+                  </button>
+                ) : null}
               </div>
               <button
                 type="button"

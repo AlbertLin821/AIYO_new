@@ -156,6 +156,54 @@ export default function HomePage() {
     upsertVideo,
   ]);
 
+  const refreshVideoSummary = useCallback(
+    async (video: VideoRecommendation) => {
+      if (!video.videoId?.trim()) {
+        return;
+      }
+      setSummaryDiagnostics(null);
+      setIsSummarizing(true);
+      try {
+        const result = await summarizeVideo({
+          videoId: video.videoId,
+          title: video.title,
+          destination: tripDestination,
+          refresh: true,
+        });
+        upsertVideo(result.video);
+        setSelectedVideo(result.video);
+        setSummaryDiagnostics({
+          transcriptSource: result.transcriptSource,
+          summarySource: result.summarySource,
+          segmentSource: result.segmentSource,
+          captionLanguage: result.debug?.captionLanguage,
+          captionKind: result.debug?.captionKind,
+          captionSource: result.debug?.captionSource,
+          mapsProvenance: result.mapsProvenance,
+          geocodeWarnings: result.geocodeWarnings,
+          summaryUnavailable: result.summaryUnavailable,
+          unavailableReason: result.unavailableReason,
+        });
+      } catch (error) {
+        pushToast({
+          variant: "error",
+          title: t.video.requestFailed,
+          description: error instanceof Error ? error.message : t.video.requestFailedGeneric,
+        });
+      } finally {
+        setIsSummarizing(false);
+      }
+    },
+    [
+      pushToast,
+      setIsSummarizing,
+      setSelectedVideo,
+      setSummaryDiagnostics,
+      tripDestination,
+      upsertVideo,
+    ],
+  );
+
   useEffect(() => {
     if (sessionStatus !== "authenticated") {
       resumeImportHandledRef.current = false;
@@ -351,6 +399,11 @@ export default function HomePage() {
         video={selectedVideo}
         open={selectedVideo !== null}
         onClose={handleCloseVideoDrawer}
+        onRefreshSummary={
+          selectedVideo?.videoId
+            ? () => refreshVideoSummary(selectedVideo)
+            : undefined
+        }
       />
     </div>
   );
