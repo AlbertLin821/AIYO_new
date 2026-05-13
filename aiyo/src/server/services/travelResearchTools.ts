@@ -1,4 +1,4 @@
-import type { ChatContext, TripPlanRequest } from "@/types";
+import type { ChatContext, ChatSource, TripPlanRequest } from "@/types";
 import { serverConfig } from "@/server/config";
 import {
   searchPlacesByText,
@@ -9,15 +9,24 @@ import {
   formatWeatherForPrompt,
 } from "@/server/providers/openMeteoWeather";
 import { formatTavilyForPrompt, tavilySearch } from "@/server/providers/tavilySearch";
+import { searchYouTubeVideos } from "@/server/providers/youtubeProvider";
+import {
+  mergeChatSources,
+  normalizeTavilySources,
+  normalizeWeatherSources,
+  normalizeYouTubeSources,
+} from "@/server/chat/sourceNormalization";
 
 export type TravelToolRequest =
   | { type: "search_place"; query: string; locationHint?: string }
   | { type: "tavily_search"; query: string }
-  | { type: "weather_forecast"; destination?: string; startDate?: string; endDate?: string };
+  | { type: "weather_forecast"; destination?: string; startDate?: string; endDate?: string }
+  | { type: "youtube_search"; destination?: string; keyword?: string; limit?: number };
 
 export type TravelResearchDigest = {
   text: string;
   placeHits: PlaceSearchHit[];
+  sources: Record<string, ChatSource>;
 };
 
 function dedupePlaces(places: PlaceSearchHit[]): PlaceSearchHit[] {
@@ -61,6 +70,9 @@ function isTravelToolRequest(value: unknown): value is TravelToolRequest {
     return true;
   }
   if (r.type === "weather_forecast") {
+    return true;
+  }
+  if (r.type === "youtube_search") {
     return true;
   }
   return false;
@@ -120,10 +132,24 @@ export function buildTripPlanResearchRequests(request: TripPlanRequest): TravelT
   const q = `${dest} 景點 美食 ${interest}`.replace(/\s+/g, " ").slice(0, 120);
   const requests: TravelToolRequest[] = [
     { type: "search_place", query: q, locationHint: dest },
-    { type: "weather_forecast", destination: dest },
+    {
+      type: "weather_forecast",
+      destination: dest,
+      startDate: request.tripStartDate,
+      endDate: request.tripEndDate || request.tripStartDate,
+    },
+    {
+      type: "youtube_search",
+      destination: dest,
+      keyword: interest || dest,
+      limit: 3,
+    },
   ];
   if (serverConfig.tavilyApiKey.trim()) {
-    requests.push({ type: "tavily_search", query: `${dest} 旅遊 活動 展覽 市集` });
+    requests.push({
+      type: "tavily_search",
+      query: `${dest} 旅遊 活動 展覽 市集 ${request.tripStartDate || ""}`.replace(/\s+/g, " ").trim(),
+    });
   }
   return requests;
 }
@@ -134,6 +160,7 @@ export async function executeTravelToolRequests(
 ): Promise<TravelResearchDigest> {
   const placeHits: PlaceSearchHit[] = [];
   const sections: string[] = [];
+  let sources: Record<string, ChatSource> = {};
   const slice = requests.slice(0, 8);
 
   for (const req of slice) {
@@ -153,6 +180,7 @@ export async function executeTravelToolRequests(
       const res = await tavilySearch({ query: req.query, maxResults: 5 });
       if (res.ok) {
         sections.push(`### 網路摘要（${req.query}）\n${formatTavilyForPrompt(res)}`);
+        sources = mergeChatSources(sources, normalizeTavilySources(res.results));
       } else {
         sections.push(`### 網路摘要（${req.query}）\n略過：${res.reason}`);
       }
@@ -173,8 +201,37 @@ export async function executeTravelToolRequests(
       });
       if (res.ok) {
         sections.push(`### 天氣預報（${destination}）\n${formatWeatherForPrompt(res)}`);
+        sources = mergeChatSources(
+          sources,
+          normalizeWeatherSources({
+            destination,
+            startDate: req.startDate || context?.tripStartDate,
+            endDate: req.endDate || context?.tripEndDate || req.startDate || context?.tripStartDate,
+            lines: res.lines,
+          }),
+        );
       } else {
         sections.push(`### 天氣預報（${destination}）\n略過：${res.reason}`);
+      }
+      continue;
+    }
+
+    if (req.type === "youtube_search") {
+      const res = await searchYouTubeVideos({
+        destination: req.destination || context?.destination,
+        keyword: req.keyword,
+        limit: Math.min(3, Math.max(1, req.limit ?? 2)),
+      });
+      if (res.videos.length > 0) {
+        sections.push(
+          `### YouTube 旅遊影片（${req.destination || context?.destination || req.keyword || "travel"}）\n${res.videos
+            .slice(0, 3)
+            .map((video, index) => `${index + 1}. ${video.title}：${video.summary || video.description || video.url}`)
+            .join("\n")}`,
+        );
+        sources = mergeChatSources(sources, normalizeYouTubeSources(res.videos.slice(0, 3)));
+      } else if (res.fallbackReason) {
+        sections.push(`### YouTube 旅遊影片\n略過：${res.fallbackReason}`);
       }
     }
   }
@@ -182,5 +239,6 @@ export async function executeTravelToolRequests(
   return {
     text: sections.join("\n\n").slice(0, 24_000),
     placeHits: dedupePlaces(placeHits),
+    sources,
   };
 }

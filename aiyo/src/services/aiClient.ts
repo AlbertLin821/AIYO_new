@@ -1,9 +1,17 @@
 import { apiDelete, apiGet, apiPost, apiPostWithMeta, apiPut } from "@/services/apiClient";
+import {
+  failFrontendDebugProcess,
+  finishFrontendDebugProcess,
+  startFrontendDebugProcess,
+} from "@/lib/frontendDebug";
 import type {
   ChatContext,
   ChatMessage,
+  ChatSource,
+  ChatQuestionAnswer,
   ChatResponsePayload,
   MemoryRecord,
+  TripProfile,
   TripPlanRequest,
   TripPlanResult,
 } from "@/types";
@@ -18,8 +26,59 @@ export async function sendChatMessage(input: {
   message: string;
   messages?: ChatMessage[];
   context?: ChatContext;
+  structuredTravelPlanning?: boolean;
+  tripProfile?: TripProfile;
+  questionAnswers?: ChatQuestionAnswer[];
+  progressSessionId?: string;
 }) {
-  return apiPost<typeof input, ChatResponsePayload>("/api/ai/chat", input);
+  const processId = startFrontendDebugProcess("chat-message", "送出聊天訊息", {
+    progressSessionId: input.progressSessionId,
+    structuredTravelPlanning: Boolean(input.structuredTravelPlanning),
+    messagePreview: input.message.slice(0, 80),
+  });
+  try {
+    const response = await apiPost<typeof input, ChatResponsePayload>("/api/chat/message", input);
+    finishFrontendDebugProcess(processId, {
+      replyType: response.reply.responseType || "unknown",
+      replyId: response.reply.id,
+    });
+    return response;
+  } catch (error) {
+    failFrontendDebugProcess(processId, error, {
+      progressSessionId: input.progressSessionId,
+    });
+    throw error;
+  }
+}
+
+export async function reviseTripPlan(input: {
+  instruction: string;
+  tripProfile: TripProfile;
+  context?: ChatContext;
+  progressSessionId?: string;
+}) {
+  const processId = startFrontendDebugProcess("trip-revise", "修改既有行程", {
+    progressSessionId: input.progressSessionId,
+    instruction: input.instruction,
+    destination: input.tripProfile.destination,
+  });
+  try {
+    const response = await apiPost<typeof input, ChatResponsePayload>("/api/trip/revise", input);
+    finishFrontendDebugProcess(processId, {
+      replyType: response.reply.responseType || "unknown",
+      replyId: response.reply.id,
+    });
+    return response;
+  } catch (error) {
+    failFrontendDebugProcess(processId, error, {
+      progressSessionId: input.progressSessionId,
+    });
+    throw error;
+  }
+}
+
+export async function fetchSourcePreview(sourceId: string): Promise<ChatSource> {
+  return apiGet<ChatSource>(`/api/sources/${encodeURIComponent(sourceId)}/preview`);
 }
 
 export async function generatePlan(request: TripPlanRequest) {
@@ -37,11 +96,27 @@ export async function generatePlanFromVoice(
   },
   options?: { signal?: AbortSignal; timeoutMs?: number },
 ): Promise<{ plan: TripPlanResult; meta?: Record<string, unknown> }> {
-  const { data, meta } = await apiPostWithMeta<typeof input, TripPlanResult>("/api/ai/plan", input, {
-    timeoutMs: options?.timeoutMs ?? VOICE_PLAN_CLIENT_TIMEOUT_MS,
-    signal: options?.signal,
+  const processId = startFrontendDebugProcess("voice-plan", "語音行程規劃", {
+    destination: input.destination,
+    days: input.days,
+    transcriptPreview: input.transcript.slice(0, 80),
   });
-  return { plan: data, meta };
+  try {
+    const { data, meta } = await apiPostWithMeta<typeof input, TripPlanResult>("/api/ai/plan", input, {
+      timeoutMs: options?.timeoutMs ?? VOICE_PLAN_CLIENT_TIMEOUT_MS,
+      signal: options?.signal,
+    });
+    finishFrontendDebugProcess(processId, {
+      days: data.days.length,
+      meta,
+    });
+    return { plan: data, meta };
+  } catch (error) {
+    failFrontendDebugProcess(processId, error, {
+      destination: input.destination,
+    });
+    throw error;
+  }
 }
 
 export async function fetchOllamaStatusForVoicePlan(): Promise<Record<string, unknown>> {

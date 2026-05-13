@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import path from "path";
 import { dismissOnboardingIfVisible, loginAs } from "./helpers/auth";
 import { ensureArtifactDirs, writeArtifactJson } from "./helpers/artifacts";
+import { openItineraryEditor } from "./helpers/itinerary";
 import {
   resetE2EData,
   seedAuthUsers,
@@ -27,9 +28,7 @@ test.describe("嘉義情境行程編輯器", () => {
 
     await loginAs(page, E2E_OWNER, "/itinerary");
     await dismissOnboardingIfVisible(page);
-    await expect(page.getByTestId("itinerary-editor")).toBeVisible({
-      timeout: 40_000,
-    });
+    await openItineraryEditor(page);
     await expect(page.getByTestId("itinerary-day-card").first()).toBeVisible();
 
     await page.getByTestId("add-activity-button").first().click();
@@ -54,7 +53,6 @@ test.describe("嘉義情境行程編輯器", () => {
     await page.waitForTimeout(800);
 
     const cardA = page.getByTestId("activity-card").filter({ hasText: "E2E排序甲" });
-    const cardB = page.getByTestId("activity-card").filter({ hasText: "E2E排序乙" });
     const orderAfterDrag = await page.evaluate(() => {
       const titles = Array.from(
         document.querySelectorAll('[data-testid="activity-card"] h3'),
@@ -99,9 +97,7 @@ test.describe("嘉義情境行程編輯器", () => {
     await bootstrap.catch(() => {});
 
     await dismissOnboardingIfVisible(page);
-    await expect(page.getByTestId("itinerary-editor")).toBeVisible({
-      timeout: 40_000,
-    });
+    await openItineraryEditor(page);
 
     const renamedAfterReload = await page
       .getByTestId("activity-card")

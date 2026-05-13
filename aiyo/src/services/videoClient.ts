@@ -1,4 +1,10 @@
 import { isApiError } from "@/lib/api-response";
+import {
+  failFrontendDebugProcess,
+  finishFrontendDebugProcess,
+  startFrontendDebugProcess,
+  updateFrontendDebugProcess,
+} from "@/lib/frontendDebug";
 import type { ApiResponse } from "@/types";
 import type { VideoRecommendation, VideoSummaryResult } from "@/types";
 
@@ -12,9 +18,10 @@ export function shouldSkipClientVideoSummarize(video: VideoRecommendation): bool
   }
   const segments = video.summarySegments?.length ?? 0;
   const locations = video.extractedLocations?.length ?? 0;
+  const foods = video.extractedFoods?.length ?? 0;
   const stamps = video.timestamps?.length ?? 0;
   /** 不將僅有 description 剪貼的 `summary` 視為已分析：搜尋 API 影片常帶長篇說明但仍須跑摘要管線。 */
-  return segments > 0 || locations > 0 || stamps > 0;
+  return segments > 0 || locations > 0 || foods > 0 || stamps > 0;
 }
 
 export type VideoSearchDebugInfo = {
@@ -44,7 +51,18 @@ export async function fetchVideoRecommendations(input: {
   days?: number;
   preferences?: string[];
   limit?: number;
+  offset?: number;
+  excludeVideoIds?: string[];
 }): Promise<VideoRecommendationsClientResult> {
+  const processId = startFrontendDebugProcess("video-search", "查詢旅遊影片推薦", {
+    destination: input.destination,
+    keyword: input.keyword,
+    days: input.days,
+    limit: input.limit,
+    offset: input.offset,
+    preferences: input.preferences,
+    excludeVideoIds: input.excludeVideoIds,
+  });
   const params = new URLSearchParams();
   if (input.destination) {
     params.set("destination", input.destination);
@@ -61,10 +79,20 @@ export async function fetchVideoRecommendations(input: {
   if (input.limit) {
     params.set("limit", String(input.limit));
   }
+  if (input.offset) {
+    params.set("offset", String(input.offset));
+  }
+  if (input.excludeVideoIds?.length) {
+    params.set("excludeVideoIds", input.excludeVideoIds.join(","));
+  }
 
   const response = await fetch(`/api/videos/recommendations?${params.toString()}`, {
     method: "GET",
     cache: "no-store",
+  });
+  updateFrontendDebugProcess(processId, "api-response", {
+    status: response.status,
+    ok: response.ok,
   });
 
   const payload = await parseJson<ApiResponse<VideoRecommendation[]> & { meta?: Record<string, unknown> }>(
@@ -72,11 +100,15 @@ export async function fetchVideoRecommendations(input: {
   );
 
   if (!response.ok || isApiError(payload)) {
-    throw new Error(
+    const error = new Error(
       isApiError(payload)
         ? payload.error.message
         : `Request failed with status ${response.status}`,
     );
+    failFrontendDebugProcess(processId, error, {
+      status: response.status,
+    });
+    throw error;
   }
 
   const source = payload.meta?.source;
@@ -97,7 +129,7 @@ export async function fetchVideoRecommendations(input: {
     });
   }
 
-  return {
+  const result: VideoRecommendationsClientResult = {
     videos: payload.data,
     source:
       source === "mock-fallback" || source === "youtube-data-api"
@@ -109,6 +141,13 @@ export async function fetchVideoRecommendations(input: {
         : undefined,
     debug,
   };
+  finishFrontendDebugProcess(processId, {
+    resultCount: result.videos.length,
+    source: result.source,
+    fallbackReason: result.fallbackReason,
+    titles: result.videos.slice(0, 6).map((video) => video.title),
+  });
+  return result;
 }
 
 export async function summarizeVideo(input: {
@@ -118,24 +157,70 @@ export async function summarizeVideo(input: {
   destination?: string;
   /** 清除伺服端快取並強制重新分析（重新呼叫 AI／擷取管線） */
   refresh?: boolean;
+  /** 由外層 queue 管理 debug process 時可關閉內層 API debug。 */
+  debug?: boolean;
 }): Promise<VideoSummaryResult> {
+  const shouldDebug = input.debug !== false;
+  const processId = shouldDebug
+    ? startFrontendDebugProcess("video-summary", "分析旅遊影片", {
+        videoId: input.videoId,
+        url: input.url,
+        title: input.title,
+        destination: input.destination,
+        refresh: Boolean(input.refresh),
+      })
+    : null;
+  const requestBody = {
+    url: input.url,
+    videoId: input.videoId,
+    title: input.title,
+    destination: input.destination,
+    refresh: input.refresh,
+  };
   const response = await fetch("/api/videos/summarize", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(input),
+    body: JSON.stringify(requestBody),
   });
+  if (processId) {
+    updateFrontendDebugProcess(processId, "api-response", {
+      status: response.status,
+      ok: response.ok,
+    });
+  }
 
   const payload = await parseJson<ApiResponse<VideoSummaryResult>>(response);
 
   if (!response.ok || isApiError(payload)) {
-    throw new Error(
+    const error = new Error(
       isApiError(payload)
         ? payload.error.message
         : `Request failed with status ${response.status}`,
     );
+    if (processId) {
+      failFrontendDebugProcess(processId, error, {
+        status: response.status,
+        videoId: input.videoId,
+        title: input.title,
+      });
+    }
+    throw error;
   }
 
+  if (processId) {
+    finishFrontendDebugProcess(processId, {
+      videoId: payload.data.video.videoId,
+      title: payload.data.video.title,
+      summaryUnavailable: payload.data.summaryUnavailable,
+      transcriptSource: payload.data.transcriptSource,
+      summarySource: payload.data.summarySource,
+      segmentSource: payload.data.segmentSource,
+      extractedLocationCount: payload.data.video.extractedLocations.length,
+      extractedFoodCount: payload.data.video.extractedFoods?.length || 0,
+      segmentCount: payload.data.video.summarySegments?.length || 0,
+    });
+  }
   return payload.data;
 }

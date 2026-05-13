@@ -114,6 +114,7 @@ function serializeTrip(trip: {
     description: string | null;
     timeSlot: string | null;
     itemType: string | null;
+    transportMode: string | null;
     source: string | null;
     location: string | null;
     latitude: number | null;
@@ -186,6 +187,7 @@ function serializeTrip(trip: {
       time: item.timeSlot || "09:00",
       title: item.title,
       type: (item.itemType || "activity") as PersistedTripPayload["itinerary"][number]["items"][number]["type"],
+      transport: item.transportMode || undefined,
       notes: item.description || undefined,
       location:
         item.location && item.latitude != null && item.longitude != null
@@ -766,6 +768,7 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
       description: item.notes || null,
       timeSlot: item.time,
       itemType: item.type,
+      transportMode: item.transport || null,
       source: item.source || "manual",
       location: item.location?.name || null,
       latitude: item.location?.lat ?? null,

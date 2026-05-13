@@ -6,6 +6,19 @@ import { summarizeVideo } from "@/server/services/videoSummaryService";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function summarizeErrorMeta(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+  return {
+    message: String(error),
+  };
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as {
@@ -46,6 +59,7 @@ export async function POST(request: Request) {
       throw error;
     }
   } catch (error) {
+    console.error("[video-summarize] Failed to summarize video.", summarizeErrorMeta(error));
     return NextResponse.json(
       createError(
         "internal_error",

@@ -7,6 +7,7 @@ import {
   writeArtifactJson,
   writeArtifactNetwork,
 } from "./helpers/artifacts";
+import { openItineraryEditor } from "./helpers/itinerary";
 import {
   resetE2EData,
   seedAuthUsers,
@@ -236,9 +237,7 @@ test.describe("嘉義兩天一夜完整旅人流程", () => {
     });
 
     await page.goto("/itinerary");
-    await expect(page.locator('[data-testid="itinerary-editor"]:visible')).toBeVisible({
-      timeout: 40_000,
-    });
+    await openItineraryEditor(page);
     await expect(page.getByTestId("itinerary-day-card")).toHaveCount(2);
 
     await page.getByTestId("add-activity-button").first().click();
@@ -264,9 +263,7 @@ test.describe("嘉義兩天一夜完整旅人流程", () => {
     await tripsPut;
 
     await page.reload();
-    await expect(page.locator('[data-testid="itinerary-editor"]:visible')).toBeVisible({
-      timeout: 30_000,
-    });
+    await openItineraryEditor(page);
     await expect(
       page.getByTestId("activity-card").filter({ hasText: "嘉義市立美術館拍照" }),
     ).toBeVisible({ timeout: 30_000 });
@@ -290,7 +287,7 @@ test.describe("嘉義兩天一夜完整旅人流程", () => {
     const chatStart = Date.now();
     const chatRespWait = page.waitForResponse(
       (res) =>
-        res.url().includes("/api/ai/chat") &&
+        res.url().includes("/api/chat/message") &&
         res.request().method() === "POST",
       { timeout: 300_000 },
     );
@@ -341,9 +338,7 @@ test.describe("嘉義兩天一夜完整旅人流程", () => {
     );
 
     await page.goto("/itinerary");
-    await expect(page.locator('[data-testid="itinerary-editor"]:visible')).toBeVisible({
-      timeout: 40_000,
-    });
+    await openItineraryEditor(page);
     await page.screenshot({
       path: screenshots("full-flow-07-itinerary-final.png"),
       fullPage: true,

@@ -15,9 +15,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowUpDown, CalendarDays, LinkIcon, Plus, Search } from "lucide-react";
 import DeleteTripDialog from "@/components/itinerary/DeleteTripDialog";
 import ItineraryEditorSection from "@/components/itinerary/ItineraryEditorSection";
-import ItineraryLibraryPanel, {
-  type TripLibrarySort,
-} from "@/components/itinerary/ItineraryLibraryPanel";
+import type { TripLibrarySort } from "@/components/itinerary/ItineraryLibraryPanel";
 import ItineraryPageHeader from "@/components/itinerary/ItineraryPageHeader";
 import ItineraryShareDialog from "@/components/itinerary/ItineraryShareDialog";
 import RenameTripDialog from "@/components/itinerary/RenameTripDialog";
@@ -35,7 +33,6 @@ import {
   listItineraryFolders,
   listTripsForLibrary,
   listTripCollaborators,
-  moveTripToFolder,
   patchTripDetails,
   removeTripCollaborator,
   setActiveTrip,
@@ -124,8 +121,7 @@ export default function ItineraryPage() {
   const [itinerarySearch, setItinerarySearch] = useState("");
   const deferredItinerarySearch = useDeferredValue(itinerarySearch);
   const [fabOpen, setFabOpen] = useState(false);
-  const [folderViewMode, setFolderViewMode] = useState<"grid" | "list">("grid");
-  const [folders, setFolders] = useState<ItineraryFolderDto[]>([]);
+  const [, setFolders] = useState<ItineraryFolderDto[]>([]);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [folderError, setFolderError] = useState<string | null>(null);
   const [tripLibrary, setTripLibrary] = useState<ItineraryListItem[]>([]);
@@ -442,14 +438,6 @@ export default function ItineraryPage() {
     [requireAuthenticated, updateItineraryItem],
   );
 
-  const handleRenameFolder = useCallback(
-    (folder: ItineraryFolderDto) => {
-      setRenameFolderTarget(folder);
-      setRenameFolderDraft(folder.name);
-    },
-    [],
-  );
-
   const closeRenameFolderDialog = useCallback(() => {
     if (folderDialogSaving) {
       return;
@@ -482,13 +470,6 @@ export default function ItineraryPage() {
     }
   }, [closeRenameFolderDialog, loadTripLibrary, renameFolderDraft, renameFolderTarget]);
 
-  const handleDeleteFolder = useCallback(
-    (folder: ItineraryFolderDto) => {
-      setDeleteFolderTarget(folder);
-    },
-    [],
-  );
-
   const closeDeleteFolderDialog = useCallback(() => {
     if (folderDialogSaving) {
       return;
@@ -517,23 +498,6 @@ export default function ItineraryPage() {
       setFolderDialogSaving(false);
     }
   }, [currentFolderId, deleteFolderTarget, loadTripLibrary]);
-
-  const handleMoveCurrentTripToFolder = useCallback(
-    async (folderId: string | null) => {
-      if (!tripId || !requireAuthenticated("/itinerary")) {
-        return;
-      }
-      setFolderError(null);
-      try {
-        await moveTripToFolder(tripId, folderId);
-        setCurrentFolderId(folderId);
-        await loadTripLibrary();
-      } catch (error) {
-        setFolderError(error instanceof Error ? error.message : "無法更新行程資料夾。");
-      }
-    },
-    [loadTripLibrary, requireAuthenticated, tripId],
-  );
 
   const handleSelectTripFromLibrary = useCallback(
     async (item: ItineraryListItem) => {

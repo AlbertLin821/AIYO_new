@@ -176,6 +176,16 @@ export function buildItineraryPrompt(
           "- Validate JSON mentally before output.",
         ]
       : [];
+  const itineraryDraftSummary = request.itineraryDraft?.length
+    ? request.itineraryDraft
+        .map(
+          (day) =>
+            `Day ${day.dayNumber}: ${day.items
+              .map((item) => `${item.time} ${item.title}`)
+              .join(" | ")}`,
+        )
+        .join("\n")
+    : "";
 
   return [
     "Create a structured travel itinerary in JSON only.",
@@ -198,12 +208,17 @@ export function buildItineraryPrompt(
     `Destination: ${request.destination}`,
     `Days: ${request.days}`,
     `Budget TWD: ${request.budget || "not specified"}`,
+    request.tripStartDate ? `Trip start date (ISO): ${request.tripStartDate}` : "",
+    request.tripEndDate ? `Trip end date (ISO): ${request.tripEndDate}` : "",
     `Interests: ${request.preferences.interests.join(", ") || "none"}`,
     `Pace: ${request.preferences.pace}`,
     `Transport preference: ${request.preferences.transportPreference}`,
     `Must visit: ${request.preferences.mustVisit?.join(", ") || "none"}`,
     `Avoid: ${request.preferences.avoid?.join(", ") || "none"}`,
     request.preferences.notes ? `Notes: ${request.preferences.notes}` : "",
+    itineraryDraftSummary
+      ? `Existing itinerary draft to revise/preserve when reasonable:\n${itineraryDraftSummary}`
+      : "",
     `Relevant long-term memory: ${formatMemoryContext(memoryContext)}`,
     "",
     "SELF-CHECK BEFORE FINAL OUTPUT:",
@@ -211,6 +226,12 @@ export function buildItineraryPrompt(
     "- `days` length matches requested number of days.",
     "- `mustVisit` covered and `avoid` excluded.",
     "- Times are sorted and types are from allowed enum.",
+    ...(itineraryDraftSummary
+      ? [
+          "- This request includes an existing itinerary draft. Edit and preserve useful structure when possible instead of rewriting everything from scratch.",
+          "- Keep unchanged day flow when the user's latest instruction does not require modifying that part.",
+        ]
+      : []),
     ...(externalResearch
       ? [
           "",

@@ -582,11 +582,27 @@ export default function VideoSummaryDrawer({
                     ) : isProcessingVideo ? (
                       <ProcessingRow label={t.drawer.videoProcessing} />
                     ) : (
-                      <p className="text-sm text-muted">
-                        {summaryDiagnostics?.summaryUnavailable
-                          ? "無法取得逐字稿，暫時無法抽出可靠地點。"
-                          : "此影片未擷取到足夠明確的地點名稱。"}
-                      </p>
+                      <p className="text-sm text-muted">{t.drawer.noExtractedLocations}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="mb-3 text-sm font-semibold text-foreground">{t.drawer.extractedFoods}</h4>
+                  <div className="flex flex-col gap-2">
+                    {activeVideo.extractedFoods && activeVideo.extractedFoods.length > 0 ? (
+                      activeVideo.extractedFoods.map((food, index) => (
+                        <div
+                          key={`${activeVideo.id}_food_${index}_${food}`}
+                          className="rounded-xl border border-border-light bg-cream/50 px-3 py-2.5"
+                        >
+                          <p className="text-sm font-medium text-foreground">{food}</p>
+                        </div>
+                      ))
+                    ) : isProcessingVideo ? (
+                      <ProcessingRow label={t.drawer.videoProcessing} />
+                    ) : (
+                      <p className="text-sm text-muted">{t.drawer.noExtractedFoods}</p>
                     )}
                   </div>
                 </div>

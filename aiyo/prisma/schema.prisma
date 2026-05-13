@@ -118,6 +118,7 @@ model TripItem {
   description      String?
   timeSlot         String?
   itemType         String?
+  transportMode    String?
   source           String?
   location         String?
   latitude         Float?

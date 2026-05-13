@@ -53,6 +53,10 @@ function normalizeTransport(transport: string): string {
   return transport.trim().toLowerCase();
 }
 
+function segmentTransportKey(transport: string): string {
+  return normalizeTransport(transport).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "transit";
+}
+
 export function estimateTravelMinutes(distanceKm: number, transport: string): number {
   const mode = normalizeTransport(transport);
   let speedKmh = 20;
@@ -102,7 +106,7 @@ export function buildItineraryRouteSegments(days: TripPlanDay[]): ItineraryRoute
       const distanceKm = estimateDistanceKm(from, to);
       const legColor = DAY_ROUTE_COLORS[index % DAY_ROUTE_COLORS.length];
       return {
-        id: `day_${day.dayNumber}_${previous.id}_${item.id}`,
+        id: `day_${day.dayNumber}_${previous.id}_${item.id}_${segmentTransportKey(transport)}_${previous.time}_${item.time}`,
         dayNumber: day.dayNumber,
         fromItemId: previous.id,
         toItemId: item.id,

@@ -5,11 +5,19 @@ import dynamic from "next/dynamic";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Sparkles, TrendingUp } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, PlusCircle, Sparkles, TrendingUp } from "lucide-react";
 import VideoCard from "@/components/home/VideoCard";
 import VideoSearchBar from "@/components/home/VideoSearchBar";
 import { getDefaultTaiwanCityVideos } from "@/data/defaultTaiwanCityVideos";
+import {
+  failFrontendDebugProcess,
+  finishFrontendDebugProcess,
+  logFrontendDebugEvent,
+  startFrontendDebugProcess,
+  updateFrontendDebugProcess,
+} from "@/lib/frontendDebug";
 import { readPendingVideoImport } from "@/lib/pendingVideoImport";
+import { enqueueVideoSummaries, enqueueVideoSummary } from "@/lib/videoSummaryQueue";
 import { zhTW as t } from "@/locales/zh-TW";
 import { fetchVideoRecommendations, shouldSkipClientVideoSummarize, summarizeVideo } from "@/services/videoClient";
 import { useToastStore } from "@/stores/useToastStore";
@@ -147,6 +155,7 @@ export default function HomePage() {
   const adScrollRef = useRef<HTMLDivElement | null>(null);
 
   const [heroIndex, setHeroIndex] = useState(0);
+  const [isLoadingMoreVideos, setIsLoadingMoreVideos] = useState(false);
   useEffect(() => {
     const timer = setInterval(() => {
       setHeroIndex((prev) => (prev + 1) % HERO_IMAGES.length);
@@ -158,13 +167,16 @@ export default function HomePage() {
     selectedVideo,
     setSelectedVideo,
     errorMessage,
+    isSearching,
     recommendationSource,
+    lastRecommendationRequest,
     setSummaryDiagnostics,
     searchQuery,
     upsertVideo,
     setIsSummarizing,
     setVideos,
     setRecommendationSource,
+    setLastRecommendationRequest,
     setIsSearching,
     setErrorMessage,
     setSearchQuery,
@@ -176,6 +188,9 @@ export default function HomePage() {
 
   const hasSearched = Boolean(searchQuery.trim());
   const hasTripSeed = Boolean(tripDestination.trim()) && tripDays > 0;
+  const canLoadMoreVideos =
+    recommendationSource !== "single-video-url" &&
+    Boolean(lastRecommendationRequest || hasSearched || hasTripSeed);
   const showEmptyGrid = videos.length === 0 && !errorMessage;
   const defaultVideos = useMemo(() => getDefaultTaiwanCityVideos(6), []);
 
@@ -196,23 +211,39 @@ export default function HomePage() {
     let cancelled = false;
     setIsSearching(true);
     setErrorMessage(null);
-    void fetchVideoRecommendations({
+    const processId = startFrontendDebugProcess("home-video-seed", "首頁自動載入影片推薦", {
+      destination: tripDestination.trim(),
+      days: tripDays,
+    });
+    const request = {
       destination: tripDestination.trim(),
       days: tripDays,
       preferences: ["美食", "景點", "懶人包"],
       limit: 6,
-    })
+    };
+    void fetchVideoRecommendations(request)
       .then((outcome) => {
         if (cancelled) {
           return;
         }
         setVideos(outcome.videos.length ? outcome.videos : defaultVideos);
         setRecommendationSource(outcome.videos.length ? outcome.source : "default-taiwan-cities");
+        setLastRecommendationRequest(outcome.videos.length ? request : null);
+        enqueueVideoSummaries(outcome.videos, {
+          destination: tripDestination.trim(),
+        });
+        finishFrontendDebugProcess(processId, {
+          resultCount: outcome.videos.length,
+          source: outcome.source,
+        });
       })
       .catch((error) => {
         if (cancelled) {
           return;
         }
+        failFrontendDebugProcess(processId, error, {
+          destination: tripDestination.trim(),
+        });
         setErrorMessage(error instanceof Error ? error.message : t.video.requestFailedGeneric);
         setVideos(defaultVideos);
         setRecommendationSource("default-taiwan-cities");
@@ -222,6 +253,7 @@ export default function HomePage() {
       });
     return () => {
       cancelled = true;
+      finishFrontendDebugProcess(processId, { cancelled: true });
     };
   }, [
     defaultVideos,
@@ -229,6 +261,7 @@ export default function HomePage() {
     recommendationSource,
     setErrorMessage,
     setIsSearching,
+    setLastRecommendationRequest,
     setRecommendationSource,
     setVideos,
     tripDays,
@@ -239,6 +272,11 @@ export default function HomePage() {
   const openVideoSummary = useCallback(async (video: VideoRecommendation) => {
     setSummaryDiagnostics(null);
     setSelectedVideo(video);
+    logFrontendDebugEvent("home-video", "open-summary-click", {
+      videoId: video.videoId,
+      title: video.title,
+      skipClientSummary: shouldSkipClientVideoSummarize(video),
+    });
 
     if (shouldSkipClientVideoSummarize(video)) {
       return;
@@ -246,11 +284,14 @@ export default function HomePage() {
 
     setIsSummarizing(true);
     try {
-      const result = await summarizeVideo({
-        videoId: video.videoId,
-        title: video.title,
+      const job = enqueueVideoSummary(video, {
         destination: tripDestination,
+        background: false,
       });
+      if (!job) {
+        return;
+      }
+      const result = await job;
       upsertVideo(result.video);
       setSelectedVideo(result.video);
       setSummaryDiagnostics({
@@ -264,6 +305,12 @@ export default function HomePage() {
         geocodeWarnings: result.geocodeWarnings,
         summaryUnavailable: result.summaryUnavailable,
         unavailableReason: result.unavailableReason,
+      });
+      logFrontendDebugEvent("home-video", "summary-ready", {
+        videoId: result.video.videoId,
+        title: result.video.title,
+        locations: result.video.extractedLocations.length,
+        segments: result.video.summarySegments?.length || 0,
       });
     } catch (error) {
       pushToast({
@@ -283,11 +330,112 @@ export default function HomePage() {
     upsertVideo,
   ]);
 
+  const appendUniqueVideos = useCallback((incoming: VideoRecommendation[]) => {
+    const seen = new Set(videos.map((video) => video.videoId || video.id));
+    return incoming.filter((video) => {
+      const key = video.videoId || video.id;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  }, [videos]);
+
+  const handleLoadMoreVideos = useCallback(async () => {
+    const fallbackRequest = hasSearched
+      ? { keyword: searchQuery.trim(), limit: 6 }
+      : hasTripSeed
+        ? {
+            destination: tripDestination.trim(),
+            days: tripDays,
+            preferences: ["美食", "景點", "懶人包"],
+            limit: 6,
+          }
+        : null;
+    const baseRequest = lastRecommendationRequest || fallbackRequest;
+    if (!baseRequest) {
+      return;
+    }
+
+    setIsLoadingMoreVideos(true);
+    setErrorMessage(null);
+    const processId = startFrontendDebugProcess("video-search-more", "載入更多旅遊影片推薦", {
+      request: baseRequest,
+      currentVideoCount: videos.length,
+    });
+    try {
+      const excludeVideoIds = videos.map((video) => video.videoId || video.id).filter(Boolean);
+      const request = {
+        ...baseRequest,
+        limit: 6,
+        excludeVideoIds,
+      };
+      const outcome = await fetchVideoRecommendations(request);
+      const newVideos = appendUniqueVideos(outcome.videos);
+      setVideos([...videos, ...newVideos]);
+      setRecommendationSource(outcome.source);
+      setLastRecommendationRequest({
+        destination: baseRequest.destination,
+        keyword: baseRequest.keyword,
+        days: baseRequest.days,
+        preferences: baseRequest.preferences,
+        limit: 6,
+      });
+      enqueueVideoSummaries(newVideos, {
+        destination: baseRequest.destination || tripDestination,
+      });
+      finishFrontendDebugProcess(processId, {
+        requested: outcome.videos.length,
+        appended: newVideos.length,
+        source: outcome.source,
+      });
+      if (outcome.source === "mock-fallback") {
+        pushToast({
+          variant: "warning",
+          title: t.video.mockVideosTitle,
+          description: outcome.fallbackReason || t.video.mockVideosDesc,
+        });
+      }
+    } catch (error) {
+      failFrontendDebugProcess(processId, error, {
+        currentVideoCount: videos.length,
+      });
+      const description = error instanceof Error ? error.message : t.video.requestFailedGeneric;
+      setErrorMessage(description);
+      pushToast({
+        variant: "error",
+        title: t.video.requestFailed,
+        description,
+      });
+    } finally {
+      setIsLoadingMoreVideos(false);
+    }
+  }, [
+    appendUniqueVideos,
+    hasSearched,
+    hasTripSeed,
+    lastRecommendationRequest,
+    pushToast,
+    searchQuery,
+    setErrorMessage,
+    setLastRecommendationRequest,
+    setRecommendationSource,
+    setVideos,
+    tripDays,
+    tripDestination,
+    videos,
+  ]);
+
   const refreshVideoSummary = useCallback(
     async (video: VideoRecommendation) => {
       if (!video.videoId?.trim()) {
         return;
       }
+      logFrontendDebugEvent("home-video", "refresh-summary-click", {
+        videoId: video.videoId,
+        title: video.title,
+      });
       setSummaryDiagnostics(null);
       setIsSummarizing(true);
       try {
@@ -310,6 +458,12 @@ export default function HomePage() {
           geocodeWarnings: result.geocodeWarnings,
           summaryUnavailable: result.summaryUnavailable,
           unavailableReason: result.unavailableReason,
+        });
+        logFrontendDebugEvent("home-video", "refresh-summary-ready", {
+          videoId: result.video.videoId,
+          title: result.video.title,
+          locations: result.video.extractedLocations.length,
+          segments: result.video.summarySegments?.length || 0,
         });
       } catch (error) {
         pushToast({
@@ -350,9 +504,18 @@ export default function HomePage() {
       return;
     }
     void (async () => {
+      const processId = startFrontendDebugProcess("home-video-resume", "登入後恢復影片匯入前摘要", {
+        videoId: pending.videoId,
+      });
       const fromList = useVideoStore.getState().videos.find((v) => v.videoId === pending.videoId);
       if (fromList) {
+        updateFrontendDebugProcess(processId, "video-found-in-store", {
+          title: fromList.title,
+        });
         await openVideoSummary(fromList);
+        finishFrontendDebugProcess(processId, {
+          resumedFrom: "store",
+        });
         return;
       }
       setSummaryDiagnostics(null);
@@ -398,7 +561,14 @@ export default function HomePage() {
             description: t.video.mapsMixed,
           });
         }
+        finishFrontendDebugProcess(processId, {
+          resumedFrom: "server-summary",
+          title: result.video.title,
+        });
       } catch (error) {
+        failFrontendDebugProcess(processId, error, {
+          videoId: pending.videoId,
+        });
         pushToast({
           variant: "error",
           title: t.video.requestFailed,
@@ -483,7 +653,7 @@ export default function HomePage() {
       </motion.div>
 
       <div className="max-w-6xl mx-auto">
-        <div className="flex flex-wrap items-center gap-2 mb-5">
+        <div className="mb-5 flex flex-wrap items-center gap-2">
           <TrendingUp className="size-4 text-secondary" />
           <h2 className="font-semibold text-foreground">{t.home.recommended}</h2>
           <span className="text-xs text-muted bg-border-light px-2 py-0.5 rounded-full">
@@ -508,6 +678,22 @@ export default function HomePage() {
             <span className="text-[10px] uppercase tracking-wide rounded-full bg-lavender/20 px-2 py-0.5 text-foreground/80">
               {t.home.sourceSingleVideo}
             </span>
+          )}
+          {videos.length > 0 && canLoadMoreVideos && !isSearching && (
+            <button
+              type="button"
+              onClick={() => void handleLoadMoreVideos()}
+              disabled={isLoadingMoreVideos}
+              className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border-light bg-surface px-3 py-1 text-xs font-medium text-foreground shadow-soft transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label={t.home.moreVideos}
+            >
+              {isLoadingMoreVideos ? (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              ) : (
+                <PlusCircle className="size-3.5" aria-hidden />
+              )}
+              {isLoadingMoreVideos ? t.home.loadingMoreVideos : t.home.moreVideos}
+            </button>
           )}
         </div>
 

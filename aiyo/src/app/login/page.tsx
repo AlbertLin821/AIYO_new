@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo } from "react";
+import { Suspense, useEffect, useMemo, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useUIStore } from "@/stores/useUIStore";
 import { zhTW as t } from "@/locales/zh-TW";
@@ -10,6 +10,7 @@ function LoginPageContent() {
   const router = useRouter();
   const setLoginModalOpen = useUIStore((s) => s.setLoginModalOpen);
   const loginModalOpen = useUIStore((s) => s.loginModalOpen);
+  const hasOpenedModalRef = useRef(false);
 
   const callbackUrl = useMemo(() => {
     const direct = searchParams.get("callbackUrl");
@@ -24,7 +25,11 @@ function LoginPageContent() {
   }, [setLoginModalOpen, callbackUrl]);
 
   useEffect(() => {
-    if (!loginModalOpen) {
+    if (loginModalOpen) {
+      hasOpenedModalRef.current = true;
+      return;
+    }
+    if (hasOpenedModalRef.current) {
       router.replace(callbackUrl);
     }
   }, [loginModalOpen, router, callbackUrl]);

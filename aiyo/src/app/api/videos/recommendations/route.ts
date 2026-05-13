@@ -13,8 +13,22 @@ export async function GET(request: Request) {
     const days = searchParams.get("days") ? Number(searchParams.get("days")) : undefined;
     const preferences = searchParams.get("preferences")?.split(",").map((item) => item.trim()).filter(Boolean);
     const limit = Number(searchParams.get("limit") || 6);
+    const offset = Number(searchParams.get("offset") || 0);
+    const excludeVideoIds = searchParams
+      .get("excludeVideoIds")
+      ?.split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
 
-    const outcome = await getVideoRecommendations({ destination, keyword, days, preferences, limit });
+    const outcome = await getVideoRecommendations({
+      destination,
+      keyword,
+      days,
+      preferences,
+      limit,
+      offset,
+      excludeVideoIds,
+    });
     return NextResponse.json(
       createSuccess(outcome.videos, {
         source: outcome.source,
@@ -45,6 +59,8 @@ export async function POST(request: Request) {
       budget?: string;
       companions?: string[];
       limit?: number;
+      offset?: number;
+      excludeVideoIds?: string[];
     };
     const outcome = await getVideoRecommendations(body);
     return NextResponse.json(

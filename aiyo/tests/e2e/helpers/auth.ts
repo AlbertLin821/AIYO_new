@@ -84,7 +84,15 @@ export async function loginAs(page: Page, user: E2EUser, callbackUrl = "/itinera
   const passwordInput = page.locator('input[name="password"]').filter({ visible: true });
   await emailInput.fill(user.email);
   await passwordInput.fill(user.password);
-  await emailInput.press("Enter");
+  const submitButton = page
+    .locator("form")
+    .getByRole("button", { name: "登入" })
+    .filter({ visible: true });
+  if (await submitButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await submitButton.click();
+  } else {
+    await passwordInput.press("Enter");
+  }
 
   await expectPostLoginPath(page, callbackUrl);
   await dismissOnboardingIfVisible(page);

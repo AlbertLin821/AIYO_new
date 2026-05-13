@@ -20,7 +20,7 @@ import { buildItineraryRouteSegments, type ItineraryRouteSegment } from "@/lib/r
 import { useMapStore } from "@/stores/useMapStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
-import type { MapPin as MapPinType } from "@/types";
+import type { LocationReference, MapPin as MapPinType } from "@/types";
 import { zhTW as t } from "@/locales/zh-TW";
 import { createMapPinElement, encodeMapPinDataUrl, MAP_PIN_VIEWBOX_H, MAP_PIN_VIEWBOX_W } from "@/components/map/mapPinIcon";
 import { MapPinMarker } from "@/components/map/MapPinMarker";
@@ -112,6 +112,59 @@ function pinSourceLabel(source: string | undefined) {
   return source;
 }
 
+function buildLocationBackfilledPin(
+  pin: MapPinType,
+  linkedItem?: { time: string; title: string; type: string; transport?: string; notes?: string; location?: LocationReference },
+): MapPinType {
+  const location = linkedItem?.location;
+  if (!location) {
+    return pin;
+  }
+  return {
+    ...pin,
+    description: pin.description || linkedItem?.notes || location.description,
+    address: pin.address || location.address,
+    placeId: pin.placeId || location.placeId,
+    photoUrl: pin.photoUrl || location.photoUrl,
+    thumbnail: pin.thumbnail || location.thumbnail || location.photoUrl,
+    openingHours: pin.openingHours || location.openingHours,
+    phoneNumber: pin.phoneNumber || location.phoneNumber,
+    website: pin.website || location.website,
+    googleMapsUrl: pin.googleMapsUrl || location.googleMapsUrl,
+    rating: pin.rating ?? location.rating,
+    userRatingsTotal: pin.userRatingsTotal ?? location.userRatingsTotal,
+    confidence: pin.confidence ?? location.confidence,
+    verified: pin.verified ?? location.verified,
+  };
+}
+
+function findLinkedItineraryItem(
+  itinerary: ReturnType<typeof useTripStore.getState>["itinerary"],
+  pin: MapPinType | null,
+) {
+  if (!pin) {
+    return undefined;
+  }
+  return itinerary
+    .flatMap((day) => day.items)
+    .find((item) => {
+      if (pin.linkedTripItemId && item.id === pin.linkedTripItemId) {
+        return true;
+      }
+      if (item.location?.placeId && pin.placeId && item.location.placeId === pin.placeId) {
+        return true;
+      }
+      if (
+        item.location &&
+        Math.abs(item.location.lat - pin.lat) < 0.00001 &&
+        Math.abs(item.location.lng - pin.lng) < 0.00001
+      ) {
+        return true;
+      }
+      return item.location?.name?.trim().toLowerCase() === pin.name.trim().toLowerCase();
+    });
+}
+
 function buildRoutePlanningUrl(pin: Pick<MapPinType, "lat" | "lng" | "address" | "placeId">): string {
   const routeParams = new URLSearchParams({
     api: "1",
@@ -140,11 +193,12 @@ function buildGoogleMapsUrl(pin: Pick<MapPinType, "lat" | "lng" | "placeId" | "g
 
 function buildPinInfoContent(
   pin: MapPinType,
-  linkedItem?: { time: string; title: string; type: string; transport?: string; notes?: string },
+  linkedItem?: { time: string; title: string; type: string; transport?: string; notes?: string; location?: LocationReference },
 ): string {
-  const routeUrl = buildRoutePlanningUrl(pin);
-  const googleMapsUrl = buildGoogleMapsUrl(pin);
-  const thumbnail = pin.thumbnail || pin.photoUrl;
+  const resolvedPin = buildLocationBackfilledPin(pin, linkedItem);
+  const routeUrl = buildRoutePlanningUrl(resolvedPin);
+  const googleMapsUrl = buildGoogleMapsUrl(resolvedPin);
+  const thumbnail = resolvedPin.thumbnail || resolvedPin.photoUrl;
   const empty = t.map.notProvided;
 
   return `
@@ -158,24 +212,24 @@ function buildPinInfoContent(
       </div>
       <div style="padding:12px 8px 0;">
         <div style="display:flex;align-items:flex-start;gap:8px;">
-          <div style="width:12px;height:12px;border-radius:999px;background:${escapeHtml(pin.color || "#5a7ea3")};margin-top:5px;box-shadow:0 0 0 3px rgba(255,255,255,.9),0 2px 8px rgba(0,0,0,.18);"></div>
-          <div style="min-width:0;flex:1;">
-            <h3 style="margin:0;font-size:16px;line-height:1.35;font-weight:700;color:#111827;">${escapeHtml(pin.name)}</h3>
-            <p style="margin:4px 0 0;font-size:12px;line-height:1.45;color:#4b5563;">${escapeHtml(pin.description || t.map.noDescription)}</p>
+              <div style="width:12px;height:12px;border-radius:999px;background:${escapeHtml(resolvedPin.color || "#5a7ea3")};margin-top:5px;box-shadow:0 0 0 3px rgba(255,255,255,.9),0 2px 8px rgba(0,0,0,.18);"></div>
+              <div style="min-width:0;flex:1;">
+            <h3 style="margin:0;font-size:16px;line-height:1.35;font-weight:700;color:#111827;">${escapeHtml(resolvedPin.name)}</h3>
+            <p style="margin:4px 0 0;font-size:12px;line-height:1.45;color:#4b5563;">${escapeHtml(resolvedPin.description || t.map.noDescription)}</p>
           </div>
         </div>
       </div>
       <dl style="display:grid;grid-template-columns:72px 1fr;gap:6px 8px;margin:12px 8px 0;font-size:12px;line-height:1.45;">
         <dt style="color:#6b7280;">${escapeHtml(t.map.infoAddress)}</dt>
-        <dd style="margin:0;color:#1f2937;">${escapeHtml(pin.address || empty)}</dd>
+        <dd style="margin:0;color:#1f2937;">${escapeHtml(resolvedPin.address || empty)}</dd>
         <dt style="color:#6b7280;">${escapeHtml(t.map.infoOpeningHours)}</dt>
-        <dd style="margin:0;color:#1f2937;">${escapeHtml(pin.openingHours || empty)}</dd>
+        <dd style="margin:0;color:#1f2937;">${escapeHtml(resolvedPin.openingHours || empty)}</dd>
         <dt style="color:#6b7280;">${escapeHtml(t.map.infoPhone)}</dt>
-        <dd style="margin:0;color:#1f2937;">${escapeHtml(pin.phoneNumber || empty)}</dd>
+        <dd style="margin:0;color:#1f2937;">${escapeHtml(resolvedPin.phoneNumber || empty)}</dd>
         <dt style="color:#6b7280;">${escapeHtml(t.map.infoSource)}</dt>
-        <dd style="margin:0;color:#1f2937;">${escapeHtml(pinSourceLabel(pin.source))}${pin.dayNumber ? ` · D${escapeHtml(pin.dayNumber)}` : ""}</dd>
+        <dd style="margin:0;color:#1f2937;">${escapeHtml(pinSourceLabel(resolvedPin.source))}${resolvedPin.dayNumber ? ` · D${escapeHtml(resolvedPin.dayNumber)}` : ""}</dd>
         <dt style="color:#6b7280;">${escapeHtml(t.map.infoCoords)}</dt>
-        <dd style="margin:0;color:#1f2937;">${escapeHtml(pin.lat.toFixed(5))}, ${escapeHtml(pin.lng.toFixed(5))}</dd>
+        <dd style="margin:0;color:#1f2937;">${escapeHtml(resolvedPin.lat.toFixed(5))}, ${escapeHtml(resolvedPin.lng.toFixed(5))}</dd>
       </dl>
       <a href="${escapeHtml(routeUrl)}" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;justify-content:center;margin:12px 8px 0;padding:9px 12px;border-radius:10px;background:#426991;color:white;font-size:12px;font-weight:700;text-decoration:none;">
         ${escapeHtml(t.map.infoRoute)}
@@ -780,14 +834,13 @@ export default function MapView() {
     mapInstanceRef.current.setMapTypeId(nextType);
   }
 
-  const highlightedItem = itinerary
-    .flatMap((day) => day.items)
-    .find((item) => item.id === selectedPin?.linkedTripItemId);
+  const highlightedItem = findLinkedItineraryItem(itinerary, selectedPin);
+  const resolvedSelectedPin = selectedPin ? buildLocationBackfilledPin(selectedPin, highlightedItem) : null;
   const selectedPinRoutes = selectedPin
     ? routeSegments.filter(
         (segment) =>
-          segment.fromItemId === selectedPin.linkedTripItemId ||
-          segment.toItemId === selectedPin.linkedTripItemId,
+          segment.fromItemId === highlightedItem?.id ||
+          segment.toItemId === highlightedItem?.id,
       )
     : [];
 
@@ -879,13 +932,13 @@ export default function MapView() {
         </div>
       )}
 
-      {selectedPin && (
+      {resolvedSelectedPin && (
         <div className="absolute bottom-4 left-4 z-[11] max-h-[min(70vh,28rem)] w-80 overflow-y-auto rounded-2xl border-2 border-primary/25 bg-peach-light/60 p-4 shadow-soft-lg backdrop-blur-sm" data-testid="selected-map-pin">
           <div className="mb-3 flex h-28 items-center justify-center overflow-hidden rounded-xl bg-surface-elevated">
-            {selectedPin.thumbnail || selectedPin.photoUrl ? (
+            {resolvedSelectedPin.thumbnail || resolvedSelectedPin.photoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element -- Google Places photo URLs are runtime-provided.
               <img
-                src={selectedPin.thumbnail || selectedPin.photoUrl}
+                src={resolvedSelectedPin.thumbnail || resolvedSelectedPin.photoUrl}
                 alt={t.map.infoThumbnail}
                 className="h-full w-full object-cover"
               />
@@ -894,27 +947,27 @@ export default function MapView() {
             )}
           </div>
           <p className="mb-2 text-xs uppercase tracking-wide text-muted">{t.map.selectedPinTitle}</p>
-          <h3 className="text-base font-semibold text-foreground">{selectedPin.name}</h3>
-          <p className="mt-1 text-sm text-muted">{selectedPin.description}</p>
+          <h3 className="text-base font-semibold text-foreground">{resolvedSelectedPin.name}</h3>
+          <p className="mt-1 text-sm text-muted">{resolvedSelectedPin.description}</p>
           <div className="mt-3 grid grid-cols-[4.5rem_1fr] gap-x-2 gap-y-1 text-xs">
             <span className="text-muted">{t.map.infoAddress}</span>
-            <span className="text-foreground">{selectedPin.address || t.map.notProvided}</span>
+            <span className="text-foreground">{resolvedSelectedPin.address || t.map.notProvided}</span>
             <span className="text-muted">{t.map.infoOpeningHours}</span>
-            <span className="text-foreground">{selectedPin.openingHours || t.map.notProvided}</span>
+            <span className="text-foreground">{resolvedSelectedPin.openingHours || t.map.notProvided}</span>
             <span className="text-muted">{t.map.infoPhone}</span>
-            <span className="text-foreground">{selectedPin.phoneNumber || t.map.notProvided}</span>
+            <span className="text-foreground">{resolvedSelectedPin.phoneNumber || t.map.notProvided}</span>
             <span className="text-muted">{t.map.infoSource}</span>
             <span className="text-foreground">
-              {pinSourceLabel(selectedPin.source)}
-              {selectedPin.dayNumber ? ` · D${selectedPin.dayNumber}` : ""}
+              {pinSourceLabel(resolvedSelectedPin.source)}
+              {resolvedSelectedPin.dayNumber ? ` · D${resolvedSelectedPin.dayNumber}` : ""}
             </span>
             <span className="text-muted">{t.map.infoCoords}</span>
             <span className="font-mono text-[11px] text-foreground">
-              {selectedPin.lat.toFixed(5)}, {selectedPin.lng.toFixed(5)}
+              {resolvedSelectedPin.lat.toFixed(5)}, {resolvedSelectedPin.lng.toFixed(5)}
             </span>
           </div>
           <a
-            href={buildRoutePlanningUrl(selectedPin)}
+            href={buildRoutePlanningUrl(resolvedSelectedPin)}
             target="_blank"
             rel="noopener noreferrer"
             data-testid="map-route-link"
@@ -922,9 +975,9 @@ export default function MapView() {
           >
             {t.map.infoRoute}
           </a>
-          {buildGoogleMapsUrl(selectedPin) && (
+          {buildGoogleMapsUrl(resolvedSelectedPin) && (
             <a
-              href={buildGoogleMapsUrl(selectedPin) || undefined}
+              href={buildGoogleMapsUrl(resolvedSelectedPin) || undefined}
               target="_blank"
               rel="noopener noreferrer"
               data-testid="map-google-maps-link"

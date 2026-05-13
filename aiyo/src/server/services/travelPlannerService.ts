@@ -10,6 +10,10 @@ import {
 import { serverConfig } from "@/server/config";
 import { shouldUseWebSearch } from "@/server/search/searchIntent";
 import { searchWeb, type WebSearchResult } from "@/server/search/searxngClient";
+import { mergeChatSources, normalizeWebSearchSources, pickCitationIdsForText } from "@/server/chat/sourceNormalization";
+import { registerChatSources } from "@/server/chat/sourcePreviewStore";
+import { publishChatProgress } from "@/server/chat/chatProgressStore";
+import { applyRevisionInstructionToProfile } from "@/server/chat/tripRevision";
 import {
   buildDefaultTravelToolRequests,
   buildTripPlanResearchRequests,
@@ -21,7 +25,15 @@ import type {
   AiProposedChange,
   ChatContext,
   ChatMessage,
+  ChatQuestionAnswer,
+  ChatSource,
+  CitationText,
   ChatResponsePayload,
+  QuestionCardPayload,
+  StatusStepPayload,
+  TravelPlanResponse,
+  TravelPlanRevisionMeta,
+  TripProfile,
   TripPlanDay,
   TripPlanRequest,
   TripPlanResult,
@@ -147,6 +159,21 @@ type WebSearchBundle = {
   warning?: string;
 };
 
+function publishProgressStep(
+  progressSessionId: string | undefined,
+  label: string,
+  status: StatusStepPayload["status"],
+): void {
+  if (!progressSessionId) {
+    return;
+  }
+  publishChatProgress(progressSessionId, {
+    type: "status_step",
+    label,
+    status,
+  });
+}
+
 function formatWebSearchDigest(results: WebSearchResult[]): string {
   return results
     .map((result, index) => {
@@ -174,6 +201,846 @@ function attachSearchFallbackNotice(content: string, warning?: string): string {
     return content;
   }
   return `${notice}\n\n${content}`;
+}
+
+const CHINESE_NUMBERS: Record<string, number> = {
+  一: 1,
+  二: 2,
+  兩: 2,
+  三: 3,
+  四: 4,
+  五: 5,
+  六: 6,
+  七: 7,
+  八: 8,
+  九: 9,
+  十: 10,
+};
+
+function nowChatTimestamp(): string {
+  return new Date().toLocaleTimeString("zh-TW", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function emptyTripProfile(): TripProfile {
+  return {
+    destination: null,
+    duration_days: null,
+    duration_nights: null,
+    departure_location: null,
+    travel_dates: null,
+    companions: null,
+    traveler_count: null,
+    budget: null,
+    special_population: {
+      has_elderly: false,
+      has_children: false,
+      mobility_issue: false,
+    },
+    preferences: [],
+    transportation: null,
+    accommodation: null,
+    visited_before: [],
+    avoid_places: [],
+    dietary_restrictions: [],
+    disliked_activities: [],
+    pace: null,
+    output_format: null,
+  };
+}
+
+function mergeTripProfile(base?: TripProfile | null, context?: ChatContext): TripProfile {
+  const profile = {
+    ...emptyTripProfile(),
+    ...(base || {}),
+    special_population: {
+      ...emptyTripProfile().special_population,
+      ...(base?.special_population || {}),
+    },
+    preferences: [...(base?.preferences || [])],
+    visited_before: [...(base?.visited_before || [])],
+    avoid_places: [...(base?.avoid_places || [])],
+    dietary_restrictions: [...(base?.dietary_restrictions || [])],
+    disliked_activities: [...(base?.disliked_activities || [])],
+  };
+  if (!profile.destination && context?.destination) {
+    profile.destination = context.destination;
+  }
+  if (!profile.duration_days && context?.days) {
+    profile.duration_days = context.days;
+    profile.duration_nights = Math.max(0, context.days - 1);
+  }
+  if (!profile.budget && context?.budget) {
+    profile.budget = String(context.budget);
+  }
+  if (!profile.pace && context?.preferences?.pace) {
+    profile.pace = context.preferences.pace;
+  }
+  if (!profile.transportation && context?.preferences?.transportPreference) {
+    profile.transportation = context.preferences.transportPreference;
+  }
+  if (profile.preferences.length === 0 && context?.preferences?.interests?.length) {
+    profile.preferences = [...context.preferences.interests];
+  }
+  return profile;
+}
+
+function parseFlexibleNumber(value: string): number | null {
+  const digit = value.match(/\d+/)?.[0];
+  if (digit) {
+    return Number(digit);
+  }
+  return CHINESE_NUMBERS[value.trim()] ?? null;
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function buildPlanFingerprint(days: TripPlanDay[]): string {
+  const raw = days
+    .map((day) => `D${day.dayNumber}:${day.items.map((item) => `${item.time}-${item.title}`).join("|")}`)
+    .join("||");
+  let hash = 0;
+  for (let index = 0; index < raw.length; index += 1) {
+    hash = (hash * 31 + raw.charCodeAt(index)) >>> 0;
+  }
+  return hash.toString(36).padStart(7, "0");
+}
+
+function diffDayTitles(day: TripPlanDay): string[] {
+  return day.items.map((item) => item.title.trim()).filter(Boolean);
+}
+
+function itemRevisionKey(dayNumber: number, item: TripPlanDay["items"][number]): string {
+  return `D${dayNumber}:${item.time.trim()}::${item.title.trim()}`;
+}
+
+type RevisionComparableItem = {
+  day: string;
+  time: string;
+  title: string;
+};
+
+export function buildTravelPlanRevisionMeta(input: {
+  previousDays?: TripPlanDay[];
+  nextDays: TripPlanDay[];
+  profile: TripProfile;
+}): TravelPlanRevisionMeta | undefined {
+  const previousDays = input.previousDays || [];
+  if (!previousDays.length) {
+    return undefined;
+  }
+
+  const previousItemCount = previousDays.reduce((sum, day) => sum + day.items.length, 0);
+  const nextItemCount = input.nextDays.reduce((sum, day) => sum + day.items.length, 0);
+  const previousTitles = new Set(previousDays.flatMap(diffDayTitles));
+  const nextTitles = new Set(input.nextDays.flatMap(diffDayTitles));
+  const addedTitles = [...nextTitles].filter((title) => !previousTitles.has(title)).slice(0, 3);
+  const removedTitles = [...previousTitles].filter((title) => !nextTitles.has(title)).slice(0, 3);
+  const previousItemMap = new Map(
+    previousDays.flatMap((day) =>
+      day.items.map((item) => [
+        itemRevisionKey(day.dayNumber, item),
+        { day: `Day ${day.dayNumber}`, title: item.title.trim(), time: item.time.trim() },
+      ] as const),
+    ),
+  );
+  const nextItemMap = new Map(
+    input.nextDays.flatMap((day) =>
+      day.items.map((item) => [
+        itemRevisionKey(day.dayNumber, item),
+        { day: `Day ${day.dayNumber}`, title: item.title.trim(), time: item.time.trim() },
+      ] as const),
+    ),
+  );
+  const previousByTitle = new Map<string, RevisionComparableItem[]>();
+  const nextByTitle = new Map<string, RevisionComparableItem[]>();
+  const previousValueToKey = new Map<RevisionComparableItem, string>();
+  const nextValueToKey = new Map<RevisionComparableItem, string>();
+  for (const [key, value] of previousItemMap.entries()) {
+    const titleKey = value.title.toLowerCase();
+    previousByTitle.set(titleKey, [...(previousByTitle.get(titleKey) || []), value]);
+    previousValueToKey.set(value, key);
+  }
+  for (const [key, value] of nextItemMap.entries()) {
+    const titleKey = value.title.toLowerCase();
+    nextByTitle.set(titleKey, [...(nextByTitle.get(titleKey) || []), value]);
+    nextValueToKey.set(value, key);
+  }
+  const movedItems: TravelPlanRevisionMeta["moved_items"] = [];
+  const retimedItems: TravelPlanRevisionMeta["retimed_items"] = [];
+  const matchedPreviousKeys = new Set<string>();
+  const matchedNextKeys = new Set<string>();
+
+  for (const [titleKey, previousEntries] of previousByTitle.entries()) {
+    const nextEntries = nextByTitle.get(titleKey);
+    if (!nextEntries || previousEntries.length !== 1 || nextEntries.length !== 1) {
+      continue;
+    }
+    const previousEntry = previousEntries[0];
+    const nextEntry = nextEntries[0];
+    const previousKey = previousValueToKey.get(previousEntry);
+    const nextKey = nextValueToKey.get(nextEntry);
+    if (!previousKey || !nextKey || previousKey === nextKey) {
+      continue;
+    }
+    if (previousEntry.day !== nextEntry.day) {
+      movedItems.push({
+        title: nextEntry.title,
+        from_day: previousEntry.day,
+        to_day: nextEntry.day,
+        from_time: previousEntry.time,
+        to_time: nextEntry.time,
+      });
+      matchedPreviousKeys.add(previousKey);
+      matchedNextKeys.add(nextKey);
+      continue;
+    }
+    if (previousEntry.time !== nextEntry.time) {
+      retimedItems.push({
+        day: nextEntry.day,
+        title: nextEntry.title,
+        from_time: previousEntry.time,
+        to_time: nextEntry.time,
+      });
+      matchedPreviousKeys.add(previousKey);
+      matchedNextKeys.add(nextKey);
+    }
+  }
+  const addedItems = [...nextItemMap.entries()]
+    .filter(([key]) => !previousItemMap.has(key) && !matchedNextKeys.has(key))
+    .map(([, value]) => value)
+    .slice(0, 6);
+  const removedItems = [...previousItemMap.entries()]
+    .filter(([key]) => !nextItemMap.has(key) && !matchedPreviousKeys.has(key))
+    .map(([, value]) => value)
+    .slice(0, 6);
+  const previousDayMap = new Map(previousDays.map((day) => [day.dayNumber, day]));
+  const nextDayMap = new Map(input.nextDays.map((day) => [day.dayNumber, day]));
+  const changedDays = [...new Set([...previousDayMap.keys(), ...nextDayMap.keys()])]
+    .filter((dayNumber) => {
+      const previousDay = previousDayMap.get(dayNumber);
+      const nextDay = nextDayMap.get(dayNumber);
+      if (!previousDay || !nextDay) {
+        return true;
+      }
+      const previousSignature = previousDay.items.map((item) => `${item.time}-${item.title}`).join("|");
+      const nextSignature = nextDay.items.map((item) => `${item.time}-${item.title}`).join("|");
+      return previousSignature !== nextSignature;
+    })
+    .map((dayNumber) => `Day ${dayNumber}`);
+  const summary: string[] = [];
+
+  if (input.profile.transportation === "self_drive") {
+    summary.push("交通偏好已調整為自駕導向。");
+  } else if (input.profile.transportation === "public_transport") {
+    summary.push("交通偏好已調整為大眾運輸導向。");
+  }
+
+  if (input.profile.pace === "relaxed") {
+    summary.push("行程節奏已調整為較寬鬆。");
+  } else if (input.profile.pace === "intensive") {
+    summary.push("行程節奏已調整為較緊湊。");
+  }
+
+  if (previousItemCount !== nextItemCount) {
+    summary.push(`每日安排總數由 ${previousItemCount} 個調整為 ${nextItemCount} 個。`);
+  }
+  if (addedTitles.length) {
+    summary.push(`新增重點：${addedTitles.join("、")}。`);
+  }
+  if (removedTitles.length) {
+    summary.push(`移除或替換：${removedTitles.join("、")}。`);
+  }
+  if (!summary.length) {
+    summary.push("已依照最新條件微調既有行程結構。");
+  }
+
+  return {
+    revision_id: `rev_${Date.now().toString(36)}`,
+    revised_from: `plan_${buildPlanFingerprint(previousDays)}`,
+    based_on_existing_itinerary: true,
+    change_summary: summary.slice(0, 4),
+    changed_days: changedDays,
+    moved_items: movedItems.slice(0, 6),
+    retimed_items: retimedItems.slice(0, 6),
+    added_items: addedItems,
+    removed_items: removedItems,
+  };
+}
+
+function updateTripProfileFromText(profile: TripProfile, message: string): TripProfile {
+  const next = mergeTripProfile(profile);
+  const duration = message.match(/([一二兩三四五六七八九十\d]+)\s*天(?:\s*([一二兩三四五六七八九十\d]+)\s*夜)?/u);
+  if (duration?.[1]) {
+    const days = parseFlexibleNumber(duration[1]);
+    if (days) {
+      next.duration_days = days;
+      next.duration_nights = duration[2] ? parseFlexibleNumber(duration[2]) ?? Math.max(0, days - 1) : Math.max(0, days - 1);
+    }
+  }
+
+  const destination =
+    message.match(/(?:想去|我要去|我想去|去|到)([^，。,\s]+?)(?:玩|旅遊|旅行|自由行|行程|[一二兩三四五六七八九十\d]+\s*天|$)/u)?.[1] ||
+    message.match(/^([^，。,\s]{2,12})(?:旅遊|旅行|自由行|行程)/u)?.[1];
+  if (destination && !/哪裡|哪邊|幾天|多久/u.test(destination)) {
+    next.destination = destination.trim();
+  }
+
+  if (/自駕|租車/u.test(message)) {
+    next.transportation = "self_drive";
+  } else if (/大眾運輸|電車|公車|巴士|火車/u.test(message)) {
+    next.transportation = "public_transport";
+  }
+
+  if (/輕鬆|慢活|不要太累/u.test(message)) {
+    next.pace = "relaxed";
+  } else if (/扎實|緊湊|排滿|腿軟/u.test(message)) {
+    next.pace = "intensive";
+  }
+
+  const preferences = [
+    /美食|小吃|餐廳/u.test(message) ? "food" : "",
+    /自然|風景|阿蘇|山|海|溫泉/u.test(message) ? "nature" : "",
+    /逛街|購物|商店街|散步/u.test(message) ? "city_walk" : "",
+    /溫泉|放鬆|慢活/u.test(message) ? "onsen" : "",
+    /歷史|古蹟|城|神社|寺/u.test(message) ? "history" : "",
+  ];
+  next.preferences = uniqueStrings([...next.preferences, ...preferences]);
+  return applyRevisionInstructionToProfile(next, message);
+}
+
+function applyQuestionAnswers(profile: TripProfile, answers?: ChatQuestionAnswer[]): TripProfile {
+  const next = mergeTripProfile(profile);
+  for (const answer of answers || []) {
+    const values = Array.isArray(answer.value)
+      ? answer.value.map(String)
+      : answer.value === null || answer.value === undefined
+        ? []
+        : [String(answer.value)];
+    const first = values[0] || "";
+    switch (answer.slot) {
+      case "companions":
+        next.companions = first || null;
+        next.traveler_count =
+          first === "solo" ? 1 : first === "couple_or_friend" ? 2 : first === "small_group" ? 4 : first ? 5 : next.traveler_count;
+        break;
+      case "preferences":
+        next.preferences = uniqueStrings([...next.preferences, ...values]);
+        break;
+      case "pace":
+        next.pace = first || null;
+        break;
+      case "output_format":
+        next.output_format = first === "spreadsheet" || first === "app_flow" ? first : "report";
+        break;
+      case "departure_location":
+        next.departure_location = first.trim() || null;
+        break;
+      case "destination":
+        next.destination = first.trim() || null;
+        break;
+      case "duration_days": {
+        const days = parseFlexibleNumber(first);
+        if (days) {
+          next.duration_days = days;
+          next.duration_nights = next.duration_nights ?? Math.max(0, days - 1);
+        }
+        break;
+      }
+      case "duration_nights": {
+        const nights = parseFlexibleNumber(first);
+        if (nights !== null) {
+          next.duration_nights = nights;
+        }
+        break;
+      }
+      case "budget":
+        next.budget = first || null;
+        break;
+      case "transportation":
+        next.transportation = first || null;
+        break;
+      case "special_needs":
+        next.special_population = {
+          has_elderly: values.includes("elderly"),
+          has_children: values.includes("children"),
+          mobility_issue: values.includes("mobility_issue"),
+        };
+        if (values.includes("dietary_restriction")) {
+          next.dietary_restrictions = uniqueStrings([...next.dietary_restrictions, "需要另行確認飲食限制或過敏"]);
+        }
+        break;
+      case "travel_dates":
+        if (answer.value && typeof answer.value === "object" && !Array.isArray(answer.value)) {
+          const range = answer.value as { start?: string; end?: string };
+          const start = range.start?.trim() || "";
+          const end = range.end?.trim() || start;
+          next.travel_dates = start || end ? { start, end } : null;
+        }
+        break;
+      default:
+        if (answer.slot in next && first) {
+          (next as unknown as Record<string, unknown>)[answer.slot] = first;
+        }
+    }
+  }
+  return next;
+}
+
+function buildQuestionCard(profile: TripProfile): QuestionCardPayload | null {
+  const destination = profile.destination || "這次";
+  const durationLabel = profile.duration_days ? `${profile.duration_days}天${profile.duration_nights ?? Math.max(0, profile.duration_days - 1)}夜` : "這趟";
+
+  if (!profile.destination || !profile.duration_days) {
+    return {
+      response_type: "question_card",
+      title: "先確認行程的基本條件",
+      questions: [
+        ...(profile.destination
+          ? []
+          : [{
+              slot: "destination" as const,
+              question: "你想去哪個目的地？",
+              type: "text" as const,
+              placeholder: "例如：熊本、福岡、東京",
+            }]),
+        ...(profile.duration_days
+          ? []
+          : [{
+              slot: "duration_days" as const,
+              question: "你預計玩幾天？",
+              type: "number" as const,
+              placeholder: "例如：5",
+            }]),
+      ],
+      action: { label: "繼續", shortcut: "Enter" },
+    };
+  }
+
+  const firstRound = [
+    !profile.companions
+      ? {
+          slot: "companions" as const,
+          question: `這次${destination}${durationLabel}，你預計是幾個人一起去？`,
+          type: "single_choice" as const,
+          options: [
+            { label: "一個人獨旅", value: "solo", recommended: true },
+            { label: "兩個人（情侶 / 朋友）", value: "couple_or_friend" },
+            { label: "三到四人小團", value: "small_group" },
+            { label: "家庭或四人以上大團", value: "family_group" },
+          ],
+        }
+      : null,
+    profile.preferences.length === 0
+      ? {
+          slot: "preferences" as const,
+          question: "你最在意這趟旅程的哪個面向？",
+          type: "multi_choice" as const,
+          options: [
+            { label: "美食與在地小吃", value: "food" },
+            { label: "自然風景（阿蘇、溫泉等）", value: "nature" },
+            { label: "城市散步與逛街購物", value: "city_walk" },
+            { label: "溫泉放鬆與慢活", value: "onsen", recommended: true },
+            { label: "歷史古蹟", value: "history" },
+          ],
+        }
+      : null,
+    !profile.pace
+      ? {
+          slot: "pace" as const,
+          question: "你希望每天的行程步調大概是？",
+          type: "single_choice" as const,
+          options: [
+            { label: "輕鬆版：一天 2-3 個點，留很多休息時間", value: "relaxed", recommended: true },
+            { label: "普通版：一天 3-4 個點，節奏剛好", value: "normal" },
+            { label: "扎實版：一天 4-6 個點，走到腿軟也沒關係", value: "intensive" },
+          ],
+        }
+      : null,
+    !profile.output_format
+      ? {
+          slot: "output_format" as const,
+          question: `這份${destination}行程你希望最後用哪種形式呈現？`,
+          type: "single_choice" as const,
+          options: [
+            { label: "Report 文字版完整行程", value: "report", recommended: true },
+            { label: "Spreadsheet 可編輯行程表", value: "spreadsheet" },
+            { label: "App 假想成小旅遊 App 流程", value: "app_flow" },
+          ],
+        }
+      : null,
+  ].filter((question): question is NonNullable<typeof question> => Boolean(question));
+
+  if (firstRound.length) {
+    return {
+      response_type: "question_card",
+      title: `先幫我了解你的${destination}旅遊需求，這樣行程會更貼合你`,
+      questions: firstRound.slice(0, 4),
+      action: { label: "繼續", shortcut: "Enter" },
+    };
+  }
+
+  const secondRound = [
+    !profile.departure_location
+      ? {
+          slot: "departure_location" as const,
+          question: "你會從哪裡出發？",
+          type: "text" as const,
+          placeholder: "例如：台北、嘉義、高雄、福岡、東京",
+        }
+      : null,
+    !profile.travel_dates
+      ? {
+          slot: "travel_dates" as const,
+          question: `${destination}這趟旅程的出發與返回日期是？`,
+          type: "date_range" as const,
+        }
+      : null,
+    !profile.budget
+      ? {
+          slot: "budget" as const,
+          question: "你的總預算大概是多少？",
+          type: "single_choice" as const,
+          options: [
+            { label: "省錢型：2-3 萬台幣內", value: "budget" },
+            { label: "中等預算：3-5 萬台幣", value: "mid_range", recommended: true },
+            { label: "舒適型：5 萬以上", value: "comfortable" },
+          ],
+        }
+      : null,
+    !profile.transportation
+      ? {
+          slot: "transportation" as const,
+          question: `你在${destination}當地打算怎麼移動？`,
+          type: "single_choice" as const,
+          options: [
+            { label: "大眾運輸", value: "public_transport", recommended: true },
+            { label: "自駕", value: "self_drive" },
+            { label: "包車 / 一日遊行程", value: "charter_or_tour" },
+            { label: "還不確定，請 AI 建議", value: "ai_recommend" },
+          ],
+        }
+      : null,
+    {
+      slot: "special_needs" as const,
+      question: "有沒有特殊需求？",
+      type: "multi_choice" as const,
+      options: [
+        { label: "有長輩同行", value: "elderly" },
+        { label: "有小孩同行", value: "children" },
+        { label: "行動不便", value: "mobility_issue" },
+        { label: "飲食限制 / 過敏", value: "dietary_restriction" },
+        { label: "沒有特殊需求", value: "none", recommended: true },
+      ],
+    },
+  ].filter((question): question is NonNullable<typeof question> => Boolean(question));
+
+  if (!profile.departure_location || !profile.travel_dates || !profile.budget || !profile.transportation) {
+    return {
+      response_type: "question_card",
+      title: "再確認幾個行程安排會用到的條件",
+      questions: secondRound.slice(0, 4),
+      action: { label: "開始規劃", shortcut: "Enter" },
+    };
+  }
+
+  return null;
+}
+
+function isTripWorkflowMessage(input: {
+  message: string;
+  tripProfile?: TripProfile;
+  questionAnswers?: ChatQuestionAnswer[];
+}): boolean {
+  return Boolean(
+    input.tripProfile ||
+      input.questionAnswers?.length ||
+      /想去|我要去|行程|旅遊|旅行|自由行|玩[一二兩三四五六七八九十\d]+\s*天|[一二兩三四五六七八九十\d]+\s*天[一二兩三四五六七八九十\d]*\s*夜/u.test(input.message),
+  );
+}
+
+function budgetToNumber(value?: string | null): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+  if (value === "budget") {
+    return 30_000;
+  }
+  if (value === "mid_range") {
+    return 50_000;
+  }
+  if (value === "comfortable") {
+    return 80_000;
+  }
+  const digits = value.match(/\d+/g);
+  if (!digits?.length) {
+    return undefined;
+  }
+  return Number(digits.join(""));
+}
+
+function truncateAlertSnippet(text: string, maxLength = 88): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxLength - 1)}…`;
+}
+
+function buildWeatherAlertsFromSources(
+  profile: TripProfile,
+  sources: Record<string, ChatSource>,
+): TravelPlanResponse["weather_alerts"] {
+  const weatherSources = Object.values(sources).filter((source) => source.type === "weather");
+  if (!weatherSources.length) {
+    return profile.travel_dates
+      ? [{
+          day: "全程",
+          message: "出發前請再次確認逐日降雨與天氣變化，戶外景點可保留備案。",
+        }]
+      : [{
+          day: "全程",
+          message: "尚未提供實際旅遊日期，因此天氣只能作為提醒方向；出發前需再查即時預報。",
+        }];
+  }
+
+  const alerts = weatherSources
+    .slice(0, 3)
+    .map((source) => {
+      const dateMatch = `${source.title} ${source.snippet}`.match(/\d{4}-\d{2}-\d{2}/);
+      const precipMatch = source.snippet.match(/(\d{1,3})%/);
+      const precip = precipMatch ? Number(precipMatch[1]) : null;
+      const prefix = dateMatch ? `${dateMatch[0]}` : "全程";
+      const message = precip !== null && precip >= 50
+        ? `${prefix} 降雨機率偏高，建議把戶外景點改成可替代的室內或彈性行程。`
+        : `${prefix} 天氣摘要：${truncateAlertSnippet(source.snippet || source.preview_text)}`;
+      return {
+        day: dateMatch ? dateMatch[0] : "全程",
+        message,
+        citations: [source.source_id],
+      };
+    });
+
+  return alerts.length ? alerts : [{
+    day: "全程",
+    message: "出發前請再次確認逐日降雨與天氣變化，戶外景點可保留備案。",
+  }];
+}
+
+function buildEventAlertsFromSources(sources: Record<string, ChatSource>): TravelPlanResponse["event_alerts"] {
+  const officialSources = Object.values(sources).filter((source) => source.type === "official");
+  const keywordPattern = /活動|祭|展|市集|公告|封路|交通管制|休館|停駛|改道|festival|closure|event/i;
+
+  return officialSources
+    .filter((source) => keywordPattern.test(`${source.title} ${source.snippet} ${source.preview_text}`))
+    .slice(0, 3)
+    .map((source) => {
+      const dateMatch = `${source.title} ${source.snippet}`.match(/\d{4}-\d{2}-\d{2}/);
+      const snippet = truncateAlertSnippet(source.snippet || source.preview_text || source.title);
+      return {
+        day: dateMatch ? dateMatch[0] : "全程",
+        message: `官方提醒：${snippet}`,
+        citations: [source.source_id],
+      };
+    });
+}
+
+function profileToTripPlanRequest(profile: TripProfile, context?: ChatContext): TripPlanRequest {
+  const pace = profile.pace === "relaxed" || profile.pace === "intensive" ? profile.pace : "moderate";
+  return {
+    destination: profile.destination || "未指定目的地",
+    days: Math.max(1, profile.duration_days || 3),
+    budget: budgetToNumber(profile.budget),
+    tripStartDate: profile.travel_dates?.start || context?.tripStartDate || undefined,
+    tripEndDate: profile.travel_dates?.end || profile.travel_dates?.start || context?.tripEndDate || context?.tripStartDate || undefined,
+    preferences: {
+      interests: profile.preferences.length ? profile.preferences : ["景點", "美食"],
+      pace,
+      transportPreference: profile.transportation || "ai_recommend",
+      budget: budgetToNumber(profile.budget),
+      notes: [
+        profile.departure_location ? `出發地：${profile.departure_location}` : "",
+        profile.companions ? `同行者：${profile.companions}` : "",
+        profile.special_population.has_elderly ? "有長輩同行" : "",
+        profile.special_population.has_children ? "有小孩同行" : "",
+        profile.special_population.mobility_issue ? "有行動不便需求" : "",
+        profile.dietary_restrictions.length ? `飲食限制：${profile.dietary_restrictions.join("、")}` : "",
+      ].filter(Boolean).join("；"),
+      avoid: profile.avoid_places,
+      mustVisit: profile.visited_before.length ? undefined : [],
+    },
+    itineraryDraft: context?.itinerary,
+  };
+}
+
+export function convertTripPlanToTravelPlanWithSources(
+  plan: TripPlanResult,
+  profile: TripProfile,
+  sources: Record<string, ChatSource>,
+  revision?: TravelPlanRevisionMeta,
+): TravelPlanResponse {
+  const title = `${profile.destination || "旅遊"}${profile.duration_days || plan.days.length}天${profile.duration_nights ?? Math.max(0, (profile.duration_days || plan.days.length) - 1)}夜行程規劃`;
+  const cite = (
+    text: string,
+    preference?: {
+      preferredTypes?: ChatSource["type"][];
+      preferredProviders?: string[];
+    },
+  ): string[] | undefined => {
+    const citations = pickCitationIdsForText(text, sources, 2, preference);
+    return citations.length > 0 ? citations : undefined;
+  };
+  const citeText = (
+    text: string,
+    preference?: {
+      preferredTypes?: ChatSource["type"][];
+      preferredProviders?: string[];
+    },
+  ): CitationText => ({
+    text,
+    citations: cite(text, preference),
+  });
+  const weatherAlerts = buildWeatherAlertsFromSources(profile, sources);
+  const eventAlerts = buildEventAlertsFromSources(sources);
+  const assumptionTexts = uniqueStrings([
+    profile.travel_dates ? "" : "使用者尚未提供實際旅遊日期，因此活動與天氣不是即時保證。",
+    profile.transportation === "self_drive" ? "交通以自駕邏輯安排。" : "交通以大眾運輸或 AI 建議為主要假設。",
+    ...((plan.warnings || []).filter(Boolean)),
+  ]);
+  return {
+    response_type: "travel_plan",
+    title,
+    revision,
+    sources: Object.keys(sources).length ? sources : undefined,
+    summary_table: plan.days.map((day) => ({
+      day: `Day ${day.dayNumber}`,
+      main_route: day.items.map((item) => item.title).join(" -> "),
+      citations: cite(day.items.map((item) => `${item.title} ${item.notes || ""}`).join(" ")),
+    })),
+    days: plan.days.map((day) => {
+      const foodItems = day.items.filter((item) => item.type === "restaurant");
+      const spotItems = day.items.filter((item) => item.type !== "restaurant");
+      return {
+        day: `Day ${day.dayNumber}`,
+        theme: day.theme || day.summary || `第 ${day.dayNumber} 天`,
+        citations: cite(`${day.theme || ""} ${day.summary || ""}`.trim()),
+        transportation: uniqueStrings(day.items.map((item) => item.transport || "").filter(Boolean))
+          .slice(0, 4)
+          .map((text) => citeText(text, { preferredTypes: ["official", "web"] })),
+        spots: spotItems.map((item) => ({
+          name: item.title,
+          feature: item.notes || item.sourceSnippet || "依照目前旅遊需求安排的停靠點",
+          citations: cite(`${item.title} ${item.notes || item.sourceSnippet || ""}`, { preferredTypes: ["official", "web", "youtube"] }),
+        })),
+        food_recommendations: foodItems.map((item) => ({
+          name: item.title,
+          description: item.notes || item.sourceSnippet || "依照目前旅遊需求安排的用餐建議",
+          citations: cite(`${item.title} ${item.notes || item.sourceSnippet || ""}`, { preferredTypes: ["web", "youtube"] }),
+        })),
+        tips: uniqueStrings([day.summary || "", ...day.items.map((item) => item.notes || "")])
+          .slice(0, 3)
+          .map((text) => citeText(text, { preferredTypes: ["official", "weather", "web"] })),
+      };
+    }),
+    weather_alerts: weatherAlerts.map((alert) => ({
+      ...alert,
+      citations: alert.citations || cite(alert.message, { preferredTypes: ["weather"] }),
+    })),
+    event_alerts: eventAlerts.map((alert) => ({
+      ...alert,
+      citations: alert.citations || cite(alert.message, { preferredTypes: ["official"] }),
+    })),
+    assumptions: assumptionTexts.map((text) => citeText(text, { preferredTypes: ["official", "weather", "web"] })),
+  };
+}
+
+function buildPlanningStatusSteps(): StatusStepPayload[] {
+  return [
+    { type: "status_step", label: "整理行程需求", status: "completed" },
+    { type: "status_step", label: "判斷是否需要查詢即時資訊", status: "completed" },
+    { type: "status_step", label: "搜尋景點、交通與美食資訊", status: "completed" },
+    { type: "status_step", label: "整理每日路線、交通時間與景點順序", status: "completed" },
+    { type: "status_step", label: "生成總覽表格與每日詳細行程", status: "completed" },
+  ];
+}
+
+async function handleStructuredTripWorkflow(input: {
+  message: string;
+  context?: ChatContext;
+  tripProfile?: TripProfile;
+  questionAnswers?: ChatQuestionAnswer[];
+  progressSessionId?: string;
+  memoryContext?: string;
+}): Promise<ChatResponsePayload | null> {
+  if (!isTripWorkflowMessage(input)) {
+    return null;
+  }
+
+  publishProgressStep(input.progressSessionId, "整理行程需求", "running");
+  const seeded = mergeTripProfile(input.tripProfile, input.context);
+  const withText = updateTripProfileFromText(seeded, input.message);
+  const profile = applyQuestionAnswers(withText, input.questionAnswers);
+  const card = buildQuestionCard(profile);
+  publishProgressStep(input.progressSessionId, "整理行程需求", "completed");
+
+  if (card) {
+    return {
+      reply: {
+        id: `assistant_${Date.now()}`,
+        role: "assistant",
+        content: card.title,
+        timestamp: nowChatTimestamp(),
+        responseType: "question_card",
+        questionCard: card,
+        tripProfile: profile,
+      },
+      tripProfile: profile,
+    };
+  }
+
+  publishProgressStep(input.progressSessionId, "判斷是否需要查詢即時資訊", "running");
+  const request = profileToTripPlanRequest(profile, input.context);
+  publishProgressStep(input.progressSessionId, "判斷是否需要查詢即時資訊", "completed");
+  const generated = await generateTripPlan(request, input.memoryContext, input.progressSessionId);
+  const webSources = normalizeWebSearchSources(await runWebSearch(
+    [profile.destination || "", profile.preferences.join(" "), "行程 交通 美食"].filter(Boolean).join(" ").trim(),
+    4,
+  ).then((bundle) => bundle.results));
+  const sourceDictionary = mergeChatSources(generated.sources, webSources);
+  if (Object.keys(sourceDictionary).length > 0) {
+    registerChatSources(sourceDictionary);
+  }
+  publishProgressStep(input.progressSessionId, "生成總覽表格與每日詳細行程", "running");
+  const travelPlan = convertTripPlanToTravelPlanWithSources(
+    generated.plan,
+    profile,
+    sourceDictionary,
+    buildTravelPlanRevisionMeta({
+      previousDays: input.context?.itinerary,
+      nextDays: generated.plan.days,
+      profile,
+    }),
+  );
+  publishProgressStep(input.progressSessionId, "生成總覽表格與每日詳細行程", "completed");
+  const statusSteps = buildPlanningStatusSteps();
+  return {
+    reply: {
+      id: `assistant_${Date.now()}`,
+      role: "assistant",
+      content: travelPlan.title,
+      timestamp: nowChatTimestamp(),
+      responseType: "travel_plan",
+      statusSteps,
+      travelPlan,
+      tripProfile: profile,
+    },
+    itinerarySuggestion: generated.plan,
+    tripProfile: profile,
+  };
 }
 
 async function runWebSearch(query: string, limit?: number): Promise<WebSearchBundle> {
@@ -347,8 +1214,10 @@ function buildFallbackTripPlan(request: TripPlanRequest): TripPlanResult {
 export async function generateTripPlan(
   request: TripPlanRequest,
   memoryContext?: string,
+  progressSessionId?: string,
 ): Promise<{
   plan: TripPlanResult;
+  sources: Record<string, ChatSource>;
   diagnostics: {
     planGenerationMode: "model" | "fallback";
     parseMode: "direct" | "repaired" | "normalized" | "fallback";
@@ -356,6 +1225,8 @@ export async function generateTripPlan(
   };
 }> {
   let externalResearch = "";
+  let researchSources: Record<string, ChatSource> = {};
+  publishProgressStep(progressSessionId, "搜尋景點、交通與美食資訊", "running");
   const searchQuery = [
     request.destination,
     request.preferences.interests.join(" "),
@@ -374,14 +1245,18 @@ export async function generateTripPlan(
         destination: request.destination,
         days: request.days,
         budget: request.budget,
+        tripStartDate: request.tripStartDate,
+        tripEndDate: request.tripEndDate,
         preferences: request.preferences,
         itinerary: request.itineraryDraft,
       });
       externalResearch = digest.text.trim();
+      researchSources = digest.sources;
     }
   } catch (error) {
     console.warn("[trip-plan] research_failed", error);
   }
+  publishProgressStep(progressSessionId, "搜尋景點、交通與美食資訊", "completed");
 
   const itineraryUserContent = buildItineraryPrompt(request, memoryContext, {
     externalResearch: externalResearch || undefined,
@@ -402,6 +1277,7 @@ export async function generateTripPlan(
 
   let raw: string;
   let retryCount = 0;
+  publishProgressStep(progressSessionId, "整理每日路線、交通時間與景點順序", "running");
   try {
     raw = await chatWithOllama({
       format: "json",
@@ -420,8 +1296,10 @@ export async function generateTripPlan(
       } catch {
         const fallback = buildFallbackTripPlan(request);
         console.warn("[trip-plan] timeout,fallback");
+        publishProgressStep(progressSessionId, "整理每日路線、交通時間與景點順序", "completed");
         return {
           plan: enrichPlanWithSearchSources(fallback, webSearch.results, webSearch.warning),
+          sources: researchSources,
           diagnostics: {
             planGenerationMode: "fallback",
             parseMode: "fallback",
@@ -437,8 +1315,10 @@ export async function generateTripPlan(
   try {
     const parsed = parseTripPlanResponse(raw, request);
     console.info(`[trip-plan] parse_mode=${parsed.diagnostics.parseMode} retry_count=${retryCount}`);
+    publishProgressStep(progressSessionId, "整理每日路線、交通時間與景點順序", "completed");
     return {
       plan: enrichPlanWithSearchSources(parsed.result, webSearch.results, webSearch.warning),
+      sources: researchSources,
       diagnostics: {
         planGenerationMode: "model",
         parseMode: parsed.diagnostics.parseMode,
@@ -493,8 +1373,10 @@ export async function generateTripPlan(
         } catch {
           const fallback = buildFallbackTripPlan(request);
           console.warn("[trip-plan] timeout,fallback");
+          publishProgressStep(progressSessionId, "整理每日路線、交通時間與景點順序", "completed");
           return {
             plan: enrichPlanWithSearchSources(fallback, webSearch.results, webSearch.warning),
+            sources: researchSources,
             diagnostics: {
               planGenerationMode: "fallback",
               parseMode: "fallback",
@@ -512,8 +1394,10 @@ export async function generateTripPlan(
       if (parsed.diagnostics.parseMode === "normalized") {
         console.info("[trip-plan] normalized");
       }
+      publishProgressStep(progressSessionId, "整理每日路線、交通時間與景點順序", "completed");
       return {
         plan: enrichPlanWithSearchSources(parsed.result, webSearch.results, webSearch.warning),
+        sources: researchSources,
         diagnostics: {
           planGenerationMode: "model",
           parseMode: parsed.diagnostics.parseMode,
@@ -528,8 +1412,10 @@ export async function generateTripPlan(
       console.warn(
         `[trip-plan] ${retryError.message === "MODEL_OUTPUT_JSON_MISSING" ? "json_missing" : "json_invalid"},fallback`,
       );
+      publishProgressStep(progressSessionId, "整理每日路線、交通時間與景點順序", "completed");
       return {
         plan: enrichPlanWithSearchSources(fallback, webSearch.results, webSearch.warning),
+        sources: researchSources,
         diagnostics: {
           planGenerationMode: "fallback",
           parseMode: "fallback",
@@ -561,18 +1447,39 @@ export async function chatWithTravelAssistant(input: {
   message: string;
   messages?: ChatMessage[];
   context?: ChatContext;
+  structuredTravelPlanning?: boolean;
+  tripProfile?: TripProfile;
+  questionAnswers?: ChatQuestionAnswer[];
+  progressSessionId?: string;
   memoryContext?: string;
 }): Promise<ChatResponsePayload> {
+  if (input.structuredTravelPlanning) {
+    const structuredTripResponse = await handleStructuredTripWorkflow({
+      message: input.message,
+      context: input.context,
+      tripProfile: input.tripProfile,
+      questionAnswers: input.questionAnswers,
+      progressSessionId: input.progressSessionId,
+      memoryContext: input.memoryContext,
+    });
+    if (structuredTripResponse) {
+      return structuredTripResponse;
+    }
+  }
+
+  publishProgressStep(input.progressSessionId, "整理旅遊問題", "running");
   const language = detectResponseLanguage(input.message);
   const researchPrompt = buildChatResearchPlanningPrompt({
     message: input.message,
     context: input.context,
     memoryContext: input.memoryContext,
   });
+  publishProgressStep(input.progressSessionId, "整理旅遊問題", "completed");
 
   const perRoundTimeout = Math.min(32_000, Math.max(12_000, Math.floor(serverConfig.ollamaTimeoutMs * 0.55)));
 
   let rawResearch = "";
+  publishProgressStep(input.progressSessionId, "查詢外部資訊", "running");
   try {
     rawResearch = await chatWithOllama({
       task: "travel-chat",
@@ -599,6 +1506,7 @@ export async function chatWithTravelAssistant(input: {
   const digest = await executeTravelToolRequests(toolRequests, input.context);
   const webSearchQuery = [input.context?.destination || "", input.message].filter(Boolean).join(" ").trim();
   const webSearch = await runWebSearch(webSearchQuery, serverConfig.aiWebSearchMaxResults);
+  publishProgressStep(input.progressSessionId, "查詢外部資訊", "completed");
   const digestText =
     digest.text.trim() ||
     "未取得可驗證的外部資料；請勿捏造具體餐廳或景點名稱，proposedChanges 請為空陣列。";
@@ -611,6 +1519,7 @@ export async function chatWithTravelAssistant(input: {
     webSearch.digest || undefined,
   );
 
+  publishProgressStep(input.progressSessionId, "生成回覆", "running");
   const raw = await chatWithOllama({
     task: "travel-chat",
     format: "json",
@@ -633,6 +1542,7 @@ export async function chatWithTravelAssistant(input: {
     serverConfig.aiWebSearchRequireCitations && webSearch.results.length
       ? toCitationList(webSearch.results, 3)
       : undefined;
+  publishProgressStep(input.progressSessionId, "生成回覆", "completed");
 
   return {
     reply: {
@@ -643,6 +1553,7 @@ export async function chatWithTravelAssistant(input: {
         hour: "2-digit",
         minute: "2-digit",
       }),
+      responseType: "text_message",
       proposedChanges,
       sources,
     },

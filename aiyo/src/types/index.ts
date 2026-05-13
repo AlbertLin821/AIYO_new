@@ -110,6 +110,8 @@ export interface TripPlanRequest {
   destination: string;
   days: number;
   budget?: number;
+  tripStartDate?: string;
+  tripEndDate?: string;
   preferences: TravelPreferences;
   itineraryDraft?: TripPlanDay[];
 }
@@ -161,6 +163,169 @@ export interface AiProposedChange {
   source: "ai-chat";
 }
 
+export type ChatResponseType = "text_message" | "question_card" | "status_step" | "travel_plan" | "error";
+
+export type ChatQuestionType =
+  | "single_choice"
+  | "multi_choice"
+  | "text"
+  | "number"
+  | "date_range"
+  | "budget";
+
+export type TripProfile = {
+  destination: string | null;
+  duration_days: number | null;
+  duration_nights: number | null;
+  departure_location: string | null;
+  travel_dates: { start: string; end: string } | null;
+  companions: string | null;
+  traveler_count: number | null;
+  budget: string | null;
+  special_population: {
+    has_elderly: boolean;
+    has_children: boolean;
+    mobility_issue: boolean;
+  };
+  preferences: string[];
+  transportation: string | null;
+  accommodation: string | null;
+  visited_before: string[];
+  avoid_places: string[];
+  dietary_restrictions: string[];
+  disliked_activities: string[];
+  pace: string | null;
+  output_format?: "report" | "spreadsheet" | "app_flow" | null;
+};
+
+export type ChatQuestionOption = {
+  label: string;
+  value: string;
+  recommended?: boolean;
+};
+
+export type ChatQuestion = {
+  slot: keyof TripProfile | "special_needs";
+  question: string;
+  type: ChatQuestionType;
+  options?: ChatQuestionOption[];
+  placeholder?: string;
+};
+
+export type QuestionCardPayload = {
+  response_type: "question_card";
+  title: string;
+  questions: ChatQuestion[];
+  action?: {
+    label: string;
+    shortcut?: string;
+  };
+};
+
+export type ChatQuestionAnswer = {
+  slot: ChatQuestion["slot"];
+  value: string | string[] | number | { start?: string; end?: string } | null;
+};
+
+export type StatusStepPayload = {
+  type: "status_step";
+  label: string;
+  status: "pending" | "running" | "completed";
+};
+
+export type ChatSource = {
+  source_id: string;
+  type: "web" | "youtube" | "weather" | "official" | "other";
+  provider: string;
+  title: string;
+  url: string;
+  domain: string;
+  favicon?: string;
+  snippet: string;
+  preview_text: string;
+  thumbnail?: string;
+  published_at?: string | null;
+  retrieved_at: string;
+  reliability: "high" | "medium" | "low";
+  language?: string;
+};
+
+export type CitationText = {
+  text: string;
+  citations?: string[];
+};
+
+export type TravelPlanRevisionMeta = {
+  revision_id: string;
+  revised_from: string;
+  based_on_existing_itinerary: boolean;
+  change_summary: string[];
+  changed_days: string[];
+  moved_items: Array<{
+    title: string;
+    from_day: string;
+    to_day: string;
+    from_time: string;
+    to_time: string;
+  }>;
+  retimed_items: Array<{
+    day: string;
+    title: string;
+    from_time: string;
+    to_time: string;
+  }>;
+  added_items: Array<{
+    day: string;
+    title: string;
+    time: string;
+  }>;
+  removed_items: Array<{
+    day: string;
+    title: string;
+    time: string;
+  }>;
+};
+
+export type TravelPlanResponse = {
+  response_type: "travel_plan";
+  title: string;
+  revision?: TravelPlanRevisionMeta;
+  sources?: Record<string, ChatSource>;
+  summary_table: Array<{
+    day: string;
+    main_route: string;
+    citations?: string[];
+  }>;
+  days: Array<{
+    day: string;
+    theme: string;
+    citations?: string[];
+    transportation: CitationText[];
+    spots: Array<{
+      name: string;
+      feature: string;
+      citations?: string[];
+    }>;
+    food_recommendations: Array<{
+      name: string;
+      description: string;
+      citations?: string[];
+    }>;
+    tips: CitationText[];
+  }>;
+  weather_alerts: Array<{
+    day: string;
+    message: string;
+    citations?: string[];
+  }>;
+  event_alerts: Array<{
+    day?: string;
+    message: string;
+    citations?: string[];
+  }>;
+  assumptions: CitationText[];
+};
+
 export interface ChatContext {
   destination?: string;
   days?: number;
@@ -178,24 +343,34 @@ export interface ChatMessage {
   role: "user" | "assistant" | "system" | "ai";
   content: string;
   timestamp: string;
+  responseType?: ChatResponseType;
+  questionCard?: QuestionCardPayload;
+  statusSteps?: StatusStepPayload[];
+  travelPlan?: TravelPlanResponse;
+  tripProfile?: TripProfile;
   suggestedAction?: SuggestedAction;
   proposedChanges?: AiProposedChange[];
   sources?: Array<{
     title: string;
     url: string;
-  }>;
+  }> | Record<string, ChatSource>;
 }
 
 export interface ChatRequestPayload {
   message: string;
   messages?: ChatMessage[];
   context?: ChatContext;
+  structuredTravelPlanning?: boolean;
+  tripProfile?: TripProfile;
+  questionAnswers?: ChatQuestionAnswer[];
+  progressSessionId?: string;
 }
 
 export interface ChatResponsePayload {
   reply: ChatMessage;
   itinerarySuggestion?: TripPlanResult;
   proposedChanges?: AiProposedChange[];
+  tripProfile?: TripProfile;
 }
 
 export interface VideoSummarySegment {
@@ -242,6 +417,8 @@ export interface VideoSummaryDebugMeta {
   cacheStatus?: "memory-hit" | "persisted-hit" | "miss";
   pipelineVersion?: string;
   finalPlaceCount?: number;
+  finalFoodCount?: number;
+  failedChunkCount?: number;
   rejectedPlaceCandidateCount?: number;
   placeExtractionPipelineVersion?: string;
 }
@@ -261,6 +438,7 @@ export interface VideoRecommendation {
   relevanceReason?: string;
   timestamps: Timestamp[];
   extractedLocations: LocationReference[];
+  extractedFoods?: string[];
   summarySegments?: VideoSummarySegment[];
   /** Batch search: whether results came from YouTube Data API or mock fallback */
   listProvenance?: "youtube-data-api" | "mock-fallback" | "default-taiwan-cities";
@@ -275,6 +453,7 @@ export interface VideoSummaryResult {
   summary: string;
   segments: VideoSummarySegment[];
   extractedLocations: string[];
+  extractedFoods?: string[];
   mapsProvenance?: "google-geocoding" | "catalog-fallback" | "mixed";
   geocodeWarnings?: string[];
   fallbackReason?: string;

@@ -43,6 +43,36 @@ function transportSelectRows(destination: string) {
   }));
 }
 
+function normalizePlaceText(value: string | undefined): string {
+  return (value || "").trim().toLowerCase();
+}
+
+function findLinkedPinForItem(item: TripPlanItem, pins: TripMapPin[]): TripMapPin | undefined {
+  const location = item.location;
+  const normalizedLocationName = normalizePlaceText(location?.name);
+  const normalizedTitle = normalizePlaceText(item.title);
+  return pins.find((pin) => {
+    if (pin.linkedTripItemId === item.id) {
+      return true;
+    }
+    if (location?.placeId && pin.placeId && location.placeId === pin.placeId) {
+      return true;
+    }
+    if (
+      location &&
+      Math.abs(pin.lat - location.lat) < 0.00001 &&
+      Math.abs(pin.lng - location.lng) < 0.00001
+    ) {
+      return true;
+    }
+    const normalizedPinName = normalizePlaceText(pin.name);
+    return Boolean(
+      normalizedPinName &&
+      (normalizedPinName === normalizedLocationName || normalizedPinName === normalizedTitle),
+    );
+  });
+}
+
 type TransportSelectOption = { value: string; label: string };
 
 type SortableStopProps = {
@@ -540,11 +570,7 @@ export default function ItineraryPanel() {
                             strategy={verticalListSortingStrategy}
                           >
                             {day.items.map((item, index) => {
-                              const linkedPin = pins.find(
-                                (pin) =>
-                                  pin.linkedTripItemId === item.id ||
-                                  (item.location && pin.name === item.location.name),
-                              );
+                              const linkedPin = findLinkedPinForItem(item, pins);
                               const isSelected = linkedPin?.id === selectedPinId;
                               const canSelectOnMap = Boolean(linkedPin);
                               const incomingRoute = routeSegments.find(

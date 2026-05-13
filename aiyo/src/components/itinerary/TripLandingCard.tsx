@@ -35,6 +35,7 @@ function TripLandingCard({ item, index, disabled, duplicating, onClick, onEdit, 
         type="button"
         onClick={() => onClick(item)}
         disabled={disabled}
+        data-testid="trip-landing-card"
         className="flex w-full flex-col text-left"
       >
         <div className="relative h-40 w-full shrink-0 overflow-hidden bg-surface-elevated">

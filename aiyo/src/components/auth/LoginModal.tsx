@@ -53,53 +53,27 @@ function mapAuthError(code: string | null | undefined): string | null {
   return map[code] || "登入失敗，請稍後再試。";
 }
 
-async function fetchCsrfToken() {
-  const response = await fetch("/api/auth/csrf", {
-    headers: { Accept: "application/json" },
-    cache: "no-store",
-  });
-  const payload = (await response.json()) as { csrfToken?: string };
-  if (!response.ok || !payload.csrfToken) {
-    throw new Error("登入初始化失敗，請稍後再試。");
-  }
-  return payload.csrfToken;
-}
-
 async function signInWithCredentials(input: {
   email: string;
   password: string;
   callbackUrl: string;
 }) {
-  const csrfToken = await fetchCsrfToken();
-  const body = new URLSearchParams({
-    csrfToken,
+  const response = await signIn("credentials", {
+    redirect: false,
     email: input.email,
     password: input.password,
     callbackUrl: input.callbackUrl,
-    json: "true",
   });
 
-  const response = await fetch("/api/auth/callback/credentials", {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body,
-  });
-  const payload = (await response.json()) as { url?: string };
-
-  if (!response.ok) {
-    return { ok: false, error: "CredentialsSignin" };
+  if (!response) {
+    return { ok: false, error: "CredentialsSignin", url: null };
   }
 
-  const url = payload.url || "";
-  const error = url ? new URL(url, window.location.origin).searchParams.get("error") : null;
-  if (error) {
-    return { ok: false, error };
-  }
-
-  return { ok: true, error: null };
+  return {
+    ok: Boolean(response.ok),
+    error: response.error || null,
+    url: response.url || input.callbackUrl,
+  };
 }
 
 function LoginModal() {
@@ -164,7 +138,7 @@ function LoginModal() {
 
     if (result?.ok) {
       setOpen(false);
-      window.location.assign(callbackUrl);
+      window.location.assign(result.url || callbackUrl);
       return;
     }
     setFormError(mapAuthError(result?.error || "CredentialsSignin"));
@@ -181,7 +155,7 @@ function LoginModal() {
       const result = await signInWithCredentials({ email, password, callbackUrl });
       if (result?.ok) {
         setOpen(false);
-        window.location.assign(callbackUrl);
+        window.location.assign(result.url || callbackUrl);
         return;
       }
       setFormError(mapAuthError(result?.error));

@@ -11,6 +11,12 @@ import {
   extractIsoDateRangeFromText,
   extractPlanningUpdateFromText,
 } from "@/lib/planningContext";
+import {
+  failFrontendDebugProcess,
+  finishFrontendDebugProcess,
+  startFrontendDebugProcess,
+  updateFrontendDebugProcess,
+} from "@/lib/frontendDebug";
 import { sendChatMessage } from "@/services/aiClient";
 import { useChatStore } from "@/stores/useChatStore";
 import { useMapStore } from "@/stores/useMapStore";
@@ -56,6 +62,9 @@ export default function FloatingAIChat() {
   const pushToast = useToastStore((state) => state.pushToast);
   const [message, setMessage] = useState("");
   const rightOffset = panelOpen ? "min(404px, calc(100vw - 22rem))" : "24px";
+  const isCitationList = (
+    sources: ChatMessage["sources"],
+  ): sources is Array<{ title: string; url: string }> => Array.isArray(sources);
   const planningSnapshot = derivePlanningSnapshot({
     trip: tripStore,
     user: userStore,
@@ -88,8 +97,15 @@ export default function FloatingAIChat() {
     setMessage("");
     setErrorMessage(null);
     setIsSending(true);
+    const processId = startFrontendDebugProcess("floating-chat", "地圖浮動聊天送出", {
+      messagePreview: content.slice(0, 80),
+      destination: nextPlanningSnapshot.destination,
+    });
 
     try {
+      updateFrontendDebugProcess(processId, "request-dispatched", {
+        itineraryDayCount: useTripStore.getState().itinerary.length,
+      });
       const response = await sendChatMessage({
         message: content,
         context: {
@@ -102,7 +118,14 @@ export default function FloatingAIChat() {
         },
       });
       appendMessage(response.reply);
+      finishFrontendDebugProcess(processId, {
+        replyType: response.reply.responseType || "unknown",
+        replyId: response.reply.id,
+      });
     } catch (error) {
+      failFrontendDebugProcess(processId, error, {
+        destination: nextPlanningSnapshot.destination,
+      });
       const description =
         error instanceof Error ? error.message : t.chat.requestFailedGeneric;
       setErrorMessage(description);
@@ -196,9 +219,9 @@ export default function FloatingAIChat() {
                       content={chatMessage.content}
                       inverted={chatMessage.role === "user"}
                     />
-                    {chatMessage.role !== "user" && (chatMessage.sources || []).length > 0 && (
+                    {chatMessage.role !== "user" && isCitationList(chatMessage.sources) && chatMessage.sources.length > 0 && (
                       <div className="mt-2 space-y-1 text-[11px] text-muted">
-                        {(chatMessage.sources || []).slice(0, 2).map((source) => (
+                        {chatMessage.sources.slice(0, 2).map((source) => (
                           <p key={`${chatMessage.id}_${source.url}`}>
                             來源：
                             <a

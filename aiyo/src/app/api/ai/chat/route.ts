@@ -1,27 +1,38 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
 import { OllamaRequestError } from "@/server/ai/ollamaClient";
+import { completeChatProgress, ensureChatProgressSession } from "@/server/chat/chatProgressStore";
 import { addMemories, formatMemoryContext, searchMemories } from "@/server/memory/mem0Client";
 import { requireSessionUser } from "@/server/auth";
 import { resolveSessionTrip, saveChatMessage } from "@/server/data/appStateService";
 import { chatWithTravelAssistant } from "@/server/services/travelPlannerService";
-import type { ChatContext, ChatMessage } from "@/types";
+import type { ChatContext, ChatMessage, ChatQuestionAnswer, TripProfile } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(request: Request) {
+async function handleChatPost(request: Request) {
+  let progressSessionId: string | undefined;
   try {
     const body = (await request.json()) as {
       message?: string;
       messages?: ChatMessage[];
       context?: ChatContext;
+      structuredTravelPlanning?: boolean;
+      tripProfile?: TripProfile;
+      questionAnswers?: ChatQuestionAnswer[];
+      progressSessionId?: string;
     };
 
     if (!body.message?.trim()) {
       return NextResponse.json(createError("invalid_request", "訊息內容不能為空。"), {
         status: 400,
       });
+    }
+
+    progressSessionId = body.progressSessionId?.trim() || undefined;
+    if (progressSessionId) {
+      ensureChatProgressSession(progressSessionId);
     }
 
     let persistedUserId: string | null = null;
@@ -47,6 +58,10 @@ export async function POST(request: Request) {
       message: body.message.trim(),
       messages: body.messages,
       context: body.context,
+      structuredTravelPlanning: body.structuredTravelPlanning,
+      tripProfile: body.tripProfile,
+      questionAnswers: body.questionAnswers,
+      progressSessionId,
       memoryContext,
     });
 
@@ -79,8 +94,15 @@ export async function POST(request: Request) {
       }
     }
 
+    if (progressSessionId) {
+      completeChatProgress(progressSessionId);
+    }
+
     return NextResponse.json(createSuccess(response));
   } catch (error) {
+    if (progressSessionId) {
+      completeChatProgress(progressSessionId);
+    }
     if (error instanceof OllamaRequestError) {
       return NextResponse.json(
         createError("ollama_error", `Ollama 回應失敗：${error.message}`, error.details),
@@ -93,4 +115,8 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
+}
+
+export async function POST(request: Request) {
+  return handleChatPost(request);
 }

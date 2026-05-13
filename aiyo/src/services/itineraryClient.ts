@@ -137,6 +137,7 @@ export function createNewTrip() {
       },
     ],
     pins: [],
+    updatedAt: new Date().toISOString(),
   };
   return apiPut<PersistedTripPayload, PersistedTripPayload>("/api/trips/current", payload);
 }
