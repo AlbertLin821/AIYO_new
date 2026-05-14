@@ -5,7 +5,9 @@ import { motion } from "framer-motion";
 import { AlertCircle, Layers, MapPin, Navigation, RefreshCcw, ZoomIn, ZoomOut } from "lucide-react";
 import type {
   GoogleInfoWindowInstance,
+  GoogleMapLayerInstance,
   GoogleMapInstance,
+  GoogleMapTypeId,
   GoogleMapsApi,
   GoogleMarkerInstance,
   GooglePolylineInstance,
@@ -15,6 +17,8 @@ import {
   loadGoogleMapsApi,
 } from "@/services/googleMapsLoader";
 import { fetchItineraryRoutePaths } from "@/lib/fetchItineraryDirections";
+import { logFrontendDebugEvent } from "@/lib/frontendDebug";
+import { cn } from "@/lib/utils";
 import { inferMapsRegionCode } from "@/lib/tripTransportRegion";
 import { buildItineraryRouteSegments, type ItineraryRouteSegment } from "@/lib/routeSegments";
 import { useMapStore } from "@/stores/useMapStore";
@@ -36,6 +40,21 @@ const GOOGLE_MAPS_MAP_ID = (process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || "").tr
 /** 無任何標記時：地圖預設對準台灣本島（略放大、視覺置中）。 */
 const DEFAULT_MAP_TW_CENTER = { lat: 23.62, lng: 121.0 };
 const DEFAULT_MAP_TW_ZOOM = 8;
+
+const MAP_TYPE_OPTIONS: Array<{ value: GoogleMapTypeId; label: string }> = [
+  { value: "roadmap", label: t.map.mapTypeRoadmap },
+  { value: "satellite", label: t.map.mapTypeSatellite },
+  { value: "hybrid", label: t.map.mapTypeHybrid },
+  { value: "terrain", label: t.map.mapTypeTerrain },
+];
+
+type MapOverlayLayer = "traffic" | "transit" | "bicycling";
+
+const MAP_LAYER_OPTIONS: Array<{ value: MapOverlayLayer; label: string }> = [
+  { value: "traffic", label: t.map.layerTraffic },
+  { value: "transit", label: t.map.layerTransit },
+  { value: "bicycling", label: t.map.layerBicycling },
+];
 
 /** Mock 地圖無標記時的示意範圍（約略台灣區域）。 */
 const MOCK_TW_LAT_RANGE = { min: 21.95, max: 25.35 };
@@ -136,6 +155,55 @@ function buildLocationBackfilledPin(
     confidence: pin.confidence ?? location.confidence,
     verified: pin.verified ?? location.verified,
   };
+}
+
+function needsPlaceDetails(pin: MapPinType, linkedItem?: { location?: LocationReference }): boolean {
+  const hasImage = Boolean(pin.thumbnail || pin.photoUrl || linkedItem?.location?.thumbnail || linkedItem?.location?.photoUrl);
+  const hasOpeningHours = Boolean(pin.openingHours || linkedItem?.location?.openingHours);
+  const hasPhone = Boolean(pin.phoneNumber || linkedItem?.location?.phoneNumber);
+  return !hasImage || !hasOpeningHours || !hasPhone;
+}
+
+function mergePinDetails(pin: MapPinType, patch: Partial<MapPinType>): MapPinType {
+  return {
+    ...pin,
+    address: pin.address || patch.address,
+    placeId: pin.placeId || patch.placeId,
+    photoUrl: pin.photoUrl || patch.photoUrl,
+    thumbnail: pin.thumbnail || patch.thumbnail || patch.photoUrl,
+    openingHours: pin.openingHours || patch.openingHours,
+    phoneNumber: pin.phoneNumber || patch.phoneNumber,
+    website: pin.website || patch.website,
+    googleMapsUrl: pin.googleMapsUrl || patch.googleMapsUrl,
+    rating: pin.rating ?? patch.rating,
+    userRatingsTotal: pin.userRatingsTotal ?? patch.userRatingsTotal,
+    verified: pin.verified ?? patch.verified,
+  };
+}
+
+function mergeLocationDetails(location: LocationReference, patch: Partial<LocationReference>): LocationReference {
+  return {
+    ...location,
+    address: location.address || patch.address,
+    placeId: location.placeId || patch.placeId,
+    photoUrl: location.photoUrl || patch.photoUrl,
+    thumbnail: location.thumbnail || patch.thumbnail || patch.photoUrl,
+    openingHours: location.openingHours || patch.openingHours,
+    phoneNumber: location.phoneNumber || patch.phoneNumber,
+    website: location.website || patch.website,
+    googleMapsUrl: location.googleMapsUrl || patch.googleMapsUrl,
+    rating: location.rating ?? patch.rating,
+    userRatingsTotal: location.userRatingsTotal ?? patch.userRatingsTotal,
+    verified: location.verified ?? patch.verified,
+  };
+}
+
+function detailsRequestKey(pin: MapPinType, linkedItem?: { location?: LocationReference }): string {
+  const placeId = pin.placeId || linkedItem?.location?.placeId;
+  if (placeId) {
+    return `place:${placeId}`;
+  }
+  return `name:${pin.name.trim().toLowerCase()}:${pin.lat.toFixed(5)}:${pin.lng.toFixed(5)}`;
 }
 
 function findLinkedItineraryItem(
@@ -253,6 +321,25 @@ function buildPinInfoContent(
             </div>`
           : ""
       }
+    </article>
+  `;
+}
+
+function buildRouteSegmentInfoContent(segment: ItineraryRouteSegment, displayMinutes: number): string {
+  return `
+    <article style="min-width:240px;max-width:320px;padding:10px 8px;font-family:inherit;color:#1f2937;">
+      <div style="font-size:11px;font-weight:700;color:#426991;letter-spacing:.04em;">${escapeHtml(t.map.relatedRoutes)}</div>
+      <h3 style="margin:6px 0 0;font-size:15px;line-height:1.35;font-weight:700;color:#111827;">D${escapeHtml(segment.dayNumber)} ${escapeHtml(segment.fromName)} → ${escapeHtml(segment.toName)}</h3>
+      <dl style="display:grid;grid-template-columns:64px 1fr;gap:6px 8px;margin:10px 0 0;font-size:12px;line-height:1.45;">
+        <dt style="color:#6b7280;">時間</dt>
+        <dd style="margin:0;color:#1f2937;">${escapeHtml(segment.fromTime)} → ${escapeHtml(segment.toTime)}</dd>
+        <dt style="color:#6b7280;">交通</dt>
+        <dd style="margin:0;color:#1f2937;">${escapeHtml(segment.transport)}</dd>
+        <dt style="color:#6b7280;">距離</dt>
+        <dd style="margin:0;color:#1f2937;">${escapeHtml(formatDistanceKm(segment.distanceKm))}</dd>
+        <dt style="color:#6b7280;">時間</dt>
+        <dd style="margin:0;color:#1f2937;">${escapeHtml(formatRouteMinutes(displayMinutes))}</dd>
+      </dl>
     </article>
   `;
 }
@@ -419,7 +506,13 @@ export default function MapView() {
   const useAdvancedMarkers = Boolean(runtimeMapsConfig.googleMapsMapId);
   const [sdkState, setSdkState] = useState<SdkState>(() => (useGoogleSdk ? "loading" : "error"));
   const [mockZoom, setMockZoom] = useState(1);
-  const [mapType, setMapType] = useState<"roadmap" | "satellite">("roadmap");
+  const [mapType, setMapType] = useState<GoogleMapTypeId>("roadmap");
+  const [enabledLayers, setEnabledLayers] = useState<Record<MapOverlayLayer, boolean>>({
+    traffic: false,
+    transit: false,
+    bicycling: false,
+  });
+  const [mapControlsOpen, setMapControlsOpen] = useState(false);
   const [providerError, setProviderError] = useState<string | null>(null);
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<GoogleMapInstance | null>(null);
@@ -427,6 +520,12 @@ export default function MapView() {
   const markersRef = useRef<Map<string, GoogleMarkerInstance>>(new Map());
   const polylinesRef = useRef<GooglePolylineInstance[]>([]);
   const routeLabelMarkersRef = useRef<GoogleMarkerInstance[]>([]);
+  const overlayLayersRef = useRef<Record<MapOverlayLayer, GoogleMapLayerInstance | null>>({
+    traffic: null,
+    transit: null,
+    bicycling: null,
+  });
+  const requestedPlaceDetailsRef = useRef<Set<string>>(new Set());
 
   const selectedPin = useMemo(
     () => pins.find((pin) => pin.id === selectedPinId) || null,
@@ -541,6 +640,36 @@ export default function MapView() {
   }, [pushToast, useGoogleSdk]);
 
   useEffect(() => {
+    if (sdkState !== "ready" || !mapInstanceRef.current) {
+      return;
+    }
+    mapInstanceRef.current.setMapTypeId(mapType);
+  }, [mapType, sdkState]);
+
+  useEffect(() => {
+    const maps = window.google?.maps;
+    const map = mapInstanceRef.current;
+    if (sdkState !== "ready" || !maps || !map) {
+      return;
+    }
+
+    const layers = overlayLayersRef.current;
+    layers.traffic ??= new maps.TrafficLayer();
+    layers.transit ??= new maps.TransitLayer();
+    layers.bicycling ??= new maps.BicyclingLayer();
+
+    layers.traffic?.setMap(enabledLayers.traffic ? map : null);
+    layers.transit?.setMap(enabledLayers.transit ? map : null);
+    layers.bicycling?.setMap(enabledLayers.bicycling ? map : null);
+
+    return () => {
+      layers.traffic?.setMap(null);
+      layers.transit?.setMap(null);
+      layers.bicycling?.setMap(null);
+    };
+  }, [enabledLayers, sdkState]);
+
+  useEffect(() => {
     if (!useGoogleSdk || sdkState !== "ready" || !mapInstanceRef.current || !mapElementRef.current) {
       return;
     }
@@ -577,6 +706,119 @@ export default function MapView() {
   }, [sdkState, useGoogleSdk]);
 
   useEffect(() => {
+    if (sdkState !== "ready") {
+      return;
+    }
+
+    const candidates = pins
+      .map((pin) => ({ pin, linkedItem: findLinkedItineraryItem(itinerary, pin) }))
+      .filter(({ pin, linkedItem }) => needsPlaceDetails(pin, linkedItem))
+      .map(({ pin, linkedItem }) => ({
+        pinId: pin.id,
+        key: detailsRequestKey(pin, linkedItem),
+        name: pin.name || linkedItem?.location?.name || "",
+        placeId: pin.placeId || linkedItem?.location?.placeId || undefined,
+        lat: pin.lat,
+        lng: pin.lng,
+        address: pin.address || linkedItem?.location?.address,
+        linkedItemId: linkedItem?.id,
+        linkedItemDay: linkedItem?.dayNumber,
+      }))
+      .filter((entry) => entry.name && !requestedPlaceDetailsRef.current.has(entry.key))
+      .slice(0, 6);
+
+    if (candidates.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    candidates.forEach((candidate) => requestedPlaceDetailsRef.current.add(candidate.key));
+    logFrontendDebugEvent("map", "place-details-request", {
+      count: candidates.length,
+      names: candidates.map((candidate) => candidate.name),
+      withPlaceId: candidates.filter((candidate) => candidate.placeId).length,
+    });
+
+    void fetch("/api/map/place-details", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        region: tripDestination,
+        places: candidates.map((candidate) => ({
+          id: candidate.pinId,
+          name: candidate.name,
+          placeId: candidate.placeId,
+          lat: candidate.lat,
+          lng: candidate.lng,
+          address: candidate.address,
+        })),
+      }),
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (cancelled || !payload?.success || !Array.isArray(payload.data?.results)) {
+          logFrontendDebugEvent("map", "place-details-empty", {
+            ok: Boolean(payload?.success),
+          });
+          return;
+        }
+        const patches = new Map<string, Partial<MapPinType>>();
+        payload.data.results.forEach((row: { id?: string; details?: Partial<MapPinType> }) => {
+          if (!row.id || !row.details) {
+            return;
+          }
+          if (Object.values(row.details).some((value) => value !== undefined && value !== "")) {
+            patches.set(row.id, row.details);
+          }
+        });
+        if (patches.size === 0) {
+          logFrontendDebugEvent("map", "place-details-no-patches", {
+            requested: candidates.length,
+          });
+          return;
+        }
+
+        const currentPins = useMapStore.getState().pins;
+        const nextPins = currentPins.map((pin) => {
+          const patch = patches.get(pin.id);
+          return patch ? mergePinDetails(pin, patch) : pin;
+        });
+        useMapStore.getState().setPins(nextPins);
+
+        const trip = useTripStore.getState();
+        candidates.forEach((candidate) => {
+          const patch = patches.get(candidate.pinId);
+          if (!patch || !candidate.linkedItemId || !candidate.linkedItemDay) {
+            return;
+          }
+          const day = trip.itinerary.find((entry) => entry.dayNumber === candidate.linkedItemDay);
+          const item = day?.items.find((entry) => entry.id === candidate.linkedItemId);
+          if (!item?.location) {
+            return;
+          }
+          trip.updateItineraryItem(candidate.linkedItemDay, candidate.linkedItemId, {
+            location: mergeLocationDetails(item.location, patch),
+          });
+        });
+
+        logFrontendDebugEvent("map", "place-details-applied", {
+          requested: candidates.length,
+          patched: patches.size,
+          names: candidates.filter((candidate) => patches.has(candidate.pinId)).map((candidate) => candidate.name),
+        });
+      })
+      .catch((error) => {
+        logFrontendDebugEvent("map", "place-details-failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [itinerary, pins, sdkState, tripDestination]);
+
+  useEffect(() => {
     const maps = window.google?.maps;
     if (sdkState !== "ready" || !mapInstanceRef.current || !maps) {
       return;
@@ -588,14 +830,17 @@ export default function MapView() {
 
     markersRef.current.forEach((marker) => marker.setMap(null));
     markersRef.current.clear();
-    polylinesRef.current.forEach((polyline) => polyline.setMap(null));
-    polylinesRef.current = [];
-    routeLabelMarkersRef.current.forEach((marker) => marker.setMap(null));
-    routeLabelMarkersRef.current = [];
 
     const map = mapInstanceRef.current;
+    const clearRouteOverlays = () => {
+      polylinesRef.current.forEach((polyline) => polyline.setMap(null));
+      polylinesRef.current = [];
+      routeLabelMarkersRef.current.forEach((marker) => marker.setMap(null));
+      routeLabelMarkersRef.current = [];
+    };
 
     if (pins.length === 0) {
+      clearRouteOverlays();
       useMapStore.getState().setItinerarySegmentDurations({});
       map.setCenter(DEFAULT_MAP_TW_CENTER);
       map.setZoom(DEFAULT_MAP_TW_ZOOM);
@@ -616,9 +861,7 @@ export default function MapView() {
       if (!marker) {
         return;
       }
-      const linkedItem = itinerary
-        .flatMap((day) => day.items)
-        .find((item) => item.id === pin.linkedTripItemId);
+      const linkedItem = findLinkedItineraryItem(itinerary, pin);
       map.panTo({ lat: pin.lat, lng: pin.lng });
       infoWindowRef.current.setContent(buildPinInfoContent(pin, linkedItem));
       infoWindowRef.current.open({ map, anchor: marker });
@@ -636,15 +879,32 @@ export default function MapView() {
     function scheduleDirectionsOverlay() {
       clearTimeout(directionsTimer);
       if (routeSegments.length === 0) {
+        clearRouteOverlays();
         useMapStore.getState().setItinerarySegmentDurations({});
+        logFrontendDebugEvent("map", "routes-empty", {
+          pins: pins.length,
+          itineraryDays: itinerary.length,
+        });
         return;
       }
+      logFrontendDebugEvent("map", "routes-scheduled", {
+        segments: routeSegments.length,
+        pins: pins.length,
+      });
       directionsTimer = window.setTimeout(() => {
         void (async () => {
-          const resolved = await fetchItineraryRoutePaths(mapsApi, routeSegments, {
-            cancelled: () => cancelled,
-            region: inferMapsRegionCode(tripDestination),
-          });
+          let resolved: Awaited<ReturnType<typeof fetchItineraryRoutePaths>>;
+          try {
+            resolved = await fetchItineraryRoutePaths(mapsApi, routeSegments, {
+              cancelled: () => cancelled,
+              region: inferMapsRegionCode(tripDestination),
+            });
+          } catch {
+            logFrontendDebugEvent("map", "routes-fetch-threw", {
+              segments: routeSegments.length,
+            });
+            return;
+          }
           if (cancelled || !mapInstanceRef.current) {
             return;
           }
@@ -655,6 +915,7 @@ export default function MapView() {
           });
 
           const nextMinutes: Record<string, number> = {};
+          clearRouteOverlays();
           resolved.forEach((entry) => {
             const { segment, path, usedDirections, durationSeconds } = entry;
             const displayMinutes = segmentRouteDisplayMinutes(segment, durationSeconds, usedDirections);
@@ -667,6 +928,7 @@ export default function MapView() {
               strokeOpacity: usedDirections ? 0.92 : 0.72,
               strokeWeight: usedDirections ? 5 : 4,
               geodesic: !usedDirections,
+              zIndex: 950,
             });
             polylinesRef.current.push(polyline);
             path.forEach((p) => routeBounds.extend(p));
@@ -675,7 +937,9 @@ export default function MapView() {
             const labelMarker = new mapsApi.Marker({
               map,
               position: mid,
-              clickable: false,
+              clickable: true,
+              title: `${segment.fromName} → ${segment.toName}`,
+              zIndex: 980,
               icon: {
                 path: mapsApi.SymbolPath.CIRCLE,
                 scale: 0,
@@ -689,10 +953,32 @@ export default function MapView() {
                 fontWeight: "700",
               },
             });
+            labelMarker.addListener("click", () => {
+              if (!infoWindowRef.current) {
+                return;
+              }
+              infoWindowRef.current.setContent(buildRouteSegmentInfoContent(segment, displayMinutes));
+              infoWindowRef.current.open({ map, anchor: labelMarker });
+            });
+            polyline.addListener?.("click", () => {
+              if (!infoWindowRef.current) {
+                return;
+              }
+              infoWindowRef.current.setContent(buildRouteSegmentInfoContent(segment, displayMinutes));
+              infoWindowRef.current.open({ map, anchor: labelMarker });
+              map.panTo(mid);
+            });
             routeLabelMarkersRef.current.push(labelMarker);
           });
 
           useMapStore.getState().setItinerarySegmentDurations(nextMinutes);
+          logFrontendDebugEvent("map", "routes-drawn", {
+            requested: routeSegments.length,
+            resolved: resolved.length,
+            directions: resolved.filter((entry) => entry.usedDirections).length,
+            fallback: resolved.filter((entry) => !entry.usedDirections).length,
+            polylines: polylinesRef.current.length,
+          });
 
           if (resolved.some((entry) => entry.usedDirections)) {
             map.fitBounds(routeBounds, 72);
@@ -799,6 +1085,18 @@ export default function MapView() {
     useAdvancedMarkers,
   ]);
 
+  useEffect(
+    () => () => {
+      markersRef.current.forEach((marker) => marker.setMap(null));
+      markersRef.current.clear();
+      polylinesRef.current.forEach((polyline) => polyline.setMap(null));
+      polylinesRef.current = [];
+      routeLabelMarkersRef.current.forEach((marker) => marker.setMap(null));
+      routeLabelMarkersRef.current = [];
+    },
+    [],
+  );
+
   function changeMockZoom(delta: number) {
     setMockZoom((z) =>
       Math.min(2.3, Math.max(0.5, Math.round((z + delta) * 1000) / 1000)),
@@ -825,13 +1123,18 @@ export default function MapView() {
     mapInstanceRef.current.setZoom(14);
   }
 
-  function toggleMapType() {
-    if (sdkState !== "ready" || !mapInstanceRef.current) {
-      return;
-    }
-    const nextType = mapType === "roadmap" ? "satellite" : "roadmap";
+  function setMapDisplayType(nextType: GoogleMapTypeId) {
     setMapType(nextType);
-    mapInstanceRef.current.setMapTypeId(nextType);
+    if (sdkState === "ready" && mapInstanceRef.current) {
+      mapInstanceRef.current.setMapTypeId(nextType);
+    }
+  }
+
+  function toggleOverlayLayer(layer: MapOverlayLayer) {
+    setEnabledLayers((current) => ({
+      ...current,
+      [layer]: !current[layer],
+    }));
   }
 
   const highlightedItem = findLinkedItineraryItem(itinerary, selectedPin);
@@ -906,9 +1209,14 @@ export default function MapView() {
         </button>
         <button
           type="button"
-          onClick={toggleMapType}
-          disabled={!mapReady}
-          className="flex size-9 cursor-pointer items-center justify-center rounded-xl border border-border bg-surface text-muted shadow-soft transition-colors hover:border-primary/30 hover:bg-surface-elevated hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+          onClick={() => setMapControlsOpen((open) => !open)}
+          aria-label={t.map.mapControls}
+          aria-expanded={mapControlsOpen}
+          disabled={showRealMap && !mapReady}
+          className={cn(
+            "flex size-9 cursor-pointer items-center justify-center rounded-xl border border-border bg-surface text-muted shadow-soft transition-colors hover:border-primary/30 hover:bg-surface-elevated hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45",
+            mapControlsOpen && "border-primary/35 bg-primary/10 text-primary",
+          )}
         >
           <Layers className="size-4" />
         </button>
@@ -921,6 +1229,80 @@ export default function MapView() {
           <Navigation className="size-4" />
         </button>
       </div>
+
+      {mapControlsOpen && (
+        <div className="absolute right-16 top-[7.25rem] z-[12] w-64 rounded-2xl border border-border-light bg-surface/95 p-3 text-xs shadow-soft-lg backdrop-blur-md sm:top-[6.75rem]">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-foreground">{t.map.mapControls}</p>
+              <p className="mt-0.5 text-[11px] text-muted">{t.map.mapControlsHint}</p>
+            </div>
+            {!mapReady && showRealMap && (
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
+                {t.map.loadingLabel}
+              </span>
+            )}
+          </div>
+
+          <div className="mt-3">
+            <p className="mb-2 font-semibold text-muted">{t.map.mapDisplayType}</p>
+            <div className="grid grid-cols-2 gap-2">
+              {MAP_TYPE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setMapDisplayType(option.value)}
+                  disabled={showRealMap && !mapReady}
+                  className={cn(
+                    "rounded-xl border px-2.5 py-2 font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+                    mapType === option.value
+                      ? "border-primary bg-primary text-white"
+                      : "border-border-light bg-white text-foreground hover:border-primary/30 hover:bg-primary/5",
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <p className="mb-2 font-semibold text-muted">{t.map.mapOverlayLayers}</p>
+            <div className="flex flex-col gap-2">
+              {MAP_LAYER_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => toggleOverlayLayer(option.value)}
+                  disabled={!mapReady}
+                  className={cn(
+                    "flex items-center justify-between rounded-xl border px-3 py-2 font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+                    enabledLayers[option.value]
+                      ? "border-secondary/40 bg-secondary/15 text-foreground"
+                      : "border-border-light bg-white text-foreground hover:border-primary/30 hover:bg-primary/5",
+                  )}
+                >
+                  <span>{option.label}</span>
+                  <span
+                    className={cn(
+                      "h-5 w-9 rounded-full p-0.5 transition-colors",
+                      enabledLayers[option.value] ? "bg-primary" : "bg-border",
+                    )}
+                    aria-hidden
+                  >
+                    <span
+                      className={cn(
+                        "block size-4 rounded-full bg-white shadow-sm transition-transform",
+                        enabledLayers[option.value] && "translate-x-4",
+                      )}
+                    />
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {providerError && sdkState === "error" && useGoogleSdk && (
         <div className="absolute left-4 top-32 z-[11] flex w-80 max-w-[calc(100%-2rem)] items-start gap-3 rounded-2xl border-2 border-danger/25 bg-peach-light/90 px-4 py-3 text-sm text-foreground shadow-soft-lg">

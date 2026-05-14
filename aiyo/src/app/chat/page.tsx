@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import PastelRainbowBackground from "@/components/effects/PastelRainbowBackground";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -9,6 +10,7 @@ import { motion } from "framer-motion";
 import {
   CalendarDays,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   DollarSign,
@@ -40,6 +42,7 @@ import {
 } from "@/lib/frontendDebug";
 import { cn } from "@/lib/utils";
 import { reviseTripPlan, sendChatMessage } from "@/services/aiClient";
+import { createNewTrip, listTripsForLibrary, setActiveTrip } from "@/services/itineraryClient";
 import { syncService } from "@/services/syncService";
 import { fetchVideoRecommendations, shouldSkipClientVideoSummarize, summarizeVideo } from "@/services/videoClient";
 import { useChatStore } from "@/stores/useChatStore";
@@ -47,6 +50,7 @@ import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
 import { useUserStore } from "@/stores/useUserStore";
 import { useVideoStore } from "@/stores/useVideoStore";
+import type { ItineraryListItem } from "@/lib/itinerary-sort";
 import type {
   AiProposedChange,
   ChatMessage,
@@ -58,12 +62,35 @@ import type {
   TripPlanItem,
   TripProfile,
   VideoRecommendation,
+  VideoSummaryResult,
 } from "@/types";
 
 const VideoSummaryDrawer = dynamic(
   () => import("@/components/home/VideoSummaryDrawer"),
   { ssr: false },
 );
+
+function buildVideoSummaryKey(input: {
+  videoId?: string;
+  destination?: string;
+  refresh?: boolean;
+}) {
+  return [
+    input.refresh ? "refresh" : "summary",
+    input.videoId?.trim() || "unknown-video",
+    input.destination?.trim() || "any-destination",
+  ].join(":");
+}
+
+function videoMatches(candidate: VideoRecommendation | null, source: VideoRecommendation) {
+  if (!candidate) {
+    return false;
+  }
+  if (candidate.id === source.id) {
+    return true;
+  }
+  return Boolean(candidate.videoId && source.videoId && candidate.videoId === source.videoId);
+}
 
 function buildUserMessage(content: string): ChatMessage {
   return {
@@ -77,11 +104,45 @@ function buildUserMessage(content: string): ChatMessage {
   };
 }
 
+function buildAssistantLocalMessage(content: string): ChatMessage {
+  return {
+    id: `chat_assistant_local_${Date.now()}`,
+    role: "assistant",
+    content,
+    timestamp: new Date().toLocaleTimeString("zh-TW", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+    responseType: "text_message",
+  };
+}
+
+function formatTripUpdatedDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleDateString("zh-TW", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
 function shouldRecommendVideos(message: string): boolean {
   return /影片|youtube|YouTube|video|vlog|推薦.*看|找.*看|旅遊.*看|景點.*影片/i.test(message);
 }
 
-function buildItineraryItemFromAiChange(change: AiProposedChange): TripPlanItem {
+function isItineraryMutationCommand(message: string): boolean {
+  return /新增|加入|加上|刪除|移除|修改|調整|改成|換成|改到|提前|延後|移到|重排|重新規劃|幫我(?:安排|規劃|新增|加入|調整|修改|刪除|移除)|請(?:安排|規劃|新增|加入|調整|修改|刪除|移除)/u.test(message);
+}
+
+type AddItineraryChange = Extract<AiProposedChange, { type: "add_itinerary_item" }>;
+type ExistingItemChange = Extract<
+  AiProposedChange,
+  { type: "update_itinerary_item" | "remove_itinerary_item" }
+>;
+
+function buildItineraryItemFromAiChange(change: AddItineraryChange): TripPlanItem {
   const title = change.title.trim() || change.locationName?.trim() || "AI 建議行程";
   return {
     id: `ai_chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -95,7 +156,53 @@ function buildItineraryItemFromAiChange(change: AiProposedChange): TripPlanItem 
   };
 }
 
+function compactItineraryText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/臺/g, "台")
+    .replace(/[^\p{Letter}\p{Number}]+/gu, "")
+    .trim();
+}
+
+function findItineraryItemTarget(change: ExistingItemChange) {
+  const itinerary = useTripStore.getState().itinerary;
+  const scopedDays = change.day
+    ? itinerary.filter((day) => day.dayNumber === change.day)
+    : itinerary;
+  if (change.itemId) {
+    for (const day of scopedDays) {
+      const item = day.items.find((candidate) => candidate.id === change.itemId);
+      if (item) {
+        return { dayNumber: day.dayNumber, item };
+      }
+    }
+  }
+
+  const targetTitle = compactItineraryText(change.targetTitle || "");
+  if (!targetTitle) {
+    return null;
+  }
+  for (const day of scopedDays) {
+    const item = day.items.find((candidate) => {
+      const title = compactItineraryText(candidate.title);
+      const location = compactItineraryText(candidate.location?.name || "");
+      return title.includes(targetTitle) || targetTitle.includes(title) || Boolean(location && (location.includes(targetTitle) || targetTitle.includes(location)));
+    });
+    if (item) {
+      return { dayNumber: day.dayNumber, item };
+    }
+  }
+  return null;
+}
+
 const CHAT_HISTORY_SIDEBAR_KEY = "aiyo:chat-history-sidebar-expanded";
+const CHAT_CONTEXT_PANEL_WIDTH_KEY = "aiyo:chat-context-panel-width";
+const CHAT_CONTEXT_PANEL_MIN_WIDTH = 240;
+const CHAT_CONTEXT_PANEL_MAX_WIDTH = 520;
+
+function clampContextPanelWidth(width: number): number {
+  return Math.min(CHAT_CONTEXT_PANEL_MAX_WIDTH, Math.max(CHAT_CONTEXT_PANEL_MIN_WIDTH, Math.round(width)));
+}
 
 function formatQuestionAnswerSummary(card: QuestionCardPayload, answers: ChatQuestionAnswer[]): string {
   const lines = answers.map((answer) => {
@@ -112,7 +219,21 @@ function formatQuestionAnswerSummary(card: QuestionCardPayload, answers: ChatQue
     const labels = values.map((value) => question?.options?.find((option) => option.value === value)?.label || value);
     return `${question?.question || answer.slot}：${labels.join("、") || "未填寫"}`;
   });
-  return `已回答行程需求：\n${lines.join("\n")}`;
+  return `已收到你的需求：\n${lines.map((line) => `- ${line}`).join("\n")}`;
+}
+
+function addInclusiveTripDays(startDate: string, days: number): string {
+  const parsed = new Date(`${startDate}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return startDate;
+  }
+  parsed.setDate(parsed.getDate() + Math.max(1, days) - 1);
+  return parsed.toISOString().slice(0, 10);
+}
+
+function readPositiveNumber(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : undefined;
 }
 
 function StatusStepList({ steps }: { steps: StatusStepPayload[] }) {
@@ -186,9 +307,11 @@ function QuestionCard({
   card,
   disabled,
   onSubmit,
+  tripDays,
 }: {
   card: QuestionCardPayload;
   disabled?: boolean;
+  tripDays?: number;
   onSubmit: (answers: ChatQuestionAnswer[], displayMessage: string) => void;
 }) {
   const [answers, setAnswers] = useState<Record<string, string | string[] | { start?: string; end?: string }>>({});
@@ -217,12 +340,17 @@ function QuestionCard({
       const current = typeof prev[question.slot] === "object" && !Array.isArray(prev[question.slot])
         ? (prev[question.slot] as { start?: string; end?: string })
         : {};
+      const next = {
+        ...current,
+        [key]: value,
+      };
+      const inferredDays = readPositiveNumber(prev.duration_days) || tripDays;
+      if (key === "start" && value && inferredDays && !current.end) {
+        next.end = addInclusiveTripDays(value, inferredDays);
+      }
       return {
         ...prev,
-        [question.slot]: {
-          ...current,
-          [key]: value,
-        },
+        [question.slot]: next,
       };
     });
   }
@@ -239,7 +367,7 @@ function QuestionCard({
         {card.questions.map((question) => (
           <div key={question.slot} className="space-y-2">
             <p className="text-sm font-medium text-foreground">{question.question}</p>
-            {question.type === "single_choice" || question.type === "budget" ? (
+            {question.type === "single_choice" ? (
               <div className="flex flex-wrap gap-2">
                 {(question.options || []).map((option) => {
                   const selected = answers[question.slot] === option.value;
@@ -260,6 +388,43 @@ function QuestionCard({
                     </button>
                   );
                 })}
+              </div>
+            ) : question.type === "budget" ? (
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-2">
+                  {(question.options || []).map((option) => {
+                    const selected = answers[question.slot] === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => setSingle(question, option.value)}
+                        className={cn(
+                          "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                          selected
+                            ? "border-primary bg-primary text-white"
+                            : "border-border-light bg-white text-foreground hover:bg-primary/5",
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <input
+                  type="text"
+                  disabled={disabled}
+                  value={
+                    typeof answers[question.slot] === "string" &&
+                    !(question.options || []).some((option) => option.value === answers[question.slot])
+                      ? (answers[question.slot] as string)
+                      : ""
+                  }
+                  onChange={(event) => setSingle(question, event.target.value)}
+                  placeholder={question.placeholder || "自訂預算，例如：每人 25000，或總預算 80000"}
+                  className="w-full rounded-xl border border-border-light bg-white px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
+                />
               </div>
             ) : question.type === "multi_choice" ? (
               <div className="flex flex-wrap gap-2">
@@ -551,8 +716,19 @@ export default function ChatPage() {
   const [historySidebarExpanded, setHistorySidebarExpanded] = useState(true);
   const [tripProfile, setTripProfile] = useState<TripProfile | null>(null);
   const [streamingStatusSteps, setStreamingStatusSteps] = useState<StatusStepPayload[]>([]);
+  const [tripPickerOpen, setTripPickerOpen] = useState(false);
+  const [tripPickerTrips, setTripPickerTrips] = useState<ItineraryListItem[]>([]);
+  const [tripPickerLoading, setTripPickerLoading] = useState(false);
+  const [tripPickerError, setTripPickerError] = useState<string | null>(null);
+  const [tripPickerAction, setTripPickerAction] = useState<"new" | string | null>(null);
+  const [expandedContextDays, setExpandedContextDays] = useState<Record<number, boolean>>({});
+  const [contextPanelWidth, setContextPanelWidth] = useState(288);
+  const [autoSummaryProgress, setAutoSummaryProgress] = useState<{ current: number; total: number } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const statusStreamRef = useRef<EventSource | null>(null);
+  const videoSummaryQueueTokenRef = useRef(0);
+  const videoSummaryInflightRef = useRef(new Map<string, Promise<VideoSummaryResult>>());
+  const autoSummaryActiveRef = useRef(false);
   const {
     conversations,
     activeConversationId,
@@ -576,7 +752,6 @@ export default function ChatPage() {
     { icon: MapPin, label: t.chat.tagDestination },
     { icon: CalendarDays, label: t.chat.tagDays },
     { icon: DollarSign, label: t.chat.tagBudget },
-    { icon: Heart, label: t.chat.tagItinerary },
   ];
 
   useEffect(() => {
@@ -595,6 +770,17 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(CHAT_CONTEXT_PANEL_WIDTH_KEY);
+      if (raw) {
+        setContextPanelWidth(clampContextPanelWidth(Number(raw)));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
     if (status === "unauthenticated") {
       router.replace(`/login?callbackUrl=${encodeURIComponent("/chat")}`);
     }
@@ -602,23 +788,55 @@ export default function ChatPage() {
 
   useEffect(() => () => {
     statusStreamRef.current?.close();
+    videoSummaryQueueTokenRef.current += 1;
+    videoSummaryInflightRef.current.clear();
   }, []);
+
+  useEffect(() => {
+    const firstDay = tripStore.itinerary[0]?.dayNumber;
+    if (!firstDay) {
+      setExpandedContextDays({});
+      return;
+    }
+    setExpandedContextDays((prev) => {
+      const next: Record<number, boolean> = {};
+      for (const day of tripStore.itinerary) {
+        next[day.dayNumber] = prev[day.dayNumber] ?? day.dayNumber === firstDay;
+      }
+      return next;
+    });
+  }, [tripStore.tripId, tripStore.itinerary]);
 
   const planningSnapshot = derivePlanningSnapshot({
     trip: tripStore,
     user: userStore,
   });
+  const contextDestination =
+    tripStore.destination.trim() ||
+    tripStore.title.trim() ||
+    (planningSnapshot.hasDestination ? planningSnapshot.destination : "");
+  const activeConversation = conversations.find(
+    (conversation) => conversation.id === activeConversationId,
+  );
+  const hasActiveItineraryContext = Boolean(
+    activeConversationId &&
+      activeConversation?.tripId &&
+      activeConversation.tripId === tripStore.tripId &&
+      tripStore.tripId,
+  );
+  const hasContextPanel =
+    hasActiveItineraryContext &&
+    (planningSnapshot.hasPlanningContext ||
+      Boolean(contextDestination) ||
+      tripStore.itinerary.length > 0);
 
   const extractedValues = [
-    planningSnapshot.hasDestination ? planningSnapshot.destination : t.chat.valueUnset,
-    planningSnapshot.hasPlannedDays
-      ? `${planningSnapshot.days} ${t.chat.daysUnit}`
+    contextDestination || t.chat.valueUnset,
+    tripStore.days > 0
+      ? `${tripStore.days} ${t.chat.daysUnit}`
       : t.chat.valueUnset,
-    planningSnapshot.hasBudget
-      ? `${t.chat.currencyPrefix}${planningSnapshot.budget.toLocaleString()}`
-      : t.chat.valueUnset,
-    planningSnapshot.hasItinerary
-      ? t.chat.plannedStops.replace("{n}", String(planningSnapshot.plannedStopCount))
+    tripStore.budget > 0 || planningSnapshot.hasBudget
+      ? `${t.chat.currencyPrefix}${(tripStore.budget || planningSnapshot.budget).toLocaleString()}`
       : t.chat.valueUnset,
   ];
   const isCitationList = (
@@ -631,6 +849,155 @@ export default function ChatPage() {
       window.localStorage.setItem(CHAT_HISTORY_SIDEBAR_KEY, String(next));
     } catch {
       /* ignore */
+    }
+  }
+
+  function toggleContextDay(dayNumber: number) {
+    setExpandedContextDays((prev) => ({
+      ...prev,
+      [dayNumber]: !(prev[dayNumber] ?? false),
+    }));
+  }
+
+  function stopAutoVideoSummaryQueue() {
+    videoSummaryQueueTokenRef.current += 1;
+    autoSummaryActiveRef.current = false;
+    setAutoSummaryProgress(null);
+    setIsLoadingVideos(false);
+    setIsSummarizing(false);
+  }
+
+  function startAutoVideoSummaryQueue(videos: VideoRecommendation[], destination: string) {
+    const hasPendingSummaries = videos
+      .slice(0, 6)
+      .some((video) => !shouldSkipClientVideoSummarize(video));
+    if (!hasPendingSummaries) {
+      return false;
+    }
+
+    const queueToken = videoSummaryQueueTokenRef.current + 1;
+    videoSummaryQueueTokenRef.current = queueToken;
+    autoSummaryActiveRef.current = false;
+    setAutoSummaryProgress(null);
+    void processRecommendedVideoSummaries(videos, destination, queueToken);
+    return true;
+  }
+
+  function startContextPanelResize(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+
+    const startX = event.clientX;
+    const startWidth = contextPanelWidth;
+    let nextWidth = startWidth;
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      nextWidth = clampContextPanelWidth(startWidth + startX - moveEvent.clientX);
+      setContextPanelWidth(nextWidth);
+    };
+
+    const handlePointerUp = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      try {
+        window.localStorage.setItem(CHAT_CONTEXT_PANEL_WIDTH_KEY, String(nextWidth));
+      } catch {
+        /* ignore */
+      }
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+  }
+
+  async function openNewConversationPicker() {
+    if (isSending || tripPickerLoading || tripPickerAction) {
+      return;
+    }
+    setTripPickerOpen(true);
+    setTripPickerError(null);
+    setTripPickerLoading(true);
+    try {
+      const rows = await listTripsForLibrary("recent");
+      setTripPickerTrips(rows);
+    } catch (error) {
+      setTripPickerError(error instanceof Error ? error.message : "無法載入行程清單。");
+    } finally {
+      setTripPickerLoading(false);
+    }
+  }
+
+  function finishNewConversationSetup(tripId: string, title?: string) {
+    createConversation(title, tripId);
+    setInput("");
+    setTripProfile(null);
+    setTripPickerOpen(false);
+    setTripPickerAction(null);
+  }
+
+  async function selectConversationForChat(conversationId: string) {
+    const conversation = conversations.find((item) => item.id === conversationId);
+    selectConversation(conversationId);
+    const tripId = conversation?.tripId;
+    if (!tripId || tripId === useTripStore.getState().tripId) {
+      return;
+    }
+    try {
+      const snapshot = await setActiveTrip(tripId);
+      syncService.applyTripSwitch(snapshot);
+      syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
+    } catch {
+      pushToast({
+        variant: "warning",
+        title: "無法切換對話行程",
+        description: "已切換對話，但目前仍使用原本的行程脈絡。",
+      });
+    }
+  }
+
+  async function startConversationWithTrip(tripId: string) {
+    if (tripPickerAction) {
+      return;
+    }
+    setTripPickerAction(tripId);
+    setTripPickerError(null);
+    try {
+      const selectedTrip = tripPickerTrips.find((trip) => trip.id === tripId);
+      if (tripId !== useTripStore.getState().tripId) {
+        const snapshot = await setActiveTrip(tripId);
+        syncService.applyTripSwitch(snapshot);
+        syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
+      }
+      finishNewConversationSetup(tripId, selectedTrip?.title);
+    } catch (error) {
+      setTripPickerError(error instanceof Error ? error.message : "無法切換行程。");
+      setTripPickerAction(null);
+    }
+  }
+
+  async function startConversationWithNewTrip() {
+    if (tripPickerAction) {
+      return;
+    }
+    setTripPickerAction("new");
+    setTripPickerError(null);
+    try {
+      const created = await createNewTrip();
+      const snapshot = await setActiveTrip(created.tripId);
+      syncService.applyTripSwitch(snapshot);
+      syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
+      finishNewConversationSetup(created.tripId);
+    } catch (error) {
+      setTripPickerError(error instanceof Error ? error.message : "無法建立新行程。");
+      setTripPickerAction(null);
     }
   }
 
@@ -682,6 +1049,7 @@ export default function ChatPage() {
     rawInput?: string,
     options?: {
       displayMessage?: string;
+      displayAsAssistant?: boolean;
       questionAnswers?: ChatQuestionAnswer[];
       tripProfile?: TripProfile | null;
     },
@@ -690,6 +1058,8 @@ export default function ChatPage() {
     if (!message || isSending) {
       return;
     }
+
+    stopAutoVideoSummaryQueue();
 
     if (!options?.questionAnswers?.length) {
       applyPlanningUpdateToStores(extractPlanningUpdateFromText(message));
@@ -702,7 +1072,12 @@ export default function ChatPage() {
     const dateRange = extractIsoDateRangeFromText(message);
 
     const previousMessages = useChatStore.getState().messages;
-    appendMessage(buildUserMessage(options?.displayMessage || message));
+    const displayMessage = options?.displayMessage || message;
+    appendMessage(
+      options?.displayAsAssistant
+        ? buildAssistantLocalMessage(displayMessage)
+        : buildUserMessage(displayMessage),
+    );
     setInput("");
     setErrorMessage(null);
     setIsSending(true);
@@ -743,14 +1118,30 @@ export default function ChatPage() {
       if (response.tripProfile) {
         setTripProfile(response.tripProfile);
       }
+      const shouldApplyItineraryUpdate =
+        Boolean(useTripStore.getState().tripId) &&
+        (isItineraryMutationCommand(message) || response.reply.responseType === "travel_plan");
+      if (shouldApplyItineraryUpdate) {
+        if (response.itinerarySuggestion) {
+          await applyGeneratedTripPlan(response);
+        } else if (response.proposedChanges?.length) {
+          await applyAiProposedChanges(response.proposedChanges, { navigate: false });
+        }
+      }
       updateFrontendDebugProcess(chatProcessId, "reply-received", {
         replyType: response.reply.responseType,
         replyId: response.reply.id,
       });
 
       if (shouldRecommendVideos(message)) {
+        const videoSummaryQueueToken = videoSummaryQueueTokenRef.current + 1;
+        videoSummaryQueueTokenRef.current = videoSummaryQueueToken;
+        autoSummaryActiveRef.current = false;
+        setAutoSummaryProgress(null);
         setIsLoadingVideos(true);
+        setIsSummarizing(false);
         setVideoError(null);
+        let autoSummaryStarted = false;
         try {
           updateFrontendDebugProcess(chatProcessId, "video-recommendation-start", {
             destination: planningSnapshot.destination,
@@ -763,11 +1154,22 @@ export default function ChatPage() {
             limit: 6,
           });
           setRecommendedVideos(outcome.videos);
+          autoSummaryStarted = outcome.videos
+            .slice(0, 6)
+            .some((video) => !shouldSkipClientVideoSummarize(video));
           updateFrontendDebugProcess(chatProcessId, "video-recommendation-complete", {
             resultCount: outcome.videos.length,
             source: outcome.source,
             titles: outcome.videos.slice(0, 6).map((video) => video.title),
+            autoSummaryStarted,
           });
+          if (autoSummaryStarted) {
+            void processRecommendedVideoSummaries(
+              outcome.videos,
+              planningSnapshot.destination,
+              videoSummaryQueueToken,
+            );
+          }
           if (outcome.source === "mock-fallback") {
             pushToast({
               variant: "warning",
@@ -788,8 +1190,12 @@ export default function ChatPage() {
             description,
           });
         } finally {
-          setIsLoadingVideos(false);
+          if (!autoSummaryStarted) {
+            setIsLoadingVideos(false);
+          }
         }
+      } else {
+        startAutoVideoSummaryQueue(recommendedVideos, planningSnapshot.destination);
       }
       finishFrontendDebugProcess(chatProcessId, {
         progressSessionId,
@@ -867,6 +1273,7 @@ export default function ChatPage() {
       if (response.tripProfile) {
         setTripProfile(response.tripProfile);
       }
+      await applyGeneratedTripPlan(response);
       finishFrontendDebugProcess(reviseProcessId, {
         progressSessionId,
         replyType: response.reply.responseType,
@@ -893,10 +1300,14 @@ export default function ChatPage() {
     }
   }
 
-  async function applyAiProposedChanges(changes: AiProposedChange[]) {
+  async function applyAiProposedChanges(
+    changes: AiProposedChange[],
+    options: { navigate?: boolean; silent?: boolean } = {},
+  ) {
     if (!changes.length) {
       return;
     }
+    let appliedCount = 0;
     const trip = useTripStore.getState();
     if (trip.itinerary.length === 0) {
       trip.addDay();
@@ -904,22 +1315,105 @@ export default function ChatPage() {
     const days = useTripStore.getState().itinerary;
     const maxDay = Math.max(1, ...days.map((day) => day.dayNumber));
     for (const change of changes) {
-      const targetDay = Math.max(1, Math.floor(Number(change.day) || 1));
-      while (!useTripStore.getState().itinerary.some((day) => day.dayNumber === targetDay)) {
-        useTripStore.getState().addDay();
-        if (useTripStore.getState().itinerary.length > Math.max(targetDay, maxDay + 3)) {
-          break;
+      if (change.type === "add_itinerary_item") {
+        const targetDay = Math.max(1, Math.floor(Number(change.day) || 1));
+        while (!useTripStore.getState().itinerary.some((day) => day.dayNumber === targetDay)) {
+          useTripStore.getState().addDay();
+          if (useTripStore.getState().itinerary.length > Math.max(targetDay, maxDay + 3)) {
+            break;
+          }
+        }
+        useTripStore.getState().addItineraryItem(
+          targetDay,
+          buildItineraryItemFromAiChange({ ...change, day: targetDay }),
+        );
+        appliedCount += 1;
+        continue;
+      }
+
+      const target = findItineraryItemTarget(change);
+      if (!target) {
+        continue;
+      }
+      if (change.type === "remove_itinerary_item") {
+        useTripStore.getState().removeItineraryItem(target.dayNumber, target.item.id);
+        appliedCount += 1;
+        continue;
+      }
+
+      const patch: Partial<TripPlanItem> = {};
+      if (change.time) {
+        patch.time = change.time;
+      }
+      if (change.title) {
+        patch.title = change.title;
+      }
+      if (change.notes !== undefined) {
+        patch.notes = change.notes;
+      }
+      if (change.transport !== undefined) {
+        patch.transport = change.transport;
+      }
+      if (change.locationName) {
+        if (target.item.location) {
+          patch.location = {
+            ...target.item.location,
+            name: change.locationName,
+          };
+        } else if (!change.notes) {
+          patch.notes = [target.item.notes || "", `地點：${change.locationName}`].filter(Boolean).join("\n");
         }
       }
-      useTripStore.getState().addItineraryItem(targetDay, buildItineraryItemFromAiChange({ ...change, day: targetDay }));
+      if (Object.keys(patch).length > 0) {
+        useTripStore.getState().updateItineraryItem(target.dayNumber, target.item.id, patch);
+        appliedCount += 1;
+      }
     }
-    await syncService.flushTripSyncNow({ force: true });
-    pushToast({
-      variant: "success",
-      title: "已套用 AI 建議",
-      description: `已新增 ${changes.length} 筆行程候選。`,
+
+    if (appliedCount > 0) {
+      await syncService.flushTripSyncNow({ force: true });
+      if (!options.silent) {
+        pushToast({
+          variant: "success",
+          title: "已套用 AI 建議",
+          description: `已更新 ${appliedCount} 筆行程內容。`,
+        });
+      }
+      if (options.navigate ?? true) {
+        router.push("/itinerary");
+      }
+    } else if (!options.silent) {
+      pushToast({
+        variant: "warning",
+        title: "找不到可套用的行程項目",
+        description: "AI 回覆了修改建議，但目前行程中沒有找到對應項目。",
+      });
+    }
+  }
+
+  async function applyGeneratedTripPlan(
+    response: Awaited<ReturnType<typeof reviseTripPlan>>,
+    options: { silent?: boolean } = {},
+  ) {
+    if (!response.itinerarySuggestion) {
+      return false;
+    }
+    const currentTrip = useTripStore.getState();
+    currentTrip.replaceTripPlan(response.itinerarySuggestion, {
+      destination: currentTrip.destination || response.tripProfile?.destination || planningSnapshot.destination,
+      days: response.itinerarySuggestion.days.length,
+      budget: currentTrip.budget || planningSnapshot.budget,
+      title: currentTrip.title || response.tripProfile?.destination || currentTrip.destination,
     });
-    router.push("/itinerary");
+    await syncService.flushTripSyncNow({ force: true });
+    if (!options.silent) {
+      pushToast({
+        variant: "success",
+        title: "已更新行程",
+        description: "AI 已把修改後的行程同步到目前行程。",
+      });
+    }
+    return true;
   }
 
   function handleVoiceHint() {
@@ -930,6 +1424,106 @@ export default function ChatPage() {
       actionLabel: t.chat.goToMap,
       action: () => router.push("/map"),
     });
+  }
+
+  function applyVideoSummaryResult(sourceVideo: VideoRecommendation, result: VideoSummaryResult) {
+    setRecommendedVideos((videos) =>
+      videos.map((item) => (videoMatches(item, sourceVideo) ? result.video : item)),
+    );
+    setSelectedVideo((current) => (videoMatches(current, sourceVideo) ? result.video : current));
+  }
+
+  function buildSummaryDiagnostics(result: VideoSummaryResult) {
+    return {
+      transcriptSource: result.transcriptSource,
+      summarySource: result.summarySource,
+      segmentSource: result.segmentSource,
+      captionLanguage: result.debug?.captionLanguage,
+      captionKind: result.debug?.captionKind,
+      captionSource: result.debug?.captionSource,
+      mapsProvenance: result.mapsProvenance,
+      geocodeWarnings: result.geocodeWarnings,
+      summaryUnavailable: result.summaryUnavailable,
+      unavailableReason: result.unavailableReason,
+    };
+  }
+
+  async function summarizeVideoOnce(input: {
+    video: VideoRecommendation;
+    destination: string;
+    refresh?: boolean;
+    debug?: boolean;
+  }) {
+    const key = buildVideoSummaryKey({
+      videoId: input.video.videoId,
+      destination: input.destination,
+      refresh: input.refresh,
+    });
+    const existing = videoSummaryInflightRef.current.get(key);
+    if (existing) {
+      return existing;
+    }
+    const request = summarizeVideo({
+      videoId: input.video.videoId,
+      title: input.video.title,
+      destination: input.destination,
+      refresh: input.refresh,
+      debug: input.debug,
+    }).finally(() => {
+      videoSummaryInflightRef.current.delete(key);
+    });
+    videoSummaryInflightRef.current.set(key, request);
+    return request;
+  }
+
+  async function processRecommendedVideoSummaries(
+    videos: VideoRecommendation[],
+    destination: string,
+    queueToken: number,
+  ) {
+    const queue = videos.slice(0, 6).filter((video) => !shouldSkipClientVideoSummarize(video));
+    if (queue.length === 0) {
+      return;
+    }
+
+    autoSummaryActiveRef.current = true;
+    setAutoSummaryProgress({ current: 0, total: queue.length });
+    setIsLoadingVideos(true);
+    setIsSummarizing(true);
+
+    try {
+      for (let index = 0; index < queue.length; index += 1) {
+        if (videoSummaryQueueTokenRef.current !== queueToken) {
+          return;
+        }
+        const video = queue[index];
+        setAutoSummaryProgress({ current: index + 1, total: queue.length });
+        try {
+          const result = await summarizeVideoOnce({
+            video,
+            destination,
+            debug: false,
+          });
+          if (videoSummaryQueueTokenRef.current !== queueToken) {
+            return;
+          }
+          applyVideoSummaryResult(video, result);
+        } catch (error) {
+          logFrontendDebugEvent("chat-video", "auto-summary-failed", {
+            videoId: video.videoId,
+            title: video.title,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    } finally {
+      if (videoSummaryQueueTokenRef.current === queueToken) {
+        autoSummaryActiveRef.current = false;
+        setAutoSummaryProgress(null);
+        setIsLoadingVideos(false);
+        setIsSummarizing(false);
+      }
+    }
   }
 
   async function openVideoSummary(video: VideoRecommendation) {
@@ -948,27 +1542,12 @@ export default function ChatPage() {
     setIsLoadingVideos(true);
     setIsSummarizing(true);
     try {
-      const result = await summarizeVideo({
-        videoId: video.videoId,
-        title: video.title,
+      const result = await summarizeVideoOnce({
+        video,
         destination: planningSnapshot.destination,
       });
-      setRecommendedVideos((videos) =>
-        videos.map((item) => (item.id === video.id ? result.video : item)),
-      );
-      setSelectedVideo(result.video);
-      setSummaryDiagnostics({
-        transcriptSource: result.transcriptSource,
-        summarySource: result.summarySource,
-        segmentSource: result.segmentSource,
-        captionLanguage: result.debug?.captionLanguage,
-        captionKind: result.debug?.captionKind,
-        captionSource: result.debug?.captionSource,
-        mapsProvenance: result.mapsProvenance,
-        geocodeWarnings: result.geocodeWarnings,
-        summaryUnavailable: result.summaryUnavailable,
-        unavailableReason: result.unavailableReason,
-      });
+      applyVideoSummaryResult(video, result);
+      setSummaryDiagnostics(buildSummaryDiagnostics(result));
     } catch (error) {
       pushToast({
         variant: "error",
@@ -976,8 +1555,10 @@ export default function ChatPage() {
         description: error instanceof Error ? error.message : t.video.requestFailedGeneric,
       });
     } finally {
-      setIsLoadingVideos(false);
-      setIsSummarizing(false);
+      if (!autoSummaryActiveRef.current) {
+        setIsLoadingVideos(false);
+        setIsSummarizing(false);
+      }
     }
   }
 
@@ -993,28 +1574,13 @@ export default function ChatPage() {
       title: video.title,
     });
     try {
-      const result = await summarizeVideo({
-        videoId: video.videoId,
-        title: video.title,
+      const result = await summarizeVideoOnce({
+        video,
         destination: planningSnapshot.destination,
         refresh: true,
       });
-      setRecommendedVideos((videos) =>
-        videos.map((item) => (item.id === video.id ? result.video : item)),
-      );
-      setSelectedVideo(result.video);
-      setSummaryDiagnostics({
-        transcriptSource: result.transcriptSource,
-        summarySource: result.summarySource,
-        segmentSource: result.segmentSource,
-        captionLanguage: result.debug?.captionLanguage,
-        captionKind: result.debug?.captionKind,
-        captionSource: result.debug?.captionSource,
-        mapsProvenance: result.mapsProvenance,
-        geocodeWarnings: result.geocodeWarnings,
-        summaryUnavailable: result.summaryUnavailable,
-        unavailableReason: result.unavailableReason,
-      });
+      applyVideoSummaryResult(video, result);
+      setSummaryDiagnostics(buildSummaryDiagnostics(result));
     } catch (error) {
       pushToast({
         variant: "error",
@@ -1022,8 +1588,10 @@ export default function ChatPage() {
         description: error instanceof Error ? error.message : t.video.requestFailedGeneric,
       });
     } finally {
-      setIsLoadingVideos(false);
-      setIsSummarizing(false);
+      if (!autoSummaryActiveRef.current) {
+        setIsLoadingVideos(false);
+        setIsSummarizing(false);
+      }
     }
   }
 
@@ -1044,6 +1612,109 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem-env(safe-area-inset-bottom,0px))] min-h-0 lg:h-screen">
+      {tripPickerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 py-6 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="chat-trip-picker-title"
+            className="w-full max-w-lg overflow-hidden rounded-3xl border border-border-light bg-white shadow-2xl"
+          >
+            <div className="border-b border-border-light px-5 py-4">
+              <p id="chat-trip-picker-title" className="text-base font-semibold text-foreground">
+                和AI聊聊你的行程
+              </p>
+            </div>
+
+            <div className="max-h-[60vh] space-y-3 overflow-y-auto px-5 py-4">
+              <button
+                type="button"
+                disabled={Boolean(tripPickerAction)}
+                onClick={() => void startConversationWithNewTrip()}
+                className="flex w-full items-start justify-between gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-left transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span>
+                  <span className="block text-sm font-semibold text-primary">
+                    開始新旅程
+                  </span>
+                  <span className="mt-1 block text-xs leading-relaxed text-muted">
+                    這個對話會從空白行程開始，後續套用 AI 建議時會儲存在新行程中。
+                  </span>
+                </span>
+                {tripPickerAction === "new" ? (
+                  <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-primary" aria-hidden />
+                ) : (
+                  <Plus className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+                )}
+              </button>
+
+              {tripPickerLoading ? (
+                <div className="flex items-center gap-2 rounded-2xl border border-border-light bg-surface px-4 py-3 text-sm text-muted">
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                  載入行程清單中…
+                </div>
+              ) : tripPickerTrips.length > 0 ? (
+                <div className="space-y-2">
+                  {tripPickerTrips.map((trip) => {
+                    const isCurrentTrip = trip.id === tripStore.tripId;
+                    const isSwitching = tripPickerAction === trip.id;
+                    return (
+                      <button
+                        key={trip.id}
+                        type="button"
+                        disabled={Boolean(tripPickerAction)}
+                        onClick={() => void startConversationWithTrip(trip.id)}
+                        className="flex w-full items-start justify-between gap-3 rounded-2xl border border-border-light bg-white px-4 py-3 text-left transition-colors hover:border-primary/30 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <span className="min-w-0">
+                          <span className="flex items-center gap-2">
+                            <span className="truncate text-sm font-semibold text-foreground">
+                              {trip.title}
+                            </span>
+                            {isCurrentTrip && (
+                              <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                                目前
+                              </span>
+                            )}
+                          </span>
+                          <span className="mt-1 block text-xs text-muted">
+                            {trip.destination} · {trip.days} 天 · 最近編輯 {formatTripUpdatedDate(trip.updatedAt)}
+                          </span>
+                        </span>
+                        {isSwitching && (
+                          <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-primary" aria-hidden />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-border-light bg-cream/40 px-4 py-5 text-center text-sm text-muted">
+                  目前沒有可選擇的既有行程。
+                </div>
+              )}
+
+              {tripPickerError && (
+                <p className="rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">
+                  {tripPickerError}
+                </p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-border-light px-5 py-4">
+              <button
+                type="button"
+                disabled={Boolean(tripPickerAction)}
+                onClick={() => setTripPickerOpen(false)}
+                className="rounded-xl border border-border-light bg-white px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-cream/60 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <aside
         className={cn(
           "hidden min-h-0 shrink-0 flex-col border-r border-border-light bg-surface/70 transition-[width,padding] duration-200 ease-out md:flex",
@@ -1064,10 +1735,7 @@ export default function ChatPage() {
             </button>
             <button
               type="button"
-              onClick={() => {
-                createConversation();
-                setInput("");
-              }}
+              onClick={() => void openNewConversationPicker()}
               className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-white transition-colors hover:bg-primary-dark"
               title={t.chat.newConversationAria}
               aria-label={t.chat.newConversationAria}
@@ -1100,10 +1768,7 @@ export default function ChatPage() {
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  createConversation();
-                  setInput("");
-                }}
+                onClick={() => void openNewConversationPicker()}
                 className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-white transition-colors hover:bg-primary-dark"
                 aria-label={t.chat.newConversationAria}
               >
@@ -1128,7 +1793,7 @@ export default function ChatPage() {
                   >
                     <button
                       type="button"
-                      onClick={() => selectConversation(conversation.id)}
+                      onClick={() => void selectConversationForChat(conversation.id)}
                       className="w-full rounded-2xl px-3 py-3 pr-10 text-left"
                     >
                       <p className="truncate text-sm font-medium text-foreground">{conversation.title}</p>
@@ -1165,10 +1830,7 @@ export default function ChatPage() {
             </div>
             <button
               type="button"
-              onClick={() => {
-                createConversation();
-                setInput("");
-              }}
+              onClick={() => void openNewConversationPicker()}
               className="inline-flex items-center justify-center gap-2 rounded-xl border border-border-light bg-white/70 px-3 py-2 text-xs font-medium text-foreground backdrop-blur-sm transition-colors hover:bg-white/90 md:hidden"
             >
               <Plus className="size-3.5" aria-hidden />
@@ -1182,7 +1844,7 @@ export default function ChatPage() {
               <button
                 type="button"
                 key={conversation.id}
-                onClick={() => selectConversation(conversation.id)}
+                onClick={() => void selectConversationForChat(conversation.id)}
                 className={`shrink-0 rounded-full border px-3 py-1.5 text-xs ${
                   conversation.id === activeConversationId
                     ? "border-primary/40 bg-primary/10 text-primary"
@@ -1245,9 +1907,11 @@ export default function ChatPage() {
                       <QuestionCard
                         card={message.questionCard}
                         disabled={isSending}
+                        tripDays={message.tripProfile?.duration_days || tripProfile?.duration_days || tripStore.days || userStore.travelDays}
                         onSubmit={(answers, displayMessage) =>
                           void handleSend("回答行程需求", {
                             displayMessage,
+                            displayAsAssistant: true,
                             questionAnswers: answers,
                             tripProfile: message.tripProfile || tripProfile,
                           })
@@ -1343,10 +2007,15 @@ export default function ChatPage() {
           {(isLoadingVideos || videoError || recommendedVideos.length > 0) && (
             <section className="rounded-2xl border border-border-light bg-white/80 px-4 py-4 shadow-soft backdrop-blur-md">
               <div className="mb-3 flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold text-foreground">AI 推薦影片</h2>
-                {isLoadingVideos && (
-                  <Loader2 className="size-4 animate-spin text-primary" aria-hidden />
-                )}
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">AI 推薦影片</h2>
+                  {autoSummaryProgress && (
+                    <p className="mt-1 text-xs text-muted">
+                      正在依序處理影片資料 {autoSummaryProgress.current}/{autoSummaryProgress.total}
+                    </p>
+                  )}
+                </div>
+                {isLoadingVideos && <Loader2 className="size-4 animate-spin text-primary" aria-hidden />}
               </div>
               {videoError && (
                 <p className="mb-3 rounded-xl border border-danger/20 bg-danger/10 px-3 py-2 text-sm text-danger">
@@ -1408,18 +2077,29 @@ export default function ChatPage() {
         </div>
       </div>
 
-        <div className="hidden w-72 overflow-y-auto border-l border-border-light bg-surface/50 p-5 lg:block">
+        <div
+          className="relative hidden shrink-0 overflow-y-auto border-l border-border-light bg-surface/50 p-5 lg:block"
+          style={{ width: contextPanelWidth }}
+        >
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="調整目前行程脈絡寬度"
+          title="拖曳調整寬度"
+          onPointerDown={startContextPanelResize}
+          className="absolute left-0 top-0 z-20 h-full w-2 -translate-x-1 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-primary/20"
+        />
         <h3 className="mb-4 text-sm font-semibold text-foreground">{t.chat.contextTitle}</h3>
 
-        {planningSnapshot.hasPlanningContext ? (
-          <div className="flex flex-col gap-3">
+        {hasContextPanel ? (
+          <div className="flex flex-col gap-4">
             {tagConfigs.map((tag, index) => {
               const Icon = tag.icon;
               return (
                 <button
                   type="button"
                   key={tag.label}
-                  onClick={() => router.push(index === 3 ? "/itinerary" : "/profile")}
+                  onClick={() => router.push("/profile")}
                   className="flex w-full min-w-0 items-center gap-3 rounded-xl bg-primary/5 px-3 py-2.5 text-left transition-colors hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/30"
                 >
                   <Icon className="size-4 flex-shrink-0 text-primary" aria-hidden />
@@ -1430,6 +2110,106 @@ export default function ChatPage() {
                 </button>
               );
             })}
+
+            <div className="rounded-2xl border border-border-light bg-white/70 p-3 shadow-soft">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Heart className="size-4 shrink-0 text-primary" aria-hidden />
+                  <div className="min-w-0">
+                    <p className="text-[11px] text-muted">{t.chat.tagItinerary}</p>
+                    <p className="truncate text-sm font-semibold text-foreground">
+                      {tripStore.itinerary.length > 0
+                        ? `${tripStore.itinerary.length} 天行程`
+                        : t.chat.valueUnset}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push("/itinerary")}
+                  className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10"
+                >
+                  編輯
+                </button>
+              </div>
+
+              {tripStore.itinerary.length > 0 ? (
+                <div className="space-y-2">
+                  {tripStore.itinerary.map((day, index) => {
+                    const displayOrdinal = index + 1;
+                    const expanded = expandedContextDays[day.dayNumber] ?? displayOrdinal === 1;
+                    return (
+                      <div
+                        key={day.dayNumber}
+                        className="overflow-hidden rounded-xl border border-border-light bg-surface"
+                      >
+                        <button
+                          type="button"
+                          aria-expanded={expanded}
+                          onClick={() => toggleContextDay(day.dayNumber)}
+                          className="flex w-full items-center justify-between gap-2 bg-gradient-to-r from-primary/8 via-surface to-surface px-3 py-2.5 text-left transition-colors hover:bg-primary/5"
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-white">
+                              D{displayOrdinal}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm font-semibold text-foreground">
+                                第 {displayOrdinal} 天
+                              </span>
+                              <span className="block truncate text-[11px] text-muted">
+                                {day.theme && !/^Day\s*\d+$/i.test(day.theme.trim())
+                                  ? day.theme
+                                  : `${day.items.length} 個活動`}
+                              </span>
+                            </span>
+                          </div>
+                          <ChevronDown
+                            className={cn(
+                              "size-4 shrink-0 text-muted transition-transform",
+                              expanded ? "rotate-180" : "",
+                            )}
+                            aria-hidden
+                          />
+                        </button>
+
+                        {expanded && (
+                          <div className="space-y-2 border-t border-border-light p-3">
+                            {day.items.length > 0 ? (
+                              day.items.map((item) => (
+                                <div
+                                  key={item.id}
+                                  className="rounded-xl border border-border-light bg-white px-3 py-2"
+                                >
+                                  <div className="grid grid-cols-[3.5rem_minmax(0,1fr)] items-start gap-2">
+                                    <span className="mt-0.5 inline-flex w-14 shrink-0 justify-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                                      {item.time}
+                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="truncate text-xs font-semibold text-foreground">
+                                        {item.title}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="rounded-xl border border-dashed border-border-light bg-cream/30 px-3 py-4 text-center text-xs text-muted">
+                                尚未安排活動
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-border-light bg-cream/30 px-3 py-4 text-center text-xs text-muted">
+                  尚未建立每日行程
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-border-light bg-cream/30 px-4 py-6 text-center">

@@ -125,17 +125,10 @@ export function createNewTrip() {
     tripId: "",
     title: "",
     destination: "",
-    days: 1,
+    days: 0,
     budget: 0,
     coverImageUrl: null,
-    itinerary: [
-      {
-        dayNumber: 1,
-        theme: "Day 1",
-        summary: "",
-        items: [],
-      },
-    ],
+    itinerary: [],
     pins: [],
     updatedAt: new Date().toISOString(),
   };

@@ -55,6 +55,32 @@ test("buildPinsFromTripPlan links pins back to itinerary items", () => {
   assert.equal(pins[0].source, "itinerary");
 });
 
+test("buildPinsFromTripPlan includes manually added geocoded activities", () => {
+  const days: TripPlanDay[] = [
+    {
+      dayNumber: 2,
+      items: [
+        {
+          id: "manual-activity",
+          dayNumber: 2,
+          time: "16:00",
+          title: "手動新增景點",
+          type: "activity",
+          notes: "從地圖面板新增",
+          location: locationWithDetails,
+          source: "manual",
+        },
+      ],
+    },
+  ];
+
+  const pins = buildPinsFromTripPlan(days);
+  assert.equal(pins.length, 1);
+  assert.equal(pins[0].id, "day_2_manual-activity");
+  assert.equal(pins[0].linkedTripItemId, "manual-activity");
+  assert.equal(pins[0].source, "itinerary");
+});
+
 test("mergeTripItineraryPins keeps non-itinerary pins while rebuilding itinerary pins", () => {
   const days: TripPlanDay[] = [
     {

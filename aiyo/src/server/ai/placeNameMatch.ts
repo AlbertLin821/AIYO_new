@@ -28,6 +28,9 @@ export function proposedChangeMatchesAnyPlace(
   change: AiProposedChange,
   places: PlaceSearchHit[],
 ): boolean {
+  if (change.type !== "add_itinerary_item") {
+    return true;
+  }
   if (!places.length) {
     return false;
   }
@@ -44,7 +47,7 @@ export function filterProposedChangesByVerifiedPlaces(
   places: PlaceSearchHit[],
 ): AiProposedChange[] {
   if (!places.length) {
-    return [];
+    return changes.filter((change) => change.type !== "add_itinerary_item");
   }
   return changes.filter((c) => proposedChangeMatchesAnyPlace(c, places));
 }

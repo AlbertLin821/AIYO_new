@@ -4,6 +4,8 @@ import {
   buildTravelPlanRevisionMeta,
   chatWithTravelAssistant,
   convertTripPlanToTravelPlanWithSources,
+  isExistingItineraryInquiry,
+  isTripWorkflowMessage,
 } from "@/server/services/travelPlannerService";
 import type { ChatSource, TripPlanDay, TripPlanResult, TripProfile } from "@/types";
 
@@ -44,6 +46,127 @@ test("structured chat asks for travel_dates before itinerary generation when dat
   assert.equal(response.reply.responseType, "question_card");
   assert.equal(response.reply.questionCard?.response_type, "question_card");
   assert.ok(response.reply.questionCard?.questions.some((question) => question.slot === "travel_dates"));
+});
+
+test("existing itinerary questions bypass the structured planning template", () => {
+  const context = {
+    destination: "熊本",
+    days: 1,
+    itinerary: [
+      {
+        dayNumber: 1,
+        items: [
+          { id: "item_1", time: "09:00", title: "熊本城", type: "attraction" as const },
+        ],
+      },
+    ],
+  };
+
+  assert.equal(
+    isExistingItineraryInquiry({
+      message: "這個行程裡面有哪些活動？",
+      context,
+    }),
+    true,
+  );
+  assert.equal(
+    isExistingItineraryInquiry({
+      message: "幫我在這個行程新增一個晚餐",
+      context,
+    }),
+    false,
+  );
+  assert.equal(
+    isExistingItineraryInquiry({
+      message: "這個行程有甚麼地點",
+      context,
+    }),
+    true,
+  );
+  assert.equal(
+    isTripWorkflowMessage({
+      message: "這個行程有甚麼地點",
+      context,
+      tripProfile: makeStructuredProfile(),
+    }),
+    false,
+  );
+});
+
+test("existing itinerary location questions answer from context without model planning", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "查看我現在有哪些地點在這個行程",
+    structuredTravelPlanning: true,
+    context: {
+      destination: "熊本",
+      days: 1,
+      itinerary: [
+        {
+          dayNumber: 1,
+          items: [
+            {
+              id: "item_1",
+              time: "09:00",
+              title: "熊本城",
+              type: "attraction",
+              location: {
+                name: "熊本城",
+                lat: 32.8062,
+                lng: 130.7058,
+                description: "熊本代表景點",
+                address: "熊本市中央區本丸1-1",
+              },
+            },
+            { id: "item_2", time: "12:00", title: "午餐", type: "restaurant" },
+          ],
+        },
+      ],
+    },
+  });
+
+  assert.equal(response.reply.responseType, "text_message");
+  assert.match(response.reply.content, /熊本\s*目前行程有這些地點/);
+  assert.match(response.reply.content, /Day 1 09:00：熊本城/);
+  assert.match(response.reply.content, /Day 1 12:00：午餐/);
+  assert.equal(response.reply.questionCard, undefined);
+});
+
+test("structured planning template only starts for explicit planning intent", () => {
+  const context = {
+    destination: "熊本",
+    days: 1,
+    itinerary: [
+      {
+        dayNumber: 1,
+        items: [
+          { id: "item_1", time: "09:00", title: "熊本城", type: "attraction" as const },
+        ],
+      },
+    ],
+  };
+
+  assert.equal(
+    isTripWorkflowMessage({
+      message: "這個行程適合帶長輩嗎？",
+      tripProfile: makeStructuredProfile(),
+    }),
+    false,
+  );
+  assert.equal(
+    isTripWorkflowMessage({
+      message: "請幫我規劃熊本 6 天 5 夜行程",
+      tripProfile: makeStructuredProfile(),
+    }),
+    true,
+  );
+  assert.equal(
+    isTripWorkflowMessage({
+      message: "幫我把熊本城改成水前寺成趣園",
+      context,
+      tripProfile: makeStructuredProfile(),
+    }),
+    false,
+  );
 });
 
 test("buildTravelPlanRevisionMeta summarizes changes against previous itinerary", () => {

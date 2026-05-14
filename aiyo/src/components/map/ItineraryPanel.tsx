@@ -14,7 +14,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CalendarPlus, ChevronDown, ChevronUp, GripVertical, Loader2, MapPin, Plus, X } from "lucide-react";
+import { CalendarPlus, ChevronDown, ChevronUp, GripVertical, Loader2, MapPin, Plus, Search, Trash2, X } from "lucide-react";
 import type { ItineraryListItem } from "@/lib/itinerary-sort";
 import { zhTW as t } from "@/locales/zh-TW";
 import { buildItineraryRouteSegments } from "@/lib/routeSegments";
@@ -25,7 +25,7 @@ import { syncService } from "@/services/syncService";
 import { useMapStore } from "@/stores/useMapStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
-import type { MapPin as TripMapPin, TripPlanItem } from "@/types";
+import type { ApiResponse, GeocodeResponse, LocationReference, MapPin as TripMapPin, TripPlanItem } from "@/types";
 
 const typeColors: Record<TripPlanItem["type"], string> = {
   attraction: "bg-primary/10 text-primary",
@@ -73,6 +73,18 @@ function findLinkedPinForItem(item: TripPlanItem, pins: TripMapPin[]): TripMapPi
   });
 }
 
+function nextActivityTime(items: TripPlanItem[]): string {
+  const lastTime = [...items]
+    .reverse()
+    .map((item) => item.time?.slice(0, 5))
+    .find((value) => value && /^\d{2}:\d{2}$/.test(value));
+  if (!lastTime) {
+    return "16:00";
+  }
+  const [hour, minute] = lastTime.split(":").map(Number);
+  return `${String(Math.min(23, hour + 1)).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
 type TransportSelectOption = { value: string; label: string };
 
 type SortableStopProps = {
@@ -96,6 +108,7 @@ type SortableStopProps = {
   onCommitTitle: () => void;
   onCancelTitle: () => void;
   onTimeChange: (value: string) => void;
+  onDelete: () => void;
 };
 
 function SortableMapStop({
@@ -119,6 +132,7 @@ function SortableMapStop({
   onCommitTitle,
   onCancelTitle,
   onTimeChange,
+  onDelete,
 }: SortableStopProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const style = {
@@ -203,7 +217,7 @@ function SortableMapStop({
                 value={item.time?.slice(0, 5) || "09:00"}
                 onClick={(event) => event.stopPropagation()}
                 onChange={(event) => onTimeChange(event.target.value)}
-                className="w-[5.5rem] rounded-md border border-border-light bg-surface px-1 py-0.5 font-mono text-xs text-primary focus:outline-none focus:ring-2 focus:ring-primary/25"
+                className="w-[6.75rem] rounded-md border border-border-light bg-surface px-1.5 py-0.5 font-mono text-xs text-primary focus:outline-none focus:ring-2 focus:ring-primary/25"
               />
               <span
                 className={cn(
@@ -258,6 +272,17 @@ function SortableMapStop({
               <p className="mt-1 text-[10px] text-muted">{t.itineraryPanel.noMapPinYet}</p>
             )}
           </div>
+          <button
+            type="button"
+            aria-label={`刪除活動：${item.title}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete();
+            }}
+            className="shrink-0 rounded-lg p-1 text-muted opacity-0 transition hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 focus:opacity-100"
+          >
+            <Trash2 className="size-3.5" aria-hidden />
+          </button>
         </div>
       </div>
     </div>
@@ -279,13 +304,15 @@ function typeLabel(itemType: TripPlanItem["type"]) {
 export default function ItineraryPanel() {
   const { status } = useSession();
   const itinerary = useTripStore((state) => state.itinerary);
+  const tripTitle = useTripStore((state) => state.title);
   const tripDestination = useTripStore((state) => state.destination);
   const currentTripId = useTripStore((state) => state.tripId);
   const addItineraryItem = useTripStore((state) => state.addItineraryItem);
   const updateItineraryItem = useTripStore((state) => state.updateItineraryItem);
   const updateItineraryItemTransport = useTripStore((state) => state.updateItineraryItemTransport);
+  const removeItineraryItem = useTripStore((state) => state.removeItineraryItem);
   const reorderItineraryItem = useTripStore((state) => state.reorderItineraryItem);
-  const { panelOpen, setPanelOpen, pins, selectedPinId, setSelectedPinId } = useMapStore();
+  const { panelOpen, setPanelOpen, pins, selectedPinId, setSelectedPinId, removePin } = useMapStore();
   const pushToast = useToastStore((state) => state.pushToast);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -302,6 +329,12 @@ export default function ItineraryPanel() {
   const [tripListLoading, setTripListLoading] = useState(false);
   const [tripSwitching, setTripSwitching] = useState(false);
   const [tripPickerOpen, setTripPickerOpen] = useState(false);
+  const [placeSearch, setPlaceSearch] = useState<{
+    dayNumber: number;
+    query: string;
+    loading: boolean;
+    error: string | null;
+  } | null>(null);
 
   useEffect(() => {
     if (status !== "authenticated" || !panelOpen) return;
@@ -337,19 +370,113 @@ export default function ItineraryPanel() {
   );
 
   const addQuickStop = useCallback((dayNumber: number) => {
-    manualItemCounter.current += 1;
-    const id = `manual_${dayNumber}_${manualItemCounter.current}`;
-    addItineraryItem(dayNumber, {
-      id,
-      dayNumber,
-      time: "16:00",
-      title: t.itineraryPanel.newActivityTitle,
-      type: "activity",
-      notes: t.itineraryPanel.newActivityNotes,
-      source: "manual",
-    });
-    setEditingItem({ dayNumber, itemId: id, title: t.itineraryPanel.newActivityTitle });
-  }, [addItineraryItem]);
+    setPlaceSearch({ dayNumber, query: "", loading: false, error: null });
+  }, []);
+
+  const submitPlaceSearch = useCallback(async () => {
+    if (!placeSearch || placeSearch.loading) {
+      return;
+    }
+    const query = placeSearch.query.trim();
+    if (!query) {
+      setPlaceSearch((current) =>
+        current ? { ...current, error: "請輸入地點名稱。" } : current,
+      );
+      return;
+    }
+
+    setPlaceSearch((current) => (current ? { ...current, loading: true, error: null } : current));
+    try {
+      const response = await fetch("/api/map/geocode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          queries: [query],
+          region: tripDestination,
+        }),
+      });
+      const payload = (await response.json()) as ApiResponse<GeocodeResponse>;
+      if (!payload.success) {
+        throw new Error(payload.error.message);
+      }
+      const result = payload.data.results[0];
+      if (!result) {
+        throw new Error("找不到符合的地點。");
+      }
+
+      const day = itinerary.find((entry) => entry.dayNumber === placeSearch.dayNumber);
+      const time = nextActivityTime(day?.items ?? []);
+      manualItemCounter.current += 1;
+      const id = `manual_${placeSearch.dayNumber}_${manualItemCounter.current}`;
+      const location: LocationReference = {
+        name: result.query || query,
+        lat: result.lat,
+        lng: result.lng,
+        description: result.formattedAddress,
+        address: result.formattedAddress,
+        placeId: result.placeId,
+        photoUrl: result.photoUrl,
+        thumbnail: result.thumbnail || result.photoUrl,
+        openingHours: result.openingHours,
+        phoneNumber: result.phoneNumber,
+        website: result.website,
+        googleMapsUrl: result.googleMapsUrl,
+        rating: result.rating,
+        userRatingsTotal: result.userRatingsTotal,
+        resolvedFrom: "google-geocode",
+        rawQuery: query,
+        verified: true,
+      };
+      addItineraryItem(placeSearch.dayNumber, {
+        id,
+        dayNumber: placeSearch.dayNumber,
+        time,
+        title: result.query || query,
+        type: "activity",
+        notes: result.formattedAddress,
+        location,
+        source: "manual",
+      });
+      const pinId = `day_${placeSearch.dayNumber}_${id}`;
+      useMapStore.getState().setPins([
+        ...useMapStore.getState().pins.filter((pin) => pin.id !== pinId),
+        {
+          id: pinId,
+          name: location.name,
+          lat: location.lat,
+          lng: location.lng,
+          description: location.description,
+          address: location.address,
+          placeId: location.placeId,
+          photoUrl: location.photoUrl,
+          thumbnail: location.thumbnail,
+          openingHours: location.openingHours,
+          phoneNumber: location.phoneNumber,
+          website: location.website,
+          googleMapsUrl: location.googleMapsUrl,
+          rating: location.rating,
+          userRatingsTotal: location.userRatingsTotal,
+          source: "itinerary",
+          linkedTripItemId: id,
+          dayNumber: placeSearch.dayNumber,
+          color: "#5a7ea3",
+          verified: true,
+        },
+      ]);
+      setSelectedPinId(pinId);
+      setExpandedDay(placeSearch.dayNumber);
+      setPlaceSearch(null);
+      void syncService.flushTripSyncNow();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "新增活動失敗。";
+      setPlaceSearch((current) => (current ? { ...current, loading: false, error: message } : current));
+      pushToast({
+        variant: "error",
+        title: t.itineraryPanel.addLocalActivity,
+        description: message,
+      });
+    }
+  }, [addItineraryItem, itinerary, placeSearch, pushToast, setSelectedPinId, tripDestination]);
 
   const commitTitleEdit = useCallback(() => {
     if (!editingItem) {
@@ -418,7 +545,7 @@ export default function ItineraryPanel() {
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] text-muted">切換行程</p>
                 <p className="truncate text-sm font-medium text-foreground">
-                  {useTripStore.getState().title || tripDestination || "目前行程"}
+                  {currentTripId ? tripTitle || tripDestination || "目前行程" : "目前尚未創建行程"}
                 </p>
               </div>
               {tripSwitching ? (
@@ -464,7 +591,7 @@ export default function ItineraryPanel() {
                       </div>
                     ) : tripList.length === 0 ? (
                       <div className="px-4 py-8 text-center text-xs text-muted">
-                        尚無行程
+                        目前尚未創建行程
                       </div>
                     ) : (
                       tripList.map((trip) => {
@@ -494,7 +621,7 @@ export default function ItineraryPanel() {
                             </div>
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-medium text-foreground">
-                                {trip.title || "未命名行程"}
+                                {trip.title || "目前尚未創建行程"}
                               </p>
                               <p className="mt-0.5 truncate text-[11px] text-muted">
                                 {trip.destination || "未設定目的地"}
@@ -510,6 +637,91 @@ export default function ItineraryPanel() {
                     )}
                   </div>
                 </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {placeSearch && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 z-40 flex items-center justify-center bg-black/45 p-4"
+                onClick={() => {
+                  if (!placeSearch.loading) {
+                    setPlaceSearch(null);
+                  }
+                }}
+              >
+                <motion.form
+                  initial={{ opacity: 0, scale: 0.96, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 10 }}
+                  transition={{ duration: 0.18 }}
+                  onClick={(event) => event.stopPropagation()}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void submitPlaceSearch();
+                  }}
+                  className="w-full rounded-2xl border border-border-light bg-surface p-4 shadow-soft-lg"
+                >
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-foreground">新增活動地點</h4>
+                      <p className="mt-0.5 text-xs text-muted">
+                        輸入景點、餐廳或地址，系統會加入行程並同步地圖標記。
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={placeSearch.loading}
+                      onClick={() => setPlaceSearch(null)}
+                      className="rounded-lg p-1 text-muted transition hover:bg-border-light hover:text-foreground disabled:opacity-50"
+                    >
+                      <X className="size-4" aria-hidden />
+                    </button>
+                  </div>
+                  <label className="sr-only" htmlFor="itinerary-place-search">
+                    搜尋地點
+                  </label>
+                  <div className="flex items-center gap-2 rounded-xl border border-border bg-surface-elevated px-3 py-2 focus-within:ring-2 focus-within:ring-primary/25">
+                    <Search className="size-4 shrink-0 text-muted" aria-hidden />
+                    <input
+                      id="itinerary-place-search"
+                      autoFocus
+                      value={placeSearch.query}
+                      onChange={(event) =>
+                        setPlaceSearch((current) =>
+                          current ? { ...current, query: event.target.value, error: null } : current,
+                        )
+                      }
+                      placeholder="例如：台北 101、阿宗麵線、西門町"
+                      className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted"
+                    />
+                  </div>
+                  {placeSearch.error && (
+                    <p className="mt-2 text-xs text-red-600">{placeSearch.error}</p>
+                  )}
+                  <div className="mt-4 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      disabled={placeSearch.loading}
+                      onClick={() => setPlaceSearch(null)}
+                      className="rounded-xl border border-border px-3 py-2 text-xs text-muted transition hover:bg-border-light disabled:opacity-50"
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={placeSearch.loading}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-medium text-white transition hover:bg-primary/90 disabled:opacity-60"
+                    >
+                      {placeSearch.loading && <Loader2 className="size-3 animate-spin" aria-hidden />}
+                      加入行程
+                    </button>
+                  </div>
+                </motion.form>
               </motion.div>
             )}
           </AnimatePresence>
@@ -632,6 +844,12 @@ export default function ItineraryPanel() {
                                   onTimeChange={(value) =>
                                     updateItineraryItem(day.dayNumber, item.id, { time: value })
                                   }
+                                  onDelete={() => {
+                                    removeItineraryItem(day.dayNumber, item.id);
+                                    if (linkedPin) {
+                                      removePin(linkedPin.id);
+                                    }
+                                  }}
                                 />
                               );
                             })}

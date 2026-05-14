@@ -13,6 +13,35 @@ export function detectResponseLanguage(
   return "english";
 }
 
+function formatItineraryContext(context: ChatContext): string | null {
+  if (!context.itinerary?.length) {
+    return null;
+  }
+
+  const lines = context.itinerary.flatMap((day) => {
+    const header = [
+      `Day ${day.dayNumber}`,
+      day.theme ? `theme=${day.theme}` : "",
+      day.summary ? `summary=${day.summary}` : "",
+    ].filter(Boolean).join(" | ");
+    const itemLines = day.items.slice(0, 12).map((item) => {
+      const details = [
+        `id=${item.id}`,
+        `${item.time} ${item.title}`,
+        `type=${item.type}`,
+        item.transport ? `transport=${item.transport}` : "",
+        item.notes ? `notes=${item.notes}` : "",
+        item.location?.name ? `location=${item.location.name}` : "",
+        item.location?.address ? `address=${item.location.address}` : "",
+      ].filter(Boolean).join(" | ");
+      return `- ${details}`;
+    });
+    return [header, ...itemLines];
+  });
+
+  return `Current itinerary details:\n${lines.slice(0, 80).join("\n")}`;
+}
+
 function formatContext(context?: ChatContext): string {
   if (!context) {
     return "No structured trip context was provided.";
@@ -34,13 +63,9 @@ function formatContext(context?: ChatContext): string {
     parts.push(`Trip end date (ISO): ${context.tripEndDate}`);
   }
 
-  if (context.itinerary?.length) {
-    parts.push(
-      `Current itinerary items: ${context.itinerary
-        .flatMap((day) => day.items.map((item) => `Day ${day.dayNumber} ${item.time} ${item.title}`))
-        .slice(0, 12)
-        .join(" | ")}`,
-    );
+  const itineraryContext = formatItineraryContext(context);
+  if (itineraryContext) {
+    parts.push(itineraryContext);
   }
 
   return parts.join("\n");
@@ -97,10 +122,10 @@ export function buildChatPrompt(
         ? "You MUST output JSON only with this exact shape: { \"replyText\": string, \"proposedChanges\": array }."
         : "Prefer output JSON with shape { \"replyText\": string, \"proposedChanges\": array } when possible; otherwise reply in concise plain Traditional Chinese.",
       hasResearch
-        ? 'Each proposedChanges item must be: { "type": "add_itinerary_item", "day": number, "time": "HH:MM", "title": string, "locationName"?: string, "notes"?: string }.'
+        ? 'proposedChanges may include: { "type": "add_itinerary_item", "day": number, "time": "HH:MM", "title": string, "locationName"?: string, "notes"?: string }, { "type": "update_itinerary_item", "itemId"?: string, "day"?: number, "targetTitle"?: string, "time"?: "HH:MM", "title"?: string, "locationName"?: string, "notes"?: string, "transport"?: string }, or { "type": "remove_itinerary_item", "itemId"?: string, "day"?: number, "targetTitle"?: string }.'
         : "",
       hasResearch
-        ? "Concrete restaurants, attractions, or shops in proposedChanges MUST match a venue listed under \"Verified research\" below (same name or clear substring). If no suitable venue exists, return proposedChanges: []."
+        ? "For add_itinerary_item, concrete restaurants, attractions, or shops MUST match a venue listed under \"Verified research\" below (same name or clear substring). For update_itinerary_item or remove_itinerary_item, target an existing itinerary item by id when possible, otherwise by day + targetTitle. If the user only asks a question, return proposedChanges: []."
         : "",
       hasWebSearch
         ? "You may use web search results as factual grounding. Do not invent place names, opening hours, prices, or addresses."

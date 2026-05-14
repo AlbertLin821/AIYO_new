@@ -1,10 +1,12 @@
+export type GoogleMapTypeId = "roadmap" | "satellite" | "hybrid" | "terrain";
+
 export interface GoogleMapInstance {
   setCenter: (coords: { lat: number; lng: number }) => void;
   setZoom: (zoom: number) => void;
   getZoom: () => number | undefined;
   fitBounds: (bounds: GoogleLatLngBounds, padding?: number) => void;
   panTo: (coords: { lat: number; lng: number }) => void;
-  setMapTypeId: (type: "roadmap" | "satellite") => void;
+  setMapTypeId: (type: GoogleMapTypeId) => void;
 }
 
 export interface GoogleMarkerInstance {
@@ -20,10 +22,41 @@ export interface GoogleInfoWindowInstance {
 
 export interface GooglePolylineInstance {
   setMap: (map: GoogleMapInstance | null) => void;
+  addListener?: (eventName: string, handler: () => void) => void;
+}
+
+export interface GoogleMapLayerInstance {
+  setMap: (map: GoogleMapInstance | null) => void;
 }
 
 export interface GoogleLatLngBounds {
   extend: (coords: { lat: number; lng: number }) => void;
+}
+
+export interface GooglePlacePhoto {
+  getUrl: (options?: { maxWidth?: number; maxHeight?: number }) => string;
+}
+
+export interface GooglePlaceDetailsResult {
+  name?: string;
+  formatted_address?: string;
+  formatted_phone_number?: string;
+  international_phone_number?: string;
+  opening_hours?: {
+    weekday_text?: string[];
+  };
+  photos?: GooglePlacePhoto[];
+  website?: string;
+  url?: string;
+  rating?: number;
+  user_ratings_total?: number;
+}
+
+export interface GooglePlacesServiceInstance {
+  getDetails: (
+    request: { placeId: string; fields: string[] },
+    callback: (result: GooglePlaceDetailsResult | null, status: string) => void,
+  ) => void;
 }
 
 export interface GoogleMapsApi {
@@ -38,8 +71,17 @@ export interface GoogleMapsApi {
   Polyline: new (options: Record<string, unknown>) => GooglePolylineInstance;
   InfoWindow: new () => GoogleInfoWindowInstance;
   LatLngBounds: new () => GoogleLatLngBounds;
+  TrafficLayer: new () => GoogleMapLayerInstance;
+  TransitLayer: new () => GoogleMapLayerInstance;
+  BicyclingLayer: new () => GoogleMapLayerInstance;
   SymbolPath: {
     CIRCLE: unknown;
+  };
+  places?: {
+    PlacesService: new (map: GoogleMapInstance | HTMLElement) => GooglePlacesServiceInstance;
+    PlacesServiceStatus?: {
+      OK: string;
+    };
   };
   /** Dynamic import for AdvancedMarkerElement (marker library) and Routes API, etc. */
   importLibrary?: (name: string) => Promise<Record<string, unknown>>;
@@ -150,8 +192,13 @@ export function loadGoogleMapsApi(apiKey: string): Promise<GoogleMapsApi> {
     script.id = "aiyo-google-maps-sdk";
     script.async = true;
     script.defer = true;
-    const key = encodeURIComponent(apiKey);
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&loading=async&callback=__aiyoGoogleMapsInit`;
+    const params = new URLSearchParams({
+      key: apiKey,
+      loading: "async",
+      callback: "__aiyoGoogleMapsInit",
+      libraries: "places",
+    });
+    script.src = `https://maps.googleapis.com/maps/api/js?${params.toString()}`;
     script.onerror = () => {
       if (!settled) {
         settled = true;

@@ -306,7 +306,7 @@ export default function ItineraryPage() {
       syncService.applyTripSwitch(snapshot);
       syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
       void refreshCollaboratorsForTrip(result.tripId);
-      void loadTripLibrary();
+      await loadTripLibrary();
       setJoinCode("");
       setJoinDialogOpen(false);
       pushToast({ variant: "success", title: "已加入共用行程", description: result.tripName || "" });

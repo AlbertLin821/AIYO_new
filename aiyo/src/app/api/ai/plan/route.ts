@@ -99,7 +99,7 @@ export async function POST(request: Request) {
 
     const existingTrip = await resolveSessionTrip(userId);
     const savedTrip = await saveTripPayload(userId, {
-      tripId: existingTrip.id,
+      tripId: existingTrip?.id ?? "",
       title: `${destination} 行程`,
       destination,
       days,

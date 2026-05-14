@@ -43,8 +43,8 @@ async function handleChatPost(request: Request) {
       const { userId } = await requireSessionUser();
       const trip = await resolveSessionTrip(userId);
       persistedUserId = userId;
-      persistedTripId = trip.id;
-      await saveChatMessage(userId, "user", body.message.trim(), trip.id);
+      persistedTripId = trip?.id;
+      await saveChatMessage(userId, "user", body.message.trim(), persistedTripId);
       const memories = await searchMemories({
         userId,
         query: body.message.trim(),

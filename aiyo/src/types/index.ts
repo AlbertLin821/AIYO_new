@@ -153,7 +153,8 @@ export interface SuggestedAction {
   item?: Partial<TripPlanItem>;
 }
 
-export interface AiProposedChange {
+export type AiProposedChange =
+  | {
   type: "add_itinerary_item";
   day: number;
   time: string;
@@ -162,6 +163,25 @@ export interface AiProposedChange {
   notes?: string;
   source: "ai-chat";
 }
+  | {
+  type: "update_itinerary_item";
+  day?: number;
+  itemId?: string;
+  targetTitle?: string;
+  time?: string;
+  title?: string;
+  locationName?: string;
+  notes?: string;
+  transport?: string;
+  source: "ai-chat";
+}
+  | {
+  type: "remove_itinerary_item";
+  day?: number;
+  itemId?: string;
+  targetTitle?: string;
+  source: "ai-chat";
+};
 
 export type ChatResponseType = "text_message" | "question_card" | "status_step" | "travel_plan" | "error";
 

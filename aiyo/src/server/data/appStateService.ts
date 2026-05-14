@@ -331,7 +331,19 @@ export type TripLibraryListRow = {
   isOwner: boolean;
 };
 
-/** 寫入資料庫用的行程標題：空白則依目的地給預設，否則為「未命名行程」。 */
+async function deleteLegacyDefaultTrips(userId: string) {
+  await prisma.trip.deleteMany({
+    where: {
+      userId,
+      title: "未命名行程",
+      OR: [{ destination: null }, { destination: "" }],
+      items: { none: {} },
+      pins: { none: {} },
+    },
+  });
+}
+
+/** 寫入資料庫用的行程標題：空白則依目的地給預設；無目的地時保持空白。 */
 export function normalizeTripStorageTitle(
   title: string | null | undefined,
   destination: string | null | undefined,
@@ -344,7 +356,7 @@ export function normalizeTripStorageTitle(
   if (d.length > 0) {
     return `${d} 行程`;
   }
-  return "未命名行程";
+  return "";
 }
 
 /** 行程資料夾列表：mine 僅本人擁有；recent 含本人與協作；shared 僅他人擁有且本人為協作者。 */
@@ -352,6 +364,8 @@ export async function listTripsForLibrary(
   userId: string,
   scope: "recent" | "mine" | "shared",
 ): Promise<TripLibraryListRow[]> {
+  await deleteLegacyDefaultTrips(userId);
+
   const where =
     scope === "mine"
       ? { userId }
@@ -382,7 +396,7 @@ export async function listTripsForLibrary(
 
   return trips.map((trip) => ({
     id: trip.id,
-    title: trip.title?.trim() || (trip.destination?.trim() ? `${trip.destination} 行程` : "未命名行程"),
+    title: trip.title?.trim() || (trip.destination?.trim() ? `${trip.destination} 行程` : ""),
     destination: trip.destination?.trim() || "尚未設定",
     days: trip.days,
     coverImageUrl: trip.coverImageUrl ?? null,
@@ -396,69 +410,14 @@ export async function listTripsForLibrary(
 
 const tripIncludeFull = { itineraryDays: true, items: true, pins: true } as const;
 
-const defaultTripPayloadForCreate: PersistedTripPayload = {
-  tripId: "",
-  title: "",
-  destination: "",
-  days: 1,
-  budget: 0,
-  coverImageUrl: null,
-  itinerary: [
-    {
-      dayNumber: 1,
-      theme: "Day 1",
-      summary: "尚未安排內容",
-      items: [],
-    },
-  ],
-  pins: [],
-  updatedAt: "",
-};
-
-/** 建立一筆空白擁有行程並載入完整關聯（供刪光行程後或首次載入補齊至少一筆）。 */
-export async function createDefaultOwnedTrip(userId: string) {
-  const persisted = await saveTripPayload(userId, {
-    ...defaultTripPayloadForCreate,
-    updatedAt: new Date().toISOString(),
-  });
-  return prisma.trip.findUniqueOrThrow({
-    where: { id: persisted.tripId },
-    include: tripIncludeFull,
-  });
-}
-
-/**
- * 擁有者刪除行程後：若已無任何「本人擁有」的行程，建立預設行程並在必要時寫入 activeTripId。
- */
-export async function ensureAtLeastOneOwnedTripAfterDelete(ownerUserId: string) {
-  const ownedLeft = await prisma.trip.count({ where: { userId: ownerUserId } });
-  if (ownedLeft > 0) {
-    return;
-  }
-  const fresh = await createDefaultOwnedTrip(ownerUserId);
-  await ensureProfile(ownerUserId);
-  const userRow = await prisma.user.findUniqueOrThrow({
-    where: { id: ownerUserId },
-    include: { profile: true },
-  });
-  const prefs = parseProfilePreferencesRecord(userRow.profile?.preferences);
-  const active = typeof prefs.activeTripId === "string" ? prefs.activeTripId : null;
-  if (!active) {
-    await setUserActiveTripId(ownerUserId, fresh.id);
-    return;
-  }
-  const access = await getTripAccess(ownerUserId, active);
-  if (!access) {
-    await setUserActiveTripId(ownerUserId, fresh.id);
-  }
-}
-
 /**
  * 解析目前工作階段應載入的行程：preferences.activeTripId、本人最近行程、協作行程；
- * 若皆無則建立一筆預設擁有行程並設為使用中（至少一筆擁有行程）。
+ * 若皆無則回傳 null，避免自動建立預設行程。
  */
 export async function resolveSessionTrip(userId: string) {
   await ensureProfile(userId);
+  await deleteLegacyDefaultTrips(userId);
+
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { profile: true } });
   const prefs = parseProfilePreferencesRecord(user.profile?.preferences);
   const activeTripId = typeof prefs.activeTripId === "string" ? prefs.activeTripId : null;
@@ -498,9 +457,7 @@ export async function resolveSessionTrip(userId: string) {
     return collabTrip;
   }
 
-  const created = await createDefaultOwnedTrip(userId);
-  await setUserActiveTripId(userId, created.id);
-  return created;
+  return null;
 }
 
 export async function ensureCollaborationRoom(tripId: string) {
@@ -538,30 +495,32 @@ export async function getBootstrapPayload(userId: string): Promise<BootstrapPayl
   });
   const chatMessages = serializeChatMessages(messages);
 
-  const room = await ensureCollaborationRoom(tripRecord.id);
-  const tripPayload = sanitizeBootstrapTrip({
-    trip: serializeTrip({
-      ...tripRecord,
-      itineraryDays: tripRecord.itineraryDays,
-      items: tripRecord.items,
-      pins: tripRecord.pins,
-    }),
-    profile,
-    chatMessages,
-  });
+  const room = tripRecord ? await ensureCollaborationRoom(tripRecord.id) : null;
+  const tripPayload = tripRecord
+    ? sanitizeBootstrapTrip({
+        trip: serializeTrip({
+          ...tripRecord,
+          itineraryDays: tripRecord.itineraryDays,
+          items: tripRecord.items,
+          pins: tripRecord.pins,
+        }),
+        profile,
+        chatMessages,
+      })
+    : null;
 
   const prefs = parseProfilePreferencesRecord(user.profile?.preferences);
   const welcomeSaved = prefs.welcomeCompleted === true;
-  const tripStopCount = tripPayload.itinerary.reduce((count, day) => count + day.items.length, 0);
+  const tripStopCount = tripPayload?.itinerary.reduce((count, day) => count + day.items.length, 0) ?? 0;
   const onboardingCompleted =
     welcomeSaved ||
     Boolean(user.profile?.destination?.trim()) ||
     (user.profile?.budget ?? 0) > 0 ||
     tripStopCount > 0 ||
-    tripPayload.pins.length > 0 ||
-    tripPayload.days > 1 ||
-    Boolean(tripPayload.title?.trim()) ||
-    Boolean(tripPayload.destination?.trim()) ||
+    (tripPayload?.pins.length ?? 0) > 0 ||
+    (tripPayload?.days ?? 0) > 1 ||
+    Boolean(tripPayload?.title?.trim()) ||
+    Boolean(tripPayload?.destination?.trim()) ||
     chatMessages.length > 0;
 
   return {
@@ -575,7 +534,7 @@ export async function getBootstrapPayload(userId: string): Promise<BootstrapPayl
     onboardingCompleted,
     trip: tripPayload,
     chatMessages,
-    collaboration: serializeCollaboration(room),
+    collaboration: room ? serializeCollaboration(room) : null,
   };
 }
 
@@ -712,14 +671,14 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
         update: {
           title: resolvedTitle,
           destination: input.destination,
-          days: Math.max(1, input.itinerary.length || input.days),
+          days: Math.max(0, input.itinerary.length || input.days),
           ...(coverPatch ?? {}),
         },
         create: {
           userId,
           title: resolvedTitle,
           destination: input.destination,
-          days: Math.max(1, input.itinerary.length || input.days),
+          days: Math.max(0, input.itinerary.length || input.days),
           ...(coverPatch ?? {}),
         },
       })
@@ -728,7 +687,7 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
           userId,
           title: resolvedTitle,
           destination: input.destination,
-          days: Math.max(1, input.itinerary.length || input.days),
+          days: Math.max(0, input.itinerary.length || input.days),
           ...(coverPatch ?? {}),
         },
       });
@@ -737,27 +696,19 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
   await prisma.tripItem.deleteMany({ where: { tripId: trip.id } });
   await prisma.mapPin.deleteMany({ where: { tripId: trip.id } });
 
-  const normalizedDays =
-    input.itinerary.length > 0
-      ? input.itinerary
-      : [
-          {
-            dayNumber: 1,
-            theme: "Day 1",
-            summary: undefined,
-            items: [],
-          },
-        ];
+  const normalizedDays = input.itinerary;
 
-  await prisma.tripDay.createMany({
-    data: normalizedDays.map((day, index) => ({
-      tripId: trip.id,
-      dayNumber: day.dayNumber,
-      theme: day.theme || null,
-      summary: day.summary || null,
-      sortOrder: index,
-    })),
-  });
+  if (normalizedDays.length > 0) {
+    await prisma.tripDay.createMany({
+      data: normalizedDays.map((day, index) => ({
+        tripId: trip.id,
+        dayNumber: day.dayNumber,
+        theme: day.theme || null,
+        summary: day.summary || null,
+        sortOrder: index,
+      })),
+    });
+  }
 
   const items = normalizedDays.flatMap((day) =>
     day.items.map((item, index) => ({

@@ -65,6 +65,15 @@ function normalizeResult(row: SearxngResultRow | undefined): WebSearchResult | n
   };
 }
 
+function normalizeSearxngLanguage(language: string | undefined): string {
+  const value = (language || serverConfig.searxngDefaultLanguage || "zh-TW").trim();
+  if (!value) {
+    return "zh-TW";
+  }
+  // SearxNG validates IETF language tags (zh-TW), while some older configs used zh_TW.
+  return value.replace(/^([a-z]{2})_([A-Z]{2})$/, "$1-$2");
+}
+
 export async function searchWeb(options: WebSearchOptions): Promise<WebSearchResult[]> {
   const query = options.query.trim();
   if (!serverConfig.searxngEnabled || !query) {
@@ -78,7 +87,7 @@ export async function searchWeb(options: WebSearchOptions): Promise<WebSearchRes
   const params = new URLSearchParams({
     q: query,
     format: "json",
-    language: options.language || serverConfig.searxngDefaultLanguage,
+    language: normalizeSearxngLanguage(options.language),
     categories: options.categories || serverConfig.searxngDefaultCategories,
     safesearch: String(options.safeSearch ?? serverConfig.searxngSafeSearch ?? 1),
   });
