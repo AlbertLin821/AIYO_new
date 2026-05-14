@@ -138,13 +138,18 @@ export function buildTripPlanResearchRequests(request: TripPlanRequest): TravelT
       startDate: request.tripStartDate,
       endDate: request.tripEndDate || request.tripStartDate,
     },
-    {
+  ];
+  const shouldSearchYouTube =
+    Boolean(request.preferences.mustVisit?.length) ||
+    /(history|nature|city_walk|onsen|景點|古蹟|散步|溫泉|風景)/i.test(interest);
+  if (shouldSearchYouTube) {
+    requests.push({
       type: "youtube_search",
       destination: dest,
       keyword: interest || dest,
       limit: 3,
-    },
-  ];
+    });
+  }
   if (serverConfig.tavilyApiKey.trim()) {
     requests.push({
       type: "tavily_search",

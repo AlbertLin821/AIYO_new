@@ -546,6 +546,8 @@ export const zhTW = {
     jumpUnavailable: "此片段無法解析時間，無法跳轉",
     importTargetTrip: "選取行程",
     importTargetDay: "選取天數",
+    importNewTripOption: "建立新行程",
+    importAddDay: "新增一天",
     importDayOption: "第 {n} 天",
     importPickDayDialogTitle: "加入到",
     importPickDayDialogConfirm: "確認加入",

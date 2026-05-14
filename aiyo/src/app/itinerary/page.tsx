@@ -1082,11 +1082,8 @@ export default function ItineraryPage() {
                 lastUpdatedAt={lastUpdatedAt}
                 session={session}
                 isInteractive={isInteractive}
-                canEdit={status === "authenticated" && canEdit}
-                recoveringTrip={recoveringTrip}
                 showTripSummaryRow={showTripSummaryRow}
                 onShare={() => setShareOpen(true)}
-                onAddDay={() => void handleAddDay()}
                 onOpenMap={() => router.push("/map")}
               />
 

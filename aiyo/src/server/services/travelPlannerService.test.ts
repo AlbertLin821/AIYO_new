@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  applyQuestionAnswers,
+  buildQuestionCard,
   buildTravelPlanRevisionMeta,
   chatWithTravelAssistant,
   convertTripPlanToTravelPlanWithSources,
+  deriveTripDurationFromDateRange,
   isExistingItineraryInquiry,
   isTripWorkflowMessage,
 } from "@/server/services/travelPlannerService";
@@ -32,7 +35,7 @@ function makeStructuredProfile(): TripProfile {
     dietary_restrictions: [],
     disliked_activities: [],
     pace: "relaxed",
-    output_format: "report",
+    plan_integration: "direct_merge",
   };
 }
 
@@ -46,6 +49,72 @@ test("structured chat asks for travel_dates before itinerary generation when dat
   assert.equal(response.reply.responseType, "question_card");
   assert.equal(response.reply.questionCard?.response_type, "question_card");
   assert.ok(response.reply.questionCard?.questions.some((question) => question.slot === "travel_dates"));
+});
+
+test("date range derives inclusive trip days without adding extra days", () => {
+  const derived = deriveTripDurationFromDateRange({
+    start: "2026-07-01",
+    end: "2026-07-05",
+  });
+
+  assert.deepEqual(derived, {
+    start: "2026-07-01",
+    end: "2026-07-05",
+    days: 5,
+    nights: 4,
+  });
+});
+
+test("travel_dates answers override stale duration to the actual inclusive span", () => {
+  const profile = applyQuestionAnswers(
+    {
+      ...makeStructuredProfile(),
+      duration_days: 8,
+      duration_nights: 7,
+      travel_dates: null,
+    },
+    [
+      {
+        slot: "travel_dates",
+        value: {
+          start: "2026-07-01",
+          end: "2026-07-05",
+        },
+      },
+    ],
+  );
+
+  assert.equal(profile.duration_days, 5);
+  assert.equal(profile.duration_nights, 4);
+  assert.deepEqual(profile.travel_dates, {
+    start: "2026-07-01",
+    end: "2026-07-05",
+  });
+});
+
+test("existing itinerary question card asks how to merge instead of output format", () => {
+  const card = buildQuestionCard(
+    {
+      ...makeStructuredProfile(),
+      plan_integration: null,
+    },
+    {
+      destination: "熊本",
+      days: 2,
+      itinerary: [
+        {
+          dayNumber: 1,
+          items: [
+            { id: "item_1", time: "09:00", title: "熊本城", type: "attraction" },
+          ],
+        },
+      ],
+    },
+  );
+
+  assert.equal(card?.response_type, "question_card");
+  assert.ok(card?.questions.some((question) => question.slot === "plan_integration"));
+  assert.ok(card?.questions.every((question) => !question.question.includes("最後用哪種形式呈現")));
 });
 
 test("existing itinerary questions bypass the structured planning template", () => {
@@ -361,7 +430,40 @@ test("convertTripPlanToTravelPlanWithSources preserves multi-provider sources an
   assert.match(response.weather_alerts[0]?.message || "", /2026-10-01|降雨機率偏高/);
   assert.equal(response.event_alerts[0]?.citations?.[0], "official_001");
   assert.match(response.event_alerts[0]?.message || "", /官方提醒/);
+  assert.equal(response.days[0]?.transportation[0]?.text, "熊本電鐵一日券可達");
   assert.ok(response.days[0]?.spots[0]?.citations?.includes("official_001"));
   assert.ok(response.days[0]?.food_recommendations[0]?.citations?.includes("yt_001"));
   assert.ok(response.days[0]?.transportation[0]?.citations?.includes("web_001"));
+  assert.ok(!(response.summary_table[0]?.citations || []).includes("yt_001"));
+});
+
+test("convertTripPlanToTravelPlanWithSources normalizes transport enum labels for display", () => {
+  const response = convertTripPlanToTravelPlanWithSources(
+    {
+      summary: "測試",
+      days: [
+        {
+          dayNumber: 1,
+          items: [
+            {
+              id: "item_1",
+              dayNumber: 1,
+              time: "09:00",
+              title: "熊本城",
+              type: "attraction",
+              transport: "public_transport",
+              source: "ai",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      ...makeStructuredProfile(),
+      travel_dates: { start: "2026-10-01", end: "2026-10-05" },
+    },
+    {},
+  );
+
+  assert.equal(response.days[0]?.transportation[0]?.text, "大眾運輸");
 });

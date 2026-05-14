@@ -26,7 +26,7 @@ function makeProfile(): TripProfile {
     dietary_restrictions: [],
     disliked_activities: [],
     pace: "normal",
-    output_format: "report",
+    plan_integration: "direct_merge",
   };
 }
 

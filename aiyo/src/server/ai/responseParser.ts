@@ -22,7 +22,7 @@ export class StructuredOutputError extends Error {
 export interface TripPlanParseDiagnostics {
   parseMode: "direct" | "repaired" | "normalized";
   repairStage: "none" | "json_repair" | "normalized_repair";
-  issues: Array<"json_missing" | "json_invalid" | "normalized" | "must_visit_uncovered" | "avoid_pollution">;
+  issues: Array<"json_missing" | "json_invalid" | "normalized" | "must_visit_uncovered" | "avoid_pollution" | "template_pollution">;
 }
 
 export function extractJsonBlock(raw: string): string | null {
@@ -196,6 +196,42 @@ function checkAvoidPollution(
   });
 }
 
+function normalizeTemplateCheckText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function hasTemplatePollution(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+  const normalized = normalizeTemplateCheckText(value);
+  if (!normalized) {
+    return false;
+  }
+  if (/^回答[\u3400-\u9fff_a-z0-9-]+/i.test(normalized)) {
+    return true;
+  }
+  if (/^(answer|reply)\b/.test(normalized)) {
+    return true;
+  }
+  if (/^(public_transport|self_drive|charter_or_tour|ai_recommend|budget|mid_range|comfortable)$/i.test(normalized)) {
+    return true;
+  }
+  if (/^(food|onsen|history|nature|city_walk|shopping|local_culture)\s*(行程|stop|route)?$/i.test(normalized)) {
+    return true;
+  }
+  if (/^(local lunch|dinner and evening walk|old town walk|local food|culture stops|harbor evening|market route)( \d+)?$/i.test(normalized)) {
+    return true;
+  }
+  if (/^行程點 \d+$/.test(normalized)) {
+    return true;
+  }
+  if (normalized.includes("從 回答") || normalized.includes("依照 onsen") || normalized.includes("回答晚餐與散步")) {
+    return true;
+  }
+  return false;
+}
+
 function parseTripPlanJson(
   input: string,
   request: TripPlanRequest,
@@ -313,6 +349,20 @@ function parseTripPlanJson(
   if (pollutedItems.length > 0) {
     warnings.add(`QUALITY:AVOID_POLLUTION:${pollutedItems.length}`);
     issues.push("avoid_pollution");
+  }
+
+  const templatePollutionCount =
+    days.reduce((count, day) => {
+      const pollutedDayFields = [
+        day.theme,
+        day.summary || "",
+        ...day.items.flatMap((item) => [item.title, item.notes || "", item.transport || "", item.location?.name || ""]),
+      ].filter(hasTemplatePollution).length;
+      return count + pollutedDayFields;
+    }, 0) + (hasTemplatePollution(parsed.summary || "") ? 1 : 0);
+  if (templatePollutionCount > 0) {
+    warnings.add(`QUALITY:TEMPLATE_POLLUTION:${templatePollutionCount}`);
+    issues.push("template_pollution");
   }
 
   if (normalized) {

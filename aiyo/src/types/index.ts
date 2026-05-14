@@ -215,7 +215,7 @@ export type TripProfile = {
   dietary_restrictions: string[];
   disliked_activities: string[];
   pace: string | null;
-  output_format?: "report" | "spreadsheet" | "app_flow" | null;
+  plan_integration?: "direct_merge" | "self_merge" | null;
 };
 
 export type ChatQuestionOption = {

@@ -77,6 +77,27 @@ test("parseTripPlanResponse reports avoid pollution and must-visit issues in war
   assert.ok(warnings.some((warning) => warning.startsWith("QUALITY:AVOID_POLLUTION")));
 });
 
+test("parseTripPlanResponse reports template pollution when placeholder text leaks into itinerary", () => {
+  const raw = JSON.stringify({
+    summary: "回答5天4夜行程規劃",
+    days: [
+      {
+        dayNumber: 1,
+        theme: "老城散步",
+        items: [
+          { time: "09:00", title: "回答市區", type: "attraction", transport: "public_transport" },
+          { time: "12:00", title: "回答在地午餐", type: "restaurant", notes: "依照 onsen 偏好安排用餐。" },
+        ],
+      },
+    ],
+  });
+
+  const parsed = parseTripPlanResponse(raw, request);
+  const warnings = parsed.result.warnings || [];
+  assert.ok(warnings.some((warning) => warning.startsWith("QUALITY:TEMPLATE_POLLUTION")));
+  assert.ok(parsed.diagnostics.issues.includes("template_pollution"));
+});
+
 test("parseTripPlanResponse throws when JSON block is missing", () => {
   assert.throws(
     () => parseTripPlanResponse("no json here", request),

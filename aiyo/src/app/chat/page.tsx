@@ -1909,7 +1909,7 @@ export default function ChatPage() {
                         disabled={isSending}
                         tripDays={message.tripProfile?.duration_days || tripProfile?.duration_days || tripStore.days || userStore.travelDays}
                         onSubmit={(answers, displayMessage) =>
-                          void handleSend("回答行程需求", {
+                          void handleSend("請根據我剛剛填寫的行程需求繼續處理", {
                             displayMessage,
                             displayAsAssistant: true,
                             questionAnswers: answers,
@@ -1987,10 +1987,10 @@ export default function ChatPage() {
                     streamingStatusSteps.length
                       ? streamingStatusSteps
                       : [
-                          { type: "status_step", label: "整理行程需求", status: "completed" },
-                          { type: "status_step", label: "判斷是否需要查詢即時資訊", status: "completed" },
-                          { type: "status_step", label: "Searching the web", status: "running" },
-                          { type: "status_step", label: "整理每日路線與交通時間", status: "pending" },
+                          { type: "status_step", label: "整理行程需求", status: "running" },
+                          { type: "status_step", label: "判斷是否需要查詢即時資訊", status: "pending" },
+                          { type: "status_step", label: "搜尋景點、交通與美食資訊", status: "pending" },
+                          { type: "status_step", label: "整理每日路線、交通時間與景點順序", status: "pending" },
                         ]
                   }
                 />

@@ -7,6 +7,22 @@ import { fetchSourcePreview } from "@/services/aiClient";
 import { cn } from "@/lib/utils";
 import type { ChatSource } from "@/types";
 
+function buildSourceBadgeLabel(sourceId: string, source?: ChatSource): string {
+  const suffix = sourceId.match(/_(\d+)$/)?.[1];
+  const indexLabel = suffix ? ` ${String(Number(suffix))}` : "";
+  if (!source) {
+    return `來源${indexLabel}`;
+  }
+  const labelByType: Record<ChatSource["type"], string> = {
+    web: "網頁",
+    youtube: "YouTube",
+    weather: "天氣",
+    official: "官方",
+    other: "來源",
+  };
+  return `${labelByType[source.type] || "來源"}${indexLabel}`;
+}
+
 function SourcePreviewCard({
   source,
   loading,
@@ -140,7 +156,7 @@ export function SourceTag({
         )}
       >
         <Link2 className="size-3" aria-hidden />
-        <span>{sourceId}</span>
+        <span>{buildSourceBadgeLabel(sourceId, source)}</span>
       </button>
       {open ? <SourcePreviewCard source={preview} loading={loading} error={error} /> : null}
     </div>

@@ -112,15 +112,6 @@ function ItineraryEditorSection({
             <div className="rounded-2xl border border-dashed border-border-light bg-surface px-5 py-8">
               <p className="text-base font-medium text-foreground">{t.itineraryPage.noActiveTripTitle}</p>
               <p className="mt-2 text-sm text-muted">{t.itineraryPage.noActiveTripHint}</p>
-              <button
-                type="button"
-                onClick={onAddDay}
-                disabled={!canEdit || recoveringTrip}
-                className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Plus className="size-4" />
-                {recoveringTrip ? t.itineraryPage.recoverTripLoading : t.itineraryPage.createTripStartButton}
-              </button>
             </div>
           ) : (
             <>
@@ -129,15 +120,6 @@ function ItineraryEditorSection({
                   <p className="text-base font-medium text-foreground">{t.itinerary.emptyTitle}</p>
                   <p className="mt-2 text-sm text-muted">{t.itinerary.emptyHint}</p>
                   <p className="mt-1 text-xs text-muted-light">{t.itineraryPage.emptyStateHint}</p>
-                  <button
-                    type="button"
-                    onClick={onAddDay}
-                    disabled={!isAuthenticated || !canEdit || recoveringTrip}
-                    className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Plus className="size-4" />
-                    {recoveringTrip ? t.itineraryPage.recoverTripLoading : t.itineraryPage.addDay}
-                  </button>
                 </div>
               )}
               {itinerary.map((day, dayIndex) => (
