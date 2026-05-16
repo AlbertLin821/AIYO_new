@@ -18,7 +18,6 @@ import {
   History,
   Loader2,
   MapPin,
-  Mic,
   Plus,
   Send,
   Trash2,
@@ -222,49 +221,222 @@ function formatQuestionAnswerSummary(card: QuestionCardPayload, answers: ChatQue
   return `已收到你的需求：\n${lines.map((line) => `- ${line}`).join("\n")}`;
 }
 
-function addInclusiveTripDays(startDate: string, days: number): string {
-  const parsed = new Date(`${startDate}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) {
-    return startDate;
-  }
-  parsed.setDate(parsed.getDate() + Math.max(1, days) - 1);
-  return parsed.toISOString().slice(0, 10);
-}
-
 function readPositiveNumber(value: unknown): number | undefined {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : undefined;
+}
+
+function readBudgetAmountFromText(value: string | null | undefined): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const digits = value.match(/\d[\d,]*/g);
+  if (!digits?.length) {
+    return undefined;
+  }
+  const normalized = digits.join("").replace(/,/g, "");
+  return readPositiveNumber(normalized);
+}
+
+function buildTripProfileFallback(input: {
+  destination?: string;
+  days?: number;
+  budget?: number;
+  transportPreference?: string | null;
+  pace?: string | null;
+  interests?: string[];
+}): TripProfile | null {
+  if (!input.destination?.trim() && !input.days && !input.budget) {
+    return null;
+  }
+  return {
+    destination: input.destination?.trim() || null,
+    duration_days: input.days ?? null,
+    duration_nights: input.days ? Math.max(0, input.days - 1) : null,
+    departure_location: null,
+    travel_dates: null,
+    companions: null,
+    traveler_count: null,
+    budget: input.budget ? String(input.budget) : null,
+    special_population: {
+      has_elderly: false,
+      has_children: false,
+      mobility_issue: false,
+    },
+    preferences: input.interests || [],
+    transportation: input.transportPreference || null,
+    accommodation: null,
+    visited_before: [],
+    avoid_places: [],
+    dietary_restrictions: [],
+    disliked_activities: [],
+    pace: input.pace || null,
+    plan_integration: "direct_merge",
+  };
+}
+
+function formatIsoDateLabel(value: string | undefined): string {
+  if (!value) {
+    return "未選擇";
+  }
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return parsed.toLocaleDateString("zh-TW", {
+    month: "numeric",
+    day: "numeric",
+    weekday: "short",
+  });
+}
+
+function normalizeDisplayText(value: string): string {
+  return value.toLowerCase().replace(/臺/g, "台").replace(/\s+/g, "").trim();
+}
+
+function parseIsoLocalDate(value?: string): Date | null {
+  if (!value) {
+    return null;
+  }
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+  const parsed = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getFullYear() !== Number(match[1]) ||
+    parsed.getMonth() !== Number(match[2]) - 1 ||
+    parsed.getDate() !== Number(match[3])
+  ) {
+    return null;
+  }
+  return parsed;
+}
+
+function toIsoLocalDate(value: Date): string {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+}
+
+function shiftMonth(value: Date, delta: number): Date {
+  return new Date(value.getFullYear(), value.getMonth() + delta, 1);
+}
+
+function buildCalendarMatrix(month: Date): Array<{ iso: string; day: number; inMonth: boolean }> {
+  const year = month.getFullYear();
+  const monthIndex = month.getMonth();
+  const firstDay = new Date(year, monthIndex, 1);
+  const firstWeekday = firstDay.getDay();
+  const start = new Date(year, monthIndex, 1 - firstWeekday);
+  return Array.from({ length: 42 }, (_, index) => {
+    const current = new Date(start);
+    current.setDate(start.getDate() + index);
+    return {
+      iso: toIsoLocalDate(current),
+      day: current.getDate(),
+      inMonth: current.getMonth() === monthIndex,
+    };
+  });
+}
+
+function uniqueByName<T extends { name: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = normalizeDisplayText(item.name);
+    if (!key || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }
 
 function StatusStepList({ steps }: { steps: StatusStepPayload[] }) {
   if (!steps.length) {
     return null;
   }
+  const activeIndex = Math.max(
+    0,
+    steps.findIndex((step) => step.status === "running"),
+  );
+
   return (
-    <div className="space-y-2">
-      {steps.map((step, index) => (
-        <div key={`${step.label}_${index}`} className="flex items-center gap-2 text-sm text-foreground">
-          <span
-            className={cn(
-              "flex size-5 shrink-0 items-center justify-center rounded-full border",
-              step.status === "completed"
-                ? "border-primary bg-primary text-white"
-                : step.status === "running"
-                  ? "border-secondary bg-secondary/10 text-secondary"
-                  : "border-border-light bg-white text-muted",
-            )}
-          >
-            {step.status === "completed" ? (
-              <Check className="size-3" aria-hidden />
-            ) : step.status === "running" ? (
-              <Loader2 className="size-3 animate-spin" aria-hidden />
-            ) : (
-              <span className="size-1.5 rounded-full bg-current" aria-hidden />
-            )}
-          </span>
-          <span>{step.label}</span>
+    <div className="overflow-hidden rounded-[28px] border border-primary/10 bg-white/92 px-4 py-4 shadow-[0_24px_70px_rgba(15,23,42,0.08)] backdrop-blur">
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/70">Planning Progress</p>
+          <p className="mt-1 text-sm text-muted">AI 正在整理需求、查找路線並生成每日安排。</p>
         </div>
-      ))}
+        <span className="rounded-full bg-primary/8 px-3 py-1 text-xs font-semibold text-primary">
+          Step {Math.min(activeIndex + 1, steps.length)} / {steps.length}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-start gap-y-4">
+        {steps.map((step, index) => {
+          const isCompleted = step.status === "completed";
+          const isRunning = step.status === "running";
+          const lineFilled = isCompleted || (index < activeIndex && !steps.some((item) => item.status === "running"));
+          return (
+            <div key={`${step.label}_${index}`} className="flex min-w-[180px] flex-1 items-start">
+              <div className="flex w-full items-start gap-3">
+                <div className="flex min-w-[40px] flex-col items-center">
+                  <motion.span
+                    initial={{ scale: 0.92, opacity: 0.75 }}
+                    animate={{
+                      scale: isRunning ? [1, 1.08, 1] : 1,
+                      opacity: 1,
+                    }}
+                    transition={{
+                      duration: isRunning ? 1.4 : 0.25,
+                      repeat: isRunning ? Number.POSITIVE_INFINITY : 0,
+                      ease: "easeInOut",
+                    }}
+                    className={cn(
+                      "flex size-10 items-center justify-center rounded-full border text-sm font-semibold transition-colors",
+                      isCompleted
+                        ? "border-primary bg-primary text-white shadow-[0_10px_30px_rgba(37,99,235,0.25)]"
+                        : isRunning
+                          ? "border-primary bg-white text-primary shadow-[0_10px_24px_rgba(37,99,235,0.18)]"
+                          : "border-slate-300 bg-white text-slate-400",
+                    )}
+                  >
+                    {isCompleted ? (
+                      <Check className="size-4" aria-hidden />
+                    ) : isRunning ? (
+                      <Loader2 className="size-4 animate-spin" aria-hidden />
+                    ) : (
+                      index + 1
+                    )}
+                  </motion.span>
+                  {index < steps.length - 1 ? (
+                    <div className="mt-2 hidden h-px w-[calc(100vw/9)] min-w-[64px] max-w-[140px] overflow-hidden rounded-full bg-slate-200 sm:block">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: lineFilled ? "100%" : isRunning ? "62%" : "0%" }}
+                        transition={{ duration: 0.45, ease: "easeOut" }}
+                        className="h-full rounded-full bg-primary"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+                <div className="pt-1">
+                  <p
+                    className={cn(
+                      "text-sm font-semibold",
+                      isCompleted || isRunning ? "text-foreground" : "text-muted",
+                    )}
+                  >
+                    {step.label}
+                  </p>
+                  <p className="mt-1 text-xs text-muted">
+                    {isCompleted ? "已完成" : isRunning ? "進行中" : "等待前一步完成"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -303,15 +475,115 @@ function RevisionActionBar({
   );
 }
 
+function CalendarDateField({
+  label,
+  value,
+  min,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value?: string;
+  min?: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [visibleMonth, setVisibleMonth] = useState<Date>(() => {
+    const initial = parseIsoLocalDate(value) || parseIsoLocalDate(min) || new Date();
+    return new Date(initial.getFullYear(), initial.getMonth(), 1);
+  });
+
+  const minDate = parseIsoLocalDate(min);
+  const monthLabel = visibleMonth.toLocaleDateString("zh-TW", {
+    year: "numeric",
+    month: "long",
+  });
+  const selectedIso = value || "";
+
+  return (
+    <div className="relative space-y-1">
+      <span className="text-xs font-semibold text-muted">{label}</span>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          const nextVisible = parseIsoLocalDate(value) || parseIsoLocalDate(min) || new Date();
+          setVisibleMonth(new Date(nextVisible.getFullYear(), nextVisible.getMonth(), 1));
+          setOpen((prev) => !prev);
+        }}
+        className="flex w-full items-center justify-between rounded-xl border border-border-light bg-white px-3 py-2 text-sm text-foreground transition-colors hover:border-primary/40 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        <span>{formatIsoDateLabel(value)}</span>
+        <CalendarDays className="size-4 text-primary" aria-hidden />
+      </button>
+      {open ? (
+        <div className="absolute left-0 top-full z-20 mt-2 w-[286px] rounded-2xl border border-border-light bg-white p-3 shadow-[0_24px_60px_rgba(15,23,42,0.14)]">
+          <div className="mb-3 flex items-center justify-between">
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => setVisibleMonth((prev) => shiftMonth(prev, -1))}
+              className="rounded-full border border-border-light p-1.5 text-slate-600 transition-colors hover:border-primary/30 hover:bg-primary/5"
+            >
+              <ChevronLeft className="size-4" aria-hidden />
+            </button>
+            <p className="text-sm font-semibold text-foreground">{monthLabel}</p>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => setVisibleMonth((prev) => shiftMonth(prev, 1))}
+              className="rounded-full border border-border-light p-1.5 text-slate-600 transition-colors hover:border-primary/30 hover:bg-primary/5"
+            >
+              <ChevronRight className="size-4" aria-hidden />
+            </button>
+          </div>
+          <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-muted">
+            {["日", "一", "二", "三", "四", "五", "六"].map((weekday) => (
+              <span key={weekday}>{weekday}</span>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {buildCalendarMatrix(visibleMonth).map((cell) => {
+              const disabledByMin = Boolean(minDate && cell.iso < toIsoLocalDate(minDate));
+              const selected = selectedIso === cell.iso;
+              return (
+                <button
+                  key={cell.iso}
+                  type="button"
+                  disabled={disabled || disabledByMin}
+                  onClick={() => {
+                    onChange(cell.iso);
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    "flex aspect-square items-center justify-center rounded-xl text-sm transition-colors",
+                    selected
+                      ? "bg-primary text-white shadow-[0_10px_24px_rgba(37,99,235,0.25)]"
+                      : cell.inMonth
+                        ? "bg-slate-50 text-slate-700 hover:bg-primary/8"
+                        : "bg-transparent text-slate-300 hover:bg-slate-100",
+                    disabledByMin ? "cursor-not-allowed opacity-40" : "",
+                  )}
+                >
+                  {cell.day}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function QuestionCard({
   card,
   disabled,
   onSubmit,
-  tripDays,
 }: {
   card: QuestionCardPayload;
   disabled?: boolean;
-  tripDays?: number;
   onSubmit: (answers: ChatQuestionAnswer[], displayMessage: string) => void;
 }) {
   const [answers, setAnswers] = useState<Record<string, string | string[] | { start?: string; end?: string }>>({});
@@ -340,17 +612,15 @@ function QuestionCard({
       const current = typeof prev[question.slot] === "object" && !Array.isArray(prev[question.slot])
         ? (prev[question.slot] as { start?: string; end?: string })
         : {};
-      const next = {
-        ...current,
-        [key]: value,
-      };
-      const inferredDays = readPositiveNumber(prev.duration_days) || tripDays;
-      if (key === "start" && value && inferredDays && !current.end) {
-        next.end = addInclusiveTripDays(value, inferredDays);
-      }
       return {
         ...prev,
-        [question.slot]: next,
+        [question.slot]: {
+          ...current,
+          [key]: value,
+          ...(key === "start" && current.end && value && current.end < value
+            ? { end: value }
+            : {}),
+        },
       };
     });
   }
@@ -359,6 +629,25 @@ function QuestionCard({
     slot: question.slot,
     value: answers[question.slot] ?? (question.type === "multi_choice" ? [] : ""),
   }));
+  const canSubmit = card.questions.every((question) => {
+    const value = answers[question.slot];
+    if (question.type === "multi_choice") {
+      return Array.isArray(value) && value.length > 0;
+    }
+    if (question.type === "date_range") {
+      return Boolean(
+        value &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        (value.start || "").trim() &&
+        (value.end || "").trim(),
+      );
+    }
+    if (typeof value === "number") {
+      return Number.isFinite(value);
+    }
+    return typeof value === "string" ? value.trim().length > 0 : false;
+  });
 
   return (
     <div className="w-full space-y-4 rounded-2xl border border-border-light bg-white/90 p-4 shadow-soft">
@@ -449,29 +738,38 @@ function QuestionCard({
                 })}
               </div>
             ) : question.type === "date_range" ? (
-              <div className="grid gap-2 sm:grid-cols-2">
-                <input
-                  type="date"
-                  disabled={disabled}
-                  value={
-                    typeof answers[question.slot] === "object" && !Array.isArray(answers[question.slot])
-                      ? ((answers[question.slot] as { start?: string; end?: string }).start || "")
-                      : ""
-                  }
-                  onChange={(event) => setDateRange(question, "start", event.target.value)}
-                  className="w-full rounded-xl border border-border-light bg-white px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
-                />
-                <input
-                  type="date"
-                  disabled={disabled}
-                  value={
-                    typeof answers[question.slot] === "object" && !Array.isArray(answers[question.slot])
-                      ? ((answers[question.slot] as { start?: string; end?: string }).end || "")
-                      : ""
-                  }
-                  onChange={(event) => setDateRange(question, "end", event.target.value)}
-                  className="w-full rounded-xl border border-border-light bg-white px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
-                />
+              <div className="space-y-3 rounded-2xl border border-primary/10 bg-primary/[0.03] p-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <CalendarDateField
+                    label="出發日期"
+                    disabled={disabled}
+                    value={
+                      typeof answers[question.slot] === "object" && !Array.isArray(answers[question.slot])
+                        ? ((answers[question.slot] as { start?: string; end?: string }).start || "")
+                        : ""
+                    }
+                    onChange={(value) => setDateRange(question, "start", value)}
+                  />
+                  <CalendarDateField
+                    label="返回日期"
+                    disabled={disabled}
+                    min={
+                      typeof answers[question.slot] === "object" && !Array.isArray(answers[question.slot])
+                        ? ((answers[question.slot] as { start?: string; end?: string }).start || undefined)
+                        : undefined
+                    }
+                    value={
+                      typeof answers[question.slot] === "object" && !Array.isArray(answers[question.slot])
+                        ? ((answers[question.slot] as { start?: string; end?: string }).end || "")
+                        : ""
+                    }
+                    onChange={(value) => setDateRange(question, "end", value)}
+                  />
+                </div>
+                <p className="flex items-center gap-2 text-xs text-muted">
+                  <CalendarDays className="size-3.5 text-primary" aria-hidden />
+                  兩個日期都由你自行選取，系統不會自動幫你推算回程日。
+                </p>
               </div>
             ) : (
               <input
@@ -488,7 +786,7 @@ function QuestionCard({
       </div>
       <button
         type="button"
-        disabled={disabled}
+        disabled={disabled || !canSubmit}
         onClick={() => onSubmit(normalizedAnswers, formatQuestionAnswerSummary(card, normalizedAnswers))}
         className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
       >
@@ -510,150 +808,172 @@ function TravelPlanCard({
 }) {
   const sources = plan.sources;
   const sourceEntries = Object.values(sources || {});
+  const overviewDays = plan.summary_table.map((row, index) => {
+    const day = plan.days[index];
+    const routeNames = uniqueByName(day?.spots || []).map((spot) => spot.name).slice(0, 4);
+    return {
+      day: row.day,
+      routeNames,
+      theme: day?.theme || row.main_route,
+      citations: row.citations,
+    };
+  });
 
   return (
     <div className="w-full space-y-5">
-      <div className="rounded-2xl border border-border-light bg-white/90 p-4 shadow-soft">
-      <h3 className="text-base font-semibold text-foreground">{plan.title}</h3>
-      {plan.revision ? (
-        <div className="mt-3 rounded-xl border border-border-light bg-cream/50 p-3 text-xs text-muted">
-          <p className="font-semibold text-foreground">本次調整摘要</p>
-          <p className="mt-1">
-            來源版本：<span className="font-mono">{plan.revision.revised_from}</span>
-          </p>
-          {plan.revision.changed_days.length > 0 ? (
-            <p className="mt-1">
-              變更日期：{plan.revision.changed_days.join("、")}
-            </p>
-          ) : null}
-          <ul className="mt-2 space-y-1 leading-relaxed">
-            {plan.revision.change_summary.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-          {plan.revision.added_items.length > 0 ? (
-            <div className="mt-2">
-              <p className="font-semibold text-foreground">新增項目</p>
-              <ul className="mt-1 space-y-1">
-                {plan.revision.added_items.slice(0, 3).map((item) => (
-                  <li key={`${item.day}_${item.time}_${item.title}`}>{item.day} {item.time} {item.title}</li>
-                ))}
-              </ul>
+      <div className="overflow-hidden rounded-[28px] border border-border-light bg-white/92 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+        <div className="bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.14),_transparent_36%),linear-gradient(135deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-5 py-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-2">
+              <span className="inline-flex rounded-full border border-primary/15 bg-primary/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                Final Plan
+              </span>
+              <h3 className="text-lg font-semibold tracking-tight text-foreground">{plan.title}</h3>
+              <p className="max-w-2xl text-sm leading-relaxed text-muted">
+                以每日動線、景點停留順序與餐食節奏整理成可直接採用的版本，右側行程與編輯頁會同步使用這份內容。
+              </p>
             </div>
-          ) : null}
-          {plan.revision.moved_items.length > 0 ? (
-            <div className="mt-2">
-              <p className="font-semibold text-foreground">跨日移動項目</p>
-              <ul className="mt-1 space-y-1">
-                {plan.revision.moved_items.slice(0, 3).map((item) => (
-                  <li key={`${item.title}_${item.from_day}_${item.to_day}_${item.to_time}`}>
-                    {item.title}：{item.from_day} {item.from_time} {"->"} {item.to_day} {item.to_time}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {plan.revision.retimed_items.length > 0 ? (
-            <div className="mt-2">
-              <p className="font-semibold text-foreground">同日調整時間</p>
-              <ul className="mt-1 space-y-1">
-                {plan.revision.retimed_items.slice(0, 3).map((item) => (
-                  <li key={`${item.day}_${item.title}_${item.from_time}_${item.to_time}`}>
-                    {item.day} {item.title}：{item.from_time} {"->"} {item.to_time}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {plan.revision.removed_items.length > 0 ? (
-            <div className="mt-2">
-              <p className="font-semibold text-foreground">移除或替換項目</p>
-              <ul className="mt-1 space-y-1">
-                {plan.revision.removed_items.slice(0, 3).map((item) => (
-                  <li key={`${item.day}_${item.time}_${item.title}`}>{item.day} {item.time} {item.title}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-      <div className="overflow-hidden rounded-xl border border-border-light">
-        <table className="w-full border-collapse text-sm">
-          <tbody>
-            {plan.summary_table.map((row) => (
-              <tr key={row.day} className="border-b border-border-light last:border-b-0">
-                <th className="w-20 bg-primary/5 px-3 py-2 text-left font-semibold text-primary">{row.day}</th>
-                <td className="px-3 py-2 text-foreground">
-                  <p>{row.main_route}</p>
+            <div className="grid min-w-[220px] gap-2 sm:grid-cols-2">
+              {overviewDays.map((row) => (
+                <div key={row.day} className="rounded-2xl border border-white/70 bg-white/75 px-3 py-3 shadow-[0_14px_35px_rgba(148,163,184,0.14)]">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary/80">{row.day}</p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">{row.theme}</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {(row.routeNames.length ? row.routeNames : [row.theme]).slice(0, 4).map((name) => (
+                      <span
+                        key={`${row.day}_${name}`}
+                        className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-700"
+                      >
+                        {name}
+                      </span>
+                    ))}
+                  </div>
                   <CitationGroup citations={row.citations} sources={sources} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="space-y-3">
-        {plan.days.map((day) => (
-          <section key={day.day} className="rounded-xl border border-border-light bg-cream/40 p-3">
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">{day.day}</span>
-              <h4 className="text-sm font-semibold text-foreground">{day.theme}</h4>
+                </div>
+              ))}
             </div>
-            <CitationGroup citations={day.citations} sources={sources} />
-            {day.transportation.length > 0 && (
-              <div className="mb-3">
-                <p className="mb-1 text-xs font-semibold text-muted">交通</p>
-                <ul className="space-y-1 text-sm text-foreground">
-                  {day.transportation.map((item) => (
-                    <li key={item.text}>
-                      <p>{item.text}</p>
-                      <CitationGroup citations={item.citations} sources={sources} />
-                    </li>
-                  ))}
-                </ul>
+          </div>
+        </div>
+
+        {plan.revision ? (
+          <div className="border-t border-border-light bg-amber-50/70 px-5 py-4 text-xs text-slate-700">
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="font-semibold text-foreground">本次調整摘要</p>
+              <span className="rounded-full bg-white px-2.5 py-1 font-mono text-[11px] text-muted">
+                {plan.revision.revised_from}
+              </span>
+              {plan.revision.changed_days.length > 0 ? (
+                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                  {plan.revision.changed_days.join("、")}
+                </span>
+              ) : null}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {plan.revision.change_summary.map((item, index) => (
+                <span
+                  key={`${index}_${item}`}
+                  className="rounded-full border border-amber-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-700"
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="space-y-4">
+        {plan.days.map((day) => (
+          <section
+            key={day.day}
+            className="overflow-hidden rounded-[26px] border border-border-light bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(249,250,251,0.94))] shadow-[0_16px_44px_rgba(148,163,184,0.16)]"
+          >
+            <div className="border-b border-border-light bg-slate-50/80 px-4 py-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-white">{day.day}</span>
+                <h4 className="text-base font-semibold text-foreground">{day.theme}</h4>
               </div>
-            )}
-            {day.spots.length > 0 && (
-              <div className="mb-3">
-                <p className="mb-1 text-xs font-semibold text-muted">景點</p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {day.spots.map((spot) => (
-                    <div key={spot.name} className="rounded-lg bg-white/70 px-3 py-2">
-                      <p className="text-sm font-medium text-foreground">{spot.name}</p>
-                      <p className="mt-1 text-xs leading-relaxed text-muted">{spot.feature}</p>
-                      <CitationGroup citations={spot.citations} sources={sources} />
+              <div className="mt-3 flex flex-wrap gap-2">
+                {uniqueByName(day.spots).map((spot) => (
+                  <span
+                    key={`${day.day}_route_${spot.name}`}
+                    className="rounded-full border border-primary/10 bg-white px-3 py-1 text-xs font-medium text-slate-700"
+                  >
+                    {spot.name}
+                  </span>
+                ))}
+              </div>
+              <CitationGroup citations={day.citations} sources={sources} />
+            </div>
+
+            <div className="grid gap-4 px-4 py-4 lg:grid-cols-[1.5fr_1fr]">
+              <div className="space-y-4">
+                {day.transportation.length > 0 && (
+                  <div className="rounded-2xl border border-sky-100 bg-sky-50/70 p-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">交通策略</p>
+                    <ul className="space-y-2 text-sm text-foreground">
+                      {day.transportation.map((item, index) => (
+                        <li key={`${day.day}_transport_${index}_${item.text}`} className="rounded-xl bg-white/80 px-3 py-2">
+                          <p>{item.text}</p>
+                          <CitationGroup citations={item.citations} sources={sources} />
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {uniqueByName(day.spots).length > 0 && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {uniqueByName(day.spots).map((spot, index) => (
+                      <motion.div
+                        key={`${day.day}_spot_${index}_${spot.name}`}
+                        initial={{ opacity: 0, y: 14 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true, amount: 0.15 }}
+                        transition={{ duration: 0.28, delay: index * 0.05 }}
+                        className="rounded-2xl border border-white/80 bg-white p-4 shadow-[0_12px_30px_rgba(148,163,184,0.14)]"
+                      >
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary/70">Spot {index + 1}</p>
+                        <p className="mt-2 text-sm font-semibold text-foreground">{spot.name}</p>
+                        <p className="mt-2 text-xs leading-6 text-muted">{spot.feature}</p>
+                        <CitationGroup citations={spot.citations} sources={sources} />
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                {uniqueByName(day.food_recommendations).length > 0 && (
+                  <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">餐食安排</p>
+                    <div className="space-y-2">
+                      {uniqueByName(day.food_recommendations).map((food, index) => (
+                        <div key={`${day.day}_food_${index}_${food.name}`} className="rounded-xl bg-white/85 px-3 py-3">
+                          <p className="text-sm font-semibold text-foreground">{food.name}</p>
+                          <p className="mt-1 text-xs leading-6 text-muted">{food.description}</p>
+                          <CitationGroup citations={food.citations} sources={sources} />
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
+
+                {day.tips.length > 0 && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700">提醒與備註</p>
+                    <ul className="space-y-2">
+                      {day.tips.map((tip, index) => (
+                        <li key={`${day.day}_tip_${index}_${tip.text}`} className="rounded-xl bg-white/85 px-3 py-2 text-xs leading-6 text-muted">
+                          <p>{tip.text}</p>
+                          <CitationGroup citations={tip.citations} sources={sources} />
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
-            )}
-            {day.food_recommendations.length > 0 && (
-              <div className="mb-3">
-                <p className="mb-1 text-xs font-semibold text-muted">美食</p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {day.food_recommendations.map((food) => (
-                    <div key={food.name} className="rounded-lg bg-white/70 px-3 py-2">
-                      <p className="text-sm font-medium text-foreground">{food.name}</p>
-                      <p className="mt-1 text-xs leading-relaxed text-muted">{food.description}</p>
-                      <CitationGroup citations={food.citations} sources={sources} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {day.tips.length > 0 && (
-              <div>
-                <p className="mb-1 text-xs font-semibold text-muted">提醒</p>
-                <ul className="space-y-1 text-xs leading-relaxed text-muted">
-                  {day.tips.map((tip) => (
-                    <li key={tip.text}>
-                      <p>{tip.text}</p>
-                      <CitationGroup citations={tip.citations} sources={sources} />
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            </div>
           </section>
         ))}
       </div>
@@ -671,8 +991,8 @@ function TravelPlanCard({
               <CitationGroup citations={alert.citations} sources={sources} />
             </div>
           ))}
-          {plan.assumptions.map((item) => (
-            <div key={item.text} className="mb-2 last:mb-0">
+          {plan.assumptions.map((item, index) => (
+            <div key={`assumption_${index}_${item.text}`} className="mb-2 last:mb-0">
               <p>{item.text}</p>
               <CitationGroup citations={item.citations} sources={sources} />
             </div>
@@ -699,7 +1019,6 @@ function TravelPlanCard({
           </div>
         </div>
       )}
-      </div>
       <RevisionActionBar disabled={revisionDisabled} onRevise={onRevise} />
     </div>
   );
@@ -729,11 +1048,13 @@ export default function ChatPage() {
   const videoSummaryQueueTokenRef = useRef(0);
   const videoSummaryInflightRef = useRef(new Map<string, Promise<VideoSummaryResult>>());
   const autoSummaryActiveRef = useRef(false);
+  const hydratedConversationTripRef = useRef<string | null>(null);
   const {
     conversations,
     activeConversationId,
     messages,
     createConversation,
+    setConversationTrip,
     selectConversation,
     deleteConversation,
     appendMessage,
@@ -814,31 +1135,104 @@ export default function ChatPage() {
   const contextDestination =
     tripStore.destination.trim() ||
     tripStore.title.trim() ||
+    tripProfile?.destination?.trim() ||
     (planningSnapshot.hasDestination ? planningSnapshot.destination : "");
   const activeConversation = conversations.find(
     (conversation) => conversation.id === activeConversationId,
   );
+  const activeConversationTripId = activeConversation?.tripId?.trim() || "";
   const hasActiveItineraryContext = Boolean(
     activeConversationId &&
-      activeConversation?.tripId &&
-      activeConversation.tripId === tripStore.tripId &&
+      activeConversationTripId &&
+      activeConversationTripId === tripStore.tripId &&
       tripStore.tripId,
   );
   const hasContextPanel =
-    hasActiveItineraryContext &&
+    (hasActiveItineraryContext || Boolean(activeConversationId && tripProfile)) &&
     (planningSnapshot.hasPlanningContext ||
       Boolean(contextDestination) ||
+      Boolean(tripProfile?.duration_days) ||
+      Boolean(tripProfile?.budget) ||
       tripStore.itinerary.length > 0);
 
   const extractedValues = [
     contextDestination || t.chat.valueUnset,
     tripStore.days > 0
       ? `${tripStore.days} ${t.chat.daysUnit}`
+      : tripProfile?.duration_days
+        ? `${tripProfile.duration_days} ${t.chat.daysUnit}`
       : t.chat.valueUnset,
     tripStore.budget > 0 || planningSnapshot.hasBudget
       ? `${t.chat.currencyPrefix}${(tripStore.budget || planningSnapshot.budget).toLocaleString()}`
+      : tripProfile?.budget?.trim()
+        ? tripProfile.budget.trim()
       : t.chat.valueUnset,
   ];
+
+  useEffect(() => {
+    const recoveredProfile =
+      [...(activeConversation?.messages || messages)]
+        .reverse()
+        .find((message) => message.tripProfile)?.tripProfile ||
+      buildTripProfileFallback({
+        destination: tripStore.destination || planningSnapshot.destination,
+        days: tripStore.days || planningSnapshot.days,
+        budget: tripStore.budget || planningSnapshot.budget,
+        transportPreference: userStore.preferredTransport || null,
+        pace: userStore.travelPace || null,
+        interests: userStore.interests,
+      });
+    if (recoveredProfile) {
+      setTripProfile(recoveredProfile);
+    }
+  }, [
+    activeConversation?.messages,
+    messages,
+    planningSnapshot.budget,
+    planningSnapshot.days,
+    planningSnapshot.destination,
+    tripStore.budget,
+    tripStore.days,
+    tripStore.destination,
+    userStore.interests,
+    userStore.preferredTransport,
+    userStore.travelPace,
+  ]);
+
+  useEffect(() => {
+    if (!activeConversationId || !activeConversationTripId) {
+      hydratedConversationTripRef.current = null;
+      return;
+    }
+    if (activeConversationTripId === tripStore.tripId) {
+      hydratedConversationTripRef.current = `${activeConversationId}:${activeConversationTripId}`;
+      return;
+    }
+    const hydrationKey = `${activeConversationId}:${activeConversationTripId}`;
+    if (hydratedConversationTripRef.current === hydrationKey) {
+      return;
+    }
+
+    let cancelled = false;
+    hydratedConversationTripRef.current = hydrationKey;
+    void setActiveTrip(activeConversationTripId)
+      .then((snapshot) => {
+        if (cancelled) {
+          return;
+        }
+        syncService.applyTripSwitch(snapshot);
+        syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          hydratedConversationTripRef.current = null;
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeConversationId, activeConversationTripId, tripStore.tripId]);
   const isCitationList = (
     sources: ChatMessage["sources"],
   ): sources is Array<{ title: string; url: string }> => Array.isArray(sources);
@@ -941,6 +1335,45 @@ export default function ChatPage() {
     setTripProfile(null);
     setTripPickerOpen(false);
     setTripPickerAction(null);
+  }
+
+  async function ensureTripPlanningContext(conversationTitle?: string) {
+    const currentTripId = useTripStore.getState().tripId?.trim();
+    const currentConversationId = useChatStore.getState().activeConversationId;
+    const currentConversation = useChatStore
+      .getState()
+      .conversations.find((conversation) => conversation.id === currentConversationId);
+    const conversationTripId = currentConversation?.tripId?.trim();
+
+    if (currentTripId) {
+      if (currentConversationId) {
+        setConversationTrip(currentConversationId, currentTripId);
+      }
+      return currentTripId;
+    }
+
+    if (conversationTripId) {
+      const snapshot = await setActiveTrip(conversationTripId);
+      syncService.applyTripSwitch(snapshot);
+      syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
+      if (currentConversationId) {
+        setConversationTrip(currentConversationId, conversationTripId);
+      }
+      return conversationTripId;
+    }
+
+    const created = await createNewTrip();
+    const snapshot = await setActiveTrip(created.tripId);
+    syncService.applyTripSwitch(snapshot);
+    syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
+
+    const nextConversationId = useChatStore.getState().activeConversationId;
+    if (nextConversationId) {
+      setConversationTrip(nextConversationId, created.tripId);
+    } else {
+      createConversation(conversationTitle, created.tripId);
+    }
+    return created.tripId;
   }
 
   async function selectConversationForChat(conversationId: string) {
@@ -1054,8 +1487,9 @@ export default function ChatPage() {
       tripProfile?: TripProfile | null;
     },
   ) {
+    const hasQuestionAnswers = Boolean(options?.questionAnswers?.length);
     const message = (rawInput || input).trim();
-    if (!message || isSending) {
+    if ((!message && !hasQuestionAnswers) || isSending) {
       return;
     }
 
@@ -1082,13 +1516,95 @@ export default function ChatPage() {
     setErrorMessage(null);
     setIsSending(true);
     const chatProcessId = startFrontendDebugProcess("chat-ui", "聊天送出流程", {
-      messagePreview: message.slice(0, 80),
-      hasQuestionAnswers: Boolean(options?.questionAnswers?.length),
+      messagePreview: (message || options?.displayMessage || "").slice(0, 80),
+      hasQuestionAnswers,
       hasTripProfile: Boolean(options?.tripProfile ?? tripProfile),
     });
     const { sessionId: progressSessionId, processId: sseProcessId } = startStatusStream();
 
     try {
+      const activeProfile =
+        options?.tripProfile ??
+        tripProfile ??
+        buildTripProfileFallback({
+          destination: tripStore.destination || planningSnapshot.destination,
+          days: tripStore.days || planningSnapshot.days,
+          budget: tripStore.budget || planningSnapshot.budget,
+          transportPreference: userStore.preferredTransport || null,
+          pace: userStore.travelPace || null,
+          interests: userStore.interests,
+        }) ??
+        undefined;
+      const shouldUseTripRevisionFlow =
+        !hasQuestionAnswers &&
+        !options?.displayAsAssistant &&
+        Boolean(activeProfile) &&
+        useTripStore.getState().itinerary.length > 0 &&
+        isItineraryMutationCommand(message);
+
+      if (shouldUseTripRevisionFlow && activeProfile) {
+        const revisionProfile: TripProfile = {
+          ...activeProfile,
+          plan_integration: "direct_merge",
+        };
+        updateFrontendDebugProcess(chatProcessId, "trip-revision-reroute", {
+          progressSessionId,
+        });
+        const response = await reviseTripPlan({
+          instruction: message,
+          tripProfile: revisionProfile,
+          context: {
+            destination: revisionProfile.destination || planningSnapshot.destination,
+            days: revisionProfile.duration_days || planningSnapshot.days,
+            budget: planningSnapshot.budget,
+            itinerary: useTripStore.getState().itinerary,
+            tripStartDate: revisionProfile.travel_dates?.start || undefined,
+            tripEndDate: revisionProfile.travel_dates?.end || revisionProfile.travel_dates?.start || undefined,
+            preferences: {
+              interests: revisionProfile.preferences,
+              pace:
+                revisionProfile.pace === "relaxed" || revisionProfile.pace === "intensive"
+                  ? revisionProfile.pace
+                  : useUserStore.getState().travelPace || "moderate",
+              transportPreference: revisionProfile.transportation || useUserStore.getState().preferredTransport,
+              budget: planningSnapshot.budget,
+            },
+          },
+          progressSessionId,
+        });
+        appendMessage(response.reply);
+        if (response.tripProfile) {
+          setTripProfile(response.tripProfile);
+        }
+        await ensureTripPlanningContext(
+          response.tripProfile?.destination ||
+            activeConversation?.title ||
+            displayMessage,
+        );
+        if (response.itinerarySuggestion) {
+          await applyGeneratedTripPlan(response);
+        } else if (response.proposedChanges?.length) {
+          await applyAiProposedChanges(response.proposedChanges, { navigate: false });
+        } else {
+          pushToast({
+            variant: "warning",
+            title: "沒有可套用的行程變更",
+            description: "AI 已回覆，但這次沒有產生可直接同步到行程的修改內容。",
+          });
+        }
+        updateFrontendDebugProcess(chatProcessId, "reply-received", {
+          replyType: response.reply.responseType,
+          replyId: response.reply.id,
+          tripRevisionFlow: true,
+        });
+        finishFrontendDebugProcess(chatProcessId, {
+          progressSessionId,
+          finalReplyType: response.reply.responseType,
+          tripRevisionFlow: true,
+        });
+        return;
+      }
+
       updateFrontendDebugProcess(chatProcessId, "request-dispatched", {
         progressSessionId,
       });
@@ -1118,15 +1634,37 @@ export default function ChatPage() {
       if (response.tripProfile) {
         setTripProfile(response.tripProfile);
       }
+      const shouldPersistPlanningResult =
+        Boolean(response.itinerarySuggestion) ||
+        Boolean(response.proposedChanges?.length && response.reply.responseType !== "question_card");
+      if (shouldPersistPlanningResult && response.tripProfile?.plan_integration !== "self_merge") {
+        await ensureTripPlanningContext(
+          response.tripProfile?.destination ||
+            activeConversation?.title ||
+            displayMessage,
+        );
+      }
+      const shouldDirectMergeGeneratedPlan =
+        response.reply.responseType === "travel_plan" &&
+        response.tripProfile?.plan_integration !== "self_merge";
       const shouldApplyItineraryUpdate =
         Boolean(useTripStore.getState().tripId) &&
-        (isItineraryMutationCommand(message) || response.reply.responseType === "travel_plan");
+        (isItineraryMutationCommand(message) || shouldDirectMergeGeneratedPlan);
       if (shouldApplyItineraryUpdate) {
         if (response.itinerarySuggestion) {
           await applyGeneratedTripPlan(response);
         } else if (response.proposedChanges?.length) {
           await applyAiProposedChanges(response.proposedChanges, { navigate: false });
         }
+      } else if (
+        response.reply.responseType === "travel_plan" &&
+        response.tripProfile?.plan_integration === "self_merge"
+      ) {
+        pushToast({
+          variant: "info",
+          title: "已保留為建議行程",
+          description: "你選擇了自行加入，所以目前只顯示建議內容，尚未直接修改現有行程。",
+        });
       }
       updateFrontendDebugProcess(chatProcessId, "reply-received", {
         replyType: response.reply.responseType,
@@ -1229,10 +1767,24 @@ export default function ChatPage() {
     instruction: string,
     baseTripProfile?: TripProfile | null,
   ) {
-    const activeProfile = baseTripProfile || tripProfile;
+    const activeProfile =
+      baseTripProfile ||
+      tripProfile ||
+      buildTripProfileFallback({
+        destination: tripStore.destination || planningSnapshot.destination,
+        days: tripStore.days || planningSnapshot.days,
+        budget: tripStore.budget || planningSnapshot.budget,
+        transportPreference: userStore.preferredTransport || null,
+        pace: userStore.travelPace || null,
+        interests: userStore.interests,
+      });
     if (!activeProfile || isSending) {
       return;
     }
+    const revisionProfile: TripProfile = {
+      ...activeProfile,
+      plan_integration: "direct_merge",
+    };
 
     appendMessage(buildUserMessage(`請幫我把行程調整成：${instruction}`));
     setErrorMessage(null);
@@ -1249,21 +1801,21 @@ export default function ChatPage() {
       });
       const response = await reviseTripPlan({
         instruction,
-        tripProfile: activeProfile,
+        tripProfile: revisionProfile,
         context: {
-          destination: activeProfile.destination || planningSnapshot.destination,
-          days: activeProfile.duration_days || planningSnapshot.days,
+          destination: revisionProfile.destination || planningSnapshot.destination,
+          days: revisionProfile.duration_days || planningSnapshot.days,
           budget: planningSnapshot.budget,
           itinerary: useTripStore.getState().itinerary,
-          tripStartDate: activeProfile.travel_dates?.start || undefined,
-          tripEndDate: activeProfile.travel_dates?.end || activeProfile.travel_dates?.start || undefined,
+          tripStartDate: revisionProfile.travel_dates?.start || undefined,
+          tripEndDate: revisionProfile.travel_dates?.end || revisionProfile.travel_dates?.start || undefined,
           preferences: {
-            interests: activeProfile.preferences,
+            interests: revisionProfile.preferences,
             pace:
-              activeProfile.pace === "relaxed" || activeProfile.pace === "intensive"
-                ? activeProfile.pace
+              revisionProfile.pace === "relaxed" || revisionProfile.pace === "intensive"
+                ? revisionProfile.pace
                 : useUserStore.getState().travelPace || "moderate",
-            transportPreference: activeProfile.transportation || useUserStore.getState().preferredTransport,
+            transportPreference: revisionProfile.transportation || useUserStore.getState().preferredTransport,
             budget: planningSnapshot.budget,
           },
         },
@@ -1273,7 +1825,17 @@ export default function ChatPage() {
       if (response.tripProfile) {
         setTripProfile(response.tripProfile);
       }
-      await applyGeneratedTripPlan(response);
+      if (response.itinerarySuggestion) {
+        await applyGeneratedTripPlan(response);
+      } else if (response.proposedChanges?.length) {
+        await applyAiProposedChanges(response.proposedChanges, { navigate: false });
+      } else {
+        pushToast({
+          variant: "warning",
+          title: "沒有可套用的行程變更",
+          description: "AI 已回覆，但這次沒有產生可直接同步到行程的修改內容。",
+        });
+      }
       finishFrontendDebugProcess(reviseProcessId, {
         progressSessionId,
         replyType: response.reply.responseType,
@@ -1402,7 +1964,10 @@ export default function ChatPage() {
     currentTrip.replaceTripPlan(response.itinerarySuggestion, {
       destination: currentTrip.destination || response.tripProfile?.destination || planningSnapshot.destination,
       days: response.itinerarySuggestion.days.length,
-      budget: currentTrip.budget || planningSnapshot.budget,
+      budget:
+        currentTrip.budget ||
+        planningSnapshot.budget ||
+        readBudgetAmountFromText(response.tripProfile?.budget),
       title: currentTrip.title || response.tripProfile?.destination || currentTrip.destination,
     });
     await syncService.flushTripSyncNow({ force: true });
@@ -1414,16 +1979,6 @@ export default function ChatPage() {
       });
     }
     return true;
-  }
-
-  function handleVoiceHint() {
-    pushToast({
-      variant: "info",
-      title: t.chat.voiceMapOnlyTitle,
-      description: t.chat.voiceMapOnlyHint,
-      actionLabel: t.chat.goToMap,
-      action: () => router.push("/map"),
-    });
   }
 
   function applyVideoSummaryResult(sourceVideo: VideoRecommendation, result: VideoSummaryResult) {
@@ -1907,9 +2462,8 @@ export default function ChatPage() {
                       <QuestionCard
                         card={message.questionCard}
                         disabled={isSending}
-                        tripDays={message.tripProfile?.duration_days || tripProfile?.duration_days || tripStore.days || userStore.travelDays}
                         onSubmit={(answers, displayMessage) =>
-                          void handleSend("請根據我剛剛填寫的行程需求繼續處理", {
+                          void handleSend("", {
                             displayMessage,
                             displayAsAssistant: true,
                             questionAnswers: answers,
@@ -2041,18 +2595,6 @@ export default function ChatPage() {
 
         <div className="relative z-10 px-6 pb-6 pt-3">
           <div className="flex items-center gap-3 rounded-2xl border border-border-light bg-white/80 px-4 py-2 shadow-soft backdrop-blur-md">
-            <motion.button
-              type="button"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => handleVoiceHint()}
-              className="flex size-10 cursor-pointer items-center justify-center rounded-xl bg-lavender/10 text-lavender transition-colors hover:bg-lavender/20"
-              aria-label={t.chat.voiceMapOnlyTitle}
-              title={t.chat.voiceMapOnlyHint}
-            >
-              <Mic className="size-5" aria-hidden />
-            </motion.button>
-
             <input
               type="text"
               value={input}

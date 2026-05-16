@@ -9,6 +9,7 @@ import {
   deriveTripDurationFromDateRange,
   isExistingItineraryInquiry,
   isTripWorkflowMessage,
+  needsTravelResearch,
 } from "@/server/services/travelPlannerService";
 import type { ChatSource, TripPlanDay, TripPlanResult, TripProfile } from "@/types";
 
@@ -114,7 +115,82 @@ test("existing itinerary question card asks how to merge instead of output forma
 
   assert.equal(card?.response_type, "question_card");
   assert.ok(card?.questions.some((question) => question.slot === "plan_integration"));
+  assert.ok(card?.questions.some((question) => question.question === "是否直接加入現有行程規劃呢？"));
+  assert.deepEqual(
+    card?.questions.find((question) => question.slot === "plan_integration")?.options?.map((option) => option.label),
+    ["直接加入", "自行加入"],
+  );
   assert.ok(card?.questions.every((question) => !question.question.includes("最後用哪種形式呈現")));
+});
+
+test("budget question uses dynamic options based on trip profile instead of fixed template", () => {
+  const card = buildQuestionCard({
+    ...makeStructuredProfile(),
+    budget: null,
+    transportation: "self_drive",
+    traveler_count: 2,
+    companions: "couple_or_friend",
+    preferences: ["food", "onsen", "shopping"],
+    departure_location: "台北",
+    travel_dates: null,
+  });
+
+  const budgetQuestion = card?.questions.find((question) => question.slot === "budget");
+  assert.ok(budgetQuestion);
+  assert.equal(budgetQuestion?.question, "熊本5天4夜的總預算大概抓多少比較合適？");
+  assert.ok(budgetQuestion?.options?.length === 3);
+  assert.ok(budgetQuestion?.options?.every((option) => /\d{1,3}(,\d{3})*\s*元/.test(option.label)));
+  assert.ok(budgetQuestion?.options?.some((option) => option.recommended));
+  assert.ok(budgetQuestion?.options?.every((option) => !["budget", "mid_range", "comfortable"].includes(option.value)));
+});
+
+test("needsTravelResearch stays false for current itinerary queries and modifications", () => {
+  const context = {
+    destination: "熊本",
+    itinerary: [
+      {
+        dayNumber: 1,
+        items: [{ id: "item_1", time: "09:00", title: "熊本城", type: "attraction" as const }],
+      },
+    ],
+  };
+
+  assert.equal(
+    needsTravelResearch({
+      message: "我現在這個行程有哪些地點？",
+      context,
+    }),
+    false,
+  );
+  assert.equal(
+    needsTravelResearch({
+      message: "把第二天下午改成阿蘇火山",
+      context,
+    }),
+    false,
+  );
+});
+
+test("needsTravelResearch turns on for recommendation and video inspiration requests", () => {
+  const context = {
+    destination: "熊本",
+    itinerary: [],
+  };
+
+  assert.equal(
+    needsTravelResearch({
+      message: "幫我找熊本適合晚上去的地方",
+      context,
+    }),
+    true,
+  );
+  assert.equal(
+    needsTravelResearch({
+      message: "幫我找幾個熊本旅遊影片當靈感來源",
+      context,
+    }),
+    true,
+  );
 });
 
 test("existing itinerary questions bypass the structured planning template", () => {
@@ -198,6 +274,43 @@ test("existing itinerary location questions answer from context without model pl
   assert.match(response.reply.content, /Day 1 09:00：熊本城/);
   assert.match(response.reply.content, /Day 1 12:00：午餐/);
   assert.equal(response.reply.questionCard, undefined);
+});
+
+test("existing itinerary replacement request becomes a targeted proposed change", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "把第三天的 BIFF 廣場 改成 海東龍宮寺，其他安排先維持不變。",
+    structuredTravelPlanning: true,
+    forceStructuredRevision: true,
+    context: {
+      destination: "釜山",
+      days: 5,
+      itinerary: [
+        {
+          dayNumber: 3,
+          items: [
+            { id: "item_d3_1", time: "09:00", title: "青沙浦", type: "attraction" },
+            { id: "item_d3_2", time: "15:00", title: "BIFF 廣場", type: "attraction" },
+          ],
+        },
+      ],
+    },
+  });
+
+  assert.equal(response.reply.responseType, "text_message");
+  assert.match(response.reply.content, /已將第 3 天的「BIFF 廣場」調整為「海東龍宮寺」/);
+  assert.deepEqual(response.proposedChanges, [
+    {
+      type: "update_itinerary_item",
+      day: 3,
+      itemId: "item_d3_2",
+      targetTitle: "BIFF 廣場",
+      title: "海東龍宮寺",
+      locationName: "海東龍宮寺",
+      reason: "依照使用者要求，將 BIFF 廣場 替換為 海東龍宮寺",
+      source: "ai-chat",
+    },
+  ]);
+  assert.equal(response.itinerarySuggestion, undefined);
 });
 
 test("structured planning template only starts for explicit planning intent", () => {

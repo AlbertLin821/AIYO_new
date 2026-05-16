@@ -15,6 +15,75 @@ export const EMPTY_TRIP_STATE = {
   lastUpdatedAt: null as string | null,
 };
 
+function parseSparseDayStops(day: TripPlanDay) {
+  const themeBase = (day.theme || "")
+    .replace(/\s*(與周邊順遊|順遊)$/u, "")
+    .trim();
+  const summary = (day.summary || "").trim();
+  const pairMatch = summary.match(/第\s*\d+\s*天以\s*(.+?)、(.+?)\s*與沿線餐食安排為主/u);
+  const themedStops = themeBase
+    .split(/[・／/、]/u)
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return {
+    morning: themedStops[0] || pairMatch?.[1]?.trim() || themeBase || `第 ${day.dayNumber} 天`,
+    afternoon: themedStops[1] || pairMatch?.[2]?.trim() || themedStops[0] || themeBase || `第 ${day.dayNumber} 天`,
+  };
+}
+
+function hydrateSparseDayItems(day: TripPlanDay, destination?: string): TripPlanDay {
+  if (day.items.length > 0) {
+    return day;
+  }
+  const stops = parseSparseDayStops(day);
+  const areaLabel = destination?.trim() || stops.morning;
+  return {
+    ...day,
+    items: [
+      {
+        id: `synthetic_${day.dayNumber}_1`,
+        dayNumber: day.dayNumber,
+        time: "09:00",
+        title: stops.morning,
+        type: "attraction",
+        transport: "大眾運輸",
+        notes: `依照目前摘要補齊的上午停留點：${stops.morning}`,
+        source: "ai",
+      },
+      {
+        id: `synthetic_${day.dayNumber}_2`,
+        dayNumber: day.dayNumber,
+        time: "12:00",
+        title: `${stops.morning} 周邊午餐`,
+        type: "restaurant",
+        transport: "大眾運輸",
+        notes: `依照目前摘要補齊的午餐停留點：${stops.morning} 周邊午餐`,
+        source: "ai",
+      },
+      {
+        id: `synthetic_${day.dayNumber}_3`,
+        dayNumber: day.dayNumber,
+        time: "15:00",
+        title: stops.afternoon,
+        type: "activity",
+        transport: "大眾運輸",
+        notes: `依照目前摘要補齊的下午停留點：${stops.afternoon}`,
+        source: "ai",
+      },
+      {
+        id: `synthetic_${day.dayNumber}_4`,
+        dayNumber: day.dayNumber,
+        time: "18:30",
+        title: `${stops.afternoon || areaLabel} 晚餐與散步`,
+        type: "restaurant",
+        transport: "大眾運輸",
+        notes: `依照目前摘要補齊的晚餐停留點：${stops.afternoon || areaLabel} 晚餐與散步`,
+        source: "ai",
+      },
+    ],
+  };
+}
+
 interface TripState {
   tripId: string | null;
   title: string;
@@ -91,12 +160,14 @@ export const useTripStore = create<TripState>((set) => ({
     }),
   replaceTripPlan: (plan, details) =>
     withSyncMutationSource("local-user-edit", () => {
+      const destination = details?.destination;
+      const normalizedDays = plan.days.map((day) => hydrateSparseDayItems(day, destination));
       set((state) => ({
-        itinerary: plan.days,
-        days: details?.days ?? plan.days.length,
+        itinerary: normalizedDays,
+        days: details?.days ?? normalizedDays.length,
         title: details?.title ?? state.title,
         planSummary: plan.summary,
-        destination: details?.destination ?? state.destination,
+        destination: destination ?? state.destination,
         budget: details?.budget ?? state.budget,
         coverImageUrl: state.coverImageUrl,
         lastUpdatedAt: new Date().toISOString(),

@@ -217,6 +217,12 @@ function hasTemplatePollution(value: string | undefined): boolean {
   if (/^(public_transport|self_drive|charter_or_tour|ai_recommend|budget|mid_range|comfortable)$/i.test(normalized)) {
     return true;
   }
+  if (/^(yt|web|weather|official)_\d+$/i.test(normalized)) {
+    return true;
+  }
+  if (/^plan_[a-z0-9]+$/i.test(normalized)) {
+    return true;
+  }
   if (/^(food|onsen|history|nature|city_walk|shopping|local_culture)\s*(行程|stop|route)?$/i.test(normalized)) {
     return true;
   }
@@ -226,7 +232,14 @@ function hasTemplatePollution(value: string | undefined): boolean {
   if (/^行程點 \d+$/.test(normalized)) {
     return true;
   }
-  if (normalized.includes("從 回答") || normalized.includes("依照 onsen") || normalized.includes("回答晚餐與散步")) {
+  if (
+    normalized.includes("從 回答") ||
+    normalized.includes("依照 onsen") ||
+    normalized.includes("回答晚餐與散步") ||
+    normalized.includes("ai 模型輸出格式異常") ||
+    normalized.includes("已改用保底行程模板") ||
+    normalized.includes("目前無法連線到搜尋服務")
+  ) {
     return true;
   }
   return false;
@@ -277,6 +290,9 @@ function parseTripPlanJson(
     ).map((entry) => toRecord(entry));
     if (!Array.isArray(day.items)) {
       normalized = true;
+    }
+    if (rawItems.length === 0) {
+      return null;
     }
 
     const items = rawItems.map((record, itemIndex) => {

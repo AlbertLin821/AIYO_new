@@ -93,17 +93,20 @@ export function buildDefaultTravelToolRequests(
   const requests: TravelToolRequest[] = [];
   const dest = context?.destination?.trim();
   const trimmed = message.trim();
+  const wantsVideo = /影片|youtube|YouTube|vlog|靈感|參考影片|旅遊影片/u.test(trimmed);
   const wantsPoi =
     /(餐廳|美食|景點|約會|推薦|住宿|咖啡|夜市|小吃|甜點|下午茶|酒吧|購物|百貨|博物館|公園|步道)/u.test(
       trimmed,
     );
+  const wantsWeather = /天氣|降雨|氣溫|下雨|颱風/u.test(trimmed);
+  const wantsEvents = /活動|市集|祭典|展覽|封路|交通管制|改道/u.test(trimmed);
 
   if (dest && wantsPoi) {
     const q = `${dest} ${trimmed}`.replace(/\s+/g, " ").slice(0, 120);
     requests.push({ type: "search_place", query: q, locationHint: dest });
   }
 
-  if (dest) {
+  if (dest && wantsWeather) {
     requests.push({
       type: "weather_forecast",
       destination: dest,
@@ -112,10 +115,19 @@ export function buildDefaultTravelToolRequests(
     });
   }
 
-  if (dest && serverConfig.tavilyApiKey.trim()) {
+  if (dest && wantsEvents && serverConfig.tavilyApiKey.trim()) {
     requests.push({
       type: "tavily_search",
       query: `${dest} 活動 市集 封路 交通管制 ${context?.tripStartDate || ""}`.replace(/\s+/g, " ").trim(),
+    });
+  }
+
+  if (dest && wantsVideo) {
+    requests.push({
+      type: "youtube_search",
+      destination: dest,
+      keyword: trimmed,
+      limit: 3,
     });
   }
 
@@ -139,9 +151,7 @@ export function buildTripPlanResearchRequests(request: TripPlanRequest): TravelT
       endDate: request.tripEndDate || request.tripStartDate,
     },
   ];
-  const shouldSearchYouTube =
-    Boolean(request.preferences.mustVisit?.length) ||
-    /(history|nature|city_walk|onsen|景點|古蹟|散步|溫泉|風景)/i.test(interest);
+  const shouldSearchYouTube = /影片|youtube|YouTube|vlog/i.test(request.preferences.notes || "");
   if (shouldSearchYouTube) {
     requests.push({
       type: "youtube_search",

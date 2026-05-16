@@ -136,6 +136,7 @@ function normalizeProposedChange(value: unknown): AiProposedChange | null {
       locationName: record.locationName ? String(record.locationName) : undefined,
       notes: record.notes ? String(record.notes) : undefined,
       transport: record.transport ? String(record.transport) : undefined,
+      reason: record.reason ? String(record.reason) : undefined,
       source: "ai-chat",
     };
   }
@@ -150,6 +151,7 @@ function normalizeProposedChange(value: unknown): AiProposedChange | null {
       day: Number.isFinite(day) && day > 0 ? Math.floor(day) : undefined,
       itemId: itemId || undefined,
       targetTitle: targetTitle || undefined,
+      reason: record.reason ? String(record.reason) : undefined,
       source: "ai-chat",
     };
   }
@@ -163,6 +165,7 @@ function normalizeProposedChange(value: unknown): AiProposedChange | null {
     title,
     locationName: record.locationName ? String(record.locationName) : title,
     notes: record.notes ? String(record.notes) : undefined,
+    reason: record.reason ? String(record.reason) : undefined,
     source: "ai-chat",
   };
 }
@@ -403,6 +406,87 @@ function uniqueStrings(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
+function classifyCompanionsFromTravelerCount(travelerCount: number): {
+  companions: TripProfile["companions"];
+  travelerCount: number;
+} {
+  if (travelerCount <= 1) {
+    return { companions: "solo", travelerCount: 1 };
+  }
+  if (travelerCount === 2) {
+    return { companions: "couple_or_friend", travelerCount: 2 };
+  }
+  if (travelerCount <= 4) {
+    return { companions: "small_group", travelerCount };
+  }
+  return { companions: "family_group", travelerCount };
+}
+
+function formatTwdAmount(value: number): string {
+  return `${Math.round(value).toLocaleString("zh-TW")} 元`;
+}
+
+function estimateBudgetOptions(profile: TripProfile): Array<{
+  label: string;
+  value: string;
+  recommended?: boolean;
+}> {
+  const destination = profile.destination || "";
+  const days = Math.max(1, profile.duration_days || 3);
+  const travelers = Math.max(1, profile.traveler_count || 1);
+  const isJapanTrip = /日本|熊本|福岡|東京|大阪|京都|北海道|九州|沖繩|阿蘇|黑川|由布院|別府/u.test(destination);
+  const isHighCostJapan = /東京|大阪|京都|北海道|沖繩/u.test(destination);
+  const isRegionalJapan = /熊本|福岡|九州|阿蘇|黑川|由布院|別府/u.test(destination);
+
+  let perPersonPerDay = isJapanTrip ? 5_500 : 3_500;
+  if (isHighCostJapan) {
+    perPersonPerDay += 1_500;
+  } else if (isRegionalJapan) {
+    perPersonPerDay += 500;
+  }
+  if (profile.transportation === "self_drive") {
+    perPersonPerDay += 1_200;
+  } else if (profile.transportation === "charter_or_tour") {
+    perPersonPerDay += 1_600;
+  }
+  if (profile.preferences.includes("onsen")) {
+    perPersonPerDay += 800;
+  }
+  if (profile.preferences.includes("shopping")) {
+    perPersonPerDay += 700;
+  }
+  if (profile.pace === "intensive") {
+    perPersonPerDay += 400;
+  }
+  if (travelers >= 4) {
+    perPersonPerDay = Math.max(2_800, perPersonPerDay - 500);
+  }
+
+  const leanPerPerson = Math.round(perPersonPerDay * days * 0.85 / 1_000) * 1_000;
+  const balancedPerPerson = Math.round(perPersonPerDay * days / 1_000) * 1_000;
+  const comfortPerPerson = Math.round(perPersonPerDay * days * 1.35 / 1_000) * 1_000;
+
+  const makeLabel = (tier: string, perPerson: number) => {
+    const total = perPerson * travelers;
+    const base = travelers > 1
+      ? `${tier}：每人約 ${formatTwdAmount(perPerson)}，共約 ${formatTwdAmount(total)}`
+      : `${tier}：約 ${formatTwdAmount(total)}`;
+    const note =
+      tier === "精省"
+        ? "以順路景點與平價餐食為主"
+        : tier === "平衡"
+          ? "景點、交通與餐食配置較平均"
+          : "可安排較多特色餐廳或付費體驗";
+    return `${base} (${note})`;
+  };
+
+  return [
+    { label: makeLabel("精省", leanPerPerson), value: String(leanPerPerson * travelers) },
+    { label: makeLabel("平衡", balancedPerPerson), value: String(balancedPerPerson * travelers), recommended: true },
+    { label: makeLabel("舒適", comfortPerPerson), value: String(comfortPerPerson * travelers) },
+  ];
+}
+
 function buildPlanFingerprint(days: TripPlanDay[]): string {
   const raw = days
     .map((day) => `D${day.dayNumber}:${day.items.map((item) => `${item.time}-${item.title}`).join("|")}`)
@@ -594,6 +678,31 @@ function updateTripProfileFromText(profile: TripProfile, message: string): TripP
     next.destination = destination.trim();
   }
 
+  const travelerCountMatch =
+    message.match(/(?:總共|一共|共)\s*([一二兩三四五六七八九十\d]+)\s*(?:個人|人)/u) ||
+    message.match(/([一二兩三四五六七八九十\d]+)\s*(?:個人|人)(?:同行|一起|出遊|旅遊|旅行|去玩)?/u);
+  const explicitTravelerCount = travelerCountMatch?.[1]
+    ? parseFlexibleNumber(travelerCountMatch[1])
+    : null;
+  const hasCoupleSignal = /女朋友|男朋友|老婆|老公|另一半|情侶/u.test(message);
+  const hasSoloSignal = /獨旅|自己去|我自己|一個人/u.test(message);
+  const hasFamilySignal = /家人|家庭旅遊|爸媽|父母|小孩|孩子|親子/u.test(message);
+  if (explicitTravelerCount && explicitTravelerCount > 0) {
+    const companionProfile = classifyCompanionsFromTravelerCount(explicitTravelerCount);
+    next.companions = hasCoupleSignal && explicitTravelerCount === 2
+      ? "couple_or_friend"
+      : hasFamilySignal && explicitTravelerCount >= 3
+        ? "family_group"
+        : companionProfile.companions;
+    next.traveler_count = explicitTravelerCount;
+  } else if (hasCoupleSignal) {
+    next.companions = "couple_or_friend";
+    next.traveler_count = 2;
+  } else if (hasSoloSignal) {
+    next.companions = "solo";
+    next.traveler_count = 1;
+  }
+
   if (/自駕|租車/u.test(message)) {
     next.transportation = "self_drive";
   } else if (/大眾運輸|電車|公車|巴士|火車/u.test(message)) {
@@ -700,6 +809,7 @@ export function buildQuestionCard(profile: TripProfile, context?: ChatContext): 
   const durationLabel = profile.duration_days ? `${profile.duration_days}天${profile.duration_nights ?? Math.max(0, profile.duration_days - 1)}夜` : "這趟";
   const isJapanTrip = /日本|熊本|福岡|東京|大阪|京都|北海道|九州|沖繩|阿蘇|黑川|由布院|別府/u.test(destination);
   const hasExistingItinerary = Boolean(context?.itinerary?.length);
+  const budgetOptions = estimateBudgetOptions(profile);
   const preferenceOptions = uniqueStrings([
     ...(profile.preferences.includes("food") ? ["food"] : []),
     ...(profile.preferences.includes("onsen") || isJapanTrip ? ["onsen"] : []),
@@ -793,10 +903,10 @@ export function buildQuestionCard(profile: TripProfile, context?: ChatContext): 
     hasExistingItinerary && !profile.plan_integration
       ? {
           slot: "plan_integration" as const,
-          question: "這次新增的行程要怎麼處理？",
+          question: "是否直接加入現有行程規劃呢？",
           type: "single_choice" as const,
           options: [
-            { label: "直接加入現有規劃", value: "direct_merge", recommended: true },
+            { label: "直接加入", value: "direct_merge", recommended: true },
             { label: "自行加入", value: "self_merge" },
           ],
         }
@@ -831,14 +941,10 @@ export function buildQuestionCard(profile: TripProfile, context?: ChatContext): 
     !profile.budget
       ? {
           slot: "budget" as const,
-          question: "你的總預算大概是多少？",
+          question: `${destination}${durationLabel}的總預算大概抓多少比較合適？`,
           type: "budget" as const,
-          placeholder: "也可以直接輸入，例如：每人 25000，或總預算 80000",
-          options: [
-            { label: "省錢型：2-3 萬台幣內", value: "budget" },
-            { label: "中等預算：3-5 萬台幣", value: "mid_range", recommended: true },
-            { label: "舒適型：5 萬以上", value: "comfortable" },
-          ],
+          placeholder: "也可以直接輸入，例如：每人 28000，或總預算 56000",
+          options: budgetOptions,
         }
       : null,
     !profile.transportation
@@ -892,6 +998,10 @@ export function isExistingItineraryInquiry(input: {
   }
 
   return /(?:這個|目前|現在|我的)?行程(?:裡面|裡|內)?(?:有(?:哪些|什麼|甚麼)|包含|內容|活動|景點|地點|安排)|有(?:哪些|什麼|甚麼)(?:活動|景點|地點|安排)|第[一二兩三四五六七八九十\d]+天(?:有(?:哪些|什麼|甚麼)|安排|活動|景點|地點)|列出(?:這個|目前|我的)?行程/u.test(message);
+}
+
+function isVideoInspirationRequest(message: string): boolean {
+  return /影片|youtube|YouTube|vlog|靈感|參考影片|旅遊影片|看影片/u.test(message);
 }
 
 function parseRequestedDayNumber(message: string): number | null {
@@ -980,6 +1090,241 @@ function isExistingItineraryPatchRequest(input: {
     return false;
   }
   return !/重新規劃|重排|整份|整個|全部|從頭|完整(?:安排|規劃)|(?:規劃|安排).{0,8}(?:新|完整|整份|全部)?行程/u.test(message);
+}
+
+function compactComparableText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/臺/g, "台")
+    .replace(/[^\p{Letter}\p{Number}]+/gu, "")
+    .trim();
+}
+
+function cleanupPatchTitle(value: string | undefined): string {
+  return (value || "")
+    .replace(/^[「『"'\s]+|[」』"'\s]+$/gu, "")
+    .replace(/(?:其他|其餘)安排.*$/u, "")
+    .replace(/先維持不變.*$/u, "")
+    .replace(/即可.*$/u, "")
+    .trim();
+}
+
+function matchItineraryItemFromContext(input: {
+  context?: ChatContext;
+  day?: number | null;
+  title: string;
+}) {
+  const title = compactComparableText(input.title);
+  if (!title || !input.context?.itinerary?.length) {
+    return null;
+  }
+  const scopedDays = input.day
+    ? input.context.itinerary.filter((day) => day.dayNumber === input.day)
+    : input.context.itinerary;
+  for (const day of scopedDays) {
+    const item = day.items.find((candidate) => {
+      const candidateTitle = compactComparableText(candidate.title);
+      const candidateLocation = compactComparableText(candidate.location?.name || "");
+      return (
+        candidateTitle.includes(title) ||
+        title.includes(candidateTitle) ||
+        Boolean(candidateLocation && (candidateLocation.includes(title) || title.includes(candidateLocation)))
+      );
+    });
+    if (item) {
+      return {
+        dayNumber: day.dayNumber,
+        item,
+      };
+    }
+  }
+  return null;
+}
+
+function parsePatchDayNumber(raw: string | undefined): number | null {
+  if (!raw) {
+    return null;
+  }
+  const trimmed = raw.trim();
+  if (/^\d+$/.test(trimmed)) {
+    return Number(trimmed);
+  }
+  return CHINESE_NUMBERS[trimmed] ?? null;
+}
+
+function buildDeterministicItineraryPatchResponse(input: {
+  message: string;
+  context?: ChatContext;
+}): ChatResponsePayload | null {
+  if (!input.context?.itinerary?.length) {
+    return null;
+  }
+
+  const message = input.message.trim();
+  const replaceMatch =
+    message.match(
+      /(?:把)?第\s*(\d+|[一二兩三四五六七八九十])\s*天(?:的)?\s*([^\n，。,]+?)\s*(?:改成|換成|替換成|改為|換為)\s*([^\n，。,]+?)(?:$|[，。,])/u,
+    ) ||
+    message.match(
+      /(?:把)?\s*([^\n，。,]+?)\s*(?:改成|換成|替換成|改為|換為)\s*([^\n，。,]+?)(?:$|[，。,])/u,
+    );
+
+  if (replaceMatch) {
+    const hasExplicitDay = replaceMatch.length >= 4;
+    const day = hasExplicitDay ? parsePatchDayNumber(replaceMatch[1]) : null;
+    const originalTitle = cleanupPatchTitle(hasExplicitDay ? replaceMatch[2] : replaceMatch[1]);
+    const nextTitle = cleanupPatchTitle(hasExplicitDay ? replaceMatch[3] : replaceMatch[2]);
+    if (!originalTitle || !nextTitle) {
+      return null;
+    }
+    const target = matchItineraryItemFromContext({
+      context: input.context,
+      day,
+      title: originalTitle,
+    });
+    if (!target) {
+      return null;
+    }
+    return {
+      reply: {
+        id: `assistant_${Date.now()}`,
+        role: "assistant",
+        content: `已將第 ${target.dayNumber} 天的「${target.item.title}」調整為「${nextTitle}」，其餘安排維持不變。`,
+        timestamp: nowChatTimestamp(),
+        responseType: "text_message",
+        proposedChanges: [
+          {
+            type: "update_itinerary_item",
+            day: target.dayNumber,
+            itemId: target.item.id,
+            targetTitle: target.item.title,
+            title: nextTitle,
+            locationName: nextTitle,
+            reason: `依照使用者要求，將 ${originalTitle} 替換為 ${nextTitle}`,
+            source: "ai-chat",
+          },
+        ],
+      },
+      proposedChanges: [
+        {
+          type: "update_itinerary_item",
+          day: target.dayNumber,
+          itemId: target.item.id,
+          targetTitle: target.item.title,
+          title: nextTitle,
+          locationName: nextTitle,
+          reason: `依照使用者要求，將 ${originalTitle} 替換為 ${nextTitle}`,
+          source: "ai-chat",
+        },
+      ],
+    };
+  }
+
+  const removeMatch = message.match(
+    /(?:刪除|移除)\s*(?:第\s*(\d+|[一二兩三四五六七八九十])\s*天(?:的)?)?\s*([^\n，。,]+?)(?:$|[，。,])/u,
+  );
+  if (removeMatch) {
+    const day = parsePatchDayNumber(removeMatch[1]);
+    const targetTitle = cleanupPatchTitle(removeMatch[2]);
+    const target = matchItineraryItemFromContext({
+      context: input.context,
+      day,
+      title: targetTitle,
+    });
+    if (!target) {
+      return null;
+    }
+    return {
+      reply: {
+        id: `assistant_${Date.now()}`,
+        role: "assistant",
+        content: `已從第 ${target.dayNumber} 天移除「${target.item.title}」。`,
+        timestamp: nowChatTimestamp(),
+        responseType: "text_message",
+        proposedChanges: [
+          {
+            type: "remove_itinerary_item",
+            day: target.dayNumber,
+            itemId: target.item.id,
+            targetTitle: target.item.title,
+            reason: `依照使用者要求移除此行程項目`,
+            source: "ai-chat",
+          },
+        ],
+      },
+      proposedChanges: [
+        {
+          type: "remove_itinerary_item",
+          day: target.dayNumber,
+          itemId: target.item.id,
+          targetTitle: target.item.title,
+          reason: `依照使用者要求移除此行程項目`,
+          source: "ai-chat",
+        },
+      ],
+    };
+  }
+
+  const addMatch = message.match(
+    /(?:在)?第\s*(\d+|[一二兩三四五六七八九十])\s*天(?:.*?)(?:加入|加上|新增)\s*([^\n，。,]+?)(?:$|[，。,])/u,
+  );
+  if (addMatch) {
+    const day = parsePatchDayNumber(addMatch[1]);
+    const title = cleanupPatchTitle(addMatch[2]);
+    if (!day || !title) {
+      return null;
+    }
+    return {
+      reply: {
+        id: `assistant_${Date.now()}`,
+        role: "assistant",
+        content: `已將「${title}」加入第 ${day} 天行程。`,
+        timestamp: nowChatTimestamp(),
+        responseType: "text_message",
+        proposedChanges: [
+          {
+            type: "add_itinerary_item",
+            day,
+            time: "18:30",
+            title,
+            locationName: title,
+            reason: "依照使用者要求新增行程項目",
+            source: "ai-chat",
+          },
+        ],
+      },
+      proposedChanges: [
+        {
+          type: "add_itinerary_item",
+          day,
+          time: "18:30",
+          title,
+          locationName: title,
+          reason: "依照使用者要求新增行程項目",
+          source: "ai-chat",
+        },
+      ],
+    };
+  }
+
+  return null;
+}
+
+export function needsTravelResearch(input: {
+  message: string;
+  context?: ChatContext;
+}): boolean {
+  const message = input.message.trim();
+  if (!message || !input.context?.destination) {
+    return false;
+  }
+  if (isExistingItineraryInquiry(input) || isExistingItineraryPatchRequest(input)) {
+    return false;
+  }
+  if (isVideoInspirationRequest(message)) {
+    return true;
+  }
+  return /推薦|景點|美食|餐廳|咖啡|晚上|夜景|夜市|適合|附近|天氣|降雨|氣溫|營業時間|開到幾點|門票|交通|怎麼去|封路|活動|市集|祭典|今年|近期|最新/u.test(message);
 }
 
 export function isTripWorkflowMessage(input: {
@@ -1255,8 +1600,9 @@ async function handleStructuredTripWorkflow(input: {
   questionAnswers?: ChatQuestionAnswer[];
   progressSessionId?: string;
   memoryContext?: string;
+  forceStructuredRevision?: boolean;
 }): Promise<ChatResponsePayload | null> {
-  if (!isTripWorkflowMessage(input)) {
+  if (!input.forceStructuredRevision && !isTripWorkflowMessage(input)) {
     return null;
   }
 
@@ -1264,6 +1610,9 @@ async function handleStructuredTripWorkflow(input: {
   const seeded = mergeTripProfile(input.tripProfile, input.context);
   const withText = updateTripProfileFromText(seeded, input.message);
   const profile = applyQuestionAnswers(withText, input.questionAnswers);
+  if (input.forceStructuredRevision && input.context?.itinerary?.length) {
+    profile.plan_integration = "direct_merge";
+  }
   const card = buildQuestionCard(profile, input.context);
   publishProgressStep(input.progressSessionId, "整理行程需求", "completed");
 
@@ -1386,6 +1735,142 @@ function enrichPlanWithSearchSources(
   };
 }
 
+async function buildExistingItineraryPatchResponse(input: {
+  message: string;
+  messages?: ChatMessage[];
+  context?: ChatContext;
+  memoryContext?: string;
+  progressSessionId?: string;
+}): Promise<ChatResponsePayload | null> {
+  if (!isExistingItineraryPatchRequest(input)) {
+    return null;
+  }
+
+  const deterministicPatch = buildDeterministicItineraryPatchResponse({
+    message: input.message,
+    context: input.context,
+  });
+  if (deterministicPatch) {
+    return deterministicPatch;
+  }
+
+  publishProgressStep(input.progressSessionId, "分析目前行程修改需求", "running");
+  const prompt = buildChatPrompt(
+    input.message,
+    input.context,
+    input.memoryContext,
+    "這是既有行程修改任務。請根據目前 itinerary context 產生 proposedChanges。除非使用者只是詢問，否則不要產生全新行程；也不要要求外部 research。",
+    undefined,
+  );
+  const raw = await chatWithOllama({
+    task: "travel-chat",
+    format: "json",
+    messages: [
+      { role: "system", content: prompt.system },
+      ...normalizeHistory(input.context, detectResponseLanguage(input.message)),
+      ...normalizeConversationHistory(input.messages),
+      { role: "user", content: prompt.user },
+    ],
+  });
+  const structured = parseStructuredChatOutput(raw);
+  publishProgressStep(input.progressSessionId, "分析目前行程修改需求", "completed");
+
+  return {
+    reply: {
+      id: `assistant_${Date.now()}`,
+      role: "assistant",
+      content: structured.replyText,
+      timestamp: nowChatTimestamp(),
+      responseType: "text_message",
+      proposedChanges: structured.proposedChanges,
+    },
+    proposedChanges: structured.proposedChanges,
+  };
+}
+
+function dedupePlaceHitsByName(placeHits: PlaceSearchHit[]): PlaceSearchHit[] {
+  const seen = new Set<string>();
+  return placeHits.filter((place) => {
+    const key = place.name.trim().toLowerCase();
+    if (!key || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function isRestaurantLikePlace(place: PlaceSearchHit): boolean {
+  return place.types.some((type) => /restaurant|food|cafe|bakery|meal_takeaway|bar/i.test(type));
+}
+
+function createSyntheticFallbackStops(destination: string, chinese: boolean): PlaceSearchHit[] {
+  const names = chinese
+    ? [
+        `${destination}老城區散步`,
+        `${destination}河岸散策`,
+        `${destination}文創街區`,
+        `${destination}在地市場`,
+        `${destination}夜景收尾`,
+      ]
+    : [
+        `${destination} old town walk`,
+        `${destination} riverside stroll`,
+        `${destination} creative district`,
+        `${destination} local market`,
+        `${destination} evening viewpoint`,
+      ];
+  return names.map((name, index) => ({
+    name,
+    formattedAddress: "",
+    lat: 0,
+    lng: 0,
+    placeId: `synthetic_fallback_${index + 1}`,
+    types: ["point_of_interest"],
+  }));
+}
+
+function buildSyntheticMealStop(anchorName: string, chinese: boolean, slot: "lunch" | "dinner"): PlaceSearchHit {
+  const name = chinese
+    ? slot === "lunch"
+      ? `${anchorName} 周邊午餐`
+      : `${anchorName} 晚餐與散步`
+    : slot === "lunch"
+      ? `${anchorName} lunch stop`
+      : `${anchorName} dinner and walk`;
+  return {
+    name,
+    formattedAddress: "",
+    lat: 0,
+    lng: 0,
+    placeId: `synthetic_${slot}_${anchorName.toLowerCase().replace(/[^a-z0-9\u3400-\u9fff]+/gi, "_")}`,
+    types: ["restaurant"],
+  };
+}
+
+function pickUniquePlaces(
+  pool: PlaceSearchHit[],
+  startIndex: number,
+  targetCount: number,
+): PlaceSearchHit[] {
+  if (!pool.length || targetCount <= 0) {
+    return [];
+  }
+  const picks: PlaceSearchHit[] = [];
+  const seen = new Set<string>();
+  let cursor = startIndex;
+  while (picks.length < targetCount && cursor < startIndex + pool.length * 2) {
+    const candidate = pool[cursor % pool.length];
+    const key = candidate.name.trim().toLowerCase();
+    if (key && !seen.has(key)) {
+      picks.push(candidate);
+      seen.add(key);
+    }
+    cursor += 1;
+  }
+  return picks;
+}
+
 function buildFallbackTripPlan(request: TripPlanRequest, placeHits: PlaceSearchHit[] = []): TripPlanResult {
   const chinese = isCjk(
     [request.destination, request.preferences.notes, request.preferences.interests.join(" ")]
@@ -1398,24 +1883,18 @@ function buildFallbackTripPlan(request: TripPlanRequest, placeHits: PlaceSearchH
     : `Created a ${request.days}-day starter itinerary for ${request.destination}.`;
   const mustVisit = request.preferences.mustVisit || [];
   const normalizedMustVisit = new Set(mustVisit.map((value) => value.trim().toLowerCase()).filter(Boolean));
-  const validPlaces = placeHits.filter((place) => place.name.trim().length > 1);
-  const restaurants = validPlaces.filter((place) => place.types.some((type) => /restaurant|food|cafe|bakery|meal_takeaway/i.test(type)));
-  const attractions = validPlaces.filter((place) => !restaurants.includes(place));
-  const preferredStops = [
+  const validPlaces = dedupePlaceHitsByName(placeHits.filter((place) => place.name.trim().length > 1));
+  const restaurants = validPlaces.filter(isRestaurantLikePlace);
+  const attractions = validPlaces.filter((place) => !isRestaurantLikePlace(place));
+  const preferredStops = dedupePlaceHitsByName([
     ...validPlaces.filter((place) => normalizedMustVisit.has(place.name.trim().toLowerCase())),
     ...attractions,
-  ];
-  const fallbackStops = preferredStops.length
-    ? preferredStops
-    : [{
-        name: `${request.destination}${chinese ? "市區" : " city center"}`,
-        formattedAddress: "",
-        lat: 0,
-        lng: 0,
-        placeId: "fallback_center",
-        types: ["point_of_interest"],
-      }];
-  const fallbackMeals = restaurants.length ? restaurants : fallbackStops;
+  ]);
+  const fallbackStops = dedupePlaceHitsByName([
+    ...preferredStops,
+    ...createSyntheticFallbackStops(request.destination, chinese),
+  ]);
+  const fallbackMeals = restaurants.length ? dedupePlaceHitsByName(restaurants) : [];
 
   const toLocation = (place: PlaceSearchHit | undefined, description: string) =>
     place && Number.isFinite(place.lat) && Number.isFinite(place.lng) && Math.abs(place.lat) <= 90 && Math.abs(place.lng) <= 180
@@ -1430,20 +1909,26 @@ function buildFallbackTripPlan(request: TripPlanRequest, placeHits: PlaceSearchH
 
   const days: TripPlanDay[] = Array.from({ length: request.days }, (_, index) => {
     const dayNumber = index + 1;
-    const morning = fallbackStops[index % fallbackStops.length];
-    const afternoon = fallbackStops[(index + 1) % fallbackStops.length] || morning;
-    const lunch = fallbackMeals[index % fallbackMeals.length];
-    const dinner = fallbackMeals[(index + 1) % fallbackMeals.length] || lunch;
+    const dayStops = pickUniquePlaces(
+      fallbackStops,
+      index * 2,
+      Math.min(3, Math.max(2, fallbackStops.length >= request.days * 2 ? 3 : 2)),
+    );
+    const morning = dayStops[0] || fallbackStops[0];
+    const afternoon = dayStops[1] || dayStops[0] || fallbackStops[0];
+    const eveningAnchor = dayStops[2] || afternoon || morning;
+    const lunch = fallbackMeals[index % fallbackMeals.length] || buildSyntheticMealStop(morning.name, chinese, "lunch");
+    const dinner = fallbackMeals[(index + 1) % fallbackMeals.length] || buildSyntheticMealStop(eveningAnchor.name, chinese, "dinner");
     const dayTheme = chinese
-      ? `${morning.name} 與周邊順遊`
-      : `${morning.name} and nearby route`;
+      ? `${uniqueStrings([morning.name, afternoon.name]).join("・")} 順遊`
+      : `${morning.name} and ${afternoon.name} route`;
 
     return {
       dayNumber,
       theme: dayTheme,
       summary: chinese
-        ? `第 ${dayNumber} 天以 ${morning.name}、${afternoon.name} 與沿線餐食安排為主。`
-        : `Day ${dayNumber} focuses on ${morning.name}, ${afternoon.name}, and nearby meals.`,
+        ? `第 ${dayNumber} 天以 ${morning.name}、${afternoon.name} 和沿線餐食安排為主，保留午晚餐與散步節奏。`
+        : `Day ${dayNumber} focuses on ${morning.name}, ${afternoon.name}, and nearby meal stops.`,
       items: [
         {
           id: `fallback_${dayNumber}_1`,
@@ -1489,11 +1974,11 @@ function buildFallbackTripPlan(request: TripPlanRequest, placeHits: PlaceSearchH
           dayNumber,
           time: "18:30",
           title: dinner.name,
-          type: "restaurant",
+          type: /夜景|viewpoint|stroll/i.test(dinner.name) ? "activity" : "restaurant",
           transport: transportLabel,
           notes: chinese
-            ? `晚餐安排在 ${dinner.name}，方便作為當日收尾。`
-            : `Use ${dinner.name} as an easy dinner stop to end the day.`,
+            ? `晚餐與收尾安排放在 ${dinner.name}，方便串接夜間散步或回住宿。`
+            : `Use ${dinner.name} as the evening stop before returning to the hotel.`,
           source: "ai",
           location: toLocation(dinner, `${request.destination} 建議晚餐停留點`),
         },
@@ -1757,7 +2242,28 @@ export async function chatWithTravelAssistant(input: {
   questionAnswers?: ChatQuestionAnswer[];
   progressSessionId?: string;
   memoryContext?: string;
+  forceStructuredRevision?: boolean;
 }): Promise<ChatResponsePayload> {
+  const itineraryInquiryResponse = buildExistingItineraryInquiryResponse({
+    message: input.message,
+    context: input.context,
+    questionAnswers: input.questionAnswers,
+  });
+  if (itineraryInquiryResponse) {
+    return itineraryInquiryResponse;
+  }
+
+  const itineraryPatchResponse = await buildExistingItineraryPatchResponse({
+    message: input.message,
+    messages: input.messages,
+    context: input.context,
+    memoryContext: input.memoryContext,
+    progressSessionId: input.progressSessionId,
+  });
+  if (itineraryPatchResponse) {
+    return itineraryPatchResponse;
+  }
+
   if (input.structuredTravelPlanning) {
     const structuredTripResponse = await handleStructuredTripWorkflow({
       message: input.message,
@@ -1766,19 +2272,11 @@ export async function chatWithTravelAssistant(input: {
       questionAnswers: input.questionAnswers,
       progressSessionId: input.progressSessionId,
       memoryContext: input.memoryContext,
+      forceStructuredRevision: input.forceStructuredRevision,
     });
     if (structuredTripResponse) {
       return structuredTripResponse;
     }
-  }
-
-  const itineraryInquiryResponse = buildExistingItineraryInquiryResponse({
-    message: input.message,
-    context: input.context,
-    questionAnswers: input.questionAnswers,
-  });
-  if (itineraryInquiryResponse) {
-    return itineraryInquiryResponse;
   }
 
   publishProgressStep(input.progressSessionId, "整理旅遊問題", "running");
@@ -1792,38 +2290,52 @@ export async function chatWithTravelAssistant(input: {
 
   const perRoundTimeout = Math.min(90_000, Math.max(45_000, Math.floor(serverConfig.ollamaTimeoutMs * 0.75)));
 
-  let rawResearch = "";
-  publishProgressStep(input.progressSessionId, "查詢外部資訊", "running");
-  try {
-    rawResearch = await chatWithOllama({
-      task: "travel-chat",
-      format: "json",
-      timeoutMs: perRoundTimeout,
-      messages: [
-        { role: "system", content: researchPrompt.system },
-        ...normalizeHistory(input.context, language),
-        ...normalizeConversationHistory(input.messages),
-        { role: "user", content: researchPrompt.user },
-      ],
-    });
-  } catch {
-    rawResearch = JSON.stringify({ phase: "research", toolRequests: [] });
-  }
+  const shouldResearch = needsTravelResearch({
+    message: input.message,
+    context: input.context,
+  });
+  let digest: { text: string; placeHits: PlaceSearchHit[]; sources: Record<string, ChatSource> } = {
+    text: "",
+    placeHits: [],
+    sources: {},
+  };
+  let webSearch: WebSearchBundle = { results: [], digest: "" };
+  if (shouldResearch) {
+    let rawResearch = "";
+    publishProgressStep(input.progressSessionId, "查詢外部資訊", "running");
+    try {
+      rawResearch = await chatWithOllama({
+        task: "travel-chat",
+        format: "json",
+        timeoutMs: perRoundTimeout,
+        messages: [
+          { role: "system", content: researchPrompt.system },
+          ...normalizeHistory(input.context, language),
+          ...normalizeConversationHistory(input.messages),
+          { role: "user", content: researchPrompt.user },
+        ],
+      });
+    } catch {
+      rawResearch = JSON.stringify({ phase: "research", toolRequests: [] });
+    }
 
-  let toolRequests = parseTravelToolRequestsFromModel(
-    extractJsonObject(rawResearch)?.toolRequests,
-  );
-  if (!toolRequests.length) {
-    toolRequests = buildDefaultTravelToolRequests(input.message, input.context);
-  }
+    let toolRequests = parseTravelToolRequestsFromModel(
+      extractJsonObject(rawResearch)?.toolRequests,
+    );
+    if (!toolRequests.length) {
+      toolRequests = buildDefaultTravelToolRequests(input.message, input.context);
+    }
 
-  const digest = await executeTravelToolRequests(toolRequests, input.context);
-  const webSearchQuery = [input.context?.destination || "", input.message].filter(Boolean).join(" ").trim();
-  const webSearch = await runWebSearch(webSearchQuery, serverConfig.aiWebSearchMaxResults);
-  publishProgressStep(input.progressSessionId, "查詢外部資訊", "completed");
+    digest = await executeTravelToolRequests(toolRequests, input.context);
+    const webSearchQuery = [input.context?.destination || "", input.message].filter(Boolean).join(" ").trim();
+    webSearch = await runWebSearch(webSearchQuery, serverConfig.aiWebSearchMaxResults);
+    publishProgressStep(input.progressSessionId, "查詢外部資訊", "completed");
+  }
   const digestText =
-    digest.text.trim() ||
-    "未取得可驗證的外部資料；請勿捏造具體餐廳或景點名稱，proposedChanges 請為空陣列。";
+    shouldResearch
+      ? digest.text.trim() ||
+        "我目前先根據已取得的資料整理建議，建議出發前再確認營業時間與交通資訊。"
+      : "";
 
   const prompt = buildChatPrompt(
     input.message,
@@ -1850,8 +2362,8 @@ export async function chatWithTravelAssistant(input: {
   const proposedChanges =
     digest.placeHits.length > 0
       ? filterProposedChangesByVerifiedPlaces(structured.proposedChanges, digest.placeHits)
-      : [];
-  const replyText = attachSearchFallbackNotice(structured.replyText, webSearch.warning);
+      : structured.proposedChanges;
+  const replyText = structured.replyText;
   const sources =
     serverConfig.aiWebSearchRequireCitations && webSearch.results.length
       ? toCitationList(webSearch.results, 3)

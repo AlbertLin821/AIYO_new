@@ -93,6 +93,95 @@ function sanitizeBootstrapTrip(input: {
   };
 }
 
+function parseSparseDayStops(input: {
+  dayNumber: number;
+  theme?: string | null;
+  summary?: string | null;
+}) {
+  const themeBase = (input.theme || "").replace(/\s*(與周邊順遊|順遊)$/u, "").trim();
+  const summary = (input.summary || "").trim();
+  const pairMatch = summary.match(/第\s*\d+\s*天以\s*(.+?)、(.+?)\s*與沿線餐食安排為主/u);
+  const themedStops = themeBase
+    .split(/[・／/、]/u)
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const morning = themedStops[0] || pairMatch?.[1]?.trim() || themeBase || `第 ${input.dayNumber} 天`;
+  const afternoon = themedStops[1] || pairMatch?.[2]?.trim() || morning;
+  return {
+    morning,
+    afternoon,
+  };
+}
+
+function hydrateSparseDayItems<T extends { dayNumber: number; theme?: string | null; summary?: string | null; items: Array<{
+  id: string;
+  dayNumber: number;
+  time: string;
+  title: string;
+  type: "attraction" | "restaurant" | "transport" | "hotel" | "activity" | "shopping";
+  transport?: string;
+  notes?: string;
+  source?: "ai" | "manual" | "video";
+  location?: {
+    name: string;
+    lat: number;
+    lng: number;
+    description: string;
+    address?: string;
+  };
+}> }>(day: T, destination?: string | null): T {
+  if (day.items.length > 0) {
+    return day;
+  }
+  const stops = parseSparseDayStops(day);
+  const areaLabel = destination?.trim() || stops.morning;
+  return {
+    ...day,
+    items: [
+      {
+        id: `synthetic_${day.dayNumber}_1`,
+        dayNumber: day.dayNumber,
+        time: "09:00",
+        title: stops.morning,
+        type: "attraction",
+        transport: "大眾運輸",
+        notes: `依照目前摘要補齊的上午停留點：${stops.morning}`,
+        source: "ai",
+      },
+      {
+        id: `synthetic_${day.dayNumber}_2`,
+        dayNumber: day.dayNumber,
+        time: "12:00",
+        title: `${stops.morning} 周邊午餐`,
+        type: "restaurant",
+        transport: "大眾運輸",
+        notes: `依照目前摘要補齊的午餐停留點：${stops.morning} 周邊午餐`,
+        source: "ai",
+      },
+      {
+        id: `synthetic_${day.dayNumber}_3`,
+        dayNumber: day.dayNumber,
+        time: "15:00",
+        title: stops.afternoon,
+        type: "activity",
+        transport: "大眾運輸",
+        notes: `依照目前摘要補齊的下午停留點：${stops.afternoon}`,
+        source: "ai",
+      },
+      {
+        id: `synthetic_${day.dayNumber}_4`,
+        dayNumber: day.dayNumber,
+        time: "18:30",
+        title: `${stops.afternoon || areaLabel} 晚餐與散步`,
+        type: "restaurant",
+        transport: "大眾運輸",
+        notes: `依照目前摘要補齊的晚餐停留點：${stops.afternoon || areaLabel} 晚餐與散步`,
+        source: "ai",
+      },
+    ],
+  };
+}
+
 function serializeTrip(trip: {
   id: string;
   title: string;
@@ -214,7 +303,9 @@ function serializeTrip(trip: {
     });
   }
 
-  const itinerary = Array.from(grouped.values()).sort((left, right) => left.dayNumber - right.dayNumber);
+  const itinerary = Array.from(grouped.values())
+    .sort((left, right) => left.dayNumber - right.dayNumber)
+    .map((day) => hydrateSparseDayItems(day, trip.destination));
   const pins: MapPin[] = trip.pins.map((pin) => ({
     id: pin.id,
     name: pin.label,
@@ -696,7 +787,7 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
   await prisma.tripItem.deleteMany({ where: { tripId: trip.id } });
   await prisma.mapPin.deleteMany({ where: { tripId: trip.id } });
 
-  const normalizedDays = input.itinerary;
+  const normalizedDays = input.itinerary.map((day) => hydrateSparseDayItems(day, input.destination));
 
   if (normalizedDays.length > 0) {
     await prisma.tripDay.createMany({
@@ -742,7 +833,10 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
   );
 
   if (items.length > 0) {
-    await prisma.tripItem.createMany({ data: items });
+    await prisma.tripItem.createMany({
+      data: items,
+      skipDuplicates: true,
+    });
   }
 
   if (input.pins.length > 0) {
@@ -771,6 +865,7 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
         linkedTripItemId: pin.linkedTripItemId || null,
         dayNumber: pin.dayNumber || null,
       })),
+      skipDuplicates: true,
     });
   }
 

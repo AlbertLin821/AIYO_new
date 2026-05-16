@@ -122,7 +122,7 @@ export function buildChatPrompt(
         ? "You MUST output JSON only with this exact shape: { \"replyText\": string, \"proposedChanges\": array }."
         : "Prefer output JSON with shape { \"replyText\": string, \"proposedChanges\": array } when possible; otherwise reply in concise plain Traditional Chinese.",
       hasResearch
-        ? 'proposedChanges may include: { "type": "add_itinerary_item", "day": number, "time": "HH:MM", "title": string, "locationName"?: string, "notes"?: string }, { "type": "update_itinerary_item", "itemId"?: string, "day"?: number, "targetTitle"?: string, "time"?: "HH:MM", "title"?: string, "locationName"?: string, "notes"?: string, "transport"?: string }, or { "type": "remove_itinerary_item", "itemId"?: string, "day"?: number, "targetTitle"?: string }.'
+        ? 'proposedChanges may include: { "type": "add_itinerary_item", "day": number, "time": "HH:MM", "title": string, "locationName"?: string, "notes"?: string, "reason"?: string }, { "type": "update_itinerary_item", "itemId"?: string, "day"?: number, "targetTitle"?: string, "time"?: "HH:MM", "title"?: string, "locationName"?: string, "notes"?: string, "transport"?: string, "reason"?: string }, or { "type": "remove_itinerary_item", "itemId"?: string, "day"?: number, "targetTitle"?: string, "reason"?: string }.'
         : "",
       hasResearch
         ? "For add_itinerary_item, concrete restaurants, attractions, or shops MUST match a venue listed under \"Verified research\" below (same name or clear substring). For update_itinerary_item or remove_itinerary_item, target an existing itinerary item by id when possible, otherwise by day + targetTitle. If the user only asks a question, return proposedChanges: []."

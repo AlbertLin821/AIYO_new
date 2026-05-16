@@ -25,6 +25,7 @@ interface ChatState {
   isSending: boolean;
   errorMessage: string | null;
   createConversation: (title?: string, tripId?: string) => string;
+  setConversationTrip: (conversationId: string, tripId: string) => void;
   selectConversation: (conversationId: string) => void;
   deleteConversation: (conversationId: string) => Promise<void>;
   setMessages: (messages: ChatMessage[]) => void;
@@ -104,6 +105,20 @@ export const useChatStore = create<ChatState>((set) => ({
     });
     return conversation.id;
   },
+  setConversationTrip: (conversationId, tripId) =>
+    withSyncMutationSource("local-user-edit", () => {
+      set((state) => ({
+        conversations: state.conversations.map((conversation) =>
+          conversation.id === conversationId
+            ? {
+                ...conversation,
+                tripId,
+                updatedAt: nowIso(),
+              }
+            : conversation,
+        ),
+      }));
+    }),
   selectConversation: (conversationId) =>
     set((state) => {
       const conversation = state.conversations.find((item) => item.id === conversationId);

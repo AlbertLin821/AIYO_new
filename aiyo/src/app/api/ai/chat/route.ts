@@ -24,7 +24,10 @@ async function handleChatPost(request: Request) {
       progressSessionId?: string;
     };
 
-    if (!body.message?.trim()) {
+    const normalizedMessage = body.message?.trim() || "";
+    const hasQuestionAnswers = Boolean(body.questionAnswers?.length);
+
+    if (!normalizedMessage && !hasQuestionAnswers) {
       return NextResponse.json(createError("invalid_request", "訊息內容不能為空。"), {
         status: 400,
       });
@@ -44,18 +47,20 @@ async function handleChatPost(request: Request) {
       const trip = await resolveSessionTrip(userId);
       persistedUserId = userId;
       persistedTripId = trip?.id;
-      await saveChatMessage(userId, "user", body.message.trim(), persistedTripId);
-      const memories = await searchMemories({
-        userId,
-        query: body.message.trim(),
-      });
-      memoryContext = formatMemoryContext(memories);
+      if (normalizedMessage) {
+        await saveChatMessage(userId, "user", normalizedMessage, persistedTripId);
+        const memories = await searchMemories({
+          userId,
+          query: normalizedMessage,
+        });
+        memoryContext = formatMemoryContext(memories);
+      }
     } catch {
       // Chat remains functional even if the user is not authenticated.
     }
 
     const response = await chatWithTravelAssistant({
-      message: body.message.trim(),
+      message: normalizedMessage,
       messages: body.messages,
       context: body.context,
       structuredTravelPlanning: body.structuredTravelPlanning,
@@ -81,7 +86,7 @@ async function handleChatPost(request: Request) {
         await addMemories({
           userId: persistedUserId,
           messages: [
-            { role: "user", content: body.message.trim() },
+            { role: "user", content: normalizedMessage || "[questionnaire_answers_submitted]" },
             { role: "assistant", content: response.reply.content },
           ],
           metadata: {

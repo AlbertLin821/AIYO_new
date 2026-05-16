@@ -177,7 +177,12 @@ export function failFrontendDebugProcess(
     ...(safeMeta(meta) || {}),
     error: error instanceof Error ? error.message : String(error),
   };
-  emit(isExpectedTransientFailure(finalMeta.error) ? "warn" : "error", `${process.scope}:failed`, {
+  const shouldWarn =
+    isExpectedTransientFailure(finalMeta.error) ||
+    /(?:^|-)ui$/.test(process.scope) ||
+    process.scope === "chat-ui" ||
+    process.scope === "trip-revise-ui";
+  emit(shouldWarn ? "warn" : "error", `${process.scope}:failed`, {
     id,
     label: process.label,
     meta: finalMeta,

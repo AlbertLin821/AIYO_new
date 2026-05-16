@@ -161,6 +161,7 @@ export type AiProposedChange =
   title: string;
   locationName?: string;
   notes?: string;
+  reason?: string;
   source: "ai-chat";
 }
   | {
@@ -173,6 +174,7 @@ export type AiProposedChange =
   locationName?: string;
   notes?: string;
   transport?: string;
+  reason?: string;
   source: "ai-chat";
 }
   | {
@@ -180,6 +182,7 @@ export type AiProposedChange =
   day?: number;
   itemId?: string;
   targetTitle?: string;
+  reason?: string;
   source: "ai-chat";
 };
 
