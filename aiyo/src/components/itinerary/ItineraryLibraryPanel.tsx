@@ -42,6 +42,7 @@ type Props = {
   libraryError: string | null;
   emptyHint: string;
   canEdit: boolean;
+  hideScopeTabs?: boolean;
   onScopeTabChange: (tab: "myTrips" | "sharedTrips") => void;
   onSearchChange: (value: string) => void;
   onSortChange: (value: TripLibrarySort) => void;
@@ -78,6 +79,7 @@ function ItineraryLibraryPanel({
   libraryError,
   emptyHint,
   canEdit,
+  hideScopeTabs = false,
   onScopeTabChange,
   onSearchChange,
   onSortChange,
@@ -123,22 +125,24 @@ function ItineraryLibraryPanel({
         </div>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-2 text-sm font-semibold">
-        <button
-          type="button"
-          onClick={() => onScopeTabChange("myTrips")}
-          className={cn("rounded-xl px-3 py-2 transition-colors", scopeTab === "myTrips" ? "bg-foreground text-white" : "bg-cream/45 text-muted hover:text-foreground")}
-        >
-          {t.itineraryPage.tabMyTrips}
-        </button>
-        <button
-          type="button"
-          onClick={() => onScopeTabChange("sharedTrips")}
-          className={cn("rounded-xl px-3 py-2 transition-colors", scopeTab === "sharedTrips" ? "bg-foreground text-white" : "bg-cream/45 text-muted hover:text-foreground")}
-        >
-          {t.itineraryPage.tabSharedTrips}
-        </button>
-      </div>
+      {!hideScopeTabs && (
+        <div className="mb-4 grid grid-cols-2 gap-2 text-sm font-semibold">
+          <button
+            type="button"
+            onClick={() => onScopeTabChange("myTrips")}
+            className={cn("rounded-xl px-3 py-2 transition-colors", scopeTab === "myTrips" ? "bg-foreground text-white" : "bg-cream/45 text-muted hover:text-foreground")}
+          >
+            {t.itineraryPage.tabMyTrips}
+          </button>
+          <button
+            type="button"
+            onClick={() => onScopeTabChange("sharedTrips")}
+            className={cn("rounded-xl px-3 py-2 transition-colors", scopeTab === "sharedTrips" ? "bg-foreground text-white" : "bg-cream/45 text-muted hover:text-foreground")}
+          >
+            {t.itineraryPage.tabSharedTrips}
+          </button>
+        </div>
+      )}
 
       <div className="mb-4 grid gap-2">
         <div className="flex min-h-[42px] min-w-0 items-center gap-2 rounded-xl border border-border-light bg-cream/35 px-3 py-2">
@@ -167,7 +171,7 @@ function ItineraryLibraryPanel({
         )}
       </div>
 
-      {scopeTab === "myTrips" && (
+      {!hideScopeTabs && scopeTab === "myTrips" && (
         <div className="mb-4 rounded-xl border border-border-light bg-cream/25 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-semibold text-muted">{t.itineraryPage.filterCurrentTripFolder}</p>

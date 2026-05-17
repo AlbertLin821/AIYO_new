@@ -34,7 +34,8 @@ export const serverConfig = {
   ),
   ollamaFastSummaryModel: readString("OLLAMA_VIDEO_SUMMARY_FAST_MODEL", "mistral-small:24b"),
   ollamaFinalSummaryModel: readString("OLLAMA_VIDEO_SUMMARY_FINAL_MODEL", "gemma4:26B"),
-  ollamaLocationModel: readString("OLLAMA_LOCATION_MODEL", "qwen3.6:27b"),
+  ollamaLocationModel: readString("OLLAMA_LOCATION_MODEL", "granite4.1:8b"),
+  videoExtractionMode: readString("VIDEO_EXTRACTION_MODE", "simple-ollama"),
   /**
    * 影片時間段落：在規則錨點產生後，以 Ollama `format: "json"` 拋光標題／摘要／地點提示。
    * 失敗時自動退回原片段，不影響地圖座標管線。
@@ -45,7 +46,12 @@ export const serverConfig = {
    * 預設關閉；與 `isGenericTravelLocation` 並存時為第二道閘門。
    */
   ollamaVideoLocationJsonFilter: readBoolean("OLLAMA_VIDEO_LOCATION_JSON_FILTER", false),
-  ollamaTimeoutMs: readNumber("OLLAMA_TIMEOUT_MS", 45000),
+  ollamaTimeoutMs: readNumber("OLLAMA_TIMEOUT_MS", 120000),
+  videoExtractionChunkMaxChars: readNumber("VIDEO_EXTRACTION_CHUNK_MAX_CHARS", 12000),
+  videoExtractionChunkOverlapChars: readNumber("VIDEO_EXTRACTION_CHUNK_OVERLAP_CHARS", 500),
+  videoExtractionChunkMaxCount: readNumber("VIDEO_EXTRACTION_CHUNK_MAX_COUNT", 8),
+  videoExtractionChunkConcurrency: readNumber("VIDEO_EXTRACTION_CHUNK_CONCURRENCY", 1),
+  videoExtractionOptionalVerify: readBoolean("VIDEO_EXTRACTION_OPTIONAL_VERIFY", false),
   mem0BaseUrl: readString("MEM0_BASE_URL", "http://localhost:8890"),
   mem0Enabled: readBoolean("MEM0_ENABLED", false),
   mem0TopK: readNumber("MEM0_TOP_K", 5),
@@ -64,6 +70,12 @@ export const serverConfig = {
   searxngDefaultCategories: readString("SEARXNG_DEFAULT_CATEGORIES", "general"),
   searxngResultLimit: readNumber("SEARXNG_RESULT_LIMIT", 8),
   searxngSafeSearch: readNumber("SEARXNG_SAFE_SEARCH", 1),
+  videoPlaceRequireVerification: readBoolean("VIDEO_PLACE_REQUIRE_VERIFICATION", true),
+  videoPlaceAllowHeuristicFallback: readBoolean("VIDEO_PLACE_ALLOW_HEURISTIC_FALLBACK", false),
+  videoPlaceEnableOllamaCandidates: readBoolean("VIDEO_PLACE_ENABLE_OLLAMA_CANDIDATES", true),
+  videoPlaceEnableNominatim: readBoolean("VIDEO_PLACE_ENABLE_NOMINATIM", false),
+  videoPlaceMaxCandidates: readNumber("VIDEO_PLACE_MAX_CANDIDATES", 24),
+  videoPlaceMaxFinalPlaces: readNumber("VIDEO_PLACE_MAX_FINAL_PLACES", 16),
   aiWebSearchEnabled: readBoolean("AI_WEB_SEARCH_ENABLED", true),
   aiWebSearchMaxResults: readNumber("AI_WEB_SEARCH_MAX_RESULTS", 6),
   aiWebSearchRequireCitations: readBoolean("AI_WEB_SEARCH_REQUIRE_CITATIONS", true),

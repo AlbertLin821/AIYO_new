@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
 import { serverConfig } from "@/server/config";
-import { geocodeWithGoogle } from "@/server/geo/geocodeService";
+import { fetchGooglePlaceDetailsByPlaceId, geocodeWithGoogle } from "@/server/geo/geocodeService";
 import type { GeocodeApiResult } from "@/types";
 
 export const runtime = "nodejs";
@@ -51,7 +51,18 @@ export async function POST(request: Request) {
         errors.push(`${query}: ${resolved.reason}`);
         continue;
       }
-      results.push(resolved.result);
+      const details = await fetchGooglePlaceDetailsByPlaceId(resolved.result.placeId);
+      results.push({
+        ...resolved.result,
+        photoUrl: details.photoUrl,
+        thumbnail: details.thumbnail || details.photoUrl,
+        openingHours: details.openingHours,
+        phoneNumber: details.phoneNumber,
+        website: details.website,
+        googleMapsUrl: details.googleMapsUrl,
+        rating: details.rating,
+        userRatingsTotal: details.userRatingsTotal,
+      });
     }
 
     if (results.length === 0) {

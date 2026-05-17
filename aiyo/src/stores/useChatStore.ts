@@ -15,6 +15,7 @@ export interface ChatConversation {
   createdAt: string;
   updatedAt: string;
   messages: ChatMessage[];
+  tripId?: string;
 }
 
 interface ChatState {
@@ -23,7 +24,8 @@ interface ChatState {
   messages: ChatMessage[];
   isSending: boolean;
   errorMessage: string | null;
-  createConversation: () => string;
+  createConversation: (title?: string, tripId?: string) => string;
+  setConversationTrip: (conversationId: string, tripId: string) => void;
   selectConversation: (conversationId: string) => void;
   deleteConversation: (conversationId: string) => Promise<void>;
   setMessages: (messages: ChatMessage[]) => void;
@@ -52,14 +54,15 @@ function deriveConversationTitle(messages: ChatMessage[], fallback = "新的對�
   return content.length > 22 ? `${content.slice(0, 22)}...` : content;
 }
 
-function createEmptyConversation(): ChatConversation {
+function createEmptyConversation(title = "新的對話", tripId?: string): ChatConversation {
   const createdAt = nowIso();
   return {
     id: `conversation_${Date.now()}`,
-    title: "新的對話",
+    title: title.trim() || "新的對話",
     createdAt,
     updatedAt: createdAt,
     messages: [],
+    tripId,
   };
 }
 
@@ -75,6 +78,7 @@ function upsertRemoteConversation(
     createdAt: existing?.createdAt || updatedAt,
     updatedAt,
     messages: remoteMessages,
+    tripId: existing?.tripId,
   };
 
   return [
@@ -89,8 +93,8 @@ export const useChatStore = create<ChatState>((set) => ({
   messages: [],
   isSending: false,
   errorMessage: null,
-  createConversation: () => {
-    const conversation = createEmptyConversation();
+  createConversation: (title, tripId) => {
+    const conversation = createEmptyConversation(title, tripId);
     withSyncMutationSource("local-user-edit", () => {
       set((state) => ({
         conversations: [conversation, ...state.conversations],
@@ -101,6 +105,20 @@ export const useChatStore = create<ChatState>((set) => ({
     });
     return conversation.id;
   },
+  setConversationTrip: (conversationId, tripId) =>
+    withSyncMutationSource("local-user-edit", () => {
+      set((state) => ({
+        conversations: state.conversations.map((conversation) =>
+          conversation.id === conversationId
+            ? {
+                ...conversation,
+                tripId,
+                updatedAt: nowIso(),
+              }
+            : conversation,
+        ),
+      }));
+    }),
   selectConversation: (conversationId) =>
     set((state) => {
       const conversation = state.conversations.find((item) => item.id === conversationId);
@@ -153,17 +171,42 @@ export const useChatStore = create<ChatState>((set) => ({
   },
   setMessages: (messages) =>
     set((state) => {
+      const activeConversation = state.conversations.find(
+        (conversation) => conversation.id === state.activeConversationId,
+      );
+      if (activeConversation?.tripId && activeConversation.id !== CHAT_REMOTE_CONVERSATION_ID) {
+        return {
+          conversations: state.conversations.filter(
+            (conversation) => conversation.id !== CHAT_REMOTE_CONVERSATION_ID,
+          ),
+          activeConversationId: activeConversation.id,
+          messages: activeConversation.messages,
+        };
+      }
+
       const conversations = upsertRemoteConversation(state.conversations, messages);
       const activeConversationId = state.activeConversationId || CHAT_REMOTE_CONVERSATION_ID;
-      const activeConversation = conversations.find((item) => item.id === activeConversationId);
+      const nextActiveConversation = conversations.find((item) => item.id === activeConversationId);
       return {
         conversations,
         activeConversationId,
-        messages: activeConversation?.messages || messages,
+        messages: nextActiveConversation?.messages || messages,
       };
     }),
   mergeRemoteMessages: (messages) =>
     set((state) => {
+      const activeConversation = state.conversations.find(
+        (conversation) => conversation.id === state.activeConversationId,
+      );
+      if (activeConversation?.tripId && activeConversation.id !== CHAT_REMOTE_CONVERSATION_ID) {
+        return {
+          conversations: state.conversations.filter(
+            (conversation) => conversation.id !== CHAT_REMOTE_CONVERSATION_ID,
+          ),
+          messages: activeConversation.messages,
+        };
+      }
+
       const remoteSignatures = new Set(messages.map(messageSignature));
       const remoteConversation = state.conversations.find(
         (conversation) => conversation.id === CHAT_REMOTE_CONVERSATION_ID,
@@ -174,7 +217,7 @@ export const useChatStore = create<ChatState>((set) => ({
       );
       const mergedMessages = [...messages, ...pendingLocal];
       const conversations = upsertRemoteConversation(state.conversations, mergedMessages);
-      const activeConversation = conversations.find(
+      const nextActiveConversation = conversations.find(
         (conversation) => conversation.id === state.activeConversationId,
       );
       return {
@@ -182,7 +225,7 @@ export const useChatStore = create<ChatState>((set) => ({
         messages:
           state.activeConversationId === CHAT_REMOTE_CONVERSATION_ID
             ? mergedMessages
-            : activeConversation?.messages || state.messages,
+            : nextActiveConversation?.messages || state.messages,
       };
     }),
   appendMessage: (message) =>

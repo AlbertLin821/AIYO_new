@@ -10,6 +10,9 @@ export async function GET() {
   try {
     const { userId } = await requireSessionUser();
     const trip = await resolveSessionTrip(userId);
+    if (!trip) {
+      return NextResponse.json(createSuccess(null));
+    }
     const state = await getCollaborationState(trip.id);
     return NextResponse.json(createSuccess(state));
   } catch (error) {

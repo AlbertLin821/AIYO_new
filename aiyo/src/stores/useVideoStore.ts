@@ -25,6 +25,14 @@ export type SummaryDiagnostics = {
   unavailableReason?: string;
 };
 
+export type VideoRecommendationRequest = {
+  destination?: string;
+  keyword?: string;
+  days?: number;
+  preferences?: string[];
+  limit?: number;
+};
+
 interface VideoState {
   videos: VideoRecommendation[];
   selectedVideo: VideoRecommendation | null;
@@ -36,6 +44,7 @@ interface VideoState {
     | "single-video-url"
     | null;
   summaryDiagnostics: SummaryDiagnostics | null;
+  lastRecommendationRequest: VideoRecommendationRequest | null;
   isSearching: boolean;
   isSummarizing: boolean;
   errorMessage: string | null;
@@ -49,6 +58,7 @@ interface VideoState {
     source: "youtube-data-api" | "mock-fallback" | "default-taiwan-cities" | "single-video-url" | null,
   ) => void;
   setSummaryDiagnostics: (value: SummaryDiagnostics | null) => void;
+  setLastRecommendationRequest: (request: VideoRecommendationRequest | null) => void;
   setIsSearching: (searching: boolean) => void;
   setIsSummarizing: (summarizing: boolean) => void;
   setErrorMessage: (message: string | null) => void;
@@ -61,6 +71,7 @@ export const useVideoStore = create<VideoState>((set) => ({
   searchQuery: "",
   recommendationSource: null,
   summaryDiagnostics: null,
+  lastRecommendationRequest: null,
   isSearching: false,
   isSummarizing: false,
   errorMessage: null,
@@ -80,6 +91,7 @@ export const useVideoStore = create<VideoState>((set) => ({
   setSearchQuery: (searchQuery) => set({ searchQuery }),
   setRecommendationSource: (recommendationSource) => set({ recommendationSource }),
   setSummaryDiagnostics: (summaryDiagnostics) => set({ summaryDiagnostics }),
+  setLastRecommendationRequest: (lastRecommendationRequest) => set({ lastRecommendationRequest }),
   setIsSearching: (isSearching) => set({ isSearching }),
   setIsSummarizing: (isSummarizing) => set({ isSummarizing }),
   setErrorMessage: (errorMessage) => set({ errorMessage }),

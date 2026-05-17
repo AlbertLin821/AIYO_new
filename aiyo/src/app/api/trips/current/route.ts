@@ -11,7 +11,7 @@ export async function GET() {
   try {
     const { userId } = await requireSessionUser();
     const trip = await resolveSessionTrip(userId);
-    return NextResponse.json(createSuccess({ tripId: trip.id }));
+    return NextResponse.json(createSuccess({ tripId: trip?.id ?? null }));
   } catch (error) {
     if (error instanceof Error && error.message === "unauthorized") {
       return NextResponse.json(createError("unauthorized", "Authentication required."), { status: 401 });

@@ -5,7 +5,6 @@ import { toApiError } from "@/server/apiErrors";
 import { requireSessionUser } from "@/server/auth";
 import {
   clearActiveTripIfMatches,
-  ensureAtLeastOneOwnedTripAfterDelete,
   normalizeTripStorageTitle,
   saveTripPayload,
 } from "@/server/data/appStateService";
@@ -113,9 +112,7 @@ export async function DELETE(
     }
     await requireTripAccess(userId, id, "delete");
     await clearActiveTripIfMatches(userId, id);
-    const ownerId = row.userId;
     await prisma.trip.delete({ where: { id } });
-    await ensureAtLeastOneOwnedTripAfterDelete(ownerId);
     return NextResponse.json(createSuccess({ ok: true }));
   } catch (error) {
     return toApiError(error, "Failed to delete trip.");

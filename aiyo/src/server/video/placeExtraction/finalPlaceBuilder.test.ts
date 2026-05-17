@@ -16,15 +16,25 @@ function line(id: string, startSeconds: number, text: string): NormalizedTranscr
 }
 
 async function extractNames(transcriptLines: NormalizedTranscriptLine[], destinationHint?: string) {
-  const result = await extractFinalVideoPlaces({
-    transcriptLines,
-    title: "travel video",
-    description: "",
-    destinationHint,
-    enableGeocode: false,
-    enableSearch: false,
-  });
-  return result.places.map((place) => place.name);
+  const previous = process.env.VIDEO_PLACE_ENABLE_OLLAMA_CANDIDATES;
+  process.env.VIDEO_PLACE_ENABLE_OLLAMA_CANDIDATES = "false";
+  try {
+    const result = await extractFinalVideoPlaces({
+      transcriptLines,
+      title: "travel video",
+      description: "",
+      destinationHint,
+      enableGeocode: false,
+      enableSearch: false,
+    });
+    return result.places.map((place) => place.name);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.VIDEO_PLACE_ENABLE_OLLAMA_CANDIDATES;
+    } else {
+      process.env.VIDEO_PLACE_ENABLE_OLLAMA_CANDIDATES = previous;
+    }
+  }
 }
 
 test("Kumamoto regression keeps only canonical clean places", async () => {
@@ -105,4 +115,26 @@ test("City-only transcript returns empty list", async () => {
     "大阪",
   );
   assert.deepEqual(names, []);
+});
+
+test("description-only explicit places can be preserved through metadata and verification", async () => {
+  const previous = process.env.VIDEO_PLACE_ENABLE_OLLAMA_CANDIDATES;
+  process.env.VIDEO_PLACE_ENABLE_OLLAMA_CANDIDATES = "false";
+  try {
+    const result = await extractFinalVideoPlaces({
+      transcriptLines: [],
+      title: "熊本兩天一夜",
+      description: "這次會去熊本城、黑亭、熊本櫻町巴士總站。",
+      destinationHint: "熊本",
+      enableGeocode: false,
+      enableSearch: false,
+    });
+    assert.deepEqual(result.places.map((place) => place.name), ["熊本城", "黑亭", "熊本櫻町巴士總站"]);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.VIDEO_PLACE_ENABLE_OLLAMA_CANDIDATES;
+    } else {
+      process.env.VIDEO_PLACE_ENABLE_OLLAMA_CANDIDATES = previous;
+    }
+  }
 });

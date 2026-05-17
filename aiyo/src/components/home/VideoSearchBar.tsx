@@ -2,6 +2,13 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Link2, Loader2, Search } from "lucide-react";
+import {
+  failFrontendDebugProcess,
+  finishFrontendDebugProcess,
+  startFrontendDebugProcess,
+  updateFrontendDebugProcess,
+} from "@/lib/frontendDebug";
+import { enqueueVideoSummaries } from "@/lib/videoSummaryQueue";
 import { zhTW as t } from "@/locales/zh-TW";
 import { useTripStore } from "@/stores/useTripStore";
 import { useToastStore } from "@/stores/useToastStore";
@@ -27,6 +34,7 @@ const VideoSearchBar = forwardRef<HTMLInputElement>(function VideoSearchBar(_, r
     setErrorMessage,
     setSearchQuery,
     setRecommendationSource,
+    setLastRecommendationRequest,
     setSummaryDiagnostics,
   } = useVideoStore();
 
@@ -47,6 +55,11 @@ const VideoSearchBar = forwardRef<HTMLInputElement>(function VideoSearchBar(_, r
     if (!trimmed) {
       return;
     }
+    const processId = startFrontendDebugProcess("video-search-ui", "手動搜尋影片或摘要單支影片", {
+      query: trimmed,
+      isUrl,
+      tripDestination,
+    });
 
     setErrorMessage(null);
     setSearchQuery(trimmed);
@@ -54,6 +67,9 @@ const VideoSearchBar = forwardRef<HTMLInputElement>(function VideoSearchBar(_, r
     try {
       if (isUrl) {
         setIsSummarizing(true);
+        updateFrontendDebugProcess(processId, "single-video-summary-start", {
+          url: trimmed,
+        });
         const result = await summarizeVideo({
           url: trimmed,
           destination: tripDestination,
@@ -95,15 +111,28 @@ const VideoSearchBar = forwardRef<HTMLInputElement>(function VideoSearchBar(_, r
             description: t.video.mapsMixed,
           });
         }
+        finishFrontendDebugProcess(processId, {
+          mode: "single-video-summary",
+          videoId: result.video.videoId,
+          title: result.video.title,
+        });
       } else {
         setIsSearching(true);
         setSummaryDiagnostics(null);
-        const outcome = await fetchVideoRecommendations({
+        updateFrontendDebugProcess(processId, "search-recommendations-start", {
+          keyword: trimmed,
+        });
+        const request = {
           keyword: trimmed,
           limit: 6,
-        });
+        };
+        const outcome = await fetchVideoRecommendations(request);
         setVideos(outcome.videos);
         setRecommendationSource(outcome.source);
+        setLastRecommendationRequest(request);
+        enqueueVideoSummaries(outcome.videos, {
+          destination: tripDestination,
+        });
         if (outcome.source === "mock-fallback") {
           pushToast({
             variant: "warning",
@@ -111,8 +140,17 @@ const VideoSearchBar = forwardRef<HTMLInputElement>(function VideoSearchBar(_, r
             description: outcome.fallbackReason || t.video.mockVideosDesc,
           });
         }
+        finishFrontendDebugProcess(processId, {
+          mode: "recommendation-search",
+          resultCount: outcome.videos.length,
+          source: outcome.source,
+        });
       }
     } catch (error) {
+      failFrontendDebugProcess(processId, error, {
+        query: trimmed,
+        isUrl,
+      });
       const description =
         error instanceof Error ? error.message : t.video.requestFailedGeneric;
       setErrorMessage(description);

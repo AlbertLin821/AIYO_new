@@ -21,6 +21,8 @@ interface RecommendationInput {
   budget?: string;
   companions?: string[];
   limit?: number;
+  offset?: number;
+  excludeVideoIds?: string[];
 }
 
 export type VideoRecommendationOutcome = {
@@ -53,6 +55,9 @@ function scoreVideo(video: VideoRecommendation, input: RecommendationInput): num
 }
 
 function rankFallbackVideos(input: RecommendationInput): VideoRecommendation[] {
+  const limit = Math.max(1, Math.min(input.limit || 10, 12));
+  const offset = Math.max(0, input.offset || 0);
+  const excluded = new Set((input.excludeVideoIds || []).map((id) => id.trim()).filter(Boolean));
   const rawQ =
     buildVideoRecommendationSearchQuery({
       keyword: input.keyword,
@@ -78,7 +83,8 @@ function rankFallbackVideos(input: RecommendationInput): VideoRecommendation[] {
       ),
     )
     .sort((left, right) => right.score - left.score)
-    .slice(0, Math.max(1, Math.min(input.limit || 10, 12)))
+    .filter((entry) => !excluded.has(entry.video.videoId || entry.video.id))
+    .slice(offset, offset + limit)
     .map((entry) => entry.video);
 }
 
@@ -582,6 +588,9 @@ function toPreference(input: RecommendationInput): UserTravelPreference {
 }
 
 function rankTaiwanCityFallbackVideos(input: RecommendationInput): VideoRecommendation[] {
+  const limit = Math.max(1, Math.min(input.limit || 6, 12));
+  const offset = Math.max(0, input.offset || 0);
+  const excluded = new Set((input.excludeVideoIds || []).map((id) => id.trim()).filter(Boolean));
   const ranked = rankRecommendedVideos(
     taiwanCityFallbackVideos.map((video): VideoCandidate => ({
       videoId: video.videoId || video.id,
@@ -595,17 +604,20 @@ function rankTaiwanCityFallbackVideos(input: RecommendationInput): VideoRecommen
       channelTitle: video.channelTitle,
     })),
     toPreference(input),
-    input.limit || 6,
+    limit + offset + excluded.size,
   );
 
   const byId = new Map(taiwanCityFallbackVideos.map((video) => [video.videoId, video]));
-  return ranked.map((scored) => {
-    const source = byId.get(scored.videoId) || taiwanCityFallbackVideos[0];
-    return {
-      ...source,
-      relevanceReason: `${source.relevanceReason} 推薦分數 ${scored.score}。`,
-    };
-  });
+  return ranked
+    .map((scored) => {
+      const source = byId.get(scored.videoId) || taiwanCityFallbackVideos[0];
+      return {
+        ...source,
+        relevanceReason: `${source.relevanceReason} 推薦分數 ${scored.score}。`,
+      };
+    })
+    .filter((video) => !excluded.has(video.videoId || video.id))
+    .slice(offset, offset + limit);
 }
 
 function hasTaiwanCityFallbackRelevance(input: RecommendationInput): boolean {

@@ -35,6 +35,30 @@ export async function POST(request: Request) {
       );
     }
 
+    if (room.trip.userId !== userId) {
+      await prisma.tripCollaborator.upsert({
+        where: {
+          tripId_userId: {
+            tripId: room.tripId,
+            userId,
+          },
+        },
+        update: {
+          role: "editor",
+        },
+        create: {
+          tripId: room.tripId,
+          userId,
+          role: "editor",
+        },
+      });
+    }
+
+    await prisma.trip.update({
+      where: { id: room.tripId },
+      data: { updatedAt: new Date() },
+    });
+
     await upsertPresence({
       roomId: room.id,
       userId,

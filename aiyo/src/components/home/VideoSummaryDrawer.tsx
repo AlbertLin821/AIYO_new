@@ -25,10 +25,13 @@ import {
   savePendingVideoImport,
 } from "@/lib/pendingVideoImport";
 import { zhTW as t } from "@/locales/zh-TW";
+import type { ItineraryListItem } from "@/lib/itinerary-sort";
 import {
   getVideoImportCandidateLocations,
   importVideoVerifiedPlacesToTrip,
 } from "@/services/videoPlaceImport";
+import { createNewTrip, listTripsForLibrary, setActiveTrip } from "@/services/itineraryClient";
+import { syncService } from "@/services/syncService";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
 import { useVideoStore, type SummaryDiagnostics } from "@/stores/useVideoStore";
@@ -41,6 +44,8 @@ interface VideoSummaryDrawerProps {
   /** 清除伺服端已存摘要並重新跑摘要／AI 管線（首頁／聊天由父層實作） */
   onRefreshSummary?: () => void | Promise<void>;
 }
+
+const NEW_TRIP_OPTION = "__new_trip__";
 
 function drawerSummarySourceLabel(key: SummaryDiagnostics["summarySource"]): string | null {
   switch (key) {
@@ -103,9 +108,18 @@ export default function VideoSummaryDrawer({
   const [failedImageVideoId, setFailedImageVideoId] = useState<string | null>(null);
   const [seekTarget, setSeekTarget] = useState({ token: 0, seconds: 0 });
   const [selectedLocationNames, setSelectedLocationNames] = useState<Set<string>>(() => new Set());
+  const [importTargetTripId, setImportTargetTripId] = useState<string>("");
   const [importTargetDay, setImportTargetDay] = useState(1);
+  const [importExtraDays, setImportExtraDays] = useState(0);
   const [importDayPickerOpen, setImportDayPickerOpen] = useState(false);
+  const [importTripList, setImportTripList] = useState<ItineraryListItem[]>([]);
+  const [importTripListLoading, setImportTripListLoading] = useState(false);
+  const [importTripListError, setImportTripListError] = useState<string | null>(null);
   const [refreshingSummary, setRefreshingSummary] = useState(false);
+  const currentTripId = useTripStore((state) => state.tripId);
+  const currentTripTitle = useTripStore((state) => state.title);
+  const currentTripDestination = useTripStore((state) => state.destination);
+  const currentTripDays = useTripStore((state) => state.days);
   const tripItinerary = useTripStore((state) => state.itinerary);
   const videoId = video?.videoId;
 
@@ -136,19 +150,113 @@ export default function VideoSummaryDrawer({
       const days = useTripStore.getState().itinerary.map((d) => d.dayNumber);
       const dayOk = days.includes(pending.targetDay);
       setImportTargetDay(dayOk ? pending.targetDay : (days[0] ?? pending.targetDay));
+      setImportTargetTripId(useTripStore.getState().tripId || NEW_TRIP_OPTION);
+      setImportExtraDays(0);
       clearPendingVideoImport();
     } else {
       setSelectedLocationNames(new Set(candidates.map((loc) => loc.name)));
       const firstDay = useTripStore.getState().itinerary[0]?.dayNumber ?? 1;
       setImportTargetDay(firstDay);
+      setImportTargetTripId(useTripStore.getState().tripId || NEW_TRIP_OPTION);
+      setImportExtraDays(0);
     }
   }, [open, video?.id, video]);
 
   useEffect(() => {
     if (!open) {
       setImportDayPickerOpen(false);
+      setImportExtraDays(0);
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!importDayPickerOpen || sessionStatus !== "authenticated") {
+      return;
+    }
+    let cancelled = false;
+    setImportTripListLoading(true);
+    setImportTripListError(null);
+    listTripsForLibrary("recent")
+      .then((rows) => {
+        if (cancelled) {
+          return;
+        }
+        setImportTripList(rows);
+        const fallbackTripId = currentTripId || rows[0]?.id || NEW_TRIP_OPTION;
+        setImportTargetTripId((current) =>
+          current === NEW_TRIP_OPTION ||
+          rows.some((row) => row.id === current) ||
+          current === currentTripId
+            ? current
+            : fallbackTripId,
+        );
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setImportTripListError(error instanceof Error ? error.message : t.drawer.importTripListFailed);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setImportTripListLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTripId, importDayPickerOpen, sessionStatus]);
+
+  const importTripOptions = useMemo(() => {
+    const rows = [...importTripList];
+    if (currentTripId && !rows.some((row) => row.id === currentTripId)) {
+      rows.unshift({
+        id: currentTripId,
+        title: currentTripTitle || currentTripDestination || t.drawer.currentTripFallback,
+        destination: currentTripDestination || t.common.notSet,
+        days: Math.max(1, currentTripDays || tripItinerary.length || 1),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        isOwner: true,
+      });
+    }
+    return rows;
+  }, [currentTripDestination, currentTripDays, currentTripId, currentTripTitle, importTripList, tripItinerary.length]);
+
+  const selectedImportTrip = useMemo(
+    () => importTripOptions.find((trip) => trip.id === importTargetTripId) || null,
+    [importTargetTripId, importTripOptions],
+  );
+
+  const importBaseDayCount = useMemo(() => {
+    if (importTargetTripId === NEW_TRIP_OPTION) {
+      return 1;
+    }
+    if (importTargetTripId && importTargetTripId === currentTripId && tripItinerary.length > 0) {
+      return Math.max(...tripItinerary.map((day) => day.dayNumber));
+    }
+    return Math.max(1, selectedImportTrip?.days || currentTripDays || 1);
+  }, [
+    currentTripDays,
+    currentTripId,
+    importTargetTripId,
+    selectedImportTrip?.days,
+    tripItinerary,
+  ]);
+
+  const importDayOptions = useMemo(() => {
+    const count = Math.max(1, importBaseDayCount + importExtraDays);
+    return Array.from({ length: count }, (_, index) => index + 1);
+  }, [importBaseDayCount, importExtraDays]);
+
+  const canConfirmImport =
+    importTargetTripId === NEW_TRIP_OPTION || Boolean(importTargetTripId);
+
+  useEffect(() => {
+    if (!importDayPickerOpen || importDayOptions.includes(importTargetDay)) {
+      return;
+    }
+    setImportTargetDay(importDayOptions[0] ?? 1);
+  }, [importDayOptions, importDayPickerOpen, importTargetDay]);
 
   if (!video) {
     return null;
@@ -244,6 +352,10 @@ export default function VideoSummaryDrawer({
       return;
     }
     setImportDayPickerOpen(true);
+    setImportExtraDays(0);
+    if (!importTargetTripId) {
+      setImportTargetTripId(currentTripId || NEW_TRIP_OPTION);
+    }
   }
 
   async function confirmImportToTrip() {
@@ -266,9 +378,26 @@ export default function VideoSummaryDrawer({
 
     try {
       setAdding(true);
+      let targetDayNumber = importTargetDay;
+      const targetTripId = importTargetTripId || currentTripId;
+      const creatingNewTrip = !targetTripId || targetTripId === NEW_TRIP_OPTION;
+      if (creatingNewTrip) {
+        const created = await createNewTrip();
+        const snapshot = await setActiveTrip(created.tripId);
+        syncService.applyTripSwitch(snapshot);
+        syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
+      } else if (targetTripId !== currentTripId) {
+        const snapshot = await setActiveTrip(targetTripId);
+        syncService.applyTripSwitch(snapshot);
+        syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
+        const availableDays = snapshot.trip.itinerary.map((day) => day.dayNumber);
+        targetDayNumber = availableDays.includes(importTargetDay)
+          ? importTargetDay
+          : (availableDays[0] ?? importTargetDay);
+      }
       const added = await importVideoVerifiedPlacesToTrip(activeVideo, {
         selectedNames: names,
-        targetDayNumber: importTargetDay,
+        targetDayNumber,
       });
       if (added.addedItems === 0 || added.addedPins === 0) {
         pushToast({
@@ -282,7 +411,6 @@ export default function VideoSummaryDrawer({
       setImportDayPickerOpen(false);
       showToastMessage(t.drawer.toastItinerary);
       onClose();
-      router.push("/itinerary");
     } finally {
       setAdding(false);
     }
@@ -297,17 +425,18 @@ export default function VideoSummaryDrawer({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-40 bg-foreground/10"
+              transition={{ duration: 0.35, ease: "easeOut" }}
+              className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
               onClick={onClose}
             />
 
             <motion.div
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              initial={{ opacity: 0, scale: 0.85, y: 50 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 30 }}
+              transition={{ type: "spring", damping: 22, stiffness: 180, mass: 0.9 }}
               data-testid="video-summary-drawer"
-              className="fixed right-0 top-0 z-50 flex h-screen w-full max-w-lg flex-col bg-surface shadow-soft-lg"
+              className="fixed inset-4 z-50 mx-auto my-auto flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-surface shadow-soft-lg sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2"
             >
             <div className="flex items-center justify-between border-b border-border-light px-6 py-4">
               <div className="flex min-w-0 flex-1 items-start gap-2">
@@ -581,11 +710,27 @@ export default function VideoSummaryDrawer({
                     ) : isProcessingVideo ? (
                       <ProcessingRow label={t.drawer.videoProcessing} />
                     ) : (
-                      <p className="text-sm text-muted">
-                        {summaryDiagnostics?.summaryUnavailable
-                          ? "無法取得逐字稿，暫時無法抽出可靠地點。"
-                          : "此影片未擷取到足夠明確的地點名稱。"}
-                      </p>
+                      <p className="text-sm text-muted">{t.drawer.noExtractedLocations}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="mb-3 text-sm font-semibold text-foreground">{t.drawer.extractedFoods}</h4>
+                  <div className="flex flex-col gap-2">
+                    {activeVideo.extractedFoods && activeVideo.extractedFoods.length > 0 ? (
+                      activeVideo.extractedFoods.map((food, index) => (
+                        <div
+                          key={`${activeVideo.id}_food_${index}_${food}`}
+                          className="rounded-xl border border-border-light bg-cream/50 px-3 py-2.5"
+                        >
+                          <p className="text-sm font-medium text-foreground">{food}</p>
+                        </div>
+                      ))
+                    ) : isProcessingVideo ? (
+                      <ProcessingRow label={t.drawer.videoProcessing} />
+                    ) : (
+                      <p className="text-sm text-muted">{t.drawer.noExtractedFoods}</p>
                     )}
                   </div>
                 </div>
@@ -659,27 +804,76 @@ export default function VideoSummaryDrawer({
               <h2 id="video-import-day-dialog-title" className="text-base font-semibold text-foreground">
                 {t.drawer.importPickDayDialogTitle}
               </h2>
-              <div className="mt-4 flex flex-col gap-2">
+              <div className="mt-4 flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  <label htmlFor="video-import-trip-dialog-select" className="text-sm font-medium text-foreground">
+                    {t.drawer.importTargetTrip}
+                  </label>
+                  <select
+                    id="video-import-trip-dialog-select"
+                    data-testid="video-import-trip-select"
+                    value={importTargetTripId}
+                    onChange={(event) => {
+                      const nextTripId = event.target.value;
+                      setImportTargetTripId(nextTripId);
+                      setImportExtraDays(0);
+                      setImportTargetDay(1);
+                    }}
+                    disabled={adding || importTripListLoading}
+                    className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-60"
+                  >
+                    <option value={NEW_TRIP_OPTION}>{t.drawer.importNewTripOption}</option>
+                    {importTripOptions.map((trip) => (
+                      <option key={trip.id} value={trip.id}>
+                        {trip.title || trip.destination || t.drawer.currentTripFallback}
+                        {trip.isOwner === false ? ` · ${t.drawer.importSharedTripLabel}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {importTripListLoading && (
+                    <p className="flex items-center gap-1.5 text-xs text-muted">
+                      <Loader2 className="size-3 animate-spin" aria-hidden />
+                      {t.drawer.importTripListLoading}
+                    </p>
+                  )}
+                  {importTripListError && (
+                    <p className="text-xs text-danger">{importTripListError}</p>
+                  )}
+                </div>
+                <div className="flex flex-col gap-2">
                 <label htmlFor="video-import-day-dialog-select" className="text-sm font-medium text-foreground">
                   {t.drawer.importTargetDay}
                 </label>
+                <div className="flex flex-wrap items-center gap-2">
                 <select
                   id="video-import-day-dialog-select"
                   data-testid="video-import-day-select"
                   value={importTargetDay}
                   onChange={(event) => setImportTargetDay(Number.parseInt(event.target.value, 10))}
-                  disabled={adding}
-                  className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-60"
+                  disabled={adding || importTripListLoading || importDayOptions.length === 0}
+                  className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-60"
                 >
-                  {(tripItinerary.length > 0
-                    ? tripItinerary
-                    : [{ dayNumber: 1, theme: "", summary: "", items: [] }]
-                  ).map((day) => (
-                    <option key={day.dayNumber} value={day.dayNumber}>
-                      {t.drawer.importDayOption.replace("{n}", String(day.dayNumber))}
+                  {importDayOptions.map((dayNumber) => (
+                    <option key={dayNumber} value={dayNumber}>
+                      {t.drawer.importDayOption.replace("{n}", String(dayNumber))}
                     </option>
                   ))}
                 </select>
+                <button
+                  type="button"
+                  data-testid="video-import-add-day-button"
+                  disabled={adding || importTripListLoading}
+                  onClick={() => {
+                    setImportExtraDays((current) => current + 1);
+                    setImportTargetDay((current) => current + 1);
+                  }}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border-light bg-surface px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-cream/60 disabled:opacity-50"
+                >
+                  <Plus className="size-4" aria-hidden />
+                  {t.drawer.importAddDay}
+                </button>
+                </div>
+                </div>
               </div>
               <div className="mt-6 flex justify-end gap-2">
                 <button
@@ -693,7 +887,7 @@ export default function VideoSummaryDrawer({
                 <button
                   type="button"
                   data-testid="video-import-day-confirm-button"
-                  disabled={adding}
+                  disabled={adding || importTripListLoading || !canConfirmImport}
                   onClick={() => void confirmImportToTrip()}
                   className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
                 >

@@ -44,6 +44,34 @@ test("buildItineraryPrompt includes web search grounding when provided", () => {
   assert.match(prompt, /sourceTitle\/sourceUrl\/sourceSnippet/);
 });
 
+test("buildItineraryPrompt includes existing itinerary draft revision guidance when provided", () => {
+  const prompt = buildItineraryPrompt({
+    ...request,
+    itineraryDraft: [
+      {
+        dayNumber: 1,
+        items: [
+          {
+            id: "item_1",
+            time: "09:00",
+            title: "台南車站",
+            type: "transport",
+          },
+          {
+            id: "item_2",
+            time: "10:00",
+            title: "神農街",
+            type: "attraction",
+          },
+        ],
+      },
+    ],
+  });
+  assert.match(prompt, /Existing itinerary draft to revise\/preserve when reasonable:/);
+  assert.match(prompt, /Day 1: 09:00 台南車站 \| 10:00 神農街/);
+  assert.match(prompt, /Edit and preserve useful structure/);
+});
+
 test("buildChatPrompt includes web search grounding block", () => {
   const prompt = buildChatPrompt(
     "嘉義有什麼最新景點推薦？",

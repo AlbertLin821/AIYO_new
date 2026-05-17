@@ -98,6 +98,97 @@ body {
   -webkit-backdrop-filter: blur(12px);
 }
 
+/* AI 對話頁：玻璃擬態與主題色（由 .chat-page-root 的 data-chat-theme 切換） */
+.chat-page-root {
+  --chat-fg: 255, 255, 255;
+  --chat-fg-muted: 212, 212, 216;
+  --chat-fg-subtle: 161, 161, 170;
+  --chat-fg-soft: 244, 244, 245;
+  --chat-glass-panel-bg: rgba(12, 20, 16, 0.52);
+  --chat-glass-card-bg: rgba(255, 255, 255, 0.1);
+  --chat-glass-card-strong-bg: rgba(255, 255, 255, 0.16);
+  --chat-glass-border: rgba(255, 255, 255, 0.12);
+  --chat-glass-date-pill-bg: rgba(0, 0, 0, 0.32);
+  --chat-dash-border: rgba(255, 255, 255, 0.2);
+  --chat-hover: rgba(255, 255, 255, 0.14);
+  --chat-chip-active-bg: rgba(255, 255, 255, 0.2);
+  --chat-chip-idle-bg: rgba(255, 255, 255, 0.1);
+  --chat-placeholder: 161, 161, 170;
+}
+
+.chat-page-root[data-chat-theme="light"] {
+  --chat-fg: 30, 41, 59;
+  --chat-fg-muted: 71, 85, 105;
+  --chat-fg-subtle: 100, 116, 139;
+  --chat-fg-soft: 51, 65, 85;
+  --chat-glass-panel-bg: rgba(255, 255, 255, 0.78);
+  --chat-glass-card-bg: rgba(255, 255, 255, 0.58);
+  --chat-glass-card-strong-bg: rgba(255, 255, 255, 0.72);
+  --chat-glass-border: rgba(15, 23, 42, 0.1);
+  --chat-glass-date-pill-bg: rgba(255, 255, 255, 0.72);
+  --chat-dash-border: rgba(15, 23, 42, 0.14);
+  --chat-hover: rgba(255, 255, 255, 0.85);
+  --chat-chip-active-bg: rgba(255, 255, 255, 0.92);
+  --chat-chip-idle-bg: rgba(255, 255, 255, 0.65);
+  --chat-placeholder: 148, 163, 184;
+}
+
+.chat-glass-panel {
+  background: var(--chat-glass-panel-bg);
+  border-color: var(--chat-glass-border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.chat-glass-card {
+  background: var(--chat-glass-card-bg);
+  border: 1px solid var(--chat-glass-border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.chat-glass-card-strong {
+  background: var(--chat-glass-card-strong-bg);
+  border: 1px solid var(--chat-glass-border);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.chat-glass-date-pill {
+  background: var(--chat-glass-date-pill-bg);
+  border: 1px solid var(--chat-glass-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.text-chat-fg {
+  color: rgb(var(--chat-fg));
+}
+
+.text-chat-muted {
+  color: rgb(var(--chat-fg-muted));
+}
+
+.text-chat-subtle {
+  color: rgb(var(--chat-fg-subtle));
+}
+
+.text-chat-soft {
+  color: rgb(var(--chat-fg-soft));
+}
+
+.border-chat {
+  border-color: var(--chat-glass-border);
+}
+
+.border-chat-dashed {
+  border-color: var(--chat-dash-border);
+}
+
+.placeholder-chat::placeholder {
+  color: rgb(var(--chat-placeholder));
+}
+
 /* Soft card shadow */
 .shadow-soft {
   box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.06), 0 4px 16px -4px rgba(0, 0, 0, 0.08);
@@ -138,6 +229,40 @@ body {
     linear-gradient(rgba(58, 90, 121, 0.12) 1px, transparent 1px),
     linear-gradient(90deg, rgba(58, 90, 121, 0.12) 1px, transparent 1px);
   background-size: 32px 32px;
+}
+
+@property --rainbow-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes rainbowSpin {
+  to { --rainbow-angle: 360deg; }
+}
+
+.rainbow-border {
+  position: relative;
+  border: none !important;
+  background-clip: padding-box;
+}
+
+.rainbow-border::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--rainbow-angle),
+    #ffb6c1, #ffdab9, #ffffba, #baffc9, #bae1ff, #ddb6ff, #ffb6ef, #ffb6c1
+  );
+  animation: rainbowSpin 3s linear infinite;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
 }
 
 .map-mock-shell {

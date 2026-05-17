@@ -1,7 +1,8 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { serverConfig } from "@/server/config";
-import { resolveLocationReference } from "@/server/geo/locationCatalog";
+import { findKnownLocationReference } from "@/server/geo/locationCatalog";
+import { geocodeWithGoogle } from "@/server/geo/geocodeService";
 import {
   extractYouTubeVideoId,
   fetchYouTubeMetadata,
@@ -13,6 +14,11 @@ import {
   mergeVideoSummarySegmentsByStartSeconds,
 } from "@/server/video/momentSegmentBuilder";
 import { extractFinalVideoPlaces } from "@/server/video/placeExtraction";
+import {
+  extractSimpleVideoPlacesAndFoods,
+  type SimpleExtractedFood,
+  type SimpleExtractedPlace,
+} from "@/server/video/simpleExtraction";
 import { preprocessTranscript } from "@/server/video/transcriptProcessing";
 import { selectTravelExtractionProfile } from "@/server/video/travelExtractionProfiles";
 import type {
@@ -24,7 +30,10 @@ import type {
   VideoSummarySegment,
 } from "@/types";
 
-const VIDEO_PIPELINE_VERSION = "video-quality-v6";
+const VIDEO_PIPELINE_VERSION =
+  serverConfig.videoExtractionMode === "simple-ollama" ? "video-simple-ollama-v1" : "video-quality-v6";
+const NO_VERIFIED_PLACES_MESSAGE = "此影片未擷取到足夠明確且可驗證的地點名稱。";
+const NO_SIMPLE_RESULTS_MESSAGE = "此影片未擷取到明確地點或食物名稱。";
 
 function dedupeLocationsByNormalizedName<T extends Pick<LocationReference, "name">>(locations: T[]): T[] {
   const seen = new Set<string>();
@@ -246,6 +255,119 @@ function deriveMapsProvenance(locations: Array<{ resolvedFrom?: string }>): Vide
   return "catalog-fallback";
 }
 
+function compactSummaryFromSimpleExtraction(input: {
+  places: SimpleExtractedPlace[];
+  foods: SimpleExtractedFood[];
+}): string {
+  const placeNames = input.places.map((place) => place.name).slice(0, 3);
+  const foodNames = input.foods.map((food) => food.name).slice(0, 3);
+
+  if (placeNames.length === 0 && foodNames.length === 0) {
+    return NO_SIMPLE_RESULTS_MESSAGE;
+  }
+  if (placeNames.length > 0 && foodNames.length > 0) {
+    return `影片提到${placeNames.join("、")}等地點，以及${foodNames.join("、")}等食物。`;
+  }
+  if (placeNames.length > 0) {
+    return `影片提到${placeNames.join("、")}等地點。`;
+  }
+  return `影片提到${foodNames.join("、")}等食物。`;
+}
+
+function buildSimpleSegments(input: {
+  places: SimpleExtractedPlace[];
+  foods: SimpleExtractedFood[];
+}): VideoSummarySegment[] {
+  const timedPlaces = input.places
+    .filter((place) => typeof place.startSeconds === "number")
+    .sort((left, right) => (left.startSeconds as number) - (right.startSeconds as number))
+    .slice(0, 8);
+
+  return timedPlaces.map((place, index) => {
+    const startSeconds = Math.max(0, Math.floor(place.startSeconds || 0));
+    const relatedFoods = input.foods
+      .filter((food) => typeof food.startSeconds === "number")
+      .filter((food) => Math.abs((food.startSeconds as number) - startSeconds) <= 90)
+      .map((food) => food.name)
+      .slice(0, 4);
+
+    return {
+      id: `simple_segment_${index + 1}`,
+      timestamp: formatTimestampFromSeconds(startSeconds),
+      startLabel: formatTimestampFromSeconds(startSeconds),
+      startSeconds,
+      endSeconds: startSeconds + 30,
+      title: place.name,
+      text: place.evidence || `影片提到 ${place.name}`,
+      summary: place.evidence || `影片提到 ${place.name}`,
+      locationHints: [place.name],
+      foods: relatedFoods,
+      timestampSource: "youtube-transcript",
+      timestampConfidence: "high",
+      extractionSource: "ai-polished",
+    };
+  });
+}
+
+async function buildSimpleMapReadyLocations(input: {
+  places: SimpleExtractedPlace[];
+  destinationHint?: string;
+}): Promise<LocationReference[]> {
+  const out: LocationReference[] = [];
+
+  for (const place of input.places.slice(0, 16)) {
+    const description = place.evidence || `${place.name}，影片中提到的地點。`;
+    const known = findKnownLocationReference(place.name, description);
+
+    if (serverConfig.googleMapsApiKey) {
+      const geocode = await geocodeWithGoogle(place.name, input.destinationHint);
+      if (geocode.ok) {
+        out.push({
+          name: place.name,
+          lat: geocode.result.lat,
+          lng: geocode.result.lng,
+          description,
+          address: geocode.result.formattedAddress,
+          placeId: geocode.result.placeId,
+          rawQuery: place.name,
+          raw: place.name,
+          normalized: place.name,
+          normalizedName: place.name,
+          cleanedName: place.name,
+          rawMention: place.name,
+          confidence: 0.78,
+          verified: true,
+          resolvedFrom: "google-geocode",
+          extractionSource: "ai-polished",
+        });
+        continue;
+      }
+    }
+
+    if (!known) {
+      continue;
+    }
+
+    out.push({
+      ...known,
+      name: place.name,
+      description,
+      rawQuery: place.name,
+      raw: place.name,
+      normalized: place.name,
+      normalizedName: place.name,
+      cleanedName: place.name,
+      rawMention: place.name,
+      confidence: 0.42,
+      verified: false,
+      resolvedFrom: "llm",
+      extractionSource: "ai-polished",
+    });
+  }
+
+  return dedupeLocationsByNormalizedName(out);
+}
+
 export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSummaryResult> {
   const idFromField = input.videoId?.trim();
   const idFromUrl = extractYouTubeVideoId(input.url || "") || "";
@@ -316,6 +438,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
       timestamps: [],
       summarySegments: [],
       extractedLocations: [],
+      extractedFoods: [],
     };
 
     const unavailableResult: VideoSummaryResult = {
@@ -327,6 +450,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
       summary: "",
       segments: [],
       extractedLocations: [],
+      extractedFoods: [],
       summaryUnavailable: true,
       unavailableReason,
       fallbackReason: transcriptResult.fallbackReason || unavailableReason,
@@ -359,6 +483,84 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
   const preprocessedLines = preprocessTranscript(transcriptEntries, profile, {
     captionLanguage: transcriptResult.captionLanguage,
   });
+  if (serverConfig.videoExtractionMode === "simple-ollama") {
+    const simpleResult = await extractSimpleVideoPlacesAndFoods({
+      title: metadata.title,
+      description: metadata.description,
+      transcriptLines: preprocessedLines,
+    });
+    const extractedLocationNames = simpleResult.places.map((place) => place.name);
+    const extractedFoodNames = simpleResult.foods.map((food) => food.name);
+    const mapReadyLocations = await buildSimpleMapReadyLocations({
+      places: simpleResult.places,
+      destinationHint: input.destination,
+    });
+    const resolvedSegments = buildSimpleSegments({
+      places: simpleResult.places,
+      foods: simpleResult.foods,
+    });
+    const summary = compactSummaryFromSimpleExtraction({
+      places: simpleResult.places,
+      foods: simpleResult.foods,
+    });
+    const summarySource: VideoSummaryDebugMeta["summarySource"] =
+      transcriptSource === "fallback-description" ? "ollama-description-fallback" : "ollama-transcript";
+    const segmentSource: VideoSummaryDebugMeta["segmentSource"] = "transcript-chunks";
+
+    const video: VideoRecommendation = {
+      id: metadata.id,
+      videoId: metadata.videoId,
+      title: metadata.title,
+      thumbnail: metadata.thumbnail,
+      url: metadata.url,
+      duration: metadata.duration,
+      summary,
+      description: metadata.description,
+      source: metadata.source,
+      channelTitle: metadata.channelTitle,
+      publishedAt: metadata.publishedAt,
+      timestamps: toTimestamps(resolvedSegments),
+      summarySegments: resolvedSegments,
+      extractedLocations: mapReadyLocations,
+      extractedFoods: extractedFoodNames,
+    };
+
+    const result: VideoSummaryResult = {
+      source: "youtube-summary-service",
+      transcriptSource,
+      summarySource,
+      segmentSource,
+      title: metadata.title,
+      summary,
+      segments: resolvedSegments,
+      extractedLocations: extractedLocationNames,
+      extractedFoods: extractedFoodNames,
+      mapsProvenance: mapReadyLocations.length > 0 ? deriveMapsProvenance(mapReadyLocations) : undefined,
+      fallbackReason:
+        simpleResult.debug?.failedChunkCount
+          ? `部分字幕片段分析逾時或失敗，已保留成功片段。失敗片段數：${simpleResult.debug.failedChunkCount}。`
+          : extractedLocationNames.length === 0 && extractedFoodNames.length === 0
+            ? NO_SIMPLE_RESULTS_MESSAGE
+            : undefined,
+      video,
+      debug: {
+        transcriptSource,
+        summarySource,
+        segmentSource,
+        captionLanguage: transcriptResult.captionLanguage,
+        captionKind: transcriptResult.captionKind,
+        captionSource: transcriptResult.captionSource,
+        cacheStatus: "miss",
+        pipelineVersion: VIDEO_PIPELINE_VERSION,
+        finalPlaceCount: simpleResult.debug?.finalPlaceCount,
+        finalFoodCount: simpleResult.debug?.finalFoodCount,
+        failedChunkCount: simpleResult.debug?.failedChunkCount,
+      },
+    };
+
+    await cacheVideoSummary(resolvedCacheKey, result);
+    return result;
+  }
   const finalPlaceResult = await extractFinalVideoPlaces({
     transcriptLines: preprocessedLines,
     title: metadata.title,
@@ -368,46 +570,51 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     enableSearch: serverConfig.searxngEnabled,
   });
   const finalPlaces = finalPlaceResult.places;
-  const mapReadyLocations = dedupeLocationsByNormalizedName(
-    finalPlaces.map((place) => {
-      const fallbackLocation =
-        place.lat !== undefined && place.lng !== undefined
-          ? null
-          : resolveLocationReference(place.name, input.destination);
-      return {
-        name: place.name,
-        lat: place.lat ?? fallbackLocation?.lat ?? 0,
-        lng: place.lng ?? fallbackLocation?.lng ?? 0,
-        description: place.evidenceTexts[0] || `${place.name}，影片中提及的行程候選地點。`,
-        address: place.address ?? fallbackLocation?.address,
-        normalizedName: place.canonicalName,
-        cleanedName: place.canonicalName,
-        raw: place.aliases[0] || place.name,
-        rawMention: place.aliases[0] || place.name,
-        confidence: place.confidence,
-        verified: place.source === "geocode" || place.source === "gazetteer",
-        resolvedFrom: place.source === "geocode" ? "google-geocode" : "heuristic",
-        sourceTranscriptLineIds: place.sourceTranscriptLineIds,
-        extractionSource: "deterministic" as const,
-      } satisfies LocationReference;
-    }),
-  ).slice(0, 16);
-  const extractedLocationNames = mapReadyLocations.map((loc) => loc.name);
+  /** 正式 UI：不含僅 heuristic 通過的地點（需 VIDEO_PLACE_ALLOW_HEURISTIC_FALLBACK 才可能進入 pipeline）。 */
+  const formalUiPlaces = finalPlaces.filter((place) => place.source !== "heuristic");
+  const mapReadyLocations =
+    formalUiPlaces.length === 0
+      ? []
+      : dedupeLocationsByNormalizedName(
+          formalUiPlaces
+            .filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lng))
+            .map((place) => ({
+              name: place.name,
+              lat: place.lat as number,
+              lng: place.lng as number,
+              description: place.evidenceTexts[0] || `${place.name}，影片中提及的行程候選地點。`,
+              address: place.address,
+              normalizedName: place.canonicalName,
+              cleanedName: place.canonicalName,
+              raw: place.aliases[0] || place.name,
+              rawMention: place.aliases[0] || place.name,
+              confidence: place.confidence,
+              verified: place.source === "geocode" || place.source === "gazetteer",
+              resolvedFrom: place.source === "geocode" ? ("google-geocode" as const) : ("heuristic" as const),
+              sourceTranscriptLineIds: place.sourceTranscriptLineIds,
+              extractionSource: "deterministic" as const,
+            })),
+        ).slice(0, 16);
+  const extractedLocationNames = formalUiPlaces.map((place) => place.name);
   const geocodeWarnings = finalPlaceResult.rejectedCandidates.length
     ? finalPlaceResult.rejectedCandidates
         .slice(0, 8)
         .map((candidate) => `${candidate.rawText}：${candidate.rejectedReason}`)
     : undefined;
 
-  const deterministicSegments = buildSegmentsFromVerifiedPlaces({
-    places: finalPlaces,
-    videoDurationSeconds: parseDurationToSeconds(metadata.duration),
-    maxSegments: 8,
-  });
+  const deterministicSegments =
+    formalUiPlaces.length === 0
+      ? []
+      : buildSegmentsFromVerifiedPlaces({
+          places: formalUiPlaces,
+          videoDurationSeconds: parseDurationToSeconds(metadata.duration),
+          maxSegments: 8,
+        });
   const resolvedSegmentLocations = mergeVideoSummarySegmentsByStartSeconds(deterministicSegments).filter(
     (segment) => (segment.locationHints || []).length > 0,
   );
-  const summary = compactSummaryFromSegments(resolvedSegmentLocations);
+  const summary =
+    formalUiPlaces.length === 0 ? NO_VERIFIED_PLACES_MESSAGE : compactSummaryFromSegments(resolvedSegmentLocations);
   const usedDescriptionFallback = transcriptSource === "fallback-description";
   const summarySource: VideoSummaryDebugMeta["summarySource"] = usedDescriptionFallback
     ? "ollama-description-fallback"
@@ -431,6 +638,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     timestamps: toTimestamps(resolvedSegmentLocations),
     summarySegments: resolvedSegmentLocations,
     extractedLocations: mapReadyLocations,
+    extractedFoods: [],
   };
 
   const result: VideoSummaryResult = {
@@ -442,12 +650,15 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     summary,
     segments: resolvedSegmentLocations,
     extractedLocations: extractedLocationNames,
+    extractedFoods: [],
     mapsProvenance: deriveMapsProvenance(mapReadyLocations),
     geocodeWarnings,
     fallbackReason:
-      resolvedSegmentLocations.length === 0
-        ? "無法建立穩定的重點片段，已套用 deterministic fallback。"
-        : undefined,
+      formalUiPlaces.length === 0
+        ? NO_VERIFIED_PLACES_MESSAGE
+        : resolvedSegmentLocations.length === 0
+          ? "無法建立穩定的重點片段，已套用 deterministic fallback。"
+          : undefined,
     video,
     debug: {
       transcriptSource,
@@ -459,6 +670,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
       cacheStatus: "miss",
       pipelineVersion: VIDEO_PIPELINE_VERSION,
       finalPlaceCount: finalPlaces.length,
+      finalFoodCount: 0,
       rejectedPlaceCandidateCount: finalPlaceResult.rejectedCandidates.length,
       placeExtractionPipelineVersion:
         (finalPlaceResult.debug as { placeExtractionPipelineVersion?: string } | undefined)?.placeExtractionPipelineVersion,

@@ -394,6 +394,9 @@ export async function fetchGooglePlaceDetailsByPlaceId(
     const response = await fetch(url, { cache: "no-store" });
     const payload = (await response.json()) as GooglePlaceDetailsResponse;
     if (!response.ok || payload.status !== "OK" || !payload.result) {
+      console.warn(
+        `[place-details] failed placeId=${placeId} http=${response.status} status=${payload.status} message=${payload.error_message || ""}`,
+      );
       return {};
     }
     const photoUrl = buildPhotoUrl(payload.result.photos?.[0]?.photo_reference);
@@ -407,7 +410,10 @@ export async function fetchGooglePlaceDetailsByPlaceId(
       rating: payload.result.rating,
       userRatingsTotal: payload.result.user_ratings_total,
     };
-  } catch {
+  } catch (error) {
+    console.warn(
+      `[place-details] request failed placeId=${placeId}: ${error instanceof Error ? error.message : String(error)}`,
+    );
     return {};
   }
 }

@@ -3,7 +3,6 @@
 import { memo } from "react";
 import { Plus, MousePointer2 } from "lucide-react";
 import type { DragEndEvent } from "@dnd-kit/core";
-import { cn } from "@/lib/utils";
 import { zhTW as t } from "@/locales/zh-TW";
 import type { EditingPresence, TripPlanDay, TripPlanItem } from "@/types";
 import ItineraryCollaborationSidebar from "./ItineraryCollaborationSidebar";
@@ -57,12 +56,7 @@ function ItineraryEditorSection({
   onReorderItem,
 }: Props) {
   return (
-    <div
-      className={cn(
-        "grid items-start gap-6",
-        isSharedTrips && "lg:grid-cols-[minmax(0,1fr)_320px]",
-      )}
-    >
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div
         className="relative min-w-0 space-y-5"
         onMouseMove={(event) => {
@@ -118,15 +112,6 @@ function ItineraryEditorSection({
             <div className="rounded-2xl border border-dashed border-border-light bg-surface px-5 py-8">
               <p className="text-base font-medium text-foreground">{t.itineraryPage.noActiveTripTitle}</p>
               <p className="mt-2 text-sm text-muted">{t.itineraryPage.noActiveTripHint}</p>
-              <button
-                type="button"
-                onClick={onAddDay}
-                disabled={!canEdit || recoveringTrip}
-                className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Plus className="size-4" />
-                {recoveringTrip ? t.itineraryPage.recoverTripLoading : t.itineraryPage.createTripStartButton}
-              </button>
             </div>
           ) : (
             <>
@@ -135,15 +120,6 @@ function ItineraryEditorSection({
                   <p className="text-base font-medium text-foreground">{t.itinerary.emptyTitle}</p>
                   <p className="mt-2 text-sm text-muted">{t.itinerary.emptyHint}</p>
                   <p className="mt-1 text-xs text-muted-light">{t.itineraryPage.emptyStateHint}</p>
-                  <button
-                    type="button"
-                    onClick={onAddDay}
-                    disabled={!isAuthenticated || !canEdit || recoveringTrip}
-                    className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Plus className="size-4" />
-                    {recoveringTrip ? t.itineraryPage.recoverTripLoading : t.itineraryPage.addDay}
-                  </button>
                 </div>
               )}
               {itinerary.map((day, dayIndex) => (
@@ -172,11 +148,9 @@ function ItineraryEditorSection({
         </div>
       </div>
 
-      {isSharedTrips && (
-        <aside className="flex flex-col gap-4 lg:sticky lg:top-24">
-          <ItineraryCollaborationSidebar />
-        </aside>
-      )}
+      <aside className="flex flex-col gap-4 lg:sticky lg:top-24">
+        <ItineraryCollaborationSidebar />
+      </aside>
     </div>
   );
 }

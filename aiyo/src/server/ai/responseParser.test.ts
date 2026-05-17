@@ -77,12 +77,53 @@ test("parseTripPlanResponse reports avoid pollution and must-visit issues in war
   assert.ok(warnings.some((warning) => warning.startsWith("QUALITY:AVOID_POLLUTION")));
 });
 
+test("parseTripPlanResponse reports template pollution when placeholder text leaks into itinerary", () => {
+  const raw = JSON.stringify({
+    summary: "AI 模型輸出格式異常，已改用保底行程模板",
+    days: [
+      {
+        dayNumber: 1,
+        theme: "plan_0cd57b1",
+        items: [
+          { time: "09:00", title: "回答市區", type: "attraction", transport: "public_transport" },
+          { time: "12:00", title: "yt_001", type: "restaurant", notes: "目前無法連線到搜尋服務，因此以下內容可能不是最新資料。" },
+        ],
+      },
+    ],
+  });
+
+  const parsed = parseTripPlanResponse(raw, request);
+  const warnings = parsed.result.warnings || [];
+  assert.ok(warnings.some((warning) => warning.startsWith("QUALITY:TEMPLATE_POLLUTION")));
+  assert.ok(parsed.diagnostics.issues.includes("template_pollution"));
+});
+
 test("parseTripPlanResponse throws when JSON block is missing", () => {
   assert.throws(
     () => parseTripPlanResponse("no json here", request),
     (error: unknown) =>
       error instanceof StructuredOutputError &&
       error.message === "MODEL_OUTPUT_JSON_MISSING",
+  );
+});
+
+test("parseTripPlanResponse rejects day entries without itinerary items", () => {
+  const raw = JSON.stringify({
+    summary: "Trip",
+    days: [
+      {
+        dayNumber: 1,
+        theme: "老城散步",
+        items: [],
+      },
+    ],
+  });
+
+  assert.throws(
+    () => parseTripPlanResponse(raw, request),
+    (error: unknown) =>
+      error instanceof StructuredOutputError &&
+      error.message === "MODEL_OUTPUT_JSON_INVALID",
   );
 });
 

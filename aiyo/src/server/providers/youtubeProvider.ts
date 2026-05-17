@@ -50,6 +50,8 @@ interface SearchInput {
   destination?: string;
   keyword?: string;
   limit?: number;
+  offset?: number;
+  excludeVideoIds?: string[];
 }
 
 interface YouTubeMetadata {
@@ -373,6 +375,7 @@ async function fetchMappedVideosForQuery(
     publishedAt: item.snippet?.publishedAt,
     timestamps: [],
     extractedLocations: [],
+    extractedFoods: [],
     summarySegments: [],
     listProvenance: "youtube-data-api",
   }));
@@ -470,12 +473,17 @@ export async function searchYouTubeVideos(input: SearchInput): Promise<{
   }
 
   const limit = Math.max(1, Math.min(input.limit || 6, 10));
+  const offset = Math.max(0, input.offset || 0);
+  const excludedVideoIds = new Set((input.excludeVideoIds || []).map((id) => id.trim()).filter(Boolean));
+  const neededResultCount = limit + offset + excludedVideoIds.size;
   const cacheKey = [
     YOUTUBE_SEARCH_PIPELINE_VERSION,
     input.destination?.trim() || "any-destination",
     rawUserQuery.trim(),
     "zh-Hant",
     limit,
+    offset,
+    Array.from(excludedVideoIds).sort().join(",") || "no-excludes",
   ].join(":");
   const cached = youtubeSearchCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
@@ -490,7 +498,7 @@ export async function searchYouTubeVideos(input: SearchInput): Promise<{
     };
   }
   const compactQueryLen = rawUserQuery.replace(/[\s\u3000]+/g, "").length;
-  const searchFetchCount = Math.min(30, Math.max(limit * 4, compactQueryLen <= 6 ? 24 : 16));
+  const searchFetchCount = Math.min(30, Math.max(neededResultCount * 4, compactQueryLen <= 6 ? 24 : 16));
   const searchOpts = {
     regionCode: "TW",
     relevanceLanguage: "zh-Hant",
@@ -548,7 +556,7 @@ export async function searchYouTubeVideos(input: SearchInput): Promise<{
     } else {
       fallbackReasons.push(`${q}: ${batch.message}`);
     }
-    if (collected.length >= limit * 6) {
+    if (collected.length >= neededResultCount * 6) {
       break;
     }
   }
@@ -630,7 +638,9 @@ export async function searchYouTubeVideos(input: SearchInput): Promise<{
     );
   });
 
-  const videos = pool.slice(0, limit);
+  const videos = pool
+    .filter((video) => !excludedVideoIds.has(video.videoId || video.id))
+    .slice(offset, offset + limit);
 
   const debug: VideoSearchDebugInfo = {
     rawInput: rawUserQuery,

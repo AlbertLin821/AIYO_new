@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import Image from "next/image";
-import { CalendarDays, MapPin, Plus, Share2 } from "lucide-react";
+import { CalendarDays, MapPin, Share2 } from "lucide-react";
 import type { Session } from "next-auth";
 import { zhTW as t } from "@/locales/zh-TW";
 
@@ -15,12 +15,9 @@ type Props = {
   lastUpdatedAt: string | null;
   session: Session | null;
   isInteractive: boolean;
-  canEdit: boolean;
-  recoveringTrip: boolean;
   /** 尚無目的地、天數、預算與行程內容時不顯示摘要格 */
   showTripSummaryRow: boolean;
   onShare: () => void;
-  onAddDay: () => void;
   onOpenMap: () => void;
 };
 
@@ -33,11 +30,8 @@ function ItineraryPageHeader({
   lastUpdatedAt,
   session,
   isInteractive,
-  canEdit,
-  recoveringTrip,
   showTripSummaryRow,
   onShare,
-  onAddDay,
   onOpenMap,
 }: Props) {
   const displayTitle = title.trim() || t.itineraryPage.title;
@@ -124,18 +118,6 @@ function ItineraryPageHeader({
           )}
 
           <div className="flex flex-wrap items-center gap-2">
-            {canEdit && (
-              <button
-                type="button"
-                data-testid="add-day-button"
-                onClick={onAddDay}
-                disabled={recoveringTrip}
-                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white shadow-soft transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Plus className="size-4" />
-                {recoveringTrip ? t.itineraryPage.recoverTripLoading : t.itineraryPage.addDay}
-              </button>
-            )}
             <button
               type="button"
               onClick={onShare}

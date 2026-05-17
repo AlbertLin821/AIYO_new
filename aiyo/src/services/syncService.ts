@@ -1,7 +1,7 @@
 import { zhTW as t } from "@/locales/zh-TW";
 import { markPersistenceServerHydrated, persistActiveUserSnapshotNow } from "@/services/persistence";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/services/apiClient";
-import { useChatStore } from "@/stores/useChatStore";
+import { CHAT_REMOTE_CONVERSATION_ID, useChatStore } from "@/stores/useChatStore";
 import { useCollabStore } from "@/stores/useCollabStore";
 import { useMapStore } from "@/stores/useMapStore";
 import { getSyncMutationSource } from "@/stores/syncMutationSource";
@@ -225,6 +225,12 @@ class SyncService {
       useChatStore.getState().mergeRemoteMessages(snapshot.chatMessages);
     } else {
       useChatStore.getState().setMessages(snapshot.chatMessages);
+    }
+    if (snapshot.trip?.tripId) {
+      useChatStore.getState().setConversationTrip(
+        CHAT_REMOTE_CONVERSATION_ID,
+        snapshot.trip.tripId,
+      );
     }
 
     if (snapshot.collaboration) {

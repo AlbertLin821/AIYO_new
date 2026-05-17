@@ -22,7 +22,7 @@ export class StructuredOutputError extends Error {
 export interface TripPlanParseDiagnostics {
   parseMode: "direct" | "repaired" | "normalized";
   repairStage: "none" | "json_repair" | "normalized_repair";
-  issues: Array<"json_missing" | "json_invalid" | "normalized" | "must_visit_uncovered" | "avoid_pollution">;
+  issues: Array<"json_missing" | "json_invalid" | "normalized" | "must_visit_uncovered" | "avoid_pollution" | "template_pollution">;
 }
 
 export function extractJsonBlock(raw: string): string | null {
@@ -196,6 +196,55 @@ function checkAvoidPollution(
   });
 }
 
+function normalizeTemplateCheckText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function hasTemplatePollution(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+  const normalized = normalizeTemplateCheckText(value);
+  if (!normalized) {
+    return false;
+  }
+  if (/^回答[\u3400-\u9fff_a-z0-9-]+/i.test(normalized)) {
+    return true;
+  }
+  if (/^(answer|reply)\b/.test(normalized)) {
+    return true;
+  }
+  if (/^(public_transport|self_drive|charter_or_tour|ai_recommend|budget|mid_range|comfortable)$/i.test(normalized)) {
+    return true;
+  }
+  if (/^(yt|web|weather|official)_\d+$/i.test(normalized)) {
+    return true;
+  }
+  if (/^plan_[a-z0-9]+$/i.test(normalized)) {
+    return true;
+  }
+  if (/^(food|onsen|history|nature|city_walk|shopping|local_culture)\s*(行程|stop|route)?$/i.test(normalized)) {
+    return true;
+  }
+  if (/^(local lunch|dinner and evening walk|old town walk|local food|culture stops|harbor evening|market route)( \d+)?$/i.test(normalized)) {
+    return true;
+  }
+  if (/^行程點 \d+$/.test(normalized)) {
+    return true;
+  }
+  if (
+    normalized.includes("從 回答") ||
+    normalized.includes("依照 onsen") ||
+    normalized.includes("回答晚餐與散步") ||
+    normalized.includes("ai 模型輸出格式異常") ||
+    normalized.includes("已改用保底行程模板") ||
+    normalized.includes("目前無法連線到搜尋服務")
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function parseTripPlanJson(
   input: string,
   request: TripPlanRequest,
@@ -225,7 +274,7 @@ function parseTripPlanJson(
   const issues: TripPlanParseDiagnostics["issues"] = [];
   let normalized = false;
 
-  const days: TripPlanDay[] = rawDays.map((day, dayIndex) => {
+  const normalizedDays: Array<TripPlanDay | null> = rawDays.map((day, dayIndex) => {
     const aliasDayNumber =
       Number(day.dayNumber ?? day.day ?? day.dayNo ?? day.day_index) || dayIndex + 1;
     const dedupedDayNumber = usedDayNumbers.has(aliasDayNumber)
@@ -241,6 +290,9 @@ function parseTripPlanJson(
     ).map((entry) => toRecord(entry));
     if (!Array.isArray(day.items)) {
       normalized = true;
+    }
+    if (rawItems.length === 0) {
+      return null;
     }
 
     const items = rawItems.map((record, itemIndex) => {
@@ -292,6 +344,12 @@ function parseTripPlanJson(
     };
   });
 
+  const days = normalizedDays.filter((day): day is TripPlanDay => day !== null);
+
+  if (days.length === 0) {
+    return null;
+  }
+
   const mustVisitTerms = (request.preferences.mustVisit || [])
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
@@ -313,6 +371,20 @@ function parseTripPlanJson(
   if (pollutedItems.length > 0) {
     warnings.add(`QUALITY:AVOID_POLLUTION:${pollutedItems.length}`);
     issues.push("avoid_pollution");
+  }
+
+  const templatePollutionCount =
+    days.reduce((count, day) => {
+      const pollutedDayFields = [
+        day.theme,
+        day.summary || "",
+        ...day.items.flatMap((item) => [item.title, item.notes || "", item.transport || "", item.location?.name || ""]),
+      ].filter(hasTemplatePollution).length;
+      return count + pollutedDayFields;
+    }, 0) + (hasTemplatePollution(parsed.summary || "") ? 1 : 0);
+  if (templatePollutionCount > 0) {
+    warnings.add(`QUALITY:TEMPLATE_POLLUTION:${templatePollutionCount}`);
+    issues.push("template_pollution");
   }
 
   if (normalized) {

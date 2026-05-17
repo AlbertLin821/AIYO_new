@@ -1,6 +1,4 @@
 #Requires -Version 5.1
-# Dev mode: npm install in aiyo/, ensure Ollama models from aiyo/.env, docker compose dev (+ SearXNG; + mem0 by default).
-# Switches: -NoMem0 -SkipNpmInstall -SkipDocker -SkipOllama
 param(
     [switch] $NoMem0,
     [switch] $SkipNpmInstall,
@@ -9,9 +7,17 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-# Same repo root resolution as scripts/clone-mem0.ps1 (this file lives in scripts/).
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
+
+$script:StageIndex = 0
+$script:StageTotal = 4
+$script:LogDir = Join-Path $Root ".logs\dev-deploy"
+$script:StageStopwatches = @{}
+$script:StageDurations = @{}
+$script:StageOrder = New-Object "System.Collections.Generic.List[string]"
+$script:OverallStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+New-Item -ItemType Directory -Force -Path $script:LogDir | Out-Null
 
 function Read-DotEnvMap {
     param([string] $FilePath)
@@ -66,14 +72,12 @@ function Add-UniqueModel {
     if ([string]::IsNullOrWhiteSpace($Name)) { return }
     $trim = $Name.Trim()
     if ($trim.Length -eq 0) { return }
-    $found = $false
     foreach ($x in $List) {
         if ($x.Equals($trim, [System.StringComparison]::OrdinalIgnoreCase)) {
-            $found = $true
-            break
+            return
         }
     }
-    if (-not $found) { [void]$List.Add($trim) }
+    [void]$List.Add($trim)
 }
 
 function Get-EnvOrDefaultValue {
@@ -89,7 +93,173 @@ function Get-EnvOrDefaultValue {
     return $null
 }
 
-Write-Host "== AIYO dev deploy ($Root) ==" -ForegroundColor Cyan
+function Write-DeployBanner {
+    Write-Host ""
+    Write-Host "AIYO dev deploy" -ForegroundColor Cyan
+    Write-Host "Root : $Root" -ForegroundColor DarkGray
+    Write-Host "Mem0 : $(if ($mem0On) { 'enabled' } else { 'disabled' })" -ForegroundColor DarkGray
+    Write-Host ""
+}
+
+function Format-Duration {
+    param([TimeSpan] $Duration)
+    if ($Duration.TotalHours -ge 1) {
+        return "{0:hh\:mm\:ss}" -f $Duration
+    }
+    return "{0:mm\:ss}" -f $Duration
+}
+
+function Start-Stage {
+    param(
+        [string] $Title,
+        [string] $Status
+    )
+    $script:StageIndex += 1
+    $percent = [int](($script:StageIndex - 1) / $script:StageTotal * 100)
+    $script:StageStopwatches[$Title] = [System.Diagnostics.Stopwatch]::StartNew()
+    [void]$script:StageOrder.Add($Title)
+    Write-Progress -Id 1 -Activity "AIYO dev deploy" -Status $Status -PercentComplete $percent
+    Write-Host ("[{0}/{1}] {2}" -f $script:StageIndex, $script:StageTotal, $Title) -ForegroundColor Cyan
+}
+
+function Complete-Stage {
+    param(
+        [string] $Title,
+        [string] $Message
+    )
+    $elapsed = [TimeSpan]::Zero
+    if ($script:StageStopwatches.ContainsKey($Title)) {
+        $script:StageStopwatches[$Title].Stop()
+        $elapsed = $script:StageStopwatches[$Title].Elapsed
+        $script:StageDurations[$Title] = $elapsed
+    }
+    $percent = [int]($script:StageIndex / $script:StageTotal * 100)
+    Write-Progress -Id 1 -Activity "AIYO dev deploy" -Status $Message -PercentComplete $percent
+    Write-Host ("  OK  {0} ({1})" -f $Message, (Format-Duration $elapsed)) -ForegroundColor DarkGreen
+    Write-Host ""
+}
+
+function Skip-Stage {
+    param(
+        [string] $Title,
+        [string] $Message
+    )
+    if ($script:StageStopwatches.ContainsKey($Title)) {
+        $script:StageStopwatches[$Title].Stop()
+        $script:StageDurations[$Title] = [TimeSpan]::Zero
+    }
+    $percent = [int]($script:StageIndex / $script:StageTotal * 100)
+    Write-Progress -Id 1 -Activity "AIYO dev deploy" -Status $Message -PercentComplete $percent
+    Write-Host ("  SKIP {0}" -f $Message) -ForegroundColor DarkGray
+    Write-Host ""
+}
+
+function New-StepLogPath {
+    param([string] $Name)
+    $safeName = ($Name -replace "[^a-zA-Z0-9\-_]", "_")
+    return Join-Path $script:LogDir ("{0:yyyyMMdd-HHmmss}_{1}.log" -f (Get-Date), $safeName)
+}
+
+function Show-LogTail {
+    param(
+        [string] $LogPath,
+        [int] $Tail = 80
+    )
+    if (-not (Test-Path $LogPath)) { return }
+    Write-Host "  Last log lines ($LogPath):" -ForegroundColor Yellow
+    Get-Content -LiteralPath $LogPath -Tail $Tail
+}
+
+function Invoke-LoggedCommand {
+    param(
+        [string] $Name,
+        [scriptblock] $Command,
+        [string] $Workdir
+    )
+    $logPath = New-StepLogPath $Name
+    Push-Location $Workdir
+    try {
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            & $Command *> $logPath
+        }
+        finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+        if ($LASTEXITCODE -ne 0) {
+            Show-LogTail -LogPath $logPath
+            throw "$Name failed (exit $LASTEXITCODE). Full log: $logPath"
+        }
+        Write-Host ("  log  {0}" -f $logPath) -ForegroundColor DarkGray
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+function Write-ServiceTargetList {
+    param(
+        [string] $Label,
+        [string[]] $Services
+    )
+    Write-Host ("  {0}" -f $Label) -ForegroundColor DarkGray
+    foreach ($service in $Services) {
+        Write-Host ("    - {0}" -f $service) -ForegroundColor DarkGray
+    }
+}
+
+function Get-DockerComposePsRows {
+    param([string[]] $PsArgs)
+    try {
+        $raw = & docker @($PsArgs + @("--format", "json"))
+        if ($LASTEXITCODE -ne 0 -or -not $raw) {
+            return @()
+        }
+        $rows = @()
+        foreach ($line in $raw) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $rows += ($line | ConvertFrom-Json)
+        }
+        return $rows
+    }
+    catch {
+        return @()
+    }
+}
+
+function Write-DockerServiceSummary {
+    param(
+        [string[]] $Services,
+        [string[]] $PsArgs
+    )
+    $rows = Get-DockerComposePsRows -PsArgs $PsArgs
+    if (-not $rows.Count) {
+        return
+    }
+    Write-Host "Service summary:" -ForegroundColor Cyan
+    foreach ($service in $Services) {
+        $row = $rows | Where-Object { $_.Service -eq $service } | Select-Object -First 1
+        if ($null -eq $row) {
+            Write-Host ("  - {0}: not listed" -f $service) -ForegroundColor Yellow
+            continue
+        }
+        $state = if ($row.State) { $row.State } else { "unknown" }
+        $status = if ($row.Status) { $row.Status } else { "" }
+        $name = if ($row.Name) { $row.Name } else { $service }
+        Write-Host ("  - {0}: {1} | {2} | {3}" -f $service, $name, $state, $status) -ForegroundColor DarkGray
+    }
+    Write-Host ""
+}
+
+function Write-FinalStageSummary {
+    Write-Host "Stage summary:" -ForegroundColor Cyan
+    foreach ($title in $script:StageOrder) {
+        Write-Host ("  - {0}: {1}" -f $title, (Format-Duration $script:StageDurations[$title])) -ForegroundColor DarkGray
+    }
+    Write-Host ("  - Total: {0}" -f (Format-Duration $script:OverallStopwatch.Elapsed)) -ForegroundColor DarkGray
+    Write-Host ""
+}
 
 $envExample = Join-Path $Root "aiyo\.env.example"
 $envFile = Join-Path $Root "aiyo\.env"
@@ -103,7 +273,6 @@ if (-not (Test-Path $envFile)) {
 }
 
 $envMap = Read-DotEnvMap $envFile
-# Fallbacks when aiyo/.env omits these keys: match docker-compose.yml ${VAR:-…} for app-dev / app.
 $defaults = @{
     OLLAMA_MODEL                     = "qwen3.5:9b"
     OLLAMA_TRIP_PLAN_MODEL           = "qwen3.5:9b"
@@ -126,110 +295,111 @@ Add-UniqueModel $models (Get-EnvOrDefaultValue $envMap $defaults "OLLAMA_VIDEO_S
 Add-UniqueModel $models (Get-EnvOrDefaultValue $envMap $defaults "OLLAMA_VIDEO_SUMMARY_FAST_MODEL")
 Add-UniqueModel $models (Get-EnvOrDefaultValue $envMap $defaults "OLLAMA_VIDEO_SUMMARY_FINAL_MODEL")
 Add-UniqueModel $models (Get-EnvOrDefaultValue $envMap $defaults "OLLAMA_LOCATION_MODEL")
-
-# Match docker-compose mem0-memory defaults (host Ollama)
 if ($mem0On) {
     Add-UniqueModel $models "qwen3.5:9b"
     Add-UniqueModel $models "nomic-embed-text"
 }
 
-if (-not $SkipNpmInstall) {
-    Write-Host ""
-    Write-Host "[1/4] npm install (aiyo/)..." -ForegroundColor Cyan
-    Push-Location (Join-Path $Root "aiyo")
-    try {
-        npm install
-        if ($LASTEXITCODE -ne 0) { throw "npm install exited with code $LASTEXITCODE" }
-    }
-    finally {
-        Pop-Location
-    }
+Write-DeployBanner
+
+Start-Stage -Title "Node dependencies" -Status "Installing npm packages"
+if ($SkipNpmInstall) {
+    Skip-Stage -Title "Node dependencies" -Message "npm install skipped"
 }
 else {
-    Write-Host ""
-    Write-Host "[1/4] Skipped npm install." -ForegroundColor DarkGray
+    Invoke-LoggedCommand -Name "npm_install" -Workdir (Join-Path $Root "aiyo") -Command {
+        npm install
+    }
+    Complete-Stage -Title "Node dependencies" -Message "npm install completed"
 }
 
-if (-not $SkipOllama) {
-    Write-Host ""
-    Write-Host "[2/4] Ollama models..." -ForegroundColor Cyan
+Start-Stage -Title "Ollama models" -Status "Checking local Ollama"
+if ($SkipOllama) {
+    Skip-Stage -Title "Ollama models" -Message "Ollama step skipped"
+}
+else {
     $ollamaCmd = Get-Command ollama -ErrorAction SilentlyContinue
     if (-not $ollamaCmd) {
-        Write-Error "ollama CLI not found. Install Ollama and add it to PATH."
-        exit 1
+        throw "ollama CLI not found. Install Ollama and add it to PATH."
     }
     if (-not (Test-OllamaAlive)) {
-        Write-Error "Cannot reach http://127.0.0.1:11434. Start the Ollama app or run: ollama serve"
-        exit 1
+        throw "Cannot reach http://127.0.0.1:11434. Start the Ollama app or run: ollama serve"
     }
+
     $installed = Get-OllamaTagNames
+    $modelIndex = 0
     foreach ($m in $models) {
+        $modelIndex += 1
+        $modelPercent = [int]($modelIndex / [Math]::Max($models.Count, 1) * 100)
+        Write-Progress -Id 2 -ParentId 1 -Activity "Ollama models" -Status $m -PercentComplete $modelPercent
         $have = $false
         foreach ($t in $installed) {
-            if ($t.Equals($m, [System.StringComparison]::OrdinalIgnoreCase)) {
-                $have = $true
-                break
-            }
-            if ($t.StartsWith($m + ":", [System.StringComparison]::OrdinalIgnoreCase)) {
+            if ($t.Equals($m, [System.StringComparison]::OrdinalIgnoreCase) -or $t.StartsWith($m + ":", [System.StringComparison]::OrdinalIgnoreCase)) {
                 $have = $true
                 break
             }
         }
         if ($have) {
-            Write-Host "  present: $m" -ForegroundColor DarkGreen
+            Write-Host ("  present  {0}" -f $m) -ForegroundColor DarkGreen
+            continue
         }
-        else {
-            Write-Host "  pulling: $m" -ForegroundColor Yellow
-            & ollama pull $m
-            if ($LASTEXITCODE -ne 0) { throw "ollama pull $m failed (exit $LASTEXITCODE)" }
+
+        Write-Host ("  pulling  {0}" -f $m) -ForegroundColor Yellow
+        & ollama pull $m
+        if ($LASTEXITCODE -ne 0) {
+            throw "ollama pull $m failed (exit $LASTEXITCODE)"
         }
     }
+    Write-Progress -Id 2 -ParentId 1 -Activity "Ollama models" -Completed
+    Complete-Stage -Title "Ollama models" -Message "Ollama models ready"
+}
+
+Start-Stage -Title "Mem0 vendor sync" -Status "Preparing vendor/mem0"
+if ($SkipDocker) {
+    Skip-Stage -Title "Mem0 vendor sync" -Message "Docker and Mem0 sync skipped"
 }
 else {
-    Write-Host ""
-    Write-Host "[2/4] Skipped Ollama." -ForegroundColor DarkGray
+    Invoke-LoggedCommand -Name "clone_mem0" -Workdir $Root -Command {
+        & (Join-Path $Root "scripts\clone-mem0.ps1")
+    }
+    Complete-Stage -Title "Mem0 vendor sync" -Message "Mem0 vendor path ready"
 }
 
-if (-not $SkipDocker) {
-    Write-Host ""
-    Write-Host "[3/4] Mem0 vendor path..." -ForegroundColor Cyan
-    & (Join-Path $Root "scripts\clone-mem0.ps1")
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-    Write-Host ""
-    Write-Host "[4/4] Docker Compose..." -ForegroundColor Cyan
-    $composeArgs = @(
-        "compose",
-        "--env-file", "./aiyo/.env",
-        "--profile", "dev",
-        "up", "-d", "--build",
-        "postgres", "redis", "searxng", "app-dev"
-    )
+Start-Stage -Title "Docker Compose" -Status "Building and starting containers"
+if ($SkipDocker) {
+    Skip-Stage -Title "Docker Compose" -Message "Docker compose skipped"
+}
+else {
+    $composeProfiles = @("--profile", "dev")
+    $services = @("postgres", "redis", "searxng", "app-dev")
     if ($mem0On) {
-        $composeArgs = @(
-            "compose",
-            "--env-file", "./aiyo/.env",
-            "--profile", "dev",
-            "--profile", "mem0",
-            "up", "-d", "--build",
-            "postgres", "redis", "searxng", "mem0-memory-postgres", "mem0-memory", "app-dev"
-        )
+        $composeProfiles += @("--profile", "mem0")
+        $services = @("postgres", "redis", "searxng", "mem0-memory-postgres", "mem0-memory", "app-dev")
     }
-    & docker @composeArgs
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-    Write-Host ""
+    $buildArgs = @("compose", "--env-file", "./aiyo/.env") + $composeProfiles + @("build") + $services
+    $upArgs = @("compose", "--env-file", "./aiyo/.env") + $composeProfiles + @("up", "-d", "--no-build") + $services
+    $psArgs = @("compose", "--env-file", "./aiyo/.env") + $composeProfiles + @("ps")
+
+    Write-ServiceTargetList -Label "target services" -Services $services
+
+    Invoke-LoggedCommand -Name "docker_compose_build" -Workdir $Root -Command {
+        & docker @buildArgs
+    }
+    Write-ServiceTargetList -Label "built services" -Services $services
+
+    Invoke-LoggedCommand -Name "docker_compose_up" -Workdir $Root -Command {
+        & docker @upArgs
+    }
+
+    Complete-Stage -Title "Docker Compose" -Message "Containers are up"
+    Write-DockerServiceSummary -Services $services -PsArgs $psArgs
     Write-Host "Container status:" -ForegroundColor Cyan
-    $psArgs = @("compose", "--env-file", "./aiyo/.env", "--profile", "dev", "ps")
-    if ($mem0On) {
-        $psArgs = @("compose", "--env-file", "./aiyo/.env", "--profile", "dev", "--profile", "mem0", "ps")
-    }
     & docker @psArgs
 }
-else {
-    Write-Host ""
-    Write-Host "[3-4/4] Skipped Docker." -ForegroundColor DarkGray
-}
 
+$script:OverallStopwatch.Stop()
+Write-Progress -Id 1 -Activity "AIYO dev deploy" -Completed
 Write-Host ""
-Write-Host "Done. App: http://localhost:3000  SearXNG: http://localhost:8081  Mem0 (if enabled): http://localhost:8890" -ForegroundColor Green
+Write-FinalStageSummary
+Write-Host "Done. App: http://localhost:3000  SearXNG: http://localhost:8081  Mem0: http://localhost:8890" -ForegroundColor Green
