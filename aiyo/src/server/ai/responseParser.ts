@@ -274,7 +274,7 @@ function parseTripPlanJson(
   const issues: TripPlanParseDiagnostics["issues"] = [];
   let normalized = false;
 
-  const days: TripPlanDay[] = rawDays.map((day, dayIndex) => {
+  const normalizedDays: Array<TripPlanDay | null> = rawDays.map((day, dayIndex) => {
     const aliasDayNumber =
       Number(day.dayNumber ?? day.day ?? day.dayNo ?? day.day_index) || dayIndex + 1;
     const dedupedDayNumber = usedDayNumbers.has(aliasDayNumber)
@@ -343,6 +343,12 @@ function parseTripPlanJson(
       items: sortedItems,
     };
   });
+
+  const days = normalizedDays.filter((day): day is TripPlanDay => day !== null);
+
+  if (days.length === 0) {
+    return null;
+  }
 
   const mustVisitTerms = (request.preferences.mustVisit || [])
     .map((value) => value.trim().toLowerCase())

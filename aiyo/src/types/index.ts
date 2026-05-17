@@ -250,10 +250,39 @@ export type ChatQuestionAnswer = {
   value: string | string[] | number | { start?: string; end?: string } | null;
 };
 
+export type StatusStepPhase =
+  | "understand"
+  | "plan"
+  | "research"
+  | "compose"
+  | "waiting_user";
+
+export type StatusStepStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "waiting_input"
+  | "failed";
+
+export type StatusStepProvider =
+  | "google_places"
+  | "open_meteo"
+  | "tavily"
+  | "youtube"
+  | "searxng"
+  | "ollama";
+
 export type StatusStepPayload = {
   type: "status_step";
+  phase: StatusStepPhase;
   label: string;
-  status: "pending" | "running" | "completed";
+  detail?: string;
+  status: StatusStepStatus;
+  provider?: StatusStepProvider;
+  query?: string;
+  sourceIds?: string[];
+  startedAt?: string;
+  completedAt?: string;
 };
 
 export type ChatSource = {

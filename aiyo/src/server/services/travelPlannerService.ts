@@ -195,18 +195,21 @@ type WebSearchBundle = {
   warning?: string;
 };
 
+type ProgressStepInput = Omit<StatusStepPayload, "type">;
+
 function publishProgressStep(
   progressSessionId: string | undefined,
-  label: string,
-  status: StatusStepPayload["status"],
+  step: ProgressStepInput,
 ): void {
   if (!progressSessionId) {
     return;
   }
+  const timestamp = new Date().toISOString();
   publishChatProgress(progressSessionId, {
     type: "status_step",
-    label,
-    status,
+    ...step,
+    startedAt: step.startedAt || (step.status === "running" ? timestamp : undefined),
+    completedAt: step.status === "completed" || step.status === "failed" ? step.completedAt || timestamp : undefined,
   });
 }
 
@@ -226,17 +229,6 @@ function formatWebSearchDigest(results: WebSearchResult[]): string {
 
 function toCitationList(results: WebSearchResult[], max: number): Array<{ title: string; url: string }> {
   return results.slice(0, max).map((result) => ({ title: result.title, url: result.url }));
-}
-
-function attachSearchFallbackNotice(content: string, warning?: string): string {
-  if (!warning) {
-    return content;
-  }
-  const notice = "目前無法連線到搜尋服務，因此以下內容可能不是最新資料。";
-  if (content.includes(notice)) {
-    return content;
-  }
-  return `${notice}\n\n${content}`;
 }
 
 const CHINESE_NUMBERS: Record<string, number> = {
@@ -1585,11 +1577,25 @@ export function convertTripPlanToTravelPlanWithSources(
 
 function buildPlanningStatusSteps(): StatusStepPayload[] {
   return [
-    { type: "status_step", label: "整理行程需求", status: "completed" },
-    { type: "status_step", label: "判斷是否需要查詢即時資訊", status: "completed" },
-    { type: "status_step", label: "搜尋景點、交通與美食資訊", status: "completed" },
-    { type: "status_step", label: "整理每日路線、交通時間與景點順序", status: "completed" },
-    { type: "status_step", label: "生成總覽表格與每日詳細行程", status: "completed" },
+    { type: "status_step", phase: "understand", label: "理解旅遊需求", status: "completed" },
+    { type: "status_step", phase: "plan", label: "規劃查詢範圍", status: "completed" },
+    { type: "status_step", phase: "research", label: "查詢景點、交通與天氣", status: "completed" },
+    { type: "status_step", phase: "compose", label: "生成完整行程", status: "completed" },
+  ];
+}
+
+function buildWaitingForInputStatusSteps(): StatusStepPayload[] {
+  return [
+    { type: "status_step", phase: "understand", label: "理解旅遊需求", status: "completed" },
+    {
+      type: "status_step",
+      phase: "waiting_user",
+      label: "等待補充旅遊條件",
+      detail: "收到回答後會開始查詢景點、交通與天氣。",
+      status: "waiting_input",
+    },
+    { type: "status_step", phase: "research", label: "查詢景點、交通與天氣", status: "pending" },
+    { type: "status_step", phase: "compose", label: "生成完整行程", status: "pending" },
   ];
 }
 
@@ -1606,7 +1612,12 @@ async function handleStructuredTripWorkflow(input: {
     return null;
   }
 
-  publishProgressStep(input.progressSessionId, "整理行程需求", "running");
+  publishProgressStep(input.progressSessionId, {
+    phase: "understand",
+    label: "理解旅遊需求",
+    detail: "正在整理目的地、天數、旅伴與偏好條件。",
+    status: "running",
+  });
   const seeded = mergeTripProfile(input.tripProfile, input.context);
   const withText = updateTripProfileFromText(seeded, input.message);
   const profile = applyQuestionAnswers(withText, input.questionAnswers);
@@ -1614,7 +1625,12 @@ async function handleStructuredTripWorkflow(input: {
     profile.plan_integration = "direct_merge";
   }
   const card = buildQuestionCard(profile, input.context);
-  publishProgressStep(input.progressSessionId, "整理行程需求", "completed");
+  publishProgressStep(input.progressSessionId, {
+    phase: "understand",
+    label: "理解旅遊需求",
+    detail: "已整理目前已知的旅遊條件。",
+    status: "completed",
+  });
 
   if (card) {
     return {
@@ -1624,6 +1640,7 @@ async function handleStructuredTripWorkflow(input: {
         content: card.title,
         timestamp: nowChatTimestamp(),
         responseType: "question_card",
+        statusSteps: buildWaitingForInputStatusSteps(),
         questionCard: card,
         tripProfile: profile,
       },
@@ -1631,9 +1648,19 @@ async function handleStructuredTripWorkflow(input: {
     };
   }
 
-  publishProgressStep(input.progressSessionId, "判斷是否需要查詢即時資訊", "running");
+  publishProgressStep(input.progressSessionId, {
+    phase: "plan",
+    label: "規劃查詢範圍",
+    detail: "判斷是否需要查詢天氣、景點、活動與交通資料。",
+    status: "running",
+  });
   const request = profileToTripPlanRequest(profile, input.context);
-  publishProgressStep(input.progressSessionId, "判斷是否需要查詢即時資訊", "completed");
+  publishProgressStep(input.progressSessionId, {
+    phase: "plan",
+    label: "規劃查詢範圍",
+    detail: "已決定查詢範圍，準備開始蒐集外部資料。",
+    status: "completed",
+  });
   const generated = await generateTripPlan(request, input.memoryContext, input.progressSessionId);
   const webSources = normalizeWebSearchSources(await runWebSearch(
     [profile.destination || "", profile.preferences.join(" "), "行程 交通 美食"].filter(Boolean).join(" ").trim(),
@@ -1643,7 +1670,13 @@ async function handleStructuredTripWorkflow(input: {
   if (Object.keys(sourceDictionary).length > 0) {
     registerChatSources(sourceDictionary);
   }
-  publishProgressStep(input.progressSessionId, "生成總覽表格與每日詳細行程", "running");
+  publishProgressStep(input.progressSessionId, {
+    phase: "compose",
+    label: "生成完整行程",
+    detail: "正在整理總覽、每日路線與提醒資訊。",
+    status: "running",
+    provider: "ollama",
+  });
   const travelPlan = convertTripPlanToTravelPlanWithSources(
     generated.plan,
     profile,
@@ -1654,7 +1687,13 @@ async function handleStructuredTripWorkflow(input: {
       profile,
     }),
   );
-  publishProgressStep(input.progressSessionId, "生成總覽表格與每日詳細行程", "completed");
+  publishProgressStep(input.progressSessionId, {
+    phase: "compose",
+    label: "生成完整行程",
+    detail: "最終行程已完成。",
+    status: "completed",
+    provider: "ollama",
+  });
   const statusSteps = buildPlanningStatusSteps();
   return {
     reply: {
@@ -1672,22 +1711,50 @@ async function handleStructuredTripWorkflow(input: {
   };
 }
 
-async function runWebSearch(query: string, limit?: number): Promise<WebSearchBundle> {
+async function runWebSearch(
+  query: string,
+  limit?: number,
+  progressSessionId?: string,
+): Promise<WebSearchBundle> {
   if (!serverConfig.aiWebSearchEnabled || !serverConfig.searxngEnabled || !shouldUseWebSearch(query)) {
     return { results: [], digest: "" };
   }
 
+  publishProgressStep(progressSessionId, {
+    phase: "research",
+    label: "查詢一般網頁資料",
+    detail: `正在查詢：${query}`,
+    status: "running",
+    provider: "searxng",
+    query,
+  });
   const results = await searchWeb({
     query,
     limit: Math.min(serverConfig.aiWebSearchMaxResults, limit ?? serverConfig.aiWebSearchMaxResults),
   });
   if (!results.length) {
+    publishProgressStep(progressSessionId, {
+      phase: "research",
+      label: "查詢一般網頁資料",
+      detail: "未取得可用結果，將改以既有資料繼續整理。",
+      status: "failed",
+      provider: "searxng",
+      query,
+    });
     return {
       results: [],
       digest: "",
       warning: "目前無法連線到搜尋服務，因此以下內容可能不是最新資料。",
     };
   }
+  publishProgressStep(progressSessionId, {
+    phase: "research",
+    label: "查詢一般網頁資料",
+    detail: `已取得 ${results.length} 筆網頁結果。`,
+    status: "completed",
+    provider: "searxng",
+    query,
+  });
   return {
     results,
     digest: formatWebSearchDigest(results),
@@ -1697,8 +1764,9 @@ async function runWebSearch(query: string, limit?: number): Promise<WebSearchBun
 function enrichPlanWithSearchSources(
   plan: TripPlanResult,
   searchResults: WebSearchResult[],
-  _warning?: string,
+  warning?: string,
 ): TripPlanResult {
+  void warning;
   if (!searchResults.length) {
     return plan;
   }
@@ -1754,7 +1822,12 @@ async function buildExistingItineraryPatchResponse(input: {
     return deterministicPatch;
   }
 
-  publishProgressStep(input.progressSessionId, "分析目前行程修改需求", "running");
+  publishProgressStep(input.progressSessionId, {
+    phase: "understand",
+    label: "分析目前行程修改需求",
+    detail: "正在比對既有行程與新的修改指令。",
+    status: "running",
+  });
   const prompt = buildChatPrompt(
     input.message,
     input.context,
@@ -1773,7 +1846,12 @@ async function buildExistingItineraryPatchResponse(input: {
     ],
   });
   const structured = parseStructuredChatOutput(raw);
-  publishProgressStep(input.progressSessionId, "分析目前行程修改需求", "completed");
+  publishProgressStep(input.progressSessionId, {
+    phase: "understand",
+    label: "分析目前行程修改需求",
+    detail: "已完成修改需求分析。",
+    status: "completed",
+  });
 
   return {
     reply: {
@@ -2009,7 +2087,12 @@ export async function generateTripPlan(
   let externalResearch = "";
   let researchSources: Record<string, ChatSource> = {};
   let researchPlaceHits: PlaceSearchHit[] = [];
-  publishProgressStep(progressSessionId, "搜尋景點、交通與美食資訊", "running");
+  publishProgressStep(progressSessionId, {
+    phase: "research",
+    label: "查詢景點、交通與天氣",
+    detail: "正在蒐集景點、美食、活動與天氣資料。",
+    status: "running",
+  });
   const searchQuery = [
     request.destination,
     request.preferences.interests.join(" "),
@@ -2020,7 +2103,7 @@ export async function generateTripPlan(
     .filter(Boolean)
     .join(" ")
     .trim();
-  const webSearch = await runWebSearch(searchQuery, serverConfig.aiWebSearchMaxResults);
+  const webSearch = await runWebSearch(searchQuery, serverConfig.aiWebSearchMaxResults, progressSessionId);
   try {
     const reqs = buildTripPlanResearchRequests(request);
     if (reqs.length) {
@@ -2032,7 +2115,7 @@ export async function generateTripPlan(
         tripEndDate: request.tripEndDate,
         preferences: request.preferences,
         itinerary: request.itineraryDraft,
-      });
+      }, progressSessionId);
       externalResearch = digest.text.trim();
       researchSources = digest.sources;
       researchPlaceHits = digest.placeHits;
@@ -2040,7 +2123,12 @@ export async function generateTripPlan(
   } catch (error) {
     console.warn("[trip-plan] research_failed", error);
   }
-  publishProgressStep(progressSessionId, "搜尋景點、交通與美食資訊", "completed");
+  publishProgressStep(progressSessionId, {
+    phase: "research",
+    label: "查詢景點、交通與天氣",
+    detail: "外部資料蒐集完成。",
+    status: "completed",
+  });
 
   const itineraryUserContent = buildItineraryPrompt(request, memoryContext, {
     externalResearch: externalResearch || undefined,
@@ -2061,7 +2149,13 @@ export async function generateTripPlan(
 
   let raw: string;
   let retryCount = 0;
-  publishProgressStep(progressSessionId, "整理每日路線、交通時間與景點順序", "running");
+  publishProgressStep(progressSessionId, {
+    phase: "compose",
+    label: "整理每日路線與節奏",
+    detail: "正在根據查詢結果安排每日動線。",
+    status: "running",
+    provider: "ollama",
+  });
   try {
     raw = await chatWithOllama({
       format: "json",
@@ -2080,7 +2174,13 @@ export async function generateTripPlan(
       } catch {
         const fallback = buildFallbackTripPlan(request, researchPlaceHits);
         console.warn("[trip-plan] timeout,fallback");
-        publishProgressStep(progressSessionId, "整理每日路線、交通時間與景點順序", "completed");
+        publishProgressStep(progressSessionId, {
+          phase: "compose",
+          label: "整理每日路線與節奏",
+          detail: "已改用 fallback 行程完成輸出。",
+          status: "completed",
+          provider: "ollama",
+        });
         return {
           plan: enrichPlanWithSearchSources(fallback, webSearch.results, webSearch.warning),
           sources: researchSources,
@@ -2102,7 +2202,13 @@ export async function generateTripPlan(
       throw new StructuredOutputError("MODEL_OUTPUT_TEMPLATE_POLLUTION");
     }
     console.info(`[trip-plan] parse_mode=${parsed.diagnostics.parseMode} retry_count=${retryCount}`);
-    publishProgressStep(progressSessionId, "整理每日路線、交通時間與景點順序", "completed");
+    publishProgressStep(progressSessionId, {
+      phase: "compose",
+      label: "整理每日路線與節奏",
+      detail: "每日動線整理完成。",
+      status: "completed",
+      provider: "ollama",
+    });
     return {
       plan: enrichPlanWithSearchSources(parsed.result, webSearch.results, webSearch.warning),
       sources: researchSources,
@@ -2160,7 +2266,13 @@ export async function generateTripPlan(
         } catch {
           const fallback = buildFallbackTripPlan(request, researchPlaceHits);
           console.warn("[trip-plan] timeout,fallback");
-          publishProgressStep(progressSessionId, "整理每日路線、交通時間與景點順序", "completed");
+          publishProgressStep(progressSessionId, {
+            phase: "compose",
+            label: "整理每日路線與節奏",
+            detail: "已改用 fallback 行程完成輸出。",
+            status: "completed",
+            provider: "ollama",
+          });
           return {
             plan: enrichPlanWithSearchSources(fallback, webSearch.results, webSearch.warning),
             sources: researchSources,
@@ -2184,7 +2296,13 @@ export async function generateTripPlan(
       if (parsed.diagnostics.parseMode === "normalized") {
         console.info("[trip-plan] normalized");
       }
-      publishProgressStep(progressSessionId, "整理每日路線、交通時間與景點順序", "completed");
+      publishProgressStep(progressSessionId, {
+        phase: "compose",
+        label: "整理每日路線與節奏",
+        detail: "每日動線整理完成。",
+        status: "completed",
+        provider: "ollama",
+      });
       return {
         plan: enrichPlanWithSearchSources(parsed.result, webSearch.results, webSearch.warning),
         sources: researchSources,
@@ -2202,7 +2320,13 @@ export async function generateTripPlan(
       console.warn(
         `[trip-plan] ${retryError.message === "MODEL_OUTPUT_JSON_MISSING" ? "json_missing" : "json_invalid"},fallback`,
       );
-      publishProgressStep(progressSessionId, "整理每日路線、交通時間與景點順序", "completed");
+      publishProgressStep(progressSessionId, {
+        phase: "compose",
+        label: "整理每日路線與節奏",
+        detail: "已改用 fallback 行程完成輸出。",
+        status: "completed",
+        provider: "ollama",
+      });
       return {
         plan: enrichPlanWithSearchSources(fallback, webSearch.results, webSearch.warning),
         sources: researchSources,
@@ -2279,14 +2403,24 @@ export async function chatWithTravelAssistant(input: {
     }
   }
 
-  publishProgressStep(input.progressSessionId, "整理旅遊問題", "running");
+  publishProgressStep(input.progressSessionId, {
+    phase: "understand",
+    label: "整理旅遊問題",
+    detail: "正在判斷這次提問需要哪些旅遊資訊。",
+    status: "running",
+  });
   const language = detectResponseLanguage(input.message);
   const researchPrompt = buildChatResearchPlanningPrompt({
     message: input.message,
     context: input.context,
     memoryContext: input.memoryContext,
   });
-  publishProgressStep(input.progressSessionId, "整理旅遊問題", "completed");
+  publishProgressStep(input.progressSessionId, {
+    phase: "understand",
+    label: "整理旅遊問題",
+    detail: "已整理問題脈絡。",
+    status: "completed",
+  });
 
   const perRoundTimeout = Math.min(90_000, Math.max(45_000, Math.floor(serverConfig.ollamaTimeoutMs * 0.75)));
 
@@ -2302,7 +2436,12 @@ export async function chatWithTravelAssistant(input: {
   let webSearch: WebSearchBundle = { results: [], digest: "" };
   if (shouldResearch) {
     let rawResearch = "";
-    publishProgressStep(input.progressSessionId, "查詢外部資訊", "running");
+    publishProgressStep(input.progressSessionId, {
+      phase: "research",
+      label: "查詢外部資訊",
+      detail: "正在規劃並執行外部資料查詢。",
+      status: "running",
+    });
     try {
       rawResearch = await chatWithOllama({
         task: "travel-chat",
@@ -2326,10 +2465,15 @@ export async function chatWithTravelAssistant(input: {
       toolRequests = buildDefaultTravelToolRequests(input.message, input.context);
     }
 
-    digest = await executeTravelToolRequests(toolRequests, input.context);
+    digest = await executeTravelToolRequests(toolRequests, input.context, input.progressSessionId);
     const webSearchQuery = [input.context?.destination || "", input.message].filter(Boolean).join(" ").trim();
-    webSearch = await runWebSearch(webSearchQuery, serverConfig.aiWebSearchMaxResults);
-    publishProgressStep(input.progressSessionId, "查詢外部資訊", "completed");
+    webSearch = await runWebSearch(webSearchQuery, serverConfig.aiWebSearchMaxResults, input.progressSessionId);
+    publishProgressStep(input.progressSessionId, {
+      phase: "research",
+      label: "查詢外部資訊",
+      detail: "外部資料查詢完成。",
+      status: "completed",
+    });
   }
   const digestText =
     shouldResearch
@@ -2345,7 +2489,13 @@ export async function chatWithTravelAssistant(input: {
     webSearch.digest || undefined,
   );
 
-  publishProgressStep(input.progressSessionId, "生成回覆", "running");
+  publishProgressStep(input.progressSessionId, {
+    phase: "compose",
+    label: "生成回覆",
+    detail: "正在整理回覆內容。",
+    status: "running",
+    provider: "ollama",
+  });
   const raw = await chatWithOllama({
     task: "travel-chat",
     format: "json",
@@ -2368,7 +2518,13 @@ export async function chatWithTravelAssistant(input: {
     serverConfig.aiWebSearchRequireCitations && webSearch.results.length
       ? toCitationList(webSearch.results, 3)
       : undefined;
-  publishProgressStep(input.progressSessionId, "生成回覆", "completed");
+  publishProgressStep(input.progressSessionId, {
+    phase: "compose",
+    label: "生成回覆",
+    detail: "回覆已完成。",
+    status: "completed",
+    provider: "ollama",
+  });
 
   return {
     reply: {

@@ -9,7 +9,6 @@ import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
 import {
   CalendarDays,
-  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -23,7 +22,8 @@ import {
   Trash2,
 } from "lucide-react";
 import MarkdownMessage from "@/components/chat/MarkdownMessage";
-import { CitationGroup } from "@/components/chat/SourceTag";
+import TravelPlanCard from "@/components/chat/TravelPlanCard";
+import WorkflowProgressPanel from "@/components/chat/WorkflowProgressPanel";
 import VideoCard from "@/components/home/VideoCard";
 import { zhTW as t } from "@/locales/zh-TW";
 import {
@@ -57,7 +57,6 @@ import type {
   ChatQuestionAnswer,
   QuestionCardPayload,
   StatusStepPayload,
-  TravelPlanResponse,
   TripPlanItem,
   TripProfile,
   VideoRecommendation,
@@ -290,10 +289,6 @@ function formatIsoDateLabel(value: string | undefined): string {
   });
 }
 
-function normalizeDisplayText(value: string): string {
-  return value.toLowerCase().replace(/臺/g, "台").replace(/\s+/g, "").trim();
-}
-
 function parseIsoLocalDate(value?: string): Date | null {
   if (!value) {
     return null;
@@ -337,142 +332,6 @@ function buildCalendarMatrix(month: Date): Array<{ iso: string; day: number; inM
       inMonth: current.getMonth() === monthIndex,
     };
   });
-}
-
-function uniqueByName<T extends { name: string }>(items: T[]): T[] {
-  const seen = new Set<string>();
-  return items.filter((item) => {
-    const key = normalizeDisplayText(item.name);
-    if (!key || seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
-}
-
-function StatusStepList({ steps }: { steps: StatusStepPayload[] }) {
-  if (!steps.length) {
-    return null;
-  }
-  const activeIndex = Math.max(
-    0,
-    steps.findIndex((step) => step.status === "running"),
-  );
-
-  return (
-    <div className="overflow-hidden rounded-[28px] border border-primary/10 bg-white/92 px-4 py-4 shadow-[0_24px_70px_rgba(15,23,42,0.08)] backdrop-blur">
-      <div className="mb-3 flex items-center justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/70">Planning Progress</p>
-          <p className="mt-1 text-sm text-muted">AI 正在整理需求、查找路線並生成每日安排。</p>
-        </div>
-        <span className="rounded-full bg-primary/8 px-3 py-1 text-xs font-semibold text-primary">
-          Step {Math.min(activeIndex + 1, steps.length)} / {steps.length}
-        </span>
-      </div>
-      <div className="flex flex-wrap items-start gap-y-4">
-        {steps.map((step, index) => {
-          const isCompleted = step.status === "completed";
-          const isRunning = step.status === "running";
-          const lineFilled = isCompleted || (index < activeIndex && !steps.some((item) => item.status === "running"));
-          return (
-            <div key={`${step.label}_${index}`} className="flex min-w-[180px] flex-1 items-start">
-              <div className="flex w-full items-start gap-3">
-                <div className="flex min-w-[40px] flex-col items-center">
-                  <motion.span
-                    initial={{ scale: 0.92, opacity: 0.75 }}
-                    animate={{
-                      scale: isRunning ? [1, 1.08, 1] : 1,
-                      opacity: 1,
-                    }}
-                    transition={{
-                      duration: isRunning ? 1.4 : 0.25,
-                      repeat: isRunning ? Number.POSITIVE_INFINITY : 0,
-                      ease: "easeInOut",
-                    }}
-                    className={cn(
-                      "flex size-10 items-center justify-center rounded-full border text-sm font-semibold transition-colors",
-                      isCompleted
-                        ? "border-primary bg-primary text-white shadow-[0_10px_30px_rgba(37,99,235,0.25)]"
-                        : isRunning
-                          ? "border-primary bg-white text-primary shadow-[0_10px_24px_rgba(37,99,235,0.18)]"
-                          : "border-slate-300 bg-white text-slate-400",
-                    )}
-                  >
-                    {isCompleted ? (
-                      <Check className="size-4" aria-hidden />
-                    ) : isRunning ? (
-                      <Loader2 className="size-4 animate-spin" aria-hidden />
-                    ) : (
-                      index + 1
-                    )}
-                  </motion.span>
-                  {index < steps.length - 1 ? (
-                    <div className="mt-2 hidden h-px w-[calc(100vw/9)] min-w-[64px] max-w-[140px] overflow-hidden rounded-full bg-slate-200 sm:block">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: lineFilled ? "100%" : isRunning ? "62%" : "0%" }}
-                        transition={{ duration: 0.45, ease: "easeOut" }}
-                        className="h-full rounded-full bg-primary"
-                      />
-                    </div>
-                  ) : null}
-                </div>
-                <div className="pt-1">
-                  <p
-                    className={cn(
-                      "text-sm font-semibold",
-                      isCompleted || isRunning ? "text-foreground" : "text-muted",
-                    )}
-                  >
-                    {step.label}
-                  </p>
-                  <p className="mt-1 text-xs text-muted">
-                    {isCompleted ? "已完成" : isRunning ? "進行中" : "等待前一步完成"}
-                  </p>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-const REVISION_ACTIONS = [
-  "放慢步調",
-  "改成自駕",
-  "加入更多美食",
-  "減少購物",
-] as const;
-
-function RevisionActionBar({
-  disabled,
-  onRevise,
-}: {
-  disabled?: boolean;
-  onRevise: (instruction: string) => void;
-}) {
-  return (
-    <div className="space-y-2 rounded-2xl border border-border-light bg-white/80 p-3 shadow-soft">
-      <p className="text-xs font-semibold text-muted">快速修改</p>
-      <div className="flex flex-wrap gap-2">
-        {REVISION_ACTIONS.map((action) => (
-          <button
-            key={action}
-            type="button"
-            disabled={disabled}
-            onClick={() => onRevise(action)}
-            className="rounded-full border border-border-light bg-white px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {action}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 function CalendarDateField({
@@ -766,10 +625,6 @@ function QuestionCard({
                     onChange={(value) => setDateRange(question, "end", value)}
                   />
                 </div>
-                <p className="flex items-center gap-2 text-xs text-muted">
-                  <CalendarDays className="size-3.5 text-primary" aria-hidden />
-                  兩個日期都由你自行選取，系統不會自動幫你推算回程日。
-                </p>
               </div>
             ) : (
               <input
@@ -793,233 +648,6 @@ function QuestionCard({
         {disabled ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
         {card.action?.label || "繼續"}
       </button>
-    </div>
-  );
-}
-
-function TravelPlanCard({
-  plan,
-  onRevise,
-  revisionDisabled,
-}: {
-  plan: TravelPlanResponse;
-  onRevise: (instruction: string) => void;
-  revisionDisabled?: boolean;
-}) {
-  const sources = plan.sources;
-  const sourceEntries = Object.values(sources || {});
-  const overviewDays = plan.summary_table.map((row, index) => {
-    const day = plan.days[index];
-    const routeNames = uniqueByName(day?.spots || []).map((spot) => spot.name).slice(0, 4);
-    return {
-      day: row.day,
-      routeNames,
-      theme: day?.theme || row.main_route,
-      citations: row.citations,
-    };
-  });
-
-  return (
-    <div className="w-full space-y-5">
-      <div className="overflow-hidden rounded-[28px] border border-border-light bg-white/92 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
-        <div className="bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.14),_transparent_36%),linear-gradient(135deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-5 py-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="space-y-2">
-              <span className="inline-flex rounded-full border border-primary/15 bg-primary/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-                Final Plan
-              </span>
-              <h3 className="text-lg font-semibold tracking-tight text-foreground">{plan.title}</h3>
-              <p className="max-w-2xl text-sm leading-relaxed text-muted">
-                以每日動線、景點停留順序與餐食節奏整理成可直接採用的版本，右側行程與編輯頁會同步使用這份內容。
-              </p>
-            </div>
-            <div className="grid min-w-[220px] gap-2 sm:grid-cols-2">
-              {overviewDays.map((row) => (
-                <div key={row.day} className="rounded-2xl border border-white/70 bg-white/75 px-3 py-3 shadow-[0_14px_35px_rgba(148,163,184,0.14)]">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary/80">{row.day}</p>
-                  <p className="mt-1 text-sm font-semibold text-foreground">{row.theme}</p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {(row.routeNames.length ? row.routeNames : [row.theme]).slice(0, 4).map((name) => (
-                      <span
-                        key={`${row.day}_${name}`}
-                        className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-700"
-                      >
-                        {name}
-                      </span>
-                    ))}
-                  </div>
-                  <CitationGroup citations={row.citations} sources={sources} />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {plan.revision ? (
-          <div className="border-t border-border-light bg-amber-50/70 px-5 py-4 text-xs text-slate-700">
-            <div className="flex flex-wrap items-center gap-3">
-              <p className="font-semibold text-foreground">本次調整摘要</p>
-              <span className="rounded-full bg-white px-2.5 py-1 font-mono text-[11px] text-muted">
-                {plan.revision.revised_from}
-              </span>
-              {plan.revision.changed_days.length > 0 ? (
-                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600">
-                  {plan.revision.changed_days.join("、")}
-                </span>
-              ) : null}
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {plan.revision.change_summary.map((item, index) => (
-                <span
-                  key={`${index}_${item}`}
-                  className="rounded-full border border-amber-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-700"
-                >
-                  {item}
-                </span>
-              ))}
-            </div>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="space-y-4">
-        {plan.days.map((day) => (
-          <section
-            key={day.day}
-            className="overflow-hidden rounded-[26px] border border-border-light bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(249,250,251,0.94))] shadow-[0_16px_44px_rgba(148,163,184,0.16)]"
-          >
-            <div className="border-b border-border-light bg-slate-50/80 px-4 py-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-white">{day.day}</span>
-                <h4 className="text-base font-semibold text-foreground">{day.theme}</h4>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {uniqueByName(day.spots).map((spot) => (
-                  <span
-                    key={`${day.day}_route_${spot.name}`}
-                    className="rounded-full border border-primary/10 bg-white px-3 py-1 text-xs font-medium text-slate-700"
-                  >
-                    {spot.name}
-                  </span>
-                ))}
-              </div>
-              <CitationGroup citations={day.citations} sources={sources} />
-            </div>
-
-            <div className="grid gap-4 px-4 py-4 lg:grid-cols-[1.5fr_1fr]">
-              <div className="space-y-4">
-                {day.transportation.length > 0 && (
-                  <div className="rounded-2xl border border-sky-100 bg-sky-50/70 p-3">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">交通策略</p>
-                    <ul className="space-y-2 text-sm text-foreground">
-                      {day.transportation.map((item, index) => (
-                        <li key={`${day.day}_transport_${index}_${item.text}`} className="rounded-xl bg-white/80 px-3 py-2">
-                          <p>{item.text}</p>
-                          <CitationGroup citations={item.citations} sources={sources} />
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {uniqueByName(day.spots).length > 0 && (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {uniqueByName(day.spots).map((spot, index) => (
-                      <motion.div
-                        key={`${day.day}_spot_${index}_${spot.name}`}
-                        initial={{ opacity: 0, y: 14 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true, amount: 0.15 }}
-                        transition={{ duration: 0.28, delay: index * 0.05 }}
-                        className="rounded-2xl border border-white/80 bg-white p-4 shadow-[0_12px_30px_rgba(148,163,184,0.14)]"
-                      >
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary/70">Spot {index + 1}</p>
-                        <p className="mt-2 text-sm font-semibold text-foreground">{spot.name}</p>
-                        <p className="mt-2 text-xs leading-6 text-muted">{spot.feature}</p>
-                        <CitationGroup citations={spot.citations} sources={sources} />
-                      </motion.div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-4">
-                {uniqueByName(day.food_recommendations).length > 0 && (
-                  <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-3">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">餐食安排</p>
-                    <div className="space-y-2">
-                      {uniqueByName(day.food_recommendations).map((food, index) => (
-                        <div key={`${day.day}_food_${index}_${food.name}`} className="rounded-xl bg-white/85 px-3 py-3">
-                          <p className="text-sm font-semibold text-foreground">{food.name}</p>
-                          <p className="mt-1 text-xs leading-6 text-muted">{food.description}</p>
-                          <CitationGroup citations={food.citations} sources={sources} />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {day.tips.length > 0 && (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700">提醒與備註</p>
-                    <ul className="space-y-2">
-                      {day.tips.map((tip, index) => (
-                        <li key={`${day.day}_tip_${index}_${tip.text}`} className="rounded-xl bg-white/85 px-3 py-2 text-xs leading-6 text-muted">
-                          <p>{tip.text}</p>
-                          <CitationGroup citations={tip.citations} sources={sources} />
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            </div>
-          </section>
-        ))}
-      </div>
-      {(plan.weather_alerts.length > 0 || plan.event_alerts.length > 0 || plan.assumptions.length > 0) && (
-        <div className="rounded-xl border border-border-light bg-white/70 p-3 text-xs leading-relaxed text-muted">
-          {plan.weather_alerts.map((alert) => (
-            <div key={`${alert.day}_${alert.message}`} className="mb-2 last:mb-0">
-              <p>{`${alert.day}：${alert.message}`}</p>
-              <CitationGroup citations={alert.citations} sources={sources} />
-            </div>
-          ))}
-          {plan.event_alerts.map((alert, index) => (
-            <div key={`${alert.day || "event"}_${index}`} className="mb-2 last:mb-0">
-              <p>{alert.day ? `${alert.day}：${alert.message}` : alert.message}</p>
-              <CitationGroup citations={alert.citations} sources={sources} />
-            </div>
-          ))}
-          {plan.assumptions.map((item, index) => (
-            <div key={`assumption_${index}_${item.text}`} className="mb-2 last:mb-0">
-              <p>{item.text}</p>
-              <CitationGroup citations={item.citations} sources={sources} />
-            </div>
-          ))}
-        </div>
-      )}
-      {sourceEntries.length > 0 && (
-        <div className="mt-5 rounded-xl border border-border-light bg-white/70 p-3">
-          <p className="mb-2 text-xs font-semibold text-muted">資料來源</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {sourceEntries.map((source) => (
-              <a
-                key={source.source_id}
-                href={source.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-lg border border-border-light bg-white px-3 py-2 transition-colors hover:border-primary/30 hover:bg-primary/5"
-              >
-                <p className="text-sm font-medium text-foreground">{source.title}</p>
-                <p className="mt-1 text-xs text-muted">{source.domain || source.provider}</p>
-                <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted">{source.preview_text || source.snippet}</p>
-              </a>
-            ))}
-          </div>
-        </div>
-      )}
-      <RevisionActionBar disabled={revisionDisabled} onRevise={onRevise} />
     </div>
   );
 }
@@ -1457,7 +1085,15 @@ export default function ChatPage() {
           stepStatus: step.status,
         });
         setStreamingStatusSteps((prev) => {
-          const next = prev.filter((item) => item.label !== step.label);
+          const next = prev.filter(
+            (item) =>
+              !(
+                item.phase === step.phase &&
+                item.label === step.label &&
+                item.provider === step.provider &&
+                item.query === step.query
+              ),
+          );
           return [...next, step];
         });
       } catch {
@@ -2245,7 +1881,7 @@ export default function ChatPage() {
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-border-light bg-cream/40 px-4 py-5 text-center text-sm text-muted">
-                  目前沒有可選擇的既有行程。
+                  目前沒有可選擇的行程。
                 </div>
               )}
 
@@ -2459,21 +2095,26 @@ export default function ChatPage() {
                     }`}
                   >
                     {message.responseType === "question_card" && message.questionCard ? (
-                      <QuestionCard
-                        card={message.questionCard}
-                        disabled={isSending}
-                        onSubmit={(answers, displayMessage) =>
-                          void handleSend("", {
-                            displayMessage,
-                            displayAsAssistant: true,
-                            questionAnswers: answers,
-                            tripProfile: message.tripProfile || tripProfile,
-                          })
-                        }
-                      />
+                      <div className="space-y-3">
+                        {message.statusSteps?.length ? (
+                          <WorkflowProgressPanel steps={message.statusSteps} showResearchFeed={false} />
+                        ) : null}
+                        <QuestionCard
+                          card={message.questionCard}
+                          disabled={isSending}
+                          onSubmit={(answers, displayMessage) =>
+                            void handleSend("", {
+                              displayMessage,
+                              displayAsAssistant: true,
+                              questionAnswers: answers,
+                              tripProfile: message.tripProfile || tripProfile,
+                            })
+                          }
+                        />
+                      </div>
                     ) : message.responseType === "travel_plan" && message.travelPlan ? (
                       <div className="space-y-3">
-                        {message.statusSteps?.length ? <StatusStepList steps={message.statusSteps} /> : null}
+                        {message.statusSteps?.length ? <WorkflowProgressPanel steps={message.statusSteps} /> : null}
                         <TravelPlanCard
                           plan={message.travelPlan}
                           revisionDisabled={isSending}
@@ -2482,7 +2123,7 @@ export default function ChatPage() {
                       </div>
                     ) : message.responseType === "status_step" && message.statusSteps?.length ? (
                       <div className="rounded-2xl border border-border-light bg-white/80 px-4 py-3 shadow-soft backdrop-blur-md">
-                        <StatusStepList steps={message.statusSteps} />
+                        <WorkflowProgressPanel steps={message.statusSteps} />
                       </div>
                     ) : (
                       <MarkdownMessage
@@ -2536,15 +2177,16 @@ export default function ChatPage() {
                 {t.chat.aiShort}
               </div>
               <div className="rounded-2xl rounded-bl-md border border-border-light bg-white/80 px-4 py-3 shadow-soft backdrop-blur-md">
-                <StatusStepList
+                <WorkflowProgressPanel
+                  showResearchFeed
                   steps={
                     streamingStatusSteps.length
                       ? streamingStatusSteps
                       : [
-                          { type: "status_step", label: "整理行程需求", status: "running" },
-                          { type: "status_step", label: "判斷是否需要查詢即時資訊", status: "pending" },
-                          { type: "status_step", label: "搜尋景點、交通與美食資訊", status: "pending" },
-                          { type: "status_step", label: "整理每日路線、交通時間與景點順序", status: "pending" },
+                          { type: "status_step", phase: "understand", label: "理解旅遊需求", status: "running" },
+                          { type: "status_step", phase: "plan", label: "規劃查詢範圍", status: "pending" },
+                          { type: "status_step", phase: "research", label: "查詢景點、交通與天氣", status: "pending" },
+                          { type: "status_step", phase: "compose", label: "生成完整行程", status: "pending" },
                         ]
                   }
                 />

@@ -50,7 +50,15 @@ export function isChatProgressDone(sessionId: string): boolean {
 
 export function publishChatProgress(sessionId: string, step: StatusStepPayload): void {
   const session = getOrCreateSession(sessionId);
-  const nextEvents = session.events.filter((item) => item.label !== step.label);
+  const nextEvents = session.events.filter(
+    (item) =>
+      !(
+        item.phase === step.phase &&
+        item.label === step.label &&
+        item.provider === step.provider &&
+        item.query === step.query
+      ),
+  );
   nextEvents.push(step);
   session.events = nextEvents;
   session.updatedAt = Date.now();

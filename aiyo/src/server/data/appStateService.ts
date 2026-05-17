@@ -115,7 +115,7 @@ function parseSparseDayStops(input: {
 
 function hydrateSparseDayItems<T extends { dayNumber: number; theme?: string | null; summary?: string | null; items: Array<{
   id: string;
-  dayNumber: number;
+  dayNumber?: number;
   time: string;
   title: string;
   type: "attraction" | "restaurant" | "transport" | "hotel" | "activity" | "shopping";

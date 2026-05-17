@@ -50,6 +50,8 @@ test("structured chat asks for travel_dates before itinerary generation when dat
   assert.equal(response.reply.responseType, "question_card");
   assert.equal(response.reply.questionCard?.response_type, "question_card");
   assert.ok(response.reply.questionCard?.questions.some((question) => question.slot === "travel_dates"));
+  assert.equal(response.reply.statusSteps?.[1]?.phase, "waiting_user");
+  assert.equal(response.reply.statusSteps?.[1]?.status, "waiting_input");
 });
 
 test("date range derives inclusive trip days without adding extra days", () => {

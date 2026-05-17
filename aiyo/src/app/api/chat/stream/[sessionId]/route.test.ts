@@ -7,11 +7,13 @@ test("GET /api/chat/stream/:sessionId returns SSE status stream", async () => {
   ensureChatProgressSession("session_1");
   publishChatProgress("session_1", {
     type: "status_step",
+    phase: "understand",
     label: "整理行程需求",
     status: "completed",
   });
   publishChatProgress("session_1", {
     type: "status_step",
+    phase: "research",
     label: "搜尋景點、交通與美食資訊",
     status: "completed",
   });
