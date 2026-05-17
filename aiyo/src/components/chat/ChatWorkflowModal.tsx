@@ -384,4 +384,3 @@ function WorkflowActiveStep({
     </div>
   );
 }
-
