@@ -796,7 +796,11 @@ export function applyQuestionAnswers(profile: TripProfile, answers?: ChatQuestio
   return normalizeTripProfile(next);
 }
 
-export function buildQuestionCard(profile: TripProfile, context?: ChatContext): QuestionCardPayload | null {
+export function buildQuestionCard(
+  profile: TripProfile,
+  context?: ChatContext,
+  options?: { requireConfirmationBeforePlan?: boolean },
+): QuestionCardPayload | null {
   const destination = profile.destination || "這次";
   const durationLabel = profile.duration_days ? `${profile.duration_days}天${profile.duration_nights ?? Math.max(0, profile.duration_days - 1)}夜` : "這趟";
   const isJapanTrip = /日本|熊本|福岡|東京|大阪|京都|北海道|九州|沖繩|阿蘇|黑川|由布院|別府/u.test(destination);
@@ -961,11 +965,33 @@ export function buildQuestionCard(profile: TripProfile, context?: ChatContext): 
     },
   ].filter((question): question is NonNullable<typeof question> => Boolean(question));
 
-  if (!profile.departure_location || !profile.travel_dates || !profile.budget || !profile.transportation) {
+  if (secondRound.length) {
     return {
       response_type: "question_card",
       title: "再確認幾個行程安排會用到的條件",
       questions: secondRound.slice(0, 4),
+      action: { label: "開始規劃", shortcut: "Enter" },
+    };
+  }
+
+  if (options?.requireConfirmationBeforePlan) {
+    return {
+      response_type: "question_card",
+      title: "開始規劃前，請先確認這些條件",
+      questions: [
+        {
+          slot: "special_needs" as const,
+          question: "有沒有特殊需求？",
+          type: "multi_choice" as const,
+          options: [
+            { label: "有長輩同行", value: "elderly" },
+            { label: "有小孩同行", value: "children" },
+            { label: "行動不便", value: "mobility_issue" },
+            { label: "飲食限制 / 過敏", value: "dietary_restriction" },
+            { label: "沒有特殊需求", value: "none", recommended: true },
+          ],
+        },
+      ],
       action: { label: "開始規劃", shortcut: "Enter" },
     };
   }
@@ -1612,27 +1638,25 @@ async function handleStructuredTripWorkflow(input: {
     return null;
   }
 
-  publishProgressStep(input.progressSessionId, {
-    phase: "understand",
-    label: "理解旅遊需求",
-    detail: "正在整理目的地、天數、旅伴與偏好條件。",
-    status: "running",
-  });
   const seeded = mergeTripProfile(input.tripProfile, input.context);
   const withText = updateTripProfileFromText(seeded, input.message);
   const profile = applyQuestionAnswers(withText, input.questionAnswers);
   if (input.forceStructuredRevision && input.context?.itinerary?.length) {
     profile.plan_integration = "direct_merge";
   }
-  const card = buildQuestionCard(profile, input.context);
-  publishProgressStep(input.progressSessionId, {
-    phase: "understand",
-    label: "理解旅遊需求",
-    detail: "已整理目前已知的旅遊條件。",
-    status: "completed",
+
+  const needsUserIntake = !input.questionAnswers?.length;
+  const card = buildQuestionCard(profile, input.context, {
+    requireConfirmationBeforePlan: needsUserIntake,
   });
 
-  if (card) {
+  if (card && needsUserIntake) {
+    publishProgressStep(input.progressSessionId, {
+      phase: "waiting_user",
+      label: "等待補充旅遊條件",
+      detail: "請先回答幾個問題，系統才會開始查資料與排行程。",
+      status: "waiting_input",
+    });
     return {
       reply: {
         id: `assistant_${Date.now()}`,
@@ -1647,6 +1671,19 @@ async function handleStructuredTripWorkflow(input: {
       tripProfile: profile,
     };
   }
+
+  publishProgressStep(input.progressSessionId, {
+    phase: "understand",
+    label: "理解旅遊需求",
+    detail: "正在整理目的地、天數、旅伴與偏好條件。",
+    status: "running",
+  });
+  publishProgressStep(input.progressSessionId, {
+    phase: "understand",
+    label: "理解旅遊需求",
+    detail: "已整理目前已知的旅遊條件。",
+    status: "completed",
+  });
 
   publishProgressStep(input.progressSessionId, {
     phase: "plan",
