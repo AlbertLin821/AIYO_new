@@ -344,15 +344,27 @@ function buildRouteSegmentInfoContent(segment: ItineraryRouteSegment, displayMin
   `;
 }
 
+function segmentTouchesLinkedItem(
+  segment: ItineraryRouteSegment,
+  linkedItem: ReturnType<typeof findLinkedItineraryItem> | undefined,
+) {
+  if (!linkedItem) {
+    return false;
+  }
+  return segment.fromItemId === linkedItem.id || segment.toItemId === linkedItem.id;
+}
+
 function MockMapFallback({
   pins,
   routeSegments,
+  highlightedRouteIds,
   selectedPinId,
   setSelectedPinId,
   zoom,
 }: {
   pins: MapPinType[];
   routeSegments: ItineraryRouteSegment[];
+  highlightedRouteIds: Set<string>;
   selectedPinId: string | null;
   setSelectedPinId: (value: string | null) => void;
   zoom: number;
@@ -409,6 +421,7 @@ function MockMapFallback({
 
           <svg className="pointer-events-none absolute inset-0 z-[1] h-full w-full">
             {routeSegments.map((segment) => {
+                const isHighlighted = highlightedRouteIds.has(segment.id);
                 const from = getPos(segment.from.lat, segment.from.lng);
                 const to = getPos(segment.to.lat, segment.to.lng);
                 const midX = (from.x + to.x) / 2;
@@ -421,9 +434,9 @@ function MockMapFallback({
                       x2={`${to.x}%`}
                       y2={`${to.y}%`}
                       stroke={segment.color}
-                      strokeWidth="3"
+                      strokeWidth={isHighlighted ? "5" : "3"}
                       strokeDasharray="8 6"
-                      opacity="0.72"
+                      opacity={isHighlighted ? "1" : "0.48"}
                     />
                     <text
                       x={`${midX}%`}
@@ -532,6 +545,21 @@ export default function MapView() {
     [pins, selectedPinId],
   );
   const routeSegments = useMemo(() => buildItineraryRouteSegments(itinerary), [itinerary]);
+  const highlightedItem = useMemo(
+    () => findLinkedItineraryItem(itinerary, selectedPin),
+    [itinerary, selectedPin],
+  );
+  const selectedPinRoutes = useMemo(
+    () =>
+      selectedPin
+        ? routeSegments.filter((segment) => segmentTouchesLinkedItem(segment, highlightedItem))
+        : [],
+    [highlightedItem, routeSegments, selectedPin],
+  );
+  const highlightedRouteIds = useMemo(
+    () => new Set(selectedPinRoutes.map((segment) => segment.id)),
+    [selectedPinRoutes],
+  );
   useEffect(() => {
     let cancelled = false;
     fetch("/api/runtime-config", { cache: "no-store" })
@@ -918,6 +946,7 @@ export default function MapView() {
           clearRouteOverlays();
           resolved.forEach((entry) => {
             const { segment, path, usedDirections, durationSeconds } = entry;
+            const isHighlighted = highlightedRouteIds.has(segment.id);
             const displayMinutes = segmentRouteDisplayMinutes(segment, durationSeconds, usedDirections);
             nextMinutes[segment.id] = displayMinutes;
 
@@ -925,10 +954,10 @@ export default function MapView() {
               map,
               path,
               strokeColor: segment.color,
-              strokeOpacity: usedDirections ? 0.92 : 0.72,
-              strokeWeight: usedDirections ? 5 : 4,
+              strokeOpacity: isHighlighted ? 1 : usedDirections ? 0.82 : 0.58,
+              strokeWeight: isHighlighted ? 7 : usedDirections ? 5 : 4,
               geodesic: !usedDirections,
-              zIndex: 950,
+              zIndex: isHighlighted ? 980 : 950,
             });
             polylinesRef.current.push(polyline);
             path.forEach((p) => routeBounds.extend(p));
@@ -980,7 +1009,23 @@ export default function MapView() {
             polylines: polylinesRef.current.length,
           });
 
-          if (resolved.some((entry) => entry.usedDirections)) {
+          if (selectedPin) {
+            const focusBounds = new mapsApi.LatLngBounds();
+            focusBounds.extend({ lat: selectedPin.lat, lng: selectedPin.lng });
+            resolved.forEach((entry) => {
+              if (!highlightedRouteIds.has(entry.segment.id)) {
+                return;
+              }
+              entry.path.forEach((point) => focusBounds.extend(point));
+            });
+            if (highlightedRouteIds.size > 0) {
+              map.fitBounds(focusBounds, 120);
+            } else {
+              map.panTo({ lat: selectedPin.lat, lng: selectedPin.lng });
+              map.setZoom(Math.max(map.getZoom() || 12, 14));
+            }
+            openInfoForSelectedPin();
+          } else if (resolved.some((entry) => entry.usedDirections)) {
             map.fitBounds(routeBounds, 72);
           }
         })();
@@ -1083,6 +1128,8 @@ export default function MapView() {
     setSelectedPinId,
     tripDestination,
     useAdvancedMarkers,
+    highlightedRouteIds,
+    selectedPin,
   ]);
 
   useEffect(
@@ -1137,15 +1184,7 @@ export default function MapView() {
     }));
   }
 
-  const highlightedItem = findLinkedItineraryItem(itinerary, selectedPin);
   const resolvedSelectedPin = selectedPin ? buildLocationBackfilledPin(selectedPin, highlightedItem) : null;
-  const selectedPinRoutes = selectedPin
-    ? routeSegments.filter(
-        (segment) =>
-          segment.fromItemId === highlightedItem?.id ||
-          segment.toItemId === highlightedItem?.id,
-      )
-    : [];
 
   const showRealMap = useGoogleSdk && sdkState !== "error";
   const mapReady = sdkState === "ready";
@@ -1167,6 +1206,7 @@ export default function MapView() {
           <MockMapFallback
             pins={pins}
             routeSegments={routeSegments}
+            highlightedRouteIds={highlightedRouteIds}
             selectedPinId={selectedPinId}
             setSelectedPinId={setSelectedPinId}
             zoom={mockZoom}
@@ -1384,7 +1424,7 @@ export default function MapView() {
               </p>
               <div className="mt-2 flex flex-col gap-2">
                 {selectedPinRoutes.map((segment) => (
-                  <div key={segment.id} className="text-xs leading-relaxed text-foreground">
+                  <div key={segment.id} data-testid="selected-map-route" className="text-xs leading-relaxed text-foreground">
                     <p className="font-medium">
                       D{segment.dayNumber} {segment.fromTime} {segment.fromName} → {segment.toTime} {segment.toName}
                     </p>

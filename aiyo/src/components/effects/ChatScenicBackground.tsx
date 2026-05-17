@@ -12,12 +12,14 @@ export default function ChatScenicBackground({ preset }: Props) {
 
   return (
     <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden" aria-hidden>
+      {/* 底層色塊：圖載入前占位；有圖片時由下層透出，不把照片整張蓋掉 */}
+      <div className={cn("absolute inset-0", preset.baseClass)} />
       {preset.imageSrc ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={preset.imageSrc}
           alt=""
-          className="h-full w-full scale-105 object-cover"
+          className="absolute inset-0 size-full scale-105 object-cover"
           onError={(event) => {
             if (!fallback) {
               return;
@@ -30,7 +32,6 @@ export default function ChatScenicBackground({ preset }: Props) {
           }}
         />
       ) : null}
-      <div className={cn("absolute inset-0", preset.baseClass)} />
       {preset.overlayClass ? <div className={cn("absolute inset-0", preset.overlayClass)} /> : null}
       {preset.theme === "dark" ? <div className="absolute inset-0 bg-black/15" /> : null}
     </div>

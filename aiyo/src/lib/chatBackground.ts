@@ -40,8 +40,8 @@ export const CHAT_BACKGROUND_PRESETS: ChatBackgroundPreset[] = [
     imageSrc: "/chat-bg-coast.jpg",
     imageFallback:
       "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1920&q=80",
-    baseClass: "bg-sky-100",
-    overlayClass: "bg-gradient-to-b from-white/50 via-white/20 to-sky-100/35",
+    baseClass: "bg-gradient-to-br from-sky-200 via-cyan-100 to-sky-50",
+    overlayClass: "bg-gradient-to-b from-white/55 via-transparent to-sky-900/25",
     previewClass: "bg-gradient-to-br from-sky-100 to-cyan-200",
   },
   {
@@ -50,8 +50,9 @@ export const CHAT_BACKGROUND_PRESETS: ChatBackgroundPreset[] = [
     imageSrc: "/chat-scenic-bg.jpg",
     imageFallback:
       "https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=1920&q=80",
-    baseClass: "bg-emerald-950",
-    overlayClass: "bg-gradient-to-br from-emerald-950/55 via-emerald-900/35 to-slate-950/50",
+    baseClass: "bg-gradient-to-br from-emerald-950 via-slate-900 to-black",
+    overlayClass:
+      "bg-gradient-to-br from-emerald-950/50 via-emerald-900/20 to-slate-950/45",
     previewClass: "bg-gradient-to-br from-emerald-900 to-slate-900",
   },
 ];

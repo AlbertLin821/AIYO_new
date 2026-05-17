@@ -9,17 +9,21 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ sessionId: string }> },
 ) {
   const { sessionId } = await context.params;
   ensureChatProgressSession(sessionId);
 
   const encoder = new TextEncoder();
+  let handleAbort = () => {};
   const stream = new ReadableStream({
     start(controller) {
       let closed = false;
       let unsubscribe = () => {};
+      handleAbort = () => {
+        closeStream();
+      };
       const closeWatcher = setInterval(() => {
         if (isChatProgressDone(sessionId)) {
           closeStream();
@@ -30,9 +34,13 @@ export async function GET(
         if (closed) {
           return;
         }
-        controller.enqueue(
-          encoder.encode(`event: status_step\ndata: ${JSON.stringify(payload)}\n\n`),
-        );
+        try {
+          controller.enqueue(
+            encoder.encode(`event: status_step\ndata: ${JSON.stringify(payload)}\n\n`),
+          );
+        } catch {
+          closeStream();
+        }
       };
 
       const closeStream = () => {
@@ -42,8 +50,15 @@ export async function GET(
         closed = true;
         clearInterval(closeWatcher);
         unsubscribe();
-        controller.close();
+        request.signal.removeEventListener("abort", handleAbort);
+        try {
+          controller.close();
+        } catch {
+          /* stream already closed or cancelled */
+        }
       };
+
+      request.signal.addEventListener("abort", handleAbort);
 
       for (const step of listChatProgressEvents(sessionId)) {
         sendStep(step);
@@ -60,6 +75,9 @@ export async function GET(
           closeStream();
         }
       });
+    },
+    cancel() {
+      handleAbort();
     },
   });
 

@@ -17,29 +17,35 @@ const PHASE_META: Record<
     userDescription: string;
     waitingTitle?: string;
     waitingDescription?: string;
+    failedDescription?: string;
   }
 > = {
   understand: {
     userTitle: "了解你的旅遊需求",
     userDescription: "正在整理目的地、天數與旅行偏好",
+    failedDescription: "需求整理時發生問題，請稍後再試一次。",
   },
   plan: {
     userTitle: "規劃要查哪些資料",
     userDescription: "決定接下來要搜尋的景點、交通與住宿範圍",
+    failedDescription: "查詢範圍規劃時發生問題，系統可能無法完整搜尋外部資料。",
   },
   waiting_user: {
     userTitle: "確認行程條件",
     userDescription: "需要你補充出發地、日期、預算等資訊",
     waitingTitle: "等你補充行程條件",
     waitingDescription: "填寫完成後，系統會開始搜尋景點、交通與天氣",
+    failedDescription: "條件收集流程發生問題，請重新填寫或稍後再試。",
   },
   research: {
     userTitle: "搜尋景點與交通",
     userDescription: "正在查詢景點推薦、移動方式與天氣資訊",
+    failedDescription: "外部資料查詢遇到問題，系統會盡量用目前已取得的資料繼續規劃。",
   },
   compose: {
     userTitle: "整理完整行程",
     userDescription: "把查到的資料排成每日行程草案",
+    failedDescription: "行程整理時發生問題，請稍後再試或調整需求。",
   },
 };
 
@@ -75,6 +81,12 @@ function resolveUserCopy(
     return {
       userTitle: meta.waitingTitle || meta.userTitle,
       userDescription: meta.waitingDescription || meta.userDescription,
+    };
+  }
+  if (status === "failed") {
+    return {
+      userTitle: meta.userTitle,
+      userDescription: meta.failedDescription || serverDetail?.trim() || meta.userDescription,
     };
   }
   return {

@@ -19,4 +19,4 @@ search:
     - en
 
 ui:
-  default_locale: "zh-TW"
+  default_locale: ""

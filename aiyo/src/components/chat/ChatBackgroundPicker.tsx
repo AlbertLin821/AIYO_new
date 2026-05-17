@@ -123,7 +123,7 @@ export default function ChatBackgroundPicker({ value, onChange }: Props) {
             return next;
           });
         }}
-        className="inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-medium transition-colors chat-glass-card text-chat-fg hover:bg-[var(--chat-hover)]"
+        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white/85 px-2.5 py-1.5 text-xs font-medium text-slate-800 shadow-sm transition-colors hover:bg-slate-50"
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-label={t.chat.backgroundSettingsAria}

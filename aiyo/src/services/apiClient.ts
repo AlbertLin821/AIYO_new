@@ -110,6 +110,9 @@ export async function apiPost<TRequest, TResponse>(
       (error instanceof Error && error.name === "AbortError") ||
       (typeof DOMException !== "undefined" && error instanceof DOMException && error.name === "AbortError");
     if (isAbort) {
+      if (outerSignal?.aborted) {
+        throw error;
+      }
       throw new Error(t.api.planTimeout);
     }
     throw new Error(
@@ -161,6 +164,9 @@ export async function apiPostWithMeta<TRequest, TResponse>(
       (error instanceof Error && error.name === "AbortError") ||
       (typeof DOMException !== "undefined" && error instanceof DOMException && error.name === "AbortError");
     if (isAbort) {
+      if (outerSignal?.aborted) {
+        throw error;
+      }
       throw new Error(t.api.planTimeout);
     }
     throw new Error(

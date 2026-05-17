@@ -16,10 +16,11 @@ import {
   MapPin,
   Plus,
   Send,
+  Square,
 } from "lucide-react";
 import ChatBackgroundPicker from "@/components/chat/ChatBackgroundPicker";
 import ChatHistorySidebar from "@/components/chat/ChatHistorySidebar";
-import ChatWorkflowModal from "@/components/chat/ChatWorkflowModal";
+import ChatWorkflowRail from "@/components/chat/ChatWorkflowRail";
 import MarkdownMessage from "@/components/chat/MarkdownMessage";
 import TravelPlanCard from "@/components/chat/TravelPlanCard";
 import VideoCard from "@/components/home/VideoCard";
@@ -61,6 +62,7 @@ import type {
   ChatQuestionAnswer,
   QuestionCardPayload,
   StatusStepPayload,
+  TripPlanDay,
   TripPlanItem,
   TripProfile,
   VideoRecommendation,
@@ -106,6 +108,15 @@ function buildUserMessage(content: string): ChatMessage {
   };
 }
 
+function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof Error && error.name === "AbortError") ||
+    (typeof DOMException !== "undefined" &&
+      error instanceof DOMException &&
+      error.name === "AbortError")
+  );
+}
+
 function buildAssistantLocalMessage(content: string): ChatMessage {
   return {
     id: `chat_assistant_local_${Date.now()}`,
@@ -134,6 +145,53 @@ function shouldRecommendVideos(message: string): boolean {
   return /影片|youtube|YouTube|video|vlog|推薦.*看|找.*看|旅遊.*看|景點.*影片/i.test(message);
 }
 
+function shouldFetchVideoRecommendations(input: {
+  userMessage: string;
+  replyResponseType?: ChatMessage["responseType"];
+  hadItinerarySuggestion: boolean;
+}): boolean {
+  if (shouldRecommendVideos(input.userMessage)) {
+    return true;
+  }
+  if (input.replyResponseType === "travel_plan") {
+    return true;
+  }
+  if (input.hadItinerarySuggestion) {
+    return true;
+  }
+  return false;
+}
+
+function buildChatVideoSearchKeyword(userMessage: string, itinerary: TripPlanDay[]): string {
+  const genericLabel = /午餐|晚餐|早餐|休息|飯店入住|Check-in|交通|移動|自由行|自由活動|回程|出發|前往/i;
+  const hints: string[] = [];
+  const seen = new Set<string>();
+  outer: for (const day of itinerary) {
+    for (const item of day.items) {
+      const name = item.location?.name?.trim();
+      const title = item.title.trim();
+      if (!title && !name) {
+        continue;
+      }
+      const combined =
+        name && title && name !== title ? `${title} ${name}`.trim() : (title || name || "").trim();
+      if (!combined || genericLabel.test(combined)) {
+        continue;
+      }
+      const key = combined.toLowerCase();
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      hints.push(combined);
+      if (hints.length >= 14) {
+        break outer;
+      }
+    }
+  }
+  return [userMessage.trim(), ...hints].filter(Boolean).join(" ").slice(0, 420);
+}
+
 function isItineraryMutationCommand(message: string): boolean {
   return /新增|加入|加上|刪除|移除|修改|調整|改成|換成|改到|提前|延後|移到|重排|重新規劃|幫我(?:安排|規劃|新增|加入|調整|修改|刪除|移除)|請(?:安排|規劃|新增|加入|調整|修改|刪除|移除)/u.test(message);
 }
@@ -143,6 +201,20 @@ type ExistingItemChange = Extract<
   AiProposedChange,
   { type: "update_itinerary_item" | "remove_itinerary_item" }
 >;
+
+type WorkflowRailState = {
+  visible: boolean;
+  steps: StatusStepPayload[];
+  questionCard: QuestionCardPayload | null;
+  tripProfile: TripProfile | null;
+  questionMessageId: string | null;
+};
+
+type ItinerarySyncState = {
+  status: "idle" | "syncing" | "synced" | "failed";
+  title: string;
+  detail: string;
+};
 
 function buildItineraryItemFromAiChange(change: AddItineraryChange): TripPlanItem {
   const title = change.title.trim() || change.locationName?.trim() || "AI 建議行程";
@@ -268,20 +340,21 @@ export default function ChatPage() {
   const [selectedVideo, setSelectedVideo] = useState<VideoRecommendation | null>(null);
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
-  const [historySidebarExpanded, setHistorySidebarExpanded] = useState(true);
+  const [historySidebarExpanded, setHistorySidebarExpanded] = useState(false);
   const [chatBackgroundId, setChatBackgroundId] = useState<ChatBackgroundPresetId>("mist");
   const [tripProfile, setTripProfile] = useState<TripProfile | null>(null);
   const [streamingStatusSteps, setStreamingStatusSteps] = useState<StatusStepPayload[]>([]);
-  const [workflowModal, setWorkflowModal] = useState<{
-    open: boolean;
-    steps: StatusStepPayload[];
-    questionCard: QuestionCardPayload | null;
-    tripProfile: TripProfile | null;
-  }>({
-    open: false,
+  const [workflowRail, setWorkflowRail] = useState<WorkflowRailState>({
+    visible: false,
     steps: [],
     questionCard: null,
     tripProfile: null,
+    questionMessageId: null,
+  });
+  const [itinerarySyncState, setItinerarySyncState] = useState<ItinerarySyncState>({
+    status: "idle",
+    title: "尚未同步",
+    detail: "送出需求後，這裡會顯示右側行程欄的最新同步結果。",
   });
 
   const [tripPickerOpen, setTripPickerOpen] = useState(false);
@@ -294,11 +367,12 @@ export default function ChatPage() {
   const [autoSummaryProgress, setAutoSummaryProgress] = useState<{ current: number; total: number } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const statusStreamRef = useRef<EventSource | null>(null);
+  const chatAbortControllerRef = useRef<AbortController | null>(null);
+  const chatRequestEpochRef = useRef(0);
   const videoSummaryQueueTokenRef = useRef(0);
   const videoSummaryInflightRef = useRef(new Map<string, Promise<VideoSummaryResult>>());
   const autoSummaryActiveRef = useRef(false);
   const hydratedConversationTripRef = useRef<string | null>(null);
-  const workflowModalDismissedRef = useRef(false);
   const {
     conversations,
     activeConversationId,
@@ -323,50 +397,62 @@ export default function ChatPage() {
     if (!isSending || streamingStatusSteps.length === 0) {
       return;
     }
-    setWorkflowModal((prev) => ({
+    setWorkflowRail((prev) => ({
       ...prev,
-      open: true,
+      visible: true,
       steps: streamingStatusSteps,
     }));
   }, [isSending, streamingStatusSteps]);
 
   useEffect(() => {
-    if (isSending || !workflowModal.open || workflowModal.questionCard) {
-      return;
-    }
-    const view = buildWorkflowSteps(workflowModal.steps);
-    if (!view.length) {
-      return;
-    }
-    if (view.some((step) => step.status === "waiting_input" || step.status === "running")) {
-      return;
-    }
-    if (!view.every((step) => step.status === "completed")) {
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setWorkflowModal({ open: false, steps: [], questionCard: null, tripProfile: null });
-    }, 500);
-    return () => window.clearTimeout(timer);
-  }, [isSending, workflowModal.open, workflowModal.questionCard, workflowModal.steps]);
-
-  useEffect(() => {
     const last = messages[messages.length - 1];
-    if (
-      workflowModalDismissedRef.current ||
-      isSending ||
-      last?.role !== "assistant" ||
-      last.responseType !== "question_card" ||
-      !last.questionCard
-    ) {
+    if (isSending) {
       return;
     }
-    setWorkflowModal({
-      open: true,
-      steps: last.statusSteps || [],
-      questionCard: last.questionCard,
-      tripProfile: last.tripProfile ?? tripProfile,
-    });
+    if (!last) {
+      setWorkflowRail({
+        visible: false,
+        steps: [],
+        questionCard: null,
+        tripProfile: tripProfile,
+        questionMessageId: null,
+      });
+      return;
+    }
+    if (last.role !== "assistant") {
+      return;
+    }
+    if (last.responseType === "question_card" && last.questionCard) {
+      setWorkflowRail({
+        visible: true,
+        steps: last.statusSteps || [],
+        questionCard: last.questionCard,
+        tripProfile: last.tripProfile ?? tripProfile,
+        questionMessageId: last.id,
+      });
+      return;
+    }
+    if (last.statusSteps?.length) {
+      setWorkflowRail({
+        visible: true,
+        steps: last.statusSteps,
+        questionCard: null,
+        tripProfile: last.tripProfile ?? tripProfile,
+        questionMessageId: null,
+      });
+      return;
+    }
+    setWorkflowRail((prev) =>
+      prev.visible || prev.steps.length || prev.questionCard
+        ? {
+            visible: false,
+            steps: [],
+            questionCard: null,
+            tripProfile: last.tripProfile ?? tripProfile,
+            questionMessageId: null,
+          }
+        : prev,
+    );
   }, [activeConversationId, messages, isSending, tripProfile]);
 
   const tagConfigs = [
@@ -458,6 +544,12 @@ export default function ChatPage() {
       Boolean(tripProfile?.duration_days) ||
       Boolean(tripProfile?.budget) ||
       tripStore.itinerary.length > 0);
+  const workflowView = buildWorkflowSteps(workflowRail.steps);
+  const hasWorkflowRail =
+    workflowRail.visible ||
+    isSending ||
+    Boolean(workflowRail.questionCard) ||
+    workflowView.length > 0;
 
   const extractedValues = [
     contextDestination || t.chat.valueUnset,
@@ -563,6 +655,41 @@ export default function ChatPage() {
     setAutoSummaryProgress(null);
     setIsLoadingVideos(false);
     setIsSummarizing(false);
+  }
+
+  function beginChatGenerationRequest() {
+    chatRequestEpochRef.current += 1;
+    const requestEpoch = chatRequestEpochRef.current;
+    const previous = chatAbortControllerRef.current;
+    if (previous && !previous.signal.aborted) {
+      previous.abort();
+    }
+    const controller = new AbortController();
+    chatAbortControllerRef.current = controller;
+    return { requestEpoch, signal: controller.signal };
+  }
+
+  function handleStopGeneration() {
+    chatRequestEpochRef.current += 1;
+    const controller = chatAbortControllerRef.current;
+    if (controller && !controller.signal.aborted) {
+      controller.abort();
+    }
+    chatAbortControllerRef.current = null;
+    stopStatusStream();
+    stopAutoVideoSummaryQueue();
+    setStreamingStatusSteps([]);
+    setWorkflowRail((prev) => ({
+      ...prev,
+      visible: prev.questionCard ? prev.visible : false,
+      steps: [],
+    }));
+    setIsSending(false);
+    pushToast({
+      variant: "info",
+      title: t.chat.generationStoppedTitle,
+      description: t.chat.generationStoppedDesc,
+    });
   }
 
   function startAutoVideoSummaryQueue(videos: VideoRecommendation[], destination: string) {
@@ -791,11 +918,12 @@ export default function ChatPage() {
   }
 
   function handleWorkflowQuestionSubmit(answers: ChatQuestionAnswer[], displayMessage: string) {
-    const profile = workflowModal.tripProfile ?? tripProfile;
-    setWorkflowModal((prev) => ({
+    const profile = workflowRail.tripProfile ?? tripProfile;
+    setWorkflowRail((prev) => ({
       ...prev,
       questionCard: null,
-      open: true,
+      questionMessageId: null,
+      visible: true,
     }));
     void handleSend("", {
       displayMessage,
@@ -842,12 +970,20 @@ export default function ChatPage() {
     setInput("");
     setErrorMessage(null);
     setIsSending(true);
+    setWorkflowRail((prev) => ({
+      ...prev,
+      visible: true,
+      steps: prev.questionCard ? prev.steps : [],
+      questionCard: null,
+      questionMessageId: null,
+    }));
     const chatProcessId = startFrontendDebugProcess("chat-ui", "聊天送出流程", {
       messagePreview: (message || options?.displayMessage || "").slice(0, 80),
       hasQuestionAnswers,
       hasTripProfile: Boolean(options?.tripProfile ?? tripProfile),
     });
     const { sessionId: progressSessionId, processId: sseProcessId } = startStatusStream();
+    const { requestEpoch, signal } = beginChatGenerationRequest();
 
     try {
       const activeProfile =
@@ -877,28 +1013,36 @@ export default function ChatPage() {
         updateFrontendDebugProcess(chatProcessId, "trip-revision-reroute", {
           progressSessionId,
         });
-        const response = await reviseTripPlan({
-          instruction: message,
-          tripProfile: revisionProfile,
-          context: {
-            destination: revisionProfile.destination || planningSnapshot.destination,
-            days: revisionProfile.duration_days || planningSnapshot.days,
-            budget: planningSnapshot.budget,
-            itinerary: useTripStore.getState().itinerary,
-            tripStartDate: revisionProfile.travel_dates?.start || undefined,
-            tripEndDate: revisionProfile.travel_dates?.end || revisionProfile.travel_dates?.start || undefined,
-            preferences: {
-              interests: revisionProfile.preferences,
-              pace:
-                revisionProfile.pace === "relaxed" || revisionProfile.pace === "intensive"
-                  ? revisionProfile.pace
-                  : useUserStore.getState().travelPace || "moderate",
-              transportPreference: revisionProfile.transportation || useUserStore.getState().preferredTransport,
+        const response = await reviseTripPlan(
+          {
+            instruction: message,
+            tripProfile: revisionProfile,
+            context: {
+              destination: revisionProfile.destination || planningSnapshot.destination,
+              days: revisionProfile.duration_days || planningSnapshot.days,
               budget: planningSnapshot.budget,
+              itinerary: useTripStore.getState().itinerary,
+              tripStartDate: revisionProfile.travel_dates?.start || undefined,
+              tripEndDate:
+                revisionProfile.travel_dates?.end || revisionProfile.travel_dates?.start || undefined,
+              preferences: {
+                interests: revisionProfile.preferences,
+                pace:
+                  revisionProfile.pace === "relaxed" || revisionProfile.pace === "intensive"
+                    ? revisionProfile.pace
+                    : useUserStore.getState().travelPace || "moderate",
+                transportPreference:
+                  revisionProfile.transportation || useUserStore.getState().preferredTransport,
+                budget: planningSnapshot.budget,
+              },
             },
+            progressSessionId,
           },
-          progressSessionId,
-        });
+          { signal },
+        );
+        if (requestEpoch !== chatRequestEpochRef.current) {
+          return;
+        }
         appendMessage(response.reply);
         if (response.tripProfile) {
           setTripProfile(response.tripProfile);
@@ -935,46 +1079,53 @@ export default function ChatPage() {
       updateFrontendDebugProcess(chatProcessId, "request-dispatched", {
         progressSessionId,
       });
-      const response = await sendChatMessage({
-        message,
-        messages: previousMessages.slice(-10),
-        context: {
-          destination: planningSnapshot.destination,
-          days: planningSnapshot.days,
-          budget: planningSnapshot.budget,
-          itinerary: useTripStore.getState().itinerary,
-          tripStartDate: dateRange.tripStartDate,
-          tripEndDate: dateRange.tripEndDate,
-          preferences: {
-            interests: useUserStore.getState().interests,
-            pace: useUserStore.getState().travelPace || "moderate",
-            transportPreference: useUserStore.getState().preferredTransport,
+      const response = await sendChatMessage(
+        {
+          message,
+          messages: previousMessages.slice(-10),
+          context: {
+            destination: planningSnapshot.destination,
+            days: planningSnapshot.days,
             budget: planningSnapshot.budget,
+            itinerary: useTripStore.getState().itinerary,
+            tripStartDate: dateRange.tripStartDate,
+            tripEndDate: dateRange.tripEndDate,
+            preferences: {
+              interests: useUserStore.getState().interests,
+              pace: useUserStore.getState().travelPace || "moderate",
+              transportPreference: useUserStore.getState().preferredTransport,
+              budget: planningSnapshot.budget,
+            },
           },
+          structuredTravelPlanning: true,
+          tripProfile: options?.tripProfile ?? tripProfile ?? undefined,
+          questionAnswers: options?.questionAnswers,
+          progressSessionId,
         },
-        structuredTravelPlanning: true,
-        tripProfile: options?.tripProfile ?? tripProfile ?? undefined,
-        questionAnswers: options?.questionAnswers,
-        progressSessionId,
-      });
+        { signal },
+      );
+      if (requestEpoch !== chatRequestEpochRef.current) {
+        return;
+      }
       appendMessage(response.reply);
       if (response.tripProfile) {
         setTripProfile(response.tripProfile);
       }
       if (response.reply.responseType === "question_card" && response.reply.questionCard) {
-        workflowModalDismissedRef.current = false;
-        setWorkflowModal({
-          open: true,
+        setWorkflowRail({
+          visible: true,
           steps: response.reply.statusSteps?.length ? response.reply.statusSteps : streamingStatusSteps,
           questionCard: response.reply.questionCard,
           tripProfile: response.tripProfile ?? options?.tripProfile ?? tripProfile ?? null,
+          questionMessageId: response.reply.id,
         });
       } else if (response.reply.statusSteps?.length) {
-        setWorkflowModal((prev) => ({
-          open: true,
+        setWorkflowRail((prev) => ({
+          visible: true,
           steps: response.reply.statusSteps || prev.steps,
           questionCard: null,
           tripProfile: response.tripProfile ?? prev.tripProfile,
+          questionMessageId: null,
         }));
       }
       const shouldPersistPlanningResult =
@@ -992,7 +1143,12 @@ export default function ChatPage() {
         response.tripProfile?.plan_integration !== "self_merge";
       const shouldApplyItineraryUpdate =
         Boolean(useTripStore.getState().tripId) &&
-        (isItineraryMutationCommand(message) || shouldDirectMergeGeneratedPlan);
+        Boolean(
+          response.itinerarySuggestion ||
+            (response.proposedChanges?.length && response.reply.responseType !== "question_card") ||
+            isItineraryMutationCommand(message) ||
+            shouldDirectMergeGeneratedPlan,
+        );
       if (shouldApplyItineraryUpdate) {
         if (response.itinerarySuggestion) {
           await applyGeneratedTripPlan(response);
@@ -1014,7 +1170,11 @@ export default function ChatPage() {
         replyId: response.reply.id,
       });
 
-      if (shouldRecommendVideos(message)) {
+      if (shouldFetchVideoRecommendations({
+        userMessage: message,
+        replyResponseType: response.reply.responseType,
+        hadItinerarySuggestion: Boolean(response.itinerarySuggestion),
+      })) {
         const videoSummaryQueueToken = videoSummaryQueueTokenRef.current + 1;
         videoSummaryQueueTokenRef.current = videoSummaryQueueToken;
         autoSummaryActiveRef.current = false;
@@ -1027,9 +1187,13 @@ export default function ChatPage() {
           updateFrontendDebugProcess(chatProcessId, "video-recommendation-start", {
             destination: planningSnapshot.destination,
           });
+          const videoKeyword = buildChatVideoSearchKeyword(
+            message,
+            useTripStore.getState().itinerary,
+          );
           const outcome = await fetchVideoRecommendations({
             destination: planningSnapshot.destination,
-            keyword: message,
+            keyword: videoKeyword,
             days: planningSnapshot.days,
             preferences: useUserStore.getState().interests,
             limit: 6,
@@ -1083,6 +1247,9 @@ export default function ChatPage() {
         finalReplyType: response.reply.responseType,
       });
     } catch (error) {
+      if (isAbortError(error) || signal.aborted) {
+        return;
+      }
       failFrontendDebugProcess(chatProcessId, error, {
         progressSessionId,
       });
@@ -1101,8 +1268,13 @@ export default function ChatPage() {
         progressSessionId,
         reason: "handleSend-finally",
       });
-      stopStatusStream();
-      setIsSending(false);
+      if (requestEpoch === chatRequestEpochRef.current) {
+        if (chatAbortControllerRef.current?.signal === signal) {
+          chatAbortControllerRef.current = null;
+        }
+        stopStatusStream();
+        setIsSending(false);
+      }
     }
   }
 
@@ -1137,33 +1309,42 @@ export default function ChatPage() {
       destination: activeProfile.destination,
     });
     const { sessionId: progressSessionId, processId: sseProcessId } = startStatusStream();
+    const { requestEpoch, signal } = beginChatGenerationRequest();
 
     try {
       updateFrontendDebugProcess(reviseProcessId, "request-dispatched", {
         progressSessionId,
       });
-      const response = await reviseTripPlan({
-        instruction,
-        tripProfile: revisionProfile,
-        context: {
-          destination: revisionProfile.destination || planningSnapshot.destination,
-          days: revisionProfile.duration_days || planningSnapshot.days,
-          budget: planningSnapshot.budget,
-          itinerary: useTripStore.getState().itinerary,
-          tripStartDate: revisionProfile.travel_dates?.start || undefined,
-          tripEndDate: revisionProfile.travel_dates?.end || revisionProfile.travel_dates?.start || undefined,
-          preferences: {
-            interests: revisionProfile.preferences,
-            pace:
-              revisionProfile.pace === "relaxed" || revisionProfile.pace === "intensive"
-                ? revisionProfile.pace
-                : useUserStore.getState().travelPace || "moderate",
-            transportPreference: revisionProfile.transportation || useUserStore.getState().preferredTransport,
+      const response = await reviseTripPlan(
+        {
+          instruction,
+          tripProfile: revisionProfile,
+          context: {
+            destination: revisionProfile.destination || planningSnapshot.destination,
+            days: revisionProfile.duration_days || planningSnapshot.days,
             budget: planningSnapshot.budget,
+            itinerary: useTripStore.getState().itinerary,
+            tripStartDate: revisionProfile.travel_dates?.start || undefined,
+            tripEndDate:
+              revisionProfile.travel_dates?.end || revisionProfile.travel_dates?.start || undefined,
+            preferences: {
+              interests: revisionProfile.preferences,
+              pace:
+                revisionProfile.pace === "relaxed" || revisionProfile.pace === "intensive"
+                  ? revisionProfile.pace
+                  : useUserStore.getState().travelPace || "moderate",
+              transportPreference:
+                revisionProfile.transportation || useUserStore.getState().preferredTransport,
+              budget: planningSnapshot.budget,
+            },
           },
+          progressSessionId,
         },
-        progressSessionId,
-      });
+        { signal },
+      );
+      if (requestEpoch !== chatRequestEpochRef.current) {
+        return;
+      }
       appendMessage(response.reply);
       if (response.tripProfile) {
         setTripProfile(response.tripProfile);
@@ -1184,6 +1365,9 @@ export default function ChatPage() {
         replyType: response.reply.responseType,
       });
     } catch (error) {
+      if (isAbortError(error) || signal.aborted) {
+        return;
+      }
       failFrontendDebugProcess(reviseProcessId, error, {
         progressSessionId,
       });
@@ -1200,8 +1384,13 @@ export default function ChatPage() {
         progressSessionId,
         reason: "handleRevisePlan-finally",
       });
-      stopStatusStream();
-      setIsSending(false);
+      if (requestEpoch === chatRequestEpochRef.current) {
+        if (chatAbortControllerRef.current?.signal === signal) {
+          chatAbortControllerRef.current = null;
+        }
+        stopStatusStream();
+        setIsSending(false);
+      }
     }
   }
 
@@ -1212,6 +1401,11 @@ export default function ChatPage() {
     if (!changes.length) {
       return;
     }
+    setItinerarySyncState({
+      status: "syncing",
+      title: "正在同步行程",
+      detail: `正在把 ${changes.length} 筆 AI 建議寫入右側行程欄。`,
+    });
     let appliedCount = 0;
     const trip = useTripStore.getState();
     if (trip.itinerary.length === 0) {
@@ -1275,19 +1469,46 @@ export default function ChatPage() {
       }
     }
 
+    const unappliedCount = Math.max(changes.length - appliedCount, 0);
+
     if (appliedCount > 0) {
-      await syncService.flushTripSyncNow({ force: true });
+      try {
+        await syncService.flushTripSyncNow({ force: true });
+        setItinerarySyncState({
+          status: "synced",
+          title: "已同步到目前行程",
+          detail:
+            unappliedCount > 0
+              ? `已更新 ${appliedCount} 筆，另有 ${unappliedCount} 筆找不到對應項目。`
+              : `已更新 ${appliedCount} 筆行程內容。`,
+        });
+      } catch (error) {
+        setItinerarySyncState({
+          status: "failed",
+          title: "同步失敗",
+          detail: error instanceof Error ? error.message : "無法把 AI 建議同步到目前行程。",
+        });
+        throw error;
+      }
       if (!options.silent) {
         pushToast({
           variant: "success",
           title: "已套用 AI 建議",
-          description: `已更新 ${appliedCount} 筆行程內容。`,
+          description:
+            unappliedCount > 0
+              ? `已更新 ${appliedCount} 筆，另有 ${unappliedCount} 筆未找到對應項目。`
+              : `已更新 ${appliedCount} 筆行程內容。`,
         });
       }
-      if (options.navigate ?? true) {
+      if (options.navigate ?? false) {
         router.push("/itinerary");
       }
     } else if (!options.silent) {
+      setItinerarySyncState({
+        status: "failed",
+        title: "沒有可同步的變更",
+        detail: "AI 有提供修改方向，但目前行程中找不到可直接更新的對應項目。",
+      });
       pushToast({
         variant: "warning",
         title: "找不到可套用的行程項目",
@@ -1303,6 +1524,11 @@ export default function ChatPage() {
     if (!response.itinerarySuggestion) {
       return false;
     }
+    setItinerarySyncState({
+      status: "syncing",
+      title: "正在同步行程",
+      detail: "AI 正在把新的每日行程寫入右側行程欄。",
+    });
     const currentTrip = useTripStore.getState();
     currentTrip.replaceTripPlan(response.itinerarySuggestion, {
       destination: currentTrip.destination || response.tripProfile?.destination || planningSnapshot.destination,
@@ -1314,6 +1540,11 @@ export default function ChatPage() {
       title: currentTrip.title || response.tripProfile?.destination || currentTrip.destination,
     });
     await syncService.flushTripSyncNow({ force: true });
+    setItinerarySyncState({
+      status: "synced",
+      title: "已同步到目前行程",
+      detail: `已更新 ${response.itinerarySuggestion.days.length} 天行程內容。`,
+    });
     if (!options.silent) {
       pushToast({
         variant: "success",
@@ -1637,16 +1868,16 @@ export default function ChatPage() {
       />
 
       <div className="relative z-10 flex min-h-0 flex-1 flex-col">
-        <div className="relative z-20 overflow-visible border-b border-chat px-6 py-4 chat-glass-panel">
+        <div className="relative z-20 overflow-visible border-b border-slate-200 bg-white/92 px-6 py-4 backdrop-blur">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
-              <h1 className="font-semibold text-chat-fg">{t.chat.pageTitle}</h1>
+              <h1 className="font-semibold text-slate-900">{t.chat.pageTitle}</h1>
               <ChatBackgroundPicker value={chatBackgroundId} onChange={handleChatBackgroundChange} />
             </div>
             <button
               type="button"
               onClick={() => void openNewConversationPicker()}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-chat px-3 py-2 text-xs font-medium text-chat-fg chat-glass-card transition-colors hover:bg-[var(--chat-hover)] md:hidden"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-900 transition-colors hover:bg-slate-50 md:hidden"
             >
               <Plus className="size-3.5" aria-hidden />
               {t.chat.newConversation}
@@ -1654,7 +1885,7 @@ export default function ChatPage() {
           </div>
         </div>
         {conversations.length > 0 && (
-          <div className="relative z-10 flex gap-2 overflow-x-auto border-b border-chat px-4 py-3 chat-glass-panel md:hidden">
+          <div className="relative z-10 flex gap-2 overflow-x-auto border-b border-slate-200 bg-white/88 px-4 py-3 backdrop-blur md:hidden">
             {conversations.map((conversation) => (
               <button
                 type="button"
@@ -1662,8 +1893,8 @@ export default function ChatPage() {
                 onClick={() => void selectConversationForChat(conversation.id)}
                 className={`shrink-0 rounded-full border px-3 py-1.5 text-xs ${
                   conversation.id === activeConversationId
-                    ? "border-primary/30 bg-[var(--chat-chip-active-bg)] text-chat-fg"
-                    : "border-chat bg-[var(--chat-chip-idle-bg)] text-chat-muted"
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 bg-white text-slate-600"
                 }`}
               >
                 {conversation.title}
@@ -1672,11 +1903,21 @@ export default function ChatPage() {
           </div>
         )}
 
-        <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 py-6">
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto bg-[rgba(255,255,255,0.42)] px-6 py-6">
+          {hasWorkflowRail ? (
+            <ChatWorkflowRail
+              visible={hasWorkflowRail}
+              steps={workflowRail.steps}
+              questionCard={workflowRail.questionCard}
+              disabled={isSending}
+              onSubmitQuestion={handleWorkflowQuestionSubmit}
+            />
+          ) : null}
+
           {messages.length === 0 && !isSending && !errorMessage && (
-            <div className="rounded-2xl border border-dashed border-chat-dashed px-4 py-8 text-center text-sm text-chat-muted chat-glass-card">
-              <p className="font-medium text-chat-fg">{t.chat.emptyTitle}</p>
-              <p className="mt-2 text-xs text-chat-muted">{emptyChatHint}</p>
+            <div className="rounded-3xl border border-dashed border-slate-300 bg-white px-4 py-10 text-center text-sm text-slate-500">
+              <p className="font-medium text-slate-900">{t.chat.emptyTitle}</p>
+              <p className="mt-2 text-xs text-slate-500">{emptyChatHint}</p>
             </div>
           )}
 
@@ -1701,8 +1942,8 @@ export default function ChatPage() {
                 <div
                   className={`flex size-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${
                     message.role === "user"
-                      ? "bg-gradient-to-br from-secondary to-primary"
-                      : "bg-gradient-to-br from-lavender to-primary"
+                      ? "bg-slate-900"
+                      : "bg-slate-700"
                   }`}
                 >
                   {message.role === "user" ? t.chat.userShort : t.chat.aiShort}
@@ -1712,18 +1953,23 @@ export default function ChatPage() {
                   <div
                     className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                       message.role === "user"
-                        ? "rounded-br-md bg-primary text-white"
+                        ? "rounded-br-md bg-slate-900 text-white"
                         : message.responseType === "travel_plan"
                           ? "rounded-bl-md bg-transparent p-0 text-foreground"
-                          : "rounded-bl-md chat-glass-card-strong text-chat-soft shadow-none"
+                          : "rounded-bl-md border border-slate-200 bg-white text-slate-800 shadow-none"
                     }`}
                   >
                     {message.responseType === "question_card" && message.questionCard ? (
-                      <MarkdownMessage
-                        content={message.content?.trim() || t.chat.workflowModalHint}
-                      />
-                    ) : message.responseType === "travel_plan" && message.travelPlan ? (
                       <div className="space-y-3">
+                        <MarkdownMessage
+                          content={message.content?.trim() || "請先補充這些條件，我會接著完成規劃。"}
+                        />
+                        {message.id === workflowRail.questionMessageId && workflowRail.questionCard ? (
+                          <p className="text-xs font-medium text-slate-500">上方進度列已開啟，請直接在那裡補充需求。</p>
+                        ) : null}
+                      </div>
+                    ) : message.responseType === "travel_plan" && message.travelPlan ? (
+                      <div className="max-w-full rounded-[28px] border border-slate-200/80 bg-white/95 p-4 shadow-md ring-1 ring-black/5 sm:p-5">
                         <TravelPlanCard
                           plan={message.travelPlan}
                           revisionDisabled={isSending}
@@ -1769,10 +2015,10 @@ export default function ChatPage() {
                     <button
                       type="button"
                       data-testid="chat-apply-proposed-changes"
-                      onClick={() => void applyAiProposedChanges(message.proposedChanges || [])}
-                      className="mt-2 rounded-xl bg-primary px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-primary-dark"
+                      onClick={() => void applyAiProposedChanges(message.proposedChanges || [], { navigate: false })}
+                      className="mt-2 rounded-2xl border border-slate-900 bg-slate-900 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-slate-800"
                     >
-                      套用建議到行程
+                      立即同步到右側行程
                     </button>
                   )}
                 </div>
@@ -1780,13 +2026,13 @@ export default function ChatPage() {
             </motion.div>
           ))}
 
-          {isSending && !workflowModal.open ? (
+          {isSending && !hasWorkflowRail ? (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2">
-              <div className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-lavender to-primary text-xs text-white">
+              <div className="flex size-8 items-center justify-center rounded-full bg-slate-700 text-xs text-white">
                 {t.chat.aiShort}
               </div>
-              <div className="flex items-center gap-2 rounded-2xl rounded-bl-md px-4 py-3 chat-glass-card-strong text-sm text-chat-muted">
-                <Loader2 className="size-4 animate-spin text-primary" aria-hidden />
+              <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
+                <Loader2 className="size-4 animate-spin text-slate-700" aria-hidden />
                 {t.chat.workflowProcessing}
               </div>
             </motion.div>
@@ -1799,7 +2045,7 @@ export default function ChatPage() {
           )}
 
           {(isLoadingVideos || videoError || recommendedVideos.length > 0) && (
-            <section className="rounded-2xl px-4 py-4 chat-glass-card-strong text-chat-soft">
+            <section className="rounded-3xl border border-slate-200/80 px-4 py-4 chat-glass-card-strong text-chat-soft shadow-sm">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-semibold text-chat-fg">AI 推薦影片</h2>
@@ -1833,8 +2079,8 @@ export default function ChatPage() {
           <div ref={messagesEndRef} aria-hidden className="h-px shrink-0" />
         </div>
 
-        <div className="relative z-10 px-6 pb-6 pt-3">
-          <div className="flex items-center gap-3 rounded-2xl px-4 py-2 chat-glass-card-strong">
+        <div className="relative z-10 border-t border-slate-200 bg-white/88 px-6 pb-6 pt-4 backdrop-blur">
+          <div className="flex items-center gap-3 rounded-3xl border border-slate-200 bg-white px-4 py-2 shadow-[0_12px_32px_rgba(15,23,42,0.06)]">
             <input
               type="text"
               value={input}
@@ -1842,64 +2088,104 @@ export default function ChatPage() {
               onKeyDown={(event) => event.key === "Enter" && void handleSend()}
               placeholder={t.chat.placeholder}
               data-testid="chat-input"
-              className="min-w-0 flex-1 bg-transparent py-2 text-sm text-chat-fg placeholder-chat focus:outline-none"
+              className="min-w-0 flex-1 bg-transparent py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
             />
 
-            <button
-              type="button"
-              onClick={() => void handleSend()}
-              disabled={!input.trim() || isSending}
-              data-testid="chat-send-button"
-              className="flex size-10 cursor-pointer items-center justify-center rounded-xl bg-primary text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-30"
-              aria-label={t.floatingChat.sendAria}
-            >
-              <Send className="size-4" aria-hidden />
-            </button>
+            {isSending ? (
+              <button
+                type="button"
+                onClick={handleStopGeneration}
+                data-testid="chat-stop-button"
+                className="flex size-10 cursor-pointer items-center justify-center rounded-2xl bg-slate-900 text-white transition-colors hover:bg-slate-800"
+                aria-label={t.chat.stopGenerationAria}
+              >
+                <Square className="size-4 fill-current" aria-hidden />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handleSend()}
+                disabled={!input.trim()}
+                data-testid="chat-send-button"
+                className="flex size-10 cursor-pointer items-center justify-center rounded-2xl bg-slate-900 text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-30"
+                aria-label={t.floatingChat.sendAria}
+              >
+                <Send className="size-4" aria-hidden />
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-        <div
-          className="relative z-10 hidden shrink-0 overflow-y-auto border-l border-chat p-5 chat-glass-panel lg:block"
-          style={{ width: contextPanelWidth }}
-        >
+      <div
+        className="relative z-10 hidden shrink-0 overflow-y-auto border-l border-slate-200 bg-white/90 p-5 backdrop-blur lg:block"
+        style={{ width: contextPanelWidth }}
+      >
         <div
           role="separator"
           aria-orientation="vertical"
           aria-label="調整目前行程脈絡寬度"
           title="拖曳調整寬度"
           onPointerDown={startContextPanelResize}
-          className="absolute left-0 top-0 z-20 h-full w-2 -translate-x-1 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-primary/20"
+          className="absolute left-0 top-0 z-20 h-full w-2 -translate-x-1 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-slate-300/60"
         />
-        <h3 className="mb-4 text-sm font-semibold text-chat-fg">{t.chat.contextTitle}</h3>
+        <h3 className="mb-4 text-sm font-semibold text-slate-900">即時行程</h3>
 
         {hasContextPanel ? (
           <div className="flex flex-col gap-4">
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">同步狀態</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{itinerarySyncState.title}</p>
+                </div>
+                <span
+                  className={cn(
+                    "rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                    itinerarySyncState.status === "synced"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : itinerarySyncState.status === "syncing"
+                        ? "bg-amber-100 text-amber-700"
+                        : itinerarySyncState.status === "failed"
+                          ? "bg-rose-100 text-rose-700"
+                          : "bg-slate-200 text-slate-600",
+                  )}
+                >
+                  {itinerarySyncState.status === "synced"
+                    ? "已同步"
+                    : itinerarySyncState.status === "syncing"
+                      ? "同步中"
+                      : itinerarySyncState.status === "failed"
+                        ? "需確認"
+                        : "待命"}
+                </span>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-slate-600">{itinerarySyncState.detail}</p>
+            </div>
+
             {tagConfigs.map((tag, index) => {
               const Icon = tag.icon;
               return (
-                <button
-                  type="button"
+                <div
                   key={tag.label}
-                  onClick={() => router.push("/profile")}
-                  className="flex w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left chat-glass-card transition-colors hover:bg-[var(--chat-hover)] focus:outline-none focus:ring-2 focus:ring-primary/25"
+                  className="flex w-full min-w-0 items-center gap-3 rounded-3xl border border-slate-200 bg-white px-3 py-3 text-left"
                 >
-                  <Icon className="size-4 flex-shrink-0 text-emerald-200" aria-hidden />
+                  <Icon className="size-4 flex-shrink-0 text-slate-500" aria-hidden />
                   <div className="min-w-0">
-                    <p className="text-[11px] text-chat-subtle">{tag.label}</p>
-                    <p className="truncate text-sm font-medium text-chat-fg">{extractedValues[index]}</p>
+                    <p className="text-[11px] text-slate-500">{tag.label}</p>
+                    <p className="truncate text-sm font-medium text-slate-900">{extractedValues[index]}</p>
                   </div>
-                </button>
+                </div>
               );
             })}
 
-            <div className="rounded-2xl p-3 chat-glass-card">
+            <div className="rounded-3xl border border-slate-200 bg-white p-3">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
-                  <Heart className="size-4 shrink-0 text-emerald-200" aria-hidden />
+                  <Heart className="size-4 shrink-0 text-slate-500" aria-hidden />
                   <div className="min-w-0">
-                    <p className="text-[11px] text-chat-subtle">{t.chat.tagItinerary}</p>
-                    <p className="truncate text-sm font-semibold text-chat-fg">
+                    <p className="text-[11px] text-slate-500">{t.chat.tagItinerary}</p>
+                    <p className="truncate text-sm font-semibold text-slate-900">
                       {tripStore.itinerary.length > 0
                         ? `${tripStore.itinerary.length} 天行程`
                         : t.chat.valueUnset}
@@ -1909,7 +2195,7 @@ export default function ChatPage() {
                 <button
                   type="button"
                   onClick={() => router.push("/itinerary")}
-                  className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10"
+                  className="shrink-0 rounded-xl border border-slate-200 px-2.5 py-1.5 text-[11px] font-medium text-slate-700 transition-colors hover:bg-slate-50"
                 >
                   編輯
                 </button>
@@ -1923,23 +2209,23 @@ export default function ChatPage() {
                     return (
                       <div
                         key={day.dayNumber}
-                        className="overflow-hidden rounded-xl chat-glass-card"
+                        className="overflow-hidden rounded-2xl border border-slate-200"
                       >
                         <button
                           type="button"
                           aria-expanded={expanded}
                           onClick={() => toggleContextDay(day.dayNumber)}
-                          className="flex w-full items-center justify-between gap-2 bg-[var(--chat-chip-idle-bg)] px-3 py-2.5 text-left transition-colors hover:bg-[var(--chat-hover)]"
+                          className="flex w-full items-center justify-between gap-2 bg-slate-50 px-3 py-2.5 text-left transition-colors hover:bg-slate-100"
                         >
                           <div className="flex min-w-0 items-center gap-3">
-                            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-white">
+                            <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-xs font-bold text-white">
                               D{displayOrdinal}
                             </span>
                             <span className="min-w-0">
-                              <span className="block truncate text-sm font-semibold text-chat-fg">
+                              <span className="block truncate text-sm font-semibold text-slate-900">
                                 第 {displayOrdinal} 天
                               </span>
-                              <span className="block truncate text-[11px] text-chat-subtle">
+                              <span className="block truncate text-[11px] text-slate-500">
                                 {day.theme && !/^Day\s*\d+$/i.test(day.theme.trim())
                                   ? day.theme
                                   : `${day.items.length} 個活動`}
@@ -1948,7 +2234,7 @@ export default function ChatPage() {
                           </div>
                           <ChevronDown
                             className={cn(
-                              "size-4 shrink-0 text-chat-subtle transition-transform",
+                              "size-4 shrink-0 text-slate-500 transition-transform",
                               expanded ? "rotate-180" : "",
                             )}
                             aria-hidden
@@ -1956,19 +2242,19 @@ export default function ChatPage() {
                         </button>
 
                         {expanded && (
-                          <div className="space-y-2 border-t border-chat p-3">
+                          <div className="space-y-2 border-t border-slate-200 p-3">
                             {day.items.length > 0 ? (
                               day.items.map((item) => (
                                 <div
                                   key={item.id}
-                                  className="rounded-xl px-3 py-2 chat-glass-card"
+                                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2"
                                 >
                                   <div className="grid grid-cols-[3.5rem_minmax(0,1fr)] items-start gap-2">
-                                    <span className="mt-0.5 inline-flex w-14 shrink-0 justify-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                                    <span className="mt-0.5 inline-flex w-14 shrink-0 justify-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
                                       {item.time}
                                     </span>
                                     <div className="min-w-0 flex-1">
-                                      <p className="truncate text-xs font-semibold text-chat-fg">
+                                      <p className="truncate text-xs font-semibold text-slate-900">
                                         {item.title}
                                       </p>
                                     </div>
@@ -1976,7 +2262,7 @@ export default function ChatPage() {
                                 </div>
                               ))
                             ) : (
-                              <div className="rounded-xl border border-dashed border-chat-dashed px-3 py-4 text-center text-xs text-chat-subtle">
+                              <div className="rounded-2xl border border-dashed border-slate-300 px-3 py-4 text-center text-xs text-slate-500">
                                 尚未安排活動
                               </div>
                             )}
@@ -1987,33 +2273,19 @@ export default function ChatPage() {
                   })}
                 </div>
               ) : (
-                <div className="rounded-xl border border-dashed border-chat-dashed px-3 py-4 text-center text-xs text-chat-subtle">
+                <div className="rounded-2xl border border-dashed border-slate-300 px-3 py-4 text-center text-xs text-slate-500">
                   尚未建立每日行程
                 </div>
               )}
             </div>
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-chat-dashed px-4 py-6 text-center chat-glass-card">
-            <p className="text-sm font-medium text-chat-fg">{t.chat.contextEmptyTitle}</p>
-            <p className="mt-2 text-xs leading-relaxed text-chat-muted">{t.chat.contextEmptyBody}</p>
+          <div className="rounded-3xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center">
+            <p className="text-sm font-medium text-slate-900">{t.chat.contextEmptyTitle}</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-500">{t.chat.contextEmptyBody}</p>
           </div>
         )}
       </div>
-
-      <ChatWorkflowModal
-        open={workflowModal.open}
-        steps={workflowModal.steps}
-        questionCard={workflowModal.questionCard}
-        disabled={isSending}
-        onClose={() => {
-          workflowModalDismissedRef.current = true;
-          setWorkflowModal({ open: false, steps: [], questionCard: null, tripProfile: null });
-        }}
-        onSubmitQuestion={(answers, displayMessage) =>
-          handleWorkflowQuestionSubmit(answers, displayMessage)
-        }
-      />
 
       <VideoSummaryDrawer
         video={selectedVideo}

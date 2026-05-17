@@ -22,22 +22,27 @@ import type {
  */
 export const VOICE_PLAN_CLIENT_TIMEOUT_MS = 300_000;
 
-export async function sendChatMessage(input: {
-  message: string;
-  messages?: ChatMessage[];
-  context?: ChatContext;
-  structuredTravelPlanning?: boolean;
-  tripProfile?: TripProfile;
-  questionAnswers?: ChatQuestionAnswer[];
-  progressSessionId?: string;
-}) {
+export async function sendChatMessage(
+  input: {
+    message: string;
+    messages?: ChatMessage[];
+    context?: ChatContext;
+    structuredTravelPlanning?: boolean;
+    tripProfile?: TripProfile;
+    questionAnswers?: ChatQuestionAnswer[];
+    progressSessionId?: string;
+  },
+  options?: { signal?: AbortSignal },
+) {
   const processId = startFrontendDebugProcess("chat-message", "送出聊天訊息", {
     progressSessionId: input.progressSessionId,
     structuredTravelPlanning: Boolean(input.structuredTravelPlanning),
     messagePreview: input.message.slice(0, 80),
   });
   try {
-    const response = await apiPost<typeof input, ChatResponsePayload>("/api/ai/chat", input);
+    const response = await apiPost<typeof input, ChatResponsePayload>("/api/ai/chat", input, {
+      signal: options?.signal,
+    });
     finishFrontendDebugProcess(processId, {
       replyType: response.reply.responseType || "unknown",
       replyId: response.reply.id,
@@ -51,19 +56,24 @@ export async function sendChatMessage(input: {
   }
 }
 
-export async function reviseTripPlan(input: {
-  instruction: string;
-  tripProfile: TripProfile;
-  context?: ChatContext;
-  progressSessionId?: string;
-}) {
+export async function reviseTripPlan(
+  input: {
+    instruction: string;
+    tripProfile: TripProfile;
+    context?: ChatContext;
+    progressSessionId?: string;
+  },
+  options?: { signal?: AbortSignal },
+) {
   const processId = startFrontendDebugProcess("trip-revise", "修改既有行程", {
     progressSessionId: input.progressSessionId,
     instruction: input.instruction,
     destination: input.tripProfile.destination,
   });
   try {
-    const response = await apiPost<typeof input, ChatResponsePayload>("/api/trip/revise", input);
+    const response = await apiPost<typeof input, ChatResponsePayload>("/api/trip/revise", input, {
+      signal: options?.signal,
+    });
     finishFrontendDebugProcess(processId, {
       replyType: response.reply.responseType || "unknown",
       replyId: response.reply.id,

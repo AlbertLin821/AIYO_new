@@ -133,6 +133,9 @@ export function buildChatPrompt(
       hasWebSearch
         ? "If web search results are insufficient, state that clearly instead of hallucinating details."
         : "",
+      hasWebSearch
+        ? 'When suggesting attractions, food, or routing, prefer facts from "[Web Search Results]"; mention the source page title in parentheses when you cite a specific tip (e.g., blog or news title).'
+        : "",
       "Reply only in Traditional Chinese. Do not use Simplified Chinese.",
       "Do not mirror other languages; translate the answer into natural Traditional Chinese.",
       "Use the provided travel context when it helps.",

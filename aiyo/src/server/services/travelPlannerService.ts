@@ -1316,7 +1316,9 @@ export function needsTravelResearch(input: {
   if (isVideoInspirationRequest(message)) {
     return true;
   }
-  return /推薦|景點|美食|餐廳|咖啡|晚上|夜景|夜市|適合|附近|天氣|降雨|氣溫|營業時間|開到幾點|門票|交通|怎麼去|封路|活動|市集|祭典|今年|近期|最新/u.test(message);
+  return /推薦|景點|美食|餐廳|咖啡|晚上|夜景|夜市|適合|附近|天氣|降雨|氣溫|營業時間|開到幾點|門票|交通|怎麼去|封路|活動|市集|祭典|今年|近期|最新|規劃|自由行|攻略|行程|動線|路線|蜜月|親子(?:遊)?|哪裡好玩|去哪/u.test(
+    message,
+  );
 }
 
 export function isTripWorkflowMessage(input: {
@@ -1397,15 +1399,7 @@ function buildWeatherAlertsFromSources(
 ): TravelPlanResponse["weather_alerts"] {
   const weatherSources = Object.values(sources).filter((source) => source.type === "weather");
   if (!weatherSources.length) {
-    return profile.travel_dates
-      ? [{
-          day: "全程",
-          message: "出發前請再次確認逐日降雨與天氣變化，戶外景點可保留備案。",
-        }]
-      : [{
-          day: "全程",
-          message: "尚未提供實際旅遊日期，因此天氣只能作為提醒方向；出發前需再查即時預報。",
-        }];
+    return [];
   }
 
   const alerts = weatherSources
@@ -1425,10 +1419,7 @@ function buildWeatherAlertsFromSources(
       };
     });
 
-  return alerts.length ? alerts : [{
-    day: "全程",
-    message: "出發前請再次確認逐日降雨與天氣變化，戶外景點可保留備案。",
-  }];
+  return alerts.filter((alert) => Boolean(alert.citations?.length && alert.message.trim()));
 }
 
 function buildEventAlertsFromSources(sources: Record<string, ChatSource>): TravelPlanResponse["event_alerts"] {
@@ -1519,11 +1510,7 @@ export function convertTripPlanToTravelPlanWithSources(
   const weatherAlerts = buildWeatherAlertsFromSources(profile, sources);
   const eventAlerts = buildEventAlertsFromSources(sources);
   const userFacingWarnings = toUserFacingPlanWarnings(plan.warnings);
-  const assumptionTexts = uniqueStrings([
-    profile.travel_dates ? "" : "使用者尚未提供實際旅遊日期，因此活動與天氣不是即時保證。",
-    profile.transportation === "self_drive" ? "交通以自駕邏輯安排。" : "交通以大眾運輸或 AI 建議為主要假設。",
-    ...userFacingWarnings,
-  ]);
+  const assumptionTexts = uniqueStrings([...userFacingWarnings]);
   return {
     response_type: "travel_plan",
     title,
@@ -1541,7 +1528,7 @@ export function convertTripPlanToTravelPlanWithSources(
       const spotItems = day.items.filter((item) => item.type !== "restaurant");
       return {
         day: `Day ${day.dayNumber}`,
-        theme: day.theme || day.summary || `第 ${day.dayNumber} 天`,
+        theme: cleanDayThemeLabel(day.theme || day.summary || `第 ${day.dayNumber} 天`),
         citations: cite(`${day.theme || ""} ${day.summary || ""}`.trim(), {
           preferredTypes: ["official", "web", "weather"],
         }),
@@ -1558,9 +1545,10 @@ export function convertTripPlanToTravelPlanWithSources(
           description: item.notes || item.sourceSnippet || "依照目前旅遊需求安排的用餐建議",
           citations: cite(`${item.title} ${item.notes || item.sourceSnippet || ""}`, { preferredTypes: ["web", "youtube"] }),
         })),
-        tips: uniqueStrings([day.summary || "", ...day.items.map((item) => item.notes || "")])
+        tips: uniqueStrings(day.items.map((item) => item.sourceSnippet || "").filter(Boolean))
           .slice(0, 3)
-          .map((text) => citeText(text, { preferredTypes: ["official", "weather", "web"] })),
+          .map((text) => citeText(text, { preferredTypes: ["official", "weather", "web", "youtube"] }))
+          .filter((item) => Boolean(item.citations?.length)),
       };
     }),
     weather_alerts: weatherAlerts.map((alert) => ({
@@ -1582,6 +1570,14 @@ function buildPlanningStatusSteps(): StatusStepPayload[] {
     { type: "status_step", phase: "research", label: "查詢景點、交通與天氣", status: "completed" },
     { type: "status_step", phase: "compose", label: "生成完整行程", status: "completed" },
   ];
+}
+
+function cleanDayThemeLabel(value: string, chinese = true): string {
+  const normalized = value.replace(/\s*(與周邊順遊|順遊)$/u, "").trim();
+  if (!normalized) {
+    return chinese ? "當日行程" : "Daily plan";
+  }
+  return normalized;
 }
 
 function buildWaitingForInputStatusSteps(): StatusStepPayload[] {
@@ -1662,10 +1658,12 @@ async function handleStructuredTripWorkflow(input: {
     status: "completed",
   });
   const generated = await generateTripPlan(request, input.memoryContext, input.progressSessionId);
-  const webSources = normalizeWebSearchSources(await runWebSearch(
+  const supplementaryWebBundle = await runWebSearch(
     [profile.destination || "", profile.preferences.join(" "), "行程 交通 美食"].filter(Boolean).join(" ").trim(),
     4,
-  ).then((bundle) => bundle.results));
+    input.progressSessionId,
+  );
+  const webSources = normalizeWebSearchSources(supplementaryWebBundle.results);
   const sourceDictionary = mergeChatSources(generated.sources, webSources);
   if (Object.keys(sourceDictionary).length > 0) {
     registerChatSources(sourceDictionary);
@@ -1715,8 +1713,14 @@ async function runWebSearch(
   query: string,
   limit?: number,
   progressSessionId?: string,
+  options?: { skipIntentGate?: boolean },
 ): Promise<WebSearchBundle> {
-  if (!serverConfig.aiWebSearchEnabled || !serverConfig.searxngEnabled || !shouldUseWebSearch(query)) {
+  const allowWithoutIntent = Boolean(options?.skipIntentGate);
+  if (
+    !serverConfig.aiWebSearchEnabled ||
+    !serverConfig.searxngEnabled ||
+    (!allowWithoutIntent && !shouldUseWebSearch(query))
+  ) {
     return { results: [], digest: "" };
   }
 
@@ -1998,8 +2002,8 @@ function buildFallbackTripPlan(request: TripPlanRequest, placeHits: PlaceSearchH
     const lunch = fallbackMeals[index % fallbackMeals.length] || buildSyntheticMealStop(morning.name, chinese, "lunch");
     const dinner = fallbackMeals[(index + 1) % fallbackMeals.length] || buildSyntheticMealStop(eveningAnchor.name, chinese, "dinner");
     const dayTheme = chinese
-      ? `${uniqueStrings([morning.name, afternoon.name]).join("・")} 順遊`
-      : `${morning.name} and ${afternoon.name} route`;
+      ? cleanDayThemeLabel(`${uniqueStrings([morning.name, afternoon.name]).join("・")}`, true)
+      : cleanDayThemeLabel(`${morning.name} and ${afternoon.name} route`, false);
 
     return {
       dayNumber,
@@ -2466,8 +2470,14 @@ export async function chatWithTravelAssistant(input: {
     }
 
     digest = await executeTravelToolRequests(toolRequests, input.context, input.progressSessionId);
-    const webSearchQuery = [input.context?.destination || "", input.message].filter(Boolean).join(" ").trim();
-    webSearch = await runWebSearch(webSearchQuery, serverConfig.aiWebSearchMaxResults, input.progressSessionId);
+    const interestText = input.context?.preferences?.interests?.filter(Boolean).join(" ") || "";
+    const webSearchQuery = [input.context?.destination || "", interestText, input.message]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    webSearch = await runWebSearch(webSearchQuery, serverConfig.aiWebSearchMaxResults, input.progressSessionId, {
+      skipIntentGate: true,
+    });
     publishProgressStep(input.progressSessionId, {
       phase: "research",
       label: "查詢外部資訊",

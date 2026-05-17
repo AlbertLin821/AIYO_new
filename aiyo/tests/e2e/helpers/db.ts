@@ -229,7 +229,46 @@ export async function seedTwoLocatedStopsTripForUser(userId: string) {
         },
       },
     },
+    include: {
+      items: {
+        orderBy: [{ day: "asc" }, { order: "asc" }],
+      },
+    },
   });
+
+  const [confuciusTemple, chihkanTower] = trip.items;
+  if (confuciusTemple && chihkanTower) {
+    await prisma.mapPin.createMany({
+      data: [
+        {
+          tripId: trip.id,
+          label: "孔廟",
+          lat: 22.9901,
+          lng: 120.2041,
+          description: "台南孔廟",
+          address: "台南市中西區南門路2號",
+          linkedTripItemId: confuciusTemple.id,
+          dayNumber: 1,
+          source: "manual",
+          color: "#5a7ea3",
+          verified: true,
+        },
+        {
+          tripId: trip.id,
+          label: "赤崁樓",
+          lat: 22.9972,
+          lng: 120.2023,
+          description: "赤崁樓",
+          address: "台南市中西區民族路二段212號",
+          linkedTripItemId: chihkanTower.id,
+          dayNumber: 1,
+          source: "manual",
+          color: "#5a7ea3",
+          verified: true,
+        },
+      ],
+    });
+  }
 
   const prev = await prisma.profile.findUnique({ where: { userId }, select: { preferences: true } });
   const raw = prev?.preferences;

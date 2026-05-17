@@ -150,7 +150,7 @@ export default function ChatHistorySidebar({
   return (
     <aside
       className={cn(
-        "relative z-10 hidden min-h-0 shrink-0 flex-col border-r transition-[width,padding] duration-200 ease-out chat-glass-panel md:flex",
+        "relative z-10 hidden min-h-0 shrink-0 flex-col border-r border-slate-200 bg-white/92 transition-[width,padding] duration-200 ease-out backdrop-blur md:flex",
         expanded ? "w-[300px] px-4 py-4" : "w-[52px] items-center px-2 py-4",
       )}
     >
@@ -181,11 +181,11 @@ export default function ChatHistorySidebar({
           <button
             type="button"
             onClick={onNewConversation}
-            className="mb-4 flex w-full items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left chat-glass-card-strong transition-colors hover:bg-[var(--chat-hover)]"
+            className="mb-4 flex w-full items-center justify-between gap-3 rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-left transition-colors hover:bg-white"
             aria-label={t.chat.startNewChatAria}
           >
-            <span className="text-sm font-semibold text-chat-fg">{t.chat.startNewChat}</span>
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-500/90 text-chat-fg">
+            <span className="text-sm font-semibold text-slate-900">{t.chat.startNewChat}</span>
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white">
               <MessageSquarePlus className="size-4" aria-hidden />
             </span>
           </button>
@@ -212,10 +212,10 @@ export default function ChatHistorySidebar({
                         <div
                           key={conversation.id}
                           className={cn(
-                            "group relative overflow-hidden rounded-[14px] transition-shadow chat-glass-card",
+                            "group relative overflow-hidden rounded-[18px] border border-slate-200 bg-white transition-colors",
                             isActive
-                              ? "border-primary/35 bg-[var(--chat-chip-active-bg)] shadow-[0_0_0_1px_rgba(90,126,163,0.2)]"
-                              : "hover:bg-[var(--chat-hover)]",
+                              ? "border-slate-900 bg-slate-50"
+                              : "hover:bg-slate-50",
                           )}
                         >
                           <button
@@ -235,21 +235,21 @@ export default function ChatHistorySidebar({
                                   referrerPolicy="no-referrer"
                                 />
                               ) : (
-                                <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--chat-chip-idle-bg)] text-xs font-semibold text-chat-fg">
+                                <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-900">
                                   {getDisplayInitials(displayName)}
                                 </span>
                               )}
                               <div className="min-w-0 flex-1">
                                 <div className="flex min-w-0 items-center gap-1.5">
-                                  <span className="truncate text-sm font-semibold text-chat-fg">
+                                  <span className="truncate text-sm font-semibold text-slate-900">
                                     {conversation.title}
                                   </span>
                                   <span
                                     className={cn(
                                       "shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide",
                                       itineraryTag
-                                        ? "bg-orange-400/25 text-orange-100"
-                                        : "bg-violet-400/25 text-violet-100",
+                                        ? "bg-amber-100 text-amber-700"
+                                        : "bg-slate-100 text-slate-600",
                                     )}
                                   >
                                     {itineraryTag ? t.chat.tagItinerary : t.chat.tagAi}
@@ -257,10 +257,10 @@ export default function ChatHistorySidebar({
                                 </div>
                               </div>
                             </div>
-                            <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-chat-muted">
+                            <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-slate-500">
                               {getConversationSnippet(conversation)}
                             </p>
-                            <p className="mt-2.5 text-[10px] font-medium uppercase tracking-[0.12em] text-chat-subtle">
+                            <p className="mt-2.5 text-[10px] font-medium uppercase tracking-[0.12em] text-slate-400">
                               {formatRelativeTimeAgo(conversation.updatedAt)}
                             </p>
                           </button>

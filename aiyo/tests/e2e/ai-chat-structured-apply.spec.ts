@@ -15,7 +15,7 @@ test.describe("AI chat structured proposedChanges", () => {
     await seedChiayiScenarioForUser(owner.id);
   });
 
-  test("AI proposedChanges require confirmation and persist after reload", async ({ page }) => {
+  test("AI proposedChanges stay on chat, sync the live itinerary, and persist after reload", async ({ page }) => {
     await page.route("**/api/ai/chat", async (route) => {
       await route.fulfill({
         status: 200,
@@ -60,24 +60,29 @@ test.describe("AI chat structured proposedChanges", () => {
     await chatInput.fill("請幫我把文化路夜市加到第一天晚上");
     await expect(chatInput).toHaveValue("請幫我把文化路夜市加到第一天晚上");
     await expect(page.getByTestId("chat-send-button")).toBeEnabled({ timeout: 20_000 });
-    await page.getByTestId("chat-send-button").dispatchEvent("click");
-
-    await expect(page.getByTestId("chat-message-ai").last()).toContainText("文化路夜市");
-    await expect(page.getByTestId("chat-apply-proposed-changes")).toBeVisible();
-
     const saveResponse = page.waitForResponse(
       (res) => res.url().includes("/api/trips/current") && res.request().method() === "PUT" && res.ok(),
       { timeout: 60_000 },
     );
-    await page.getByTestId("chat-apply-proposed-changes").dispatchEvent("click");
-    await saveResponse;
+    await page.getByTestId("chat-send-button").dispatchEvent("click");
 
+    await expect(page.getByTestId("chat-message-ai").last()).toContainText("文化路夜市");
+    await saveResponse;
+    await expect(page).toHaveURL(/\/chat/);
+    await expect(page.getByText("已同步到目前行程")).toBeVisible({ timeout: 40_000 });
+    await expect(page.getByText("文化路夜市小吃散步").last()).toBeVisible({ timeout: 40_000 });
+
+    await page.getByRole("button", { name: "編輯" }).click();
     await expect(page).toHaveURL(/\/itinerary/);
     await expect(page.getByTestId("activity-card").filter({ hasText: "文化路夜市小吃散步" })).toBeVisible({
       timeout: 40_000,
     });
 
     await page.reload({ waitUntil: "domcontentloaded" });
+    if (/\/login/.test(page.url())) {
+      await loginAs(page, E2E_OWNER, "/itinerary");
+      await dismissOnboardingIfVisible(page);
+    }
     await expect(page.getByTestId("activity-card").filter({ hasText: "文化路夜市小吃散步" })).toBeVisible({
       timeout: 40_000,
     });

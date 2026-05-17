@@ -15,11 +15,18 @@ const SEARCH_INTENT_KEYWORDS = [
   "附近",
   "近期",
   "今年",
+  "行程",
+  "規劃",
+  "攻略",
+  "自由行",
+  "行程安排",
+  "旅遊",
   "2026",
   "local events",
   "restaurant",
   "attraction",
   "itinerary",
+  "travel guide",
   "opening hours",
 ];
 

@@ -188,6 +188,13 @@ test("needsTravelResearch turns on for recommendation and video inspiration requ
   );
   assert.equal(
     needsTravelResearch({
+      message: "熊本三天兩夜行程可以怎麼排？",
+      context,
+    }),
+    true,
+  );
+  assert.equal(
+    needsTravelResearch({
       message: "幫我找幾個熊本旅遊影片當靈感來源",
       context,
     }),
