@@ -1,11 +1,12 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import dynamic from "next/dynamic";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Loader2, PlusCircle, Sparkles, TrendingUp } from "lucide-react";
+import HomeHeroBanner from "@/components/home/HomeHeroBanner";
 import VideoCard from "@/components/home/VideoCard";
 import VideoSearchBar from "@/components/home/VideoSearchBar";
 import { getDefaultTaiwanCityVideos } from "@/data/defaultTaiwanCityVideos";
@@ -28,17 +29,6 @@ import type { VideoRecommendation } from "@/types";
 const VideoSummaryDrawer = dynamic(() => import("@/components/home/VideoSummaryDrawer"), {
   ssr: false,
 });
-
-const HERO_IMAGES = [
-  "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=80&auto=format",
-  "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1920&q=80&auto=format",
-  "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1920&q=80&auto=format",
-  "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1920&q=80&auto=format",
-  "https://images.unsplash.com/photo-1519681393784-d120267933ba?w=1920&q=80&auto=format",
-  "https://images.unsplash.com/photo-1433086966358-54859d0ed716?w=1920&q=80&auto=format",
-];
-
-const HERO_ROTATE_MS = 10_000;
 
 const AD_PREVIEWS = [
   {
@@ -154,14 +144,7 @@ export default function HomePage() {
   const videoSearchInputRef = useRef<HTMLInputElement | null>(null);
   const adScrollRef = useRef<HTMLDivElement | null>(null);
 
-  const [heroIndex, setHeroIndex] = useState(0);
   const [isLoadingMoreVideos, setIsLoadingMoreVideos] = useState(false);
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setHeroIndex((prev) => (prev + 1) % HERO_IMAGES.length);
-    }, HERO_ROTATE_MS);
-    return () => clearInterval(timer);
-  }, []);
   const {
     videos,
     selectedVideo,
@@ -609,24 +592,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen">
-      <div className="relative h-56 sm:h-64 md:h-72 lg:h-80 w-full overflow-hidden">
-        <AnimatePresence mode="popLayout">
-          <motion.div
-            key={heroIndex}
-            className="absolute inset-0 bg-cover bg-center"
-            style={{ backgroundImage: `url('${HERO_IMAGES[heroIndex]}')` }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 1.2, ease: "easeInOut" }}
-          />
-        </AnimatePresence>
-        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/20 to-background" />
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="relative z-10 flex h-full flex-col items-center justify-center text-center px-6"
-        >
+      <HomeHeroBanner>
           <button
             type="button"
             onClick={focusVideoSearch}
@@ -638,8 +604,7 @@ export default function HomePage() {
           </button>
           <h1 className="text-3xl font-bold text-white mb-2 drop-shadow-md">{t.home.title}</h1>
           <p className="text-white/80 text-sm max-w-2xl mx-auto drop-shadow-sm">{t.home.subtitle}</p>
-        </motion.div>
-      </div>
+      </HomeHeroBanner>
 
       <div className="p-6 lg:p-8">
 

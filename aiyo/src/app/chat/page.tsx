@@ -3,27 +3,25 @@
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import PastelRainbowBackground from "@/components/effects/PastelRainbowBackground";
+import ChatScenicBackground from "@/components/effects/ChatScenicBackground";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
 import {
   CalendarDays,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   DollarSign,
   Heart,
-  History,
   Loader2,
   MapPin,
   Plus,
   Send,
-  Trash2,
 } from "lucide-react";
+import ChatBackgroundPicker from "@/components/chat/ChatBackgroundPicker";
+import ChatHistorySidebar from "@/components/chat/ChatHistorySidebar";
+import ChatWorkflowModal from "@/components/chat/ChatWorkflowModal";
 import MarkdownMessage from "@/components/chat/MarkdownMessage";
 import TravelPlanCard from "@/components/chat/TravelPlanCard";
-import WorkflowProgressPanel from "@/components/chat/WorkflowProgressPanel";
 import VideoCard from "@/components/home/VideoCard";
 import { zhTW as t } from "@/locales/zh-TW";
 import {
@@ -39,6 +37,13 @@ import {
   startFrontendDebugProcess,
   updateFrontendDebugProcess,
 } from "@/lib/frontendDebug";
+import {
+  type ChatBackgroundPresetId,
+  getChatBackgroundPreset,
+  persistChatBackgroundPresetId,
+  readChatBackgroundPresetId,
+} from "@/lib/chatBackground";
+import { buildWorkflowSteps } from "@/lib/workflowSteps";
 import { cn } from "@/lib/utils";
 import { reviseTripPlan, sendChatMessage } from "@/services/aiClient";
 import { createNewTrip, listTripsForLibrary, setActiveTrip } from "@/services/itineraryClient";
@@ -53,7 +58,6 @@ import type { ItineraryListItem } from "@/lib/itinerary-sort";
 import type {
   AiProposedChange,
   ChatMessage,
-  ChatQuestion,
   ChatQuestionAnswer,
   QuestionCardPayload,
   StatusStepPayload,
@@ -202,24 +206,6 @@ function clampContextPanelWidth(width: number): number {
   return Math.min(CHAT_CONTEXT_PANEL_MAX_WIDTH, Math.max(CHAT_CONTEXT_PANEL_MIN_WIDTH, Math.round(width)));
 }
 
-function formatQuestionAnswerSummary(card: QuestionCardPayload, answers: ChatQuestionAnswer[]): string {
-  const lines = answers.map((answer) => {
-    const question = card.questions.find((item) => item.slot === answer.slot);
-    if (answer.value && typeof answer.value === "object" && !Array.isArray(answer.value)) {
-      const range = answer.value as { start?: string; end?: string };
-      return `${question?.question || answer.slot}：${range.start || "未指定"} ~ ${range.end || "未指定"}`;
-    }
-    const values = Array.isArray(answer.value)
-      ? answer.value
-      : answer.value === null || answer.value === undefined
-        ? []
-        : [String(answer.value)];
-    const labels = values.map((value) => question?.options?.find((option) => option.value === value)?.label || value);
-    return `${question?.question || answer.slot}：${labels.join("、") || "未填寫"}`;
-  });
-  return `已收到你的需求：\n${lines.map((line) => `- ${line}`).join("\n")}`;
-}
-
 function readPositiveNumber(value: unknown): number | undefined {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : undefined;
@@ -274,395 +260,30 @@ function buildTripProfileFallback(input: {
   };
 }
 
-function formatIsoDateLabel(value: string | undefined): string {
-  if (!value) {
-    return "未選擇";
-  }
-  const parsed = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-  return parsed.toLocaleDateString("zh-TW", {
-    month: "numeric",
-    day: "numeric",
-    weekday: "short",
-  });
-}
-
-function parseIsoLocalDate(value?: string): Date | null {
-  if (!value) {
-    return null;
-  }
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) {
-    return null;
-  }
-  const parsed = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  if (
-    Number.isNaN(parsed.getTime()) ||
-    parsed.getFullYear() !== Number(match[1]) ||
-    parsed.getMonth() !== Number(match[2]) - 1 ||
-    parsed.getDate() !== Number(match[3])
-  ) {
-    return null;
-  }
-  return parsed;
-}
-
-function toIsoLocalDate(value: Date): string {
-  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
-}
-
-function shiftMonth(value: Date, delta: number): Date {
-  return new Date(value.getFullYear(), value.getMonth() + delta, 1);
-}
-
-function buildCalendarMatrix(month: Date): Array<{ iso: string; day: number; inMonth: boolean }> {
-  const year = month.getFullYear();
-  const monthIndex = month.getMonth();
-  const firstDay = new Date(year, monthIndex, 1);
-  const firstWeekday = firstDay.getDay();
-  const start = new Date(year, monthIndex, 1 - firstWeekday);
-  return Array.from({ length: 42 }, (_, index) => {
-    const current = new Date(start);
-    current.setDate(start.getDate() + index);
-    return {
-      iso: toIsoLocalDate(current),
-      day: current.getDate(),
-      inMonth: current.getMonth() === monthIndex,
-    };
-  });
-}
-
-function CalendarDateField({
-  label,
-  value,
-  min,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  value?: string;
-  min?: string;
-  disabled?: boolean;
-  onChange: (value: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [visibleMonth, setVisibleMonth] = useState<Date>(() => {
-    const initial = parseIsoLocalDate(value) || parseIsoLocalDate(min) || new Date();
-    return new Date(initial.getFullYear(), initial.getMonth(), 1);
-  });
-
-  const minDate = parseIsoLocalDate(min);
-  const monthLabel = visibleMonth.toLocaleDateString("zh-TW", {
-    year: "numeric",
-    month: "long",
-  });
-  const selectedIso = value || "";
-
-  return (
-    <div className="relative space-y-1">
-      <span className="text-xs font-semibold text-muted">{label}</span>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => {
-          const nextVisible = parseIsoLocalDate(value) || parseIsoLocalDate(min) || new Date();
-          setVisibleMonth(new Date(nextVisible.getFullYear(), nextVisible.getMonth(), 1));
-          setOpen((prev) => !prev);
-        }}
-        className="flex w-full items-center justify-between rounded-xl border border-border-light bg-white px-3 py-2 text-sm text-foreground transition-colors hover:border-primary/40 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        <span>{formatIsoDateLabel(value)}</span>
-        <CalendarDays className="size-4 text-primary" aria-hidden />
-      </button>
-      {open ? (
-        <div className="absolute left-0 top-full z-20 mt-2 w-[286px] rounded-2xl border border-border-light bg-white p-3 shadow-[0_24px_60px_rgba(15,23,42,0.14)]">
-          <div className="mb-3 flex items-center justify-between">
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => setVisibleMonth((prev) => shiftMonth(prev, -1))}
-              className="rounded-full border border-border-light p-1.5 text-slate-600 transition-colors hover:border-primary/30 hover:bg-primary/5"
-            >
-              <ChevronLeft className="size-4" aria-hidden />
-            </button>
-            <p className="text-sm font-semibold text-foreground">{monthLabel}</p>
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => setVisibleMonth((prev) => shiftMonth(prev, 1))}
-              className="rounded-full border border-border-light p-1.5 text-slate-600 transition-colors hover:border-primary/30 hover:bg-primary/5"
-            >
-              <ChevronRight className="size-4" aria-hidden />
-            </button>
-          </div>
-          <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-muted">
-            {["日", "一", "二", "三", "四", "五", "六"].map((weekday) => (
-              <span key={weekday}>{weekday}</span>
-            ))}
-          </div>
-          <div className="grid grid-cols-7 gap-1">
-            {buildCalendarMatrix(visibleMonth).map((cell) => {
-              const disabledByMin = Boolean(minDate && cell.iso < toIsoLocalDate(minDate));
-              const selected = selectedIso === cell.iso;
-              return (
-                <button
-                  key={cell.iso}
-                  type="button"
-                  disabled={disabled || disabledByMin}
-                  onClick={() => {
-                    onChange(cell.iso);
-                    setOpen(false);
-                  }}
-                  className={cn(
-                    "flex aspect-square items-center justify-center rounded-xl text-sm transition-colors",
-                    selected
-                      ? "bg-primary text-white shadow-[0_10px_24px_rgba(37,99,235,0.25)]"
-                      : cell.inMonth
-                        ? "bg-slate-50 text-slate-700 hover:bg-primary/8"
-                        : "bg-transparent text-slate-300 hover:bg-slate-100",
-                    disabledByMin ? "cursor-not-allowed opacity-40" : "",
-                  )}
-                >
-                  {cell.day}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function QuestionCard({
-  card,
-  disabled,
-  onSubmit,
-}: {
-  card: QuestionCardPayload;
-  disabled?: boolean;
-  onSubmit: (answers: ChatQuestionAnswer[], displayMessage: string) => void;
-}) {
-  const [answers, setAnswers] = useState<Record<string, string | string[] | { start?: string; end?: string }>>({});
-
-  function setSingle(question: ChatQuestion, value: string) {
-    setAnswers((prev) => ({ ...prev, [question.slot]: value }));
-  }
-
-  function toggleMulti(question: ChatQuestion, value: string) {
-    setAnswers((prev) => {
-      const current = Array.isArray(prev[question.slot]) ? (prev[question.slot] as string[]) : [];
-      const next =
-        value === "none"
-          ? current.includes("none")
-            ? []
-            : ["none"]
-          : current.includes(value)
-            ? current.filter((item) => item !== value)
-            : [...current.filter((item) => item !== "none"), value];
-      return { ...prev, [question.slot]: next };
-    });
-  }
-
-  function setDateRange(question: ChatQuestion, key: "start" | "end", value: string) {
-    setAnswers((prev) => {
-      const current = typeof prev[question.slot] === "object" && !Array.isArray(prev[question.slot])
-        ? (prev[question.slot] as { start?: string; end?: string })
-        : {};
-      return {
-        ...prev,
-        [question.slot]: {
-          ...current,
-          [key]: value,
-          ...(key === "start" && current.end && value && current.end < value
-            ? { end: value }
-            : {}),
-        },
-      };
-    });
-  }
-
-  const normalizedAnswers: ChatQuestionAnswer[] = card.questions.map((question) => ({
-    slot: question.slot,
-    value: answers[question.slot] ?? (question.type === "multi_choice" ? [] : ""),
-  }));
-  const canSubmit = card.questions.every((question) => {
-    const value = answers[question.slot];
-    if (question.type === "multi_choice") {
-      return Array.isArray(value) && value.length > 0;
-    }
-    if (question.type === "date_range") {
-      return Boolean(
-        value &&
-        typeof value === "object" &&
-        !Array.isArray(value) &&
-        (value.start || "").trim() &&
-        (value.end || "").trim(),
-      );
-    }
-    if (typeof value === "number") {
-      return Number.isFinite(value);
-    }
-    return typeof value === "string" ? value.trim().length > 0 : false;
-  });
-
-  return (
-    <div className="w-full space-y-4 rounded-2xl border border-border-light bg-white/90 p-4 shadow-soft">
-      <h3 className="text-sm font-semibold leading-relaxed text-foreground">{card.title}</h3>
-      <div className="space-y-4">
-        {card.questions.map((question) => (
-          <div key={question.slot} className="space-y-2">
-            <p className="text-sm font-medium text-foreground">{question.question}</p>
-            {question.type === "single_choice" ? (
-              <div className="flex flex-wrap gap-2">
-                {(question.options || []).map((option) => {
-                  const selected = answers[question.slot] === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => setSingle(question, option.value)}
-                      className={cn(
-                        "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                        selected
-                          ? "border-primary bg-primary text-white"
-                          : "border-border-light bg-white text-foreground hover:bg-primary/5",
-                      )}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : question.type === "budget" ? (
-              <div className="space-y-2">
-                <div className="flex flex-wrap gap-2">
-                  {(question.options || []).map((option) => {
-                    const selected = answers[question.slot] === option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => setSingle(question, option.value)}
-                        className={cn(
-                          "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                          selected
-                            ? "border-primary bg-primary text-white"
-                            : "border-border-light bg-white text-foreground hover:bg-primary/5",
-                        )}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                <input
-                  type="text"
-                  disabled={disabled}
-                  value={
-                    typeof answers[question.slot] === "string" &&
-                    !(question.options || []).some((option) => option.value === answers[question.slot])
-                      ? (answers[question.slot] as string)
-                      : ""
-                  }
-                  onChange={(event) => setSingle(question, event.target.value)}
-                  placeholder={question.placeholder || "自訂預算，例如：每人 25000，或總預算 80000"}
-                  className="w-full rounded-xl border border-border-light bg-white px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
-                />
-              </div>
-            ) : question.type === "multi_choice" ? (
-              <div className="flex flex-wrap gap-2">
-                {(question.options || []).map((option) => {
-                  const selected = Array.isArray(answers[question.slot]) && (answers[question.slot] as string[]).includes(option.value);
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => toggleMulti(question, option.value)}
-                      className={cn(
-                        "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                        selected
-                          ? "border-primary bg-primary text-white"
-                          : "border-border-light bg-white text-foreground hover:bg-primary/5",
-                      )}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : question.type === "date_range" ? (
-              <div className="space-y-3 rounded-2xl border border-primary/10 bg-primary/[0.03] p-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <CalendarDateField
-                    label="出發日期"
-                    disabled={disabled}
-                    value={
-                      typeof answers[question.slot] === "object" && !Array.isArray(answers[question.slot])
-                        ? ((answers[question.slot] as { start?: string; end?: string }).start || "")
-                        : ""
-                    }
-                    onChange={(value) => setDateRange(question, "start", value)}
-                  />
-                  <CalendarDateField
-                    label="返回日期"
-                    disabled={disabled}
-                    min={
-                      typeof answers[question.slot] === "object" && !Array.isArray(answers[question.slot])
-                        ? ((answers[question.slot] as { start?: string; end?: string }).start || undefined)
-                        : undefined
-                    }
-                    value={
-                      typeof answers[question.slot] === "object" && !Array.isArray(answers[question.slot])
-                        ? ((answers[question.slot] as { start?: string; end?: string }).end || "")
-                        : ""
-                    }
-                    onChange={(value) => setDateRange(question, "end", value)}
-                  />
-                </div>
-              </div>
-            ) : (
-              <input
-                type={question.type === "number" ? "number" : "text"}
-                disabled={disabled}
-                value={typeof answers[question.slot] === "string" ? (answers[question.slot] as string) : ""}
-                onChange={(event) => setSingle(question, event.target.value)}
-                placeholder={question.placeholder}
-                className="w-full rounded-xl border border-border-light bg-white px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
-              />
-            )}
-          </div>
-        ))}
-      </div>
-      <button
-        type="button"
-        disabled={disabled || !canSubmit}
-        onClick={() => onSubmit(normalizedAnswers, formatQuestionAnswerSummary(card, normalizedAnswers))}
-        className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {disabled ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-        {card.action?.label || "繼續"}
-      </button>
-    </div>
-  );
-}
-
 export default function ChatPage() {
   const router = useRouter();
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const [input, setInput] = useState("");
   const [recommendedVideos, setRecommendedVideos] = useState<VideoRecommendation[]>([]);
   const [selectedVideo, setSelectedVideo] = useState<VideoRecommendation | null>(null);
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [historySidebarExpanded, setHistorySidebarExpanded] = useState(true);
+  const [chatBackgroundId, setChatBackgroundId] = useState<ChatBackgroundPresetId>("mist");
   const [tripProfile, setTripProfile] = useState<TripProfile | null>(null);
   const [streamingStatusSteps, setStreamingStatusSteps] = useState<StatusStepPayload[]>([]);
+  const [workflowModal, setWorkflowModal] = useState<{
+    open: boolean;
+    steps: StatusStepPayload[];
+    questionCard: QuestionCardPayload | null;
+    tripProfile: TripProfile | null;
+  }>({
+    open: false,
+    steps: [],
+    questionCard: null,
+    tripProfile: null,
+  });
+
   const [tripPickerOpen, setTripPickerOpen] = useState(false);
   const [tripPickerTrips, setTripPickerTrips] = useState<ItineraryListItem[]>([]);
   const [tripPickerLoading, setTripPickerLoading] = useState(false);
@@ -677,6 +298,7 @@ export default function ChatPage() {
   const videoSummaryInflightRef = useRef(new Map<string, Promise<VideoSummaryResult>>());
   const autoSummaryActiveRef = useRef(false);
   const hydratedConversationTripRef = useRef<string | null>(null);
+  const workflowModalDismissedRef = useRef(false);
   const {
     conversations,
     activeConversationId,
@@ -697,6 +319,56 @@ export default function ChatPage() {
   const setSummaryDiagnostics = useVideoStore((state) => state.setSummaryDiagnostics);
   const setIsSummarizing = useVideoStore((state) => state.setIsSummarizing);
 
+  useEffect(() => {
+    if (!isSending || streamingStatusSteps.length === 0) {
+      return;
+    }
+    setWorkflowModal((prev) => ({
+      ...prev,
+      open: true,
+      steps: streamingStatusSteps,
+    }));
+  }, [isSending, streamingStatusSteps]);
+
+  useEffect(() => {
+    if (isSending || !workflowModal.open || workflowModal.questionCard) {
+      return;
+    }
+    const view = buildWorkflowSteps(workflowModal.steps);
+    if (!view.length) {
+      return;
+    }
+    if (view.some((step) => step.status === "waiting_input" || step.status === "running")) {
+      return;
+    }
+    if (!view.every((step) => step.status === "completed")) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setWorkflowModal({ open: false, steps: [], questionCard: null, tripProfile: null });
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [isSending, workflowModal.open, workflowModal.questionCard, workflowModal.steps]);
+
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (
+      workflowModalDismissedRef.current ||
+      isSending ||
+      last?.role !== "assistant" ||
+      last.responseType !== "question_card" ||
+      !last.questionCard
+    ) {
+      return;
+    }
+    setWorkflowModal({
+      open: true,
+      steps: last.statusSteps || [],
+      questionCard: last.questionCard,
+      tripProfile: last.tripProfile ?? tripProfile,
+    });
+  }, [activeConversationId, messages, isSending, tripProfile]);
+
   const tagConfigs = [
     { icon: MapPin, label: t.chat.tagDestination },
     { icon: CalendarDays, label: t.chat.tagDays },
@@ -716,6 +388,10 @@ export default function ChatPage() {
     } catch {
       /* ignore */
     }
+  }, []);
+
+  useEffect(() => {
+    setChatBackgroundId(readChatBackgroundPresetId());
   }, []);
 
   useEffect(() => {
@@ -1114,6 +790,21 @@ export default function ChatPage() {
     return { sessionId, processId };
   }
 
+  function handleWorkflowQuestionSubmit(answers: ChatQuestionAnswer[], displayMessage: string) {
+    const profile = workflowModal.tripProfile ?? tripProfile;
+    setWorkflowModal((prev) => ({
+      ...prev,
+      questionCard: null,
+      open: true,
+    }));
+    void handleSend("", {
+      displayMessage,
+      displayAsAssistant: true,
+      questionAnswers: answers,
+      tripProfile: profile,
+    });
+  }
+
   async function handleSend(
     rawInput?: string,
     options?: {
@@ -1269,6 +960,22 @@ export default function ChatPage() {
       appendMessage(response.reply);
       if (response.tripProfile) {
         setTripProfile(response.tripProfile);
+      }
+      if (response.reply.responseType === "question_card" && response.reply.questionCard) {
+        workflowModalDismissedRef.current = false;
+        setWorkflowModal({
+          open: true,
+          steps: response.reply.statusSteps?.length ? response.reply.statusSteps : streamingStatusSteps,
+          questionCard: response.reply.questionCard,
+          tripProfile: response.tripProfile ?? options?.tripProfile ?? tripProfile ?? null,
+        });
+      } else if (response.reply.statusSteps?.length) {
+        setWorkflowModal((prev) => ({
+          open: true,
+          steps: response.reply.statusSteps || prev.steps,
+          questionCard: null,
+          tripProfile: response.tripProfile ?? prev.tripProfile,
+        }));
       }
       const shouldPersistPlanningResult =
         Boolean(response.itinerarySuggestion) ||
@@ -1788,6 +1495,12 @@ export default function ChatPage() {
 
   const emptyChatHint =
     status === "authenticated" ? t.chat.emptyHintAuthed : t.chat.emptyHintGuest;
+  const chatBackgroundPreset = getChatBackgroundPreset(chatBackgroundId);
+
+  function handleChatBackgroundChange(nextId: ChatBackgroundPresetId) {
+    setChatBackgroundId(nextId);
+    persistChatBackgroundPresetId(nextId);
+  }
 
   if (status === "loading") {
     return (
@@ -1802,7 +1515,11 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex h-[calc(100dvh-3.5rem-env(safe-area-inset-bottom,0px))] min-h-0 lg:h-screen">
+    <div
+      className="chat-page-root relative flex h-[calc(100dvh-3.5rem-env(safe-area-inset-bottom,0px))] min-h-0 overflow-hidden lg:h-screen"
+      data-chat-theme={chatBackgroundPreset.theme}
+    >
+      <ChatScenicBackground preset={chatBackgroundPreset} />
       {tripPickerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 py-6 backdrop-blur-sm">
           <div
@@ -1906,123 +1623,30 @@ export default function ChatPage() {
         </div>
       )}
 
-      <aside
-        className={cn(
-          "hidden min-h-0 shrink-0 flex-col border-r border-border-light bg-surface/70 transition-[width,padding] duration-200 ease-out md:flex",
-          historySidebarExpanded ? "w-72 p-4" : "w-[52px] items-center px-2 py-4",
-        )}
-      >
-        {!historySidebarExpanded ? (
-          <div className="flex flex-1 flex-col items-center gap-3">
-            <button
-              type="button"
-              onClick={() => persistHistorySidebarExpanded(true)}
-              className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border-light bg-surface text-foreground transition-colors hover:bg-cream/60"
-              aria-expanded={false}
-              title={t.chat.expandHistorySidebar}
-              aria-label={t.chat.expandHistorySidebar}
-            >
-              <ChevronRight className="size-4" aria-hidden />
-            </button>
-            <button
-              type="button"
-              onClick={() => void openNewConversationPicker()}
-              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-white transition-colors hover:bg-primary-dark"
-              title={t.chat.newConversationAria}
-              aria-label={t.chat.newConversationAria}
-            >
-              <Plus className="size-4" aria-hidden />
-            </button>
-            <div className="flex flex-1 flex-col items-center pt-1">
-              <History className="size-4 text-muted" aria-hidden />
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="mb-4 flex items-start gap-2">
-              <button
-                type="button"
-                onClick={() => persistHistorySidebarExpanded(false)}
-                className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border-light bg-surface text-foreground transition-colors hover:bg-cream/60"
-                aria-expanded={true}
-                aria-controls="chat-history-sidebar-panel"
-                title={t.chat.collapseHistorySidebar}
-                aria-label={t.chat.collapseHistorySidebar}
-              >
-                <ChevronLeft className="size-4" aria-hidden />
-              </button>
-              <div id="chat-history-sidebar-panel" className="min-w-0 flex-1">
-                <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <History className="size-4 shrink-0 text-primary" aria-hidden />
-                  <span className="truncate">{t.chat.sidebarTitle}</span>
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => void openNewConversationPicker()}
-                className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-white transition-colors hover:bg-primary-dark"
-                aria-label={t.chat.newConversationAria}
-              >
-                <Plus className="size-4" aria-hidden />
-              </button>
-            </div>
+      <ChatHistorySidebar
+        expanded={historySidebarExpanded}
+        conversations={conversations}
+        activeConversationId={activeConversationId}
+        userName={session?.user?.name}
+        userImage={session?.user?.image}
+        onExpand={() => persistHistorySidebarExpanded(true)}
+        onCollapse={() => persistHistorySidebarExpanded(false)}
+        onNewConversation={() => void openNewConversationPicker()}
+        onSelectConversation={(conversationId) => void selectConversationForChat(conversationId)}
+        onDeleteConversation={(conversationId) => void deleteConversation(conversationId)}
+      />
 
-            <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-[3px]">
-              {conversations.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-border-light bg-cream/40 px-4 py-6 text-center text-xs text-muted">
-                  {t.chat.emptyConversationsHint}
-                </div>
-              ) : (
-                conversations.map((conversation) => (
-                  <div
-                    key={conversation.id}
-                    className={`group relative rounded-2xl border transition-colors ${
-                      conversation.id === activeConversationId
-                        ? "rainbow-border bg-primary/10"
-                        : "border-border-light bg-surface hover:bg-cream/50"
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => void selectConversationForChat(conversation.id)}
-                      className="w-full rounded-2xl px-3 py-3 pr-10 text-left"
-                    >
-                      <p className="truncate text-sm font-medium text-foreground">{conversation.title}</p>
-                      <p className="mt-1 text-[11px] text-muted">
-                        {t.chat.messagesCount.replace("{n}", String(conversation.messages.length))} ·{" "}
-                        {new Date(conversation.updatedAt).toLocaleDateString("zh-TW")}
-                      </p>
-                    </button>
-                    <button
-                      type="button"
-                      className="absolute right-2 top-1/2 z-[1] flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-red-600 opacity-0 transition-opacity hover:bg-red-500/10 group-hover:opacity-100"
-                      aria-label={t.chat.deleteConversationAria}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void deleteConversation(conversation.id);
-                      }}
-                    >
-                      <Trash2 className="size-4" aria-hidden />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </>
-        )}
-      </aside>
-
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        <PastelRainbowBackground />
-        <div className="relative z-10 border-b border-border-light bg-white/60 px-6 py-4 backdrop-blur-sm">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+        <div className="relative z-20 overflow-visible border-b border-chat px-6 py-4 chat-glass-panel">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="font-semibold text-foreground">{t.chat.pageTitle}</h1>
+            <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+              <h1 className="font-semibold text-chat-fg">{t.chat.pageTitle}</h1>
+              <ChatBackgroundPicker value={chatBackgroundId} onChange={handleChatBackgroundChange} />
             </div>
             <button
               type="button"
               onClick={() => void openNewConversationPicker()}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-border-light bg-white/70 px-3 py-2 text-xs font-medium text-foreground backdrop-blur-sm transition-colors hover:bg-white/90 md:hidden"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-chat px-3 py-2 text-xs font-medium text-chat-fg chat-glass-card transition-colors hover:bg-[var(--chat-hover)] md:hidden"
             >
               <Plus className="size-3.5" aria-hidden />
               {t.chat.newConversation}
@@ -2030,7 +1654,7 @@ export default function ChatPage() {
           </div>
         </div>
         {conversations.length > 0 && (
-          <div className="relative z-10 flex gap-2 overflow-x-auto border-b border-border-light bg-white/40 px-4 py-3 backdrop-blur-sm md:hidden">
+          <div className="relative z-10 flex gap-2 overflow-x-auto border-b border-chat px-4 py-3 chat-glass-panel md:hidden">
             {conversations.map((conversation) => (
               <button
                 type="button"
@@ -2038,8 +1662,8 @@ export default function ChatPage() {
                 onClick={() => void selectConversationForChat(conversation.id)}
                 className={`shrink-0 rounded-full border px-3 py-1.5 text-xs ${
                   conversation.id === activeConversationId
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-border-light bg-white/60 text-muted"
+                    ? "border-primary/30 bg-[var(--chat-chip-active-bg)] text-chat-fg"
+                    : "border-chat bg-[var(--chat-chip-idle-bg)] text-chat-muted"
                 }`}
               >
                 {conversation.title}
@@ -2050,9 +1674,9 @@ export default function ChatPage() {
 
         <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 py-6">
           {messages.length === 0 && !isSending && !errorMessage && (
-            <div className="rounded-2xl border border-dashed border-border-light bg-white/60 px-4 py-8 text-center text-sm text-muted backdrop-blur-sm">
-              <p className="font-medium text-foreground">{t.chat.emptyTitle}</p>
-              <p className="mt-2 text-xs">{emptyChatHint}</p>
+            <div className="rounded-2xl border border-dashed border-chat-dashed px-4 py-8 text-center text-sm text-chat-muted chat-glass-card">
+              <p className="font-medium text-chat-fg">{t.chat.emptyTitle}</p>
+              <p className="mt-2 text-xs text-chat-muted">{emptyChatHint}</p>
             </div>
           )}
 
@@ -2068,7 +1692,7 @@ export default function ChatPage() {
               <div
                 className={cn(
                   "flex items-end gap-2",
-                  message.responseType === "question_card" || message.responseType === "travel_plan" || message.responseType === "status_step"
+                  message.responseType === "travel_plan"
                     ? "w-full max-w-4xl"
                     : "max-w-[70%]",
                   message.role === "user" ? "flex-row-reverse" : ""
@@ -2089,42 +1713,27 @@ export default function ChatPage() {
                     className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                       message.role === "user"
                         ? "rounded-br-md bg-primary text-white"
-                        : message.responseType === "question_card" || message.responseType === "travel_plan" || message.responseType === "status_step"
+                        : message.responseType === "travel_plan"
                           ? "rounded-bl-md bg-transparent p-0 text-foreground"
-                          : "rounded-bl-md border border-border-light bg-white/80 text-foreground shadow-soft backdrop-blur-md"
+                          : "rounded-bl-md chat-glass-card-strong text-chat-soft shadow-none"
                     }`}
                   >
                     {message.responseType === "question_card" && message.questionCard ? (
-                      <div className="space-y-3">
-                        {message.statusSteps?.length ? (
-                          <WorkflowProgressPanel steps={message.statusSteps} showResearchFeed={false} />
-                        ) : null}
-                        <QuestionCard
-                          card={message.questionCard}
-                          disabled={isSending}
-                          onSubmit={(answers, displayMessage) =>
-                            void handleSend("", {
-                              displayMessage,
-                              displayAsAssistant: true,
-                              questionAnswers: answers,
-                              tripProfile: message.tripProfile || tripProfile,
-                            })
-                          }
-                        />
-                      </div>
+                      <MarkdownMessage
+                        content={message.content?.trim() || t.chat.workflowModalHint}
+                      />
                     ) : message.responseType === "travel_plan" && message.travelPlan ? (
                       <div className="space-y-3">
-                        {message.statusSteps?.length ? <WorkflowProgressPanel steps={message.statusSteps} /> : null}
                         <TravelPlanCard
                           plan={message.travelPlan}
                           revisionDisabled={isSending}
                           onRevise={(instruction) => void handleRevisePlan(instruction, message.tripProfile || tripProfile)}
                         />
                       </div>
-                    ) : message.responseType === "status_step" && message.statusSteps?.length ? (
-                      <div className="rounded-2xl border border-border-light bg-white/80 px-4 py-3 shadow-soft backdrop-blur-md">
-                        <WorkflowProgressPanel steps={message.statusSteps} />
-                      </div>
+                    ) : message.responseType === "status_step" ? (
+                      message.content?.trim() ? (
+                        <MarkdownMessage content={message.content} />
+                      ) : null
                     ) : (
                       <MarkdownMessage
                         content={message.content}
@@ -2171,28 +1780,17 @@ export default function ChatPage() {
             </motion.div>
           ))}
 
-          {isSending && (
+          {isSending && !workflowModal.open ? (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2">
               <div className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-lavender to-primary text-xs text-white">
                 {t.chat.aiShort}
               </div>
-              <div className="rounded-2xl rounded-bl-md border border-border-light bg-white/80 px-4 py-3 shadow-soft backdrop-blur-md">
-                <WorkflowProgressPanel
-                  showResearchFeed
-                  steps={
-                    streamingStatusSteps.length
-                      ? streamingStatusSteps
-                      : [
-                          { type: "status_step", phase: "understand", label: "理解旅遊需求", status: "running" },
-                          { type: "status_step", phase: "plan", label: "規劃查詢範圍", status: "pending" },
-                          { type: "status_step", phase: "research", label: "查詢景點、交通與天氣", status: "pending" },
-                          { type: "status_step", phase: "compose", label: "生成完整行程", status: "pending" },
-                        ]
-                  }
-                />
+              <div className="flex items-center gap-2 rounded-2xl rounded-bl-md px-4 py-3 chat-glass-card-strong text-sm text-chat-muted">
+                <Loader2 className="size-4 animate-spin text-primary" aria-hidden />
+                {t.chat.workflowProcessing}
               </div>
             </motion.div>
-          )}
+          ) : null}
 
           {errorMessage && (
             <div className="rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger backdrop-blur-sm">
@@ -2201,12 +1799,12 @@ export default function ChatPage() {
           )}
 
           {(isLoadingVideos || videoError || recommendedVideos.length > 0) && (
-            <section className="rounded-2xl border border-border-light bg-white/80 px-4 py-4 shadow-soft backdrop-blur-md">
+            <section className="rounded-2xl px-4 py-4 chat-glass-card-strong text-chat-soft">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-sm font-semibold text-foreground">AI 推薦影片</h2>
+                  <h2 className="text-sm font-semibold text-chat-fg">AI 推薦影片</h2>
                   {autoSummaryProgress && (
-                    <p className="mt-1 text-xs text-muted">
+                    <p className="mt-1 text-xs text-chat-muted">
                       正在依序處理影片資料 {autoSummaryProgress.current}/{autoSummaryProgress.total}
                     </p>
                   )}
@@ -2236,7 +1834,7 @@ export default function ChatPage() {
         </div>
 
         <div className="relative z-10 px-6 pb-6 pt-3">
-          <div className="flex items-center gap-3 rounded-2xl border border-border-light bg-white/80 px-4 py-2 shadow-soft backdrop-blur-md">
+          <div className="flex items-center gap-3 rounded-2xl px-4 py-2 chat-glass-card-strong">
             <input
               type="text"
               value={input}
@@ -2244,7 +1842,7 @@ export default function ChatPage() {
               onKeyDown={(event) => event.key === "Enter" && void handleSend()}
               placeholder={t.chat.placeholder}
               data-testid="chat-input"
-              className="min-w-0 flex-1 bg-transparent py-2 text-sm text-foreground placeholder:text-muted-light focus:outline-none"
+              className="min-w-0 flex-1 bg-transparent py-2 text-sm text-chat-fg placeholder-chat focus:outline-none"
             />
 
             <button
@@ -2262,7 +1860,7 @@ export default function ChatPage() {
       </div>
 
         <div
-          className="relative hidden shrink-0 overflow-y-auto border-l border-border-light bg-surface/50 p-5 lg:block"
+          className="relative z-10 hidden shrink-0 overflow-y-auto border-l border-chat p-5 chat-glass-panel lg:block"
           style={{ width: contextPanelWidth }}
         >
         <div
@@ -2273,7 +1871,7 @@ export default function ChatPage() {
           onPointerDown={startContextPanelResize}
           className="absolute left-0 top-0 z-20 h-full w-2 -translate-x-1 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-primary/20"
         />
-        <h3 className="mb-4 text-sm font-semibold text-foreground">{t.chat.contextTitle}</h3>
+        <h3 className="mb-4 text-sm font-semibold text-chat-fg">{t.chat.contextTitle}</h3>
 
         {hasContextPanel ? (
           <div className="flex flex-col gap-4">
@@ -2284,24 +1882,24 @@ export default function ChatPage() {
                   type="button"
                   key={tag.label}
                   onClick={() => router.push("/profile")}
-                  className="flex w-full min-w-0 items-center gap-3 rounded-xl bg-primary/5 px-3 py-2.5 text-left transition-colors hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="flex w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left chat-glass-card transition-colors hover:bg-[var(--chat-hover)] focus:outline-none focus:ring-2 focus:ring-primary/25"
                 >
-                  <Icon className="size-4 flex-shrink-0 text-primary" aria-hidden />
+                  <Icon className="size-4 flex-shrink-0 text-emerald-200" aria-hidden />
                   <div className="min-w-0">
-                    <p className="text-[11px] text-muted">{tag.label}</p>
-                    <p className="truncate text-sm font-medium text-foreground">{extractedValues[index]}</p>
+                    <p className="text-[11px] text-chat-subtle">{tag.label}</p>
+                    <p className="truncate text-sm font-medium text-chat-fg">{extractedValues[index]}</p>
                   </div>
                 </button>
               );
             })}
 
-            <div className="rounded-2xl border border-border-light bg-white/70 p-3 shadow-soft">
+            <div className="rounded-2xl p-3 chat-glass-card">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
-                  <Heart className="size-4 shrink-0 text-primary" aria-hidden />
+                  <Heart className="size-4 shrink-0 text-emerald-200" aria-hidden />
                   <div className="min-w-0">
-                    <p className="text-[11px] text-muted">{t.chat.tagItinerary}</p>
-                    <p className="truncate text-sm font-semibold text-foreground">
+                    <p className="text-[11px] text-chat-subtle">{t.chat.tagItinerary}</p>
+                    <p className="truncate text-sm font-semibold text-chat-fg">
                       {tripStore.itinerary.length > 0
                         ? `${tripStore.itinerary.length} 天行程`
                         : t.chat.valueUnset}
@@ -2325,23 +1923,23 @@ export default function ChatPage() {
                     return (
                       <div
                         key={day.dayNumber}
-                        className="overflow-hidden rounded-xl border border-border-light bg-surface"
+                        className="overflow-hidden rounded-xl chat-glass-card"
                       >
                         <button
                           type="button"
                           aria-expanded={expanded}
                           onClick={() => toggleContextDay(day.dayNumber)}
-                          className="flex w-full items-center justify-between gap-2 bg-gradient-to-r from-primary/8 via-surface to-surface px-3 py-2.5 text-left transition-colors hover:bg-primary/5"
+                          className="flex w-full items-center justify-between gap-2 bg-[var(--chat-chip-idle-bg)] px-3 py-2.5 text-left transition-colors hover:bg-[var(--chat-hover)]"
                         >
                           <div className="flex min-w-0 items-center gap-3">
                             <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-white">
                               D{displayOrdinal}
                             </span>
                             <span className="min-w-0">
-                              <span className="block truncate text-sm font-semibold text-foreground">
+                              <span className="block truncate text-sm font-semibold text-chat-fg">
                                 第 {displayOrdinal} 天
                               </span>
-                              <span className="block truncate text-[11px] text-muted">
+                              <span className="block truncate text-[11px] text-chat-subtle">
                                 {day.theme && !/^Day\s*\d+$/i.test(day.theme.trim())
                                   ? day.theme
                                   : `${day.items.length} 個活動`}
@@ -2350,7 +1948,7 @@ export default function ChatPage() {
                           </div>
                           <ChevronDown
                             className={cn(
-                              "size-4 shrink-0 text-muted transition-transform",
+                              "size-4 shrink-0 text-chat-subtle transition-transform",
                               expanded ? "rotate-180" : "",
                             )}
                             aria-hidden
@@ -2358,19 +1956,19 @@ export default function ChatPage() {
                         </button>
 
                         {expanded && (
-                          <div className="space-y-2 border-t border-border-light p-3">
+                          <div className="space-y-2 border-t border-chat p-3">
                             {day.items.length > 0 ? (
                               day.items.map((item) => (
                                 <div
                                   key={item.id}
-                                  className="rounded-xl border border-border-light bg-white px-3 py-2"
+                                  className="rounded-xl px-3 py-2 chat-glass-card"
                                 >
                                   <div className="grid grid-cols-[3.5rem_minmax(0,1fr)] items-start gap-2">
                                     <span className="mt-0.5 inline-flex w-14 shrink-0 justify-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
                                       {item.time}
                                     </span>
                                     <div className="min-w-0 flex-1">
-                                      <p className="truncate text-xs font-semibold text-foreground">
+                                      <p className="truncate text-xs font-semibold text-chat-fg">
                                         {item.title}
                                       </p>
                                     </div>
@@ -2378,7 +1976,7 @@ export default function ChatPage() {
                                 </div>
                               ))
                             ) : (
-                              <div className="rounded-xl border border-dashed border-border-light bg-cream/30 px-3 py-4 text-center text-xs text-muted">
+                              <div className="rounded-xl border border-dashed border-chat-dashed px-3 py-4 text-center text-xs text-chat-subtle">
                                 尚未安排活動
                               </div>
                             )}
@@ -2389,19 +1987,33 @@ export default function ChatPage() {
                   })}
                 </div>
               ) : (
-                <div className="rounded-xl border border-dashed border-border-light bg-cream/30 px-3 py-4 text-center text-xs text-muted">
+                <div className="rounded-xl border border-dashed border-chat-dashed px-3 py-4 text-center text-xs text-chat-subtle">
                   尚未建立每日行程
                 </div>
               )}
             </div>
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-border-light bg-cream/30 px-4 py-6 text-center">
-            <p className="text-sm font-medium text-foreground">{t.chat.contextEmptyTitle}</p>
-            <p className="mt-2 text-xs leading-relaxed text-muted">{t.chat.contextEmptyBody}</p>
+          <div className="rounded-2xl border border-dashed border-chat-dashed px-4 py-6 text-center chat-glass-card">
+            <p className="text-sm font-medium text-chat-fg">{t.chat.contextEmptyTitle}</p>
+            <p className="mt-2 text-xs leading-relaxed text-chat-muted">{t.chat.contextEmptyBody}</p>
           </div>
         )}
       </div>
+
+      <ChatWorkflowModal
+        open={workflowModal.open}
+        steps={workflowModal.steps}
+        questionCard={workflowModal.questionCard}
+        disabled={isSending}
+        onClose={() => {
+          workflowModalDismissedRef.current = true;
+          setWorkflowModal({ open: false, steps: [], questionCard: null, tripProfile: null });
+        }}
+        onSubmitQuestion={(answers, displayMessage) =>
+          handleWorkflowQuestionSubmit(answers, displayMessage)
+        }
+      />
 
       <VideoSummaryDrawer
         video={selectedVideo}

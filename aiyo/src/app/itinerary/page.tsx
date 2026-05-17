@@ -802,6 +802,12 @@ export default function ItineraryPage() {
   }, [refreshCollaborators, status, tripId]);
 
   useEffect(() => {
+    if (tripId) {
+      setShowEditor(true);
+    }
+  }, [tripId]);
+
+  useEffect(() => {
     if (status !== "authenticated" || !lastUpdatedAt) {
       return;
     }

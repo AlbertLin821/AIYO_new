@@ -37,35 +37,44 @@ export default function TravelPlanDayAccordion({
 
   return (
     <section className="overflow-hidden rounded-[26px] border border-border-light bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(249,250,251,0.94))] shadow-[0_16px_44px_rgba(148,163,184,0.16)]">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-start justify-between gap-4 border-b border-border-light bg-slate-50/80 px-4 py-4 text-left"
-      >
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-white">{day.day}</span>
-            <h4 className="text-base font-semibold text-foreground">{day.theme}</h4>
-          </div>
-          <p className="mt-2 text-sm text-muted">
-            路線：{(routeNames.length ? routeNames : [day.theme]).slice(0, 4).join(" → ")}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {(routeNames.length ? routeNames : [day.theme]).slice(0, 4).map((name) => (
-              <span
-                key={`${day.day}_${name}`}
-                className="rounded-full border border-primary/10 bg-white px-3 py-1 text-xs font-medium text-slate-700"
-              >
-                {name}
-              </span>
-            ))}
-          </div>
+      <div className="border-b border-border-light bg-slate-50/80 px-4 py-4">
+        <div className="flex items-start justify-between gap-4">
+          <button
+            type="button"
+            onClick={onToggle}
+            className="min-w-0 flex-1 text-left"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-white">{day.day}</span>
+              <h4 className="text-base font-semibold text-foreground">{day.theme}</h4>
+            </div>
+            <p className="mt-2 text-sm text-muted">
+              路線：{(routeNames.length ? routeNames : [day.theme]).slice(0, 4).join(" → ")}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(routeNames.length ? routeNames : [day.theme]).slice(0, 4).map((name) => (
+                <span
+                  key={`${day.day}_${name}`}
+                  className="rounded-full border border-primary/10 bg-white px-3 py-1 text-xs font-medium text-slate-700"
+                >
+                  {name}
+                </span>
+              ))}
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-label={`${expanded ? "收合" : "展開"} ${day.day}`}
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-border-light bg-white text-slate-600"
+          >
+            <ChevronDown className={cn("size-4 transition-transform", expanded ? "rotate-180" : "")} aria-hidden />
+          </button>
+        </div>
+        <div className="mt-3">
           <CitationGroup citations={day.citations} sources={sources} />
         </div>
-        <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-border-light bg-white text-slate-600">
-          <ChevronDown className={cn("size-4 transition-transform", expanded ? "rotate-180" : "")} aria-hidden />
-        </span>
-      </button>
+      </div>
 
       {expanded ? (
         <motion.div

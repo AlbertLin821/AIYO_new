@@ -37,7 +37,7 @@ export async function sendChatMessage(input: {
     messagePreview: input.message.slice(0, 80),
   });
   try {
-    const response = await apiPost<typeof input, ChatResponsePayload>("/api/chat/message", input);
+    const response = await apiPost<typeof input, ChatResponsePayload>("/api/ai/chat", input);
     finishFrontendDebugProcess(processId, {
       replyType: response.reply.responseType || "unknown",
       replyId: response.reply.id,
