@@ -1,4 +1,5 @@
 import type { LocationReference, MapPin, TripPlanDay } from "@/types";
+import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
 
 const PIN_COLORS = [
   "#F4A7B9",
@@ -25,6 +26,7 @@ export function buildPinsFromLocations(
       const cb = b.confidence ?? 0;
       return cb - ca;
     })
+    .filter((location) => hasUsableMapCoordinate(location))
     .filter((location, index, all) => {
       const normalized = location.name.trim().toLowerCase();
       return all.findIndex((entry) => entry.name.trim().toLowerCase() === normalized) === index;
@@ -60,6 +62,9 @@ export function buildPinsFromTripPlan(days: TripPlanDay[]): MapPin[] {
   for (const day of days) {
     for (const item of day.items) {
       if (!item.location) {
+        continue;
+      }
+      if (!hasUsableMapCoordinate(item.location)) {
         continue;
       }
       const dedupeKey = `${day.dayNumber}:${item.location.name}`;

@@ -10,7 +10,21 @@ export const MAP_PIN_VIEWBOX_H = 56;
 export const MAP_PIN_OUTER_PATH =
   "M24 3.5C13.18 3.5 4.5 12.18 4.5 23c0 13.25 19.5 32.5 19.5 32.5S43.5 36.25 43.5 23C43.5 12.18 34.82 3.5 24 3.5z";
 
-export function mapPinSvgString(fill: string, strokeWidth: number, maskId: string): string {
+function escapeSvgText(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+export function mapPinSvgString(
+  fill: string,
+  strokeWidth: number,
+  maskId: string,
+  stopLabel?: number,
+): string {
+  const fontSize = stopLabel == null ? 0 : stopLabel > 99 ? 8 : stopLabel > 9 ? 9 : 10;
+  const labelSvg =
+    stopLabel == null
+      ? ""
+      : `<text x="24" y="15" text-anchor="middle" dominant-baseline="central" font-size="${fontSize}" font-weight="800" fill="#ffffff" stroke="rgba(0,0,0,0.3)" stroke-width="0.35" paint-order="stroke fill">${escapeSvgText(String(stopLabel))}</text>`;
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${MAP_PIN_VIEWBOX_W} ${MAP_PIN_VIEWBOX_H}" ` +
     `preserveAspectRatio="xMidYMax meet" width="100%" height="100%">` +
@@ -20,7 +34,7 @@ export function mapPinSvgString(fill: string, strokeWidth: number, maskId: strin
     "</defs>" +
     `<path fill="${fill}" stroke="#ffffff" stroke-width="${strokeWidth}" stroke-linejoin="round" ` +
     `d="${MAP_PIN_OUTER_PATH}" mask="url(#${maskId})"/>` +
-    "</svg>"
+    `${labelSvg}</svg>`
   );
 }
 
@@ -31,14 +45,14 @@ function nextMaskId(): string {
   return `aiyo-map-pin-hole-${maskIdCounter}`;
 }
 
-export function encodeMapPinDataUrl(fill: string, selected: boolean): string {
+export function encodeMapPinDataUrl(fill: string, selected: boolean, stopLabel?: number): string {
   const strokeW = selected ? 2.75 : 2;
-  const svg = mapPinSvgString(fill, strokeW, nextMaskId());
+  const svg = mapPinSvgString(fill, strokeW, nextMaskId(), stopLabel);
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
 /** DOM node for {@link google.maps.marker.AdvancedMarkerElement} `content`. */
-export function createMapPinElement(fill: string, selected: boolean): HTMLElement {
+export function createMapPinElement(fill: string, selected: boolean, stopLabel?: number): HTMLElement {
   const wrap = document.createElement("div");
   const baseW = selected ? 40 : 34;
   const baseH = Math.round((MAP_PIN_VIEWBOX_H / MAP_PIN_VIEWBOX_W) * baseW);
@@ -51,6 +65,6 @@ export function createMapPinElement(fill: string, selected: boolean): HTMLElemen
   }
   wrap.style.filter = "drop-shadow(0 2px 4px rgba(0,0,0,.3))";
   const strokeW = selected ? 2.75 : 2;
-  wrap.innerHTML = mapPinSvgString(fill, strokeW, nextMaskId());
+  wrap.innerHTML = mapPinSvgString(fill, strokeW, nextMaskId(), stopLabel);
   return wrap;
 }

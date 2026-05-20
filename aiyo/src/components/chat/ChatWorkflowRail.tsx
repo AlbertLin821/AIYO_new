@@ -11,6 +11,7 @@ import {
   getProgressPercent,
   getStepStatusLabel,
 } from "@/lib/workflowSteps";
+import { inferChatToolStatusFromSteps, formatChatToolStatusLabel } from "@/lib/chat/chatOrchestrator";
 import { cn } from "@/lib/utils";
 import { zhTW as t } from "@/locales/zh-TW";
 import type { ChatQuestionAnswer, QuestionCardPayload, StatusStepPayload } from "@/types";
@@ -89,14 +90,18 @@ export default function ChatWorkflowRail({
     ? formatStepHeading(activeStep, workflowSteps.length)
     : t.chat.workflowPlanningTitle;
   const isProcessing = progressBadge === "處理中" || progressBadge === "準備中";
+  const toolStatus = inferChatToolStatusFromSteps(resolvedSteps);
+  const toolStatusLabel = formatChatToolStatusLabel(toolStatus);
+  const showToolStatus =
+    toolStatus !== "idle" && toolStatus !== "done" && (isProcessing || progressBadge === "等你回覆");
 
   if (!visible || !workflowSteps.length) {
     return null;
   }
 
   return (
-    <section className="overflow-hidden rounded-3xl border border-slate-200/90 border-l-4 border-l-primary bg-cream/40 shadow-[0_18px_50px_rgba(15,23,42,0.08)] ring-1 ring-black/5">
-      <div className="border-b border-slate-200/80 bg-white/90 px-5 py-5 backdrop-blur-sm">
+    <section className="isolate flex flex-col rounded-3xl border border-slate-200/90 border-l-4 border-l-primary bg-cream/40 shadow-[0_18px_50px_rgba(15,23,42,0.08)] ring-1 ring-black/5">
+      <div className="overflow-hidden rounded-t-3xl border-b border-slate-200/80 bg-white/90 px-5 py-5 backdrop-blur-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-700">
@@ -104,6 +109,11 @@ export default function ChatWorkflowRail({
             </p>
             <h2 className="mt-2 text-lg font-semibold text-slate-900">{heading}</h2>
             <p className="mt-1.5 text-sm leading-relaxed text-slate-700">{processingHint}</p>
+            {showToolStatus ? (
+              <p className="mt-2 text-xs font-medium tracking-wide text-primary/95">
+                工具狀態 · {toolStatusLabel}
+              </p>
+            ) : null}
           </div>
           <span
             className={cn(
@@ -168,7 +178,7 @@ export default function ChatWorkflowRail({
       </ol>
 
       {questionCard ? (
-        <div className="border-t border-slate-200/80 bg-white/80 px-5 pb-5 pt-5">
+        <div className="relative z-10 rounded-b-3xl border-t border-slate-200/80 bg-white/90 px-5 pb-5 pt-5 backdrop-blur-sm">
           <p className="mb-3 text-sm font-semibold text-slate-900">補齊資料</p>
           <QuestionCard card={questionCard} disabled={disabled} onSubmit={onSubmitQuestion} />
         </div>

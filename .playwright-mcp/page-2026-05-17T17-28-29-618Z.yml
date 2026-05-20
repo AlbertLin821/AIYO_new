@@ -1,0 +1,257 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - button "收合側邊欄" [ref=e5]:
+          - img [ref=e6]
+        - generic [ref=e180]:
+          - img [ref=e8]
+          - generic [ref=e181]:
+            - heading "AIYO" [level=1] [ref=e182]
+            - paragraph [ref=e183]: 旅遊規劃工作區
+      - navigation [ref=e11]:
+        - link "首頁" [ref=e12] [cursor=pointer]:
+          - /url: /
+          - img [ref=e13]
+          - generic [ref=e184]: 首頁
+        - link "地圖" [ref=e17] [cursor=pointer]:
+          - /url: /map
+          - img [ref=e18]
+          - generic [ref=e185]: 地圖
+        - link "AI 對話" [ref=e20] [cursor=pointer]:
+          - /url: /chat
+          - img [ref=e21]
+          - generic [ref=e186]: AI 對話
+        - link "行程" [ref=e23] [cursor=pointer]:
+          - /url: /itinerary
+          - img [ref=e24]
+          - generic [ref=e187]: 行程
+        - link "個人資料" [ref=e26] [cursor=pointer]:
+          - /url: /profile
+          - img [ref=e27]
+          - generic [ref=e188]: 個人資料
+      - generic [ref=e31]:
+        - generic [ref=e32]:
+          - generic [ref=e33]: A
+          - generic [ref=e34]:
+            - paragraph [ref=e35]: 訪客模式
+            - paragraph [ref=e36]: 登入以同步行程
+        - button "登入" [ref=e189]:
+          - img [ref=e190]
+          - generic [ref=e192]: 登入
+    - main [ref=e41]:
+      - generic [ref=e42]:
+        - generic [ref=e47]:
+          - button "捲動並聚焦到搜尋列" [ref=e48] [cursor=pointer]:
+            - img [ref=e49]
+            - text: AI 旅遊影片分析
+          - heading "用旅遊影片規劃行程" [level=1] [ref=e52]
+          - paragraph [ref=e53]: 輸入關鍵字搜尋 YouTube，或貼上 YouTube 連結。
+        - generic [ref=e54]:
+          - generic [ref=e56]:
+            - generic [ref=e57]:
+              - generic [ref=e58]:
+                - img [ref=e60]
+                - textbox "搜尋關鍵字或貼上 YouTube 連結" [ref=e63]
+              - button "搜尋" [disabled] [ref=e64]
+            - paragraph [ref=e65]: 貼上連結會分析重點片段與地點；輸入關鍵字會更新推薦卡片。
+          - generic [ref=e66]:
+            - generic [ref=e67]:
+              - img [ref=e68]
+              - heading "推薦影片" [level=2] [ref=e71]
+              - generic [ref=e72]: 6 筆
+              - generic [ref=e194]: 預設推薦
+            - generic [ref=e73]:
+              - button "開啟影片摘要：台北四日旅遊攻略：夜市、溫泉與城市散步" [ref=e195] [cursor=pointer]:
+                - generic [ref=e196]:
+                  - img "台北四日旅遊攻略：夜市、溫泉與城市散步" [ref=e197]
+                  - generic [ref=e198]:
+                    - img [ref=e199]
+                    - text: 20:45
+                  - img [ref=e204]
+                - generic [ref=e206]:
+                  - heading "台北四日旅遊攻略：夜市、溫泉與城市散步" [level=3] [ref=e207]
+                  - generic [ref=e208]:
+                    - generic [ref=e209]:
+                      - img [ref=e210]
+                      - text: 預設推薦
+                    - generic [ref=e214]:
+                      - generic [ref=e215]: 預設推薦
+                      - generic [ref=e216]: 台北101
+                      - generic [ref=e217]: 士林夜市
+                      - generic [ref=e218]: +1 個地點
+              - button "開啟影片摘要：新北淡水景點完整攻略：老街、古蹟與河岸夕景" [ref=e219] [cursor=pointer]:
+                - generic [ref=e220]:
+                  - img "新北淡水景點完整攻略：老街、古蹟與河岸夕景" [ref=e221]
+                  - generic [ref=e222]:
+                    - img [ref=e223]
+                    - text: 15:58
+                  - img [ref=e228]
+                - generic [ref=e230]:
+                  - heading "新北淡水景點完整攻略：老街、古蹟與河岸夕景" [level=3] [ref=e231]
+                  - generic [ref=e232]:
+                    - generic [ref=e233]:
+                      - img [ref=e234]
+                      - text: 預設推薦
+                    - generic [ref=e238]:
+                      - generic [ref=e239]: 預設推薦
+                      - generic [ref=e240]: 淡水老街
+                      - generic [ref=e241]: 紅毛城
+                      - generic [ref=e242]: +1 個地點
+              - button "開啟影片摘要：桃園老城區郊遊路線：古廟與市場小吃" [ref=e243] [cursor=pointer]:
+                - generic [ref=e244]:
+                  - img "桃園老城區郊遊路線：古廟與市場小吃" [ref=e245]
+                  - generic [ref=e246]:
+                    - img [ref=e247]
+                    - text: 02:39
+                  - img [ref=e252]
+                - generic [ref=e254]:
+                  - heading "桃園老城區郊遊路線：古廟與市場小吃" [level=3] [ref=e255]
+                  - generic [ref=e256]:
+                    - generic [ref=e257]:
+                      - img [ref=e258]
+                      - text: 預設推薦
+                    - generic [ref=e262]:
+                      - generic [ref=e263]: 預設推薦
+                      - generic [ref=e264]: 桃園文昌廟
+                      - generic [ref=e265]: 新民街
+                      - generic [ref=e266]: +1 個地點
+              - button "開啟影片摘要：台中一日攻略：國家歌劇院、審計新村與夜市" [ref=e267] [cursor=pointer]:
+                - generic [ref=e268]:
+                  - img "台中一日攻略：國家歌劇院、審計新村與夜市" [ref=e269]
+                  - generic [ref=e270]:
+                    - img [ref=e271]
+                    - text: 26:22
+                  - img [ref=e276]
+                - generic [ref=e278]:
+                  - heading "台中一日攻略：國家歌劇院、審計新村與夜市" [level=3] [ref=e279]
+                  - generic [ref=e280]:
+                    - generic [ref=e281]:
+                      - img [ref=e282]
+                      - text: 預設推薦
+                    - generic [ref=e286]:
+                      - generic [ref=e287]: 預設推薦
+                      - generic [ref=e288]: 臺中國家歌劇院
+                      - generic [ref=e289]: 審計新村
+                      - generic [ref=e290]: +1 個地點
+              - button "開啟影片摘要：台南 36 小時玩法：古城散步與在地美食" [ref=e291] [cursor=pointer]:
+                - generic [ref=e292]:
+                  - img "台南 36 小時玩法：古城散步與在地美食" [ref=e293]
+                  - generic [ref=e294]:
+                    - img [ref=e295]
+                    - text: 35:47
+                  - img [ref=e300]
+                - generic [ref=e302]:
+                  - heading "台南 36 小時玩法：古城散步與在地美食" [level=3] [ref=e303]
+                  - generic [ref=e304]:
+                    - generic [ref=e305]:
+                      - img [ref=e306]
+                      - text: 預設推薦
+                    - generic [ref=e310]:
+                      - generic [ref=e311]: 預設推薦
+                      - generic [ref=e312]: 赤崁樓
+                      - generic [ref=e313]: 臺南孔廟
+                      - generic [ref=e314]: +2 個地點
+              - button "開啟影片摘要：高雄初訪行程：旗津海鮮與港灣海景" [ref=e315] [cursor=pointer]:
+                - generic [ref=e316]:
+                  - img "高雄初訪行程：旗津海鮮與港灣海景" [ref=e317]
+                  - generic [ref=e318]:
+                    - img [ref=e319]
+                    - text: 16:05
+                  - img [ref=e324]
+                - generic [ref=e326]:
+                  - heading "高雄初訪行程：旗津海鮮與港灣海景" [level=3] [ref=e327]
+                  - generic [ref=e328]:
+                    - generic [ref=e329]:
+                      - img [ref=e330]
+                      - text: 預設推薦
+                    - generic [ref=e334]:
+                      - generic [ref=e335]: 預設推薦
+                      - generic [ref=e336]: 旗津老街
+                      - generic [ref=e337]: 旗津海水浴場
+                      - generic [ref=e338]: +1 個地點
+          - generic [ref=e76]:
+            - heading "合作夥伴優惠" [level=3] [ref=e77]
+            - generic [ref=e78]:
+              - button "往左滑動" [ref=e79]:
+                - img [ref=e80]
+              - generic [ref=e82]:
+                - generic [ref=e84] [cursor=pointer]:
+                  - generic [ref=e85]:
+                    - generic [ref=e86]:
+                      - generic [ref=e87]: TravelGo
+                      - generic [ref=e88]: LINE Bank
+                    - paragraph [ref=e89]: 日韓泰 機票飯店 85 折起
+                    - paragraph [ref=e90]: 機票、飯店、機加酒專屬優惠
+                  - generic [ref=e91]:
+                    - generic [ref=e92]: 每週三優惠
+                    - generic [ref=e93]: AD
+                - generic [ref=e95] [cursor=pointer]:
+                  - generic [ref=e96]:
+                    - generic [ref=e98]: GoAsia
+                    - paragraph [ref=e99]: 深度旅遊 搶飯店優惠 $300
+                    - paragraph [ref=e100]: 訂機票、飯店拿 500 獎勵金
+                  - generic [ref=e101]:
+                    - generic [ref=e102]: 立即預訂
+                    - generic [ref=e103]: AD
+                - generic [ref=e105] [cursor=pointer]:
+                  - generic [ref=e106]:
+                    - generic [ref=e107]:
+                      - generic [ref=e108]: FunTrip
+                      - generic [ref=e109]: VISA
+                    - paragraph [ref=e110]: 釜山自由行 加購行李 5 折
+                    - paragraph [ref=e111]: 每週一開搶 限量優惠
+                  - generic [ref=e112]:
+                    - generic [ref=e113]: 每週一開搶
+                    - generic [ref=e114]: AD
+                - generic [ref=e116] [cursor=pointer]:
+                  - generic [ref=e117]:
+                    - generic [ref=e118]:
+                      - generic [ref=e119]: SkyPass
+                      - generic [ref=e120]: MasterCard
+                    - paragraph [ref=e121]: 東京大阪 來回機票 $4,999
+                    - paragraph [ref=e122]: 限時搶購 售完為止
+                  - generic [ref=e123]:
+                    - generic [ref=e124]: 馬上搶
+                    - generic [ref=e125]: AD
+                - generic [ref=e127] [cursor=pointer]:
+                  - generic [ref=e128]:
+                    - generic [ref=e130]: StayEasy
+                    - paragraph [ref=e131]: 曼谷五星飯店 買一送一
+                    - paragraph [ref=e132]: 入住含早餐、免費接駁
+                  - generic [ref=e133]:
+                    - generic [ref=e134]: 限量搶購
+                    - generic [ref=e135]: AD
+                - generic [ref=e137] [cursor=pointer]:
+                  - generic [ref=e138]:
+                    - generic [ref=e139]:
+                      - generic [ref=e140]: RailEurope
+                      - generic [ref=e141]: JCB
+                    - paragraph [ref=e142]: 歐洲火車通票 75 折
+                    - paragraph [ref=e143]: 暢遊法德義瑞 無限搭乘
+                  - generic [ref=e144]:
+                    - generic [ref=e145]: 立即選購
+                    - generic [ref=e146]: AD
+                - generic [ref=e148] [cursor=pointer]:
+                  - generic [ref=e149]:
+                    - generic [ref=e151]: IslandHop
+                    - paragraph [ref=e152]: 沖繩租車自駕 3 日 $1,200
+                    - paragraph [ref=e153]: 含全險、免費 GPS 導航
+                  - generic [ref=e154]:
+                    - generic [ref=e155]: 預約租車
+                    - generic [ref=e156]: AD
+                - generic [ref=e158] [cursor=pointer]:
+                  - generic [ref=e159]:
+                    - generic [ref=e160]:
+                      - generic [ref=e161]: WifiGo
+                      - generic [ref=e162]: 中華電信
+                    - paragraph [ref=e163]: 出國上網 吃到飽 $99/天
+                    - paragraph [ref=e164]: 日韓東南亞 高速不降速
+                  - generic [ref=e165]:
+                    - generic [ref=e166]: 立即申辦
+                    - generic [ref=e167]: AD
+              - button "往右滑動" [ref=e168]:
+                - img [ref=e169]
+  - button "Open Next.js Dev Tools" [ref=e176] [cursor=pointer]:
+    - img [ref=e177]
+  - alert [ref=e339]

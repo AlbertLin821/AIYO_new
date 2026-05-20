@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
 import { OllamaRequestError, resolveModelForTask } from "@/server/ai/ollamaClient";
-import { addMemories, formatMemoryContext, searchMemories } from "@/server/memory/mem0Client";
+import { addMemories, formatMemoryContext } from "@/server/memory/mem0Client";
+import { retrieveRelevantMemoriesForUser } from "@/server/memory/memoryRetrieval";
 import { StructuredOutputError } from "@/server/ai/responseParser";
 import { requireSessionUser } from "@/server/auth";
 import { resolveSessionTrip, saveTripPayload } from "@/server/data/appStateService";
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
     const mustVisit = tripRequest.preferences.mustVisit || [];
     const avoid = tripRequest.preferences.avoid || [];
 
-    const memories = await searchMemories({
+    const { memories } = await retrieveRelevantMemoriesForUser({
       userId,
       query: [
         destination,

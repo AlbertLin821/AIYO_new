@@ -19,21 +19,86 @@ export const E2E_COLLABORATOR = {
 export type E2EUser = typeof E2E_OWNER;
 
 export async function resetE2EData() {
-  await prisma.user.deleteMany({
+  const users = await prisma.user.findMany({
     where: {
       email: {
         in: [E2E_OWNER.email, E2E_COLLABORATOR.email],
       },
     },
+    select: { id: true },
   });
+  const userIds = users.map((user) => user.id);
+  if (userIds.length === 0) {
+    await prisma.$disconnect();
+    return;
+  }
+
+  const trips = await prisma.trip.findMany({
+    where: {
+      OR: [{ userId: { in: userIds } }, { collaborators: { some: { userId: { in: userIds } } } }],
+    },
+    select: { id: true },
+  });
+  const tripIds = trips.map((trip) => trip.id);
+  const rooms = tripIds.length
+    ? await prisma.collaborationRoom.findMany({
+        where: { tripId: { in: tripIds } },
+        select: { id: true },
+      })
+    : [];
+  const roomIds = rooms.map((room) => room.id);
+
+  await prisma.$transaction([
+    roomIds.length
+      ? prisma.collaborationPresence.deleteMany({ where: { roomId: { in: roomIds } } })
+      : prisma.collaborationPresence.deleteMany({ where: { userId: { in: userIds } } }),
+    roomIds.length
+      ? prisma.comment.deleteMany({ where: { OR: [{ roomId: { in: roomIds } }, { authorId: { in: userIds } }] } })
+      : prisma.comment.deleteMany({ where: { authorId: { in: userIds } } }),
+    prisma.chatMessage.deleteMany({ where: { OR: [{ userId: { in: userIds } }, { tripId: { in: tripIds } }] } }),
+    prisma.tripCollaborator.deleteMany({ where: { OR: [{ userId: { in: userIds } }, { tripId: { in: tripIds } }] } }),
+    prisma.session.deleteMany({ where: { userId: { in: userIds } } }),
+    prisma.account.deleteMany({ where: { userId: { in: userIds } } }),
+    prisma.profile.deleteMany({ where: { userId: { in: userIds } } }),
+    prisma.itineraryFolder.deleteMany({ where: { userId: { in: userIds } } }),
+    prisma.user.deleteMany({ where: { id: { in: userIds } } }),
+  ]);
+  await prisma.$disconnect();
 }
 
 export async function seedAuthUsers() {
   await resetE2EData();
   const passwordHash = await bcrypt.hash(TEST_PASSWORD, 10);
   const [owner, collaborator] = await prisma.$transaction([
-    prisma.user.create({
-      data: {
+    prisma.user.upsert({
+      where: { email: E2E_OWNER.email },
+      update: {
+        name: E2E_OWNER.name,
+        passwordHash,
+        profile: {
+          upsert: {
+            update: {
+              budget: 12000,
+              destination: "台南",
+              preferences: {
+                interests: ["food", "culture"],
+                preferredTransport: "walk",
+                pace: "moderate",
+              },
+            },
+            create: {
+              budget: 12000,
+              destination: "台南",
+              preferences: {
+                interests: ["food", "culture"],
+                preferredTransport: "walk",
+                pace: "moderate",
+              },
+            },
+          },
+        },
+      },
+      create: {
         email: E2E_OWNER.email,
         name: E2E_OWNER.name,
         passwordHash,
@@ -50,8 +115,35 @@ export async function seedAuthUsers() {
         },
       },
     }),
-    prisma.user.create({
-      data: {
+    prisma.user.upsert({
+      where: { email: E2E_COLLABORATOR.email },
+      update: {
+        name: E2E_COLLABORATOR.name,
+        passwordHash,
+        profile: {
+          upsert: {
+            update: {
+              budget: 8000,
+              destination: "台南",
+              preferences: {
+                interests: ["food"],
+                preferredTransport: "walk",
+                pace: "moderate",
+              },
+            },
+            create: {
+              budget: 8000,
+              destination: "台南",
+              preferences: {
+                interests: ["food"],
+                preferredTransport: "walk",
+                pace: "moderate",
+              },
+            },
+          },
+        },
+      },
+      create: {
         email: E2E_COLLABORATOR.email,
         name: E2E_COLLABORATOR.name,
         passwordHash,

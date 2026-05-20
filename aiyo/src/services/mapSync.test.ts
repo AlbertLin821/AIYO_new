@@ -55,6 +55,39 @@ test("buildPinsFromTripPlan links pins back to itinerary items", () => {
   assert.equal(pins[0].source, "itinerary");
 });
 
+test("buildPinsFromTripPlan skips null-island placeholder coordinates", () => {
+  const days: TripPlanDay[] = [
+    {
+      dayNumber: 1,
+      items: [
+        {
+          id: "bad-location",
+          time: "09:00",
+          title: "錯誤標點",
+          type: "activity",
+          location: {
+            name: "錯誤標點",
+            lat: 0,
+            lng: 0,
+            description: "placeholder",
+          },
+        },
+        {
+          id: "good-location",
+          time: "10:00",
+          title: "正確標點",
+          type: "activity",
+          location: locationWithDetails,
+        },
+      ],
+    },
+  ];
+
+  const pins = buildPinsFromTripPlan(days);
+  assert.equal(pins.length, 1);
+  assert.equal(pins[0].id, "day_1_good-location");
+});
+
 test("buildPinsFromTripPlan includes manually added geocoded activities", () => {
   const days: TripPlanDay[] = [
     {

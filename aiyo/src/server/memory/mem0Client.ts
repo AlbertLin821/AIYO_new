@@ -147,7 +147,8 @@ export async function deleteMemory(memoryId: string): Promise<void> {
   });
 }
 
-export function formatMemoryContext(results: Mem0SearchResult[]): string | undefined {
+/** Accepts semantic search hits or full memory records (e.g. from {@link retrieveRelevantMemoriesForUser}). */
+export function formatMemoryContext(results: Array<{ memory?: string | null }>): string | undefined {
   const lines = results
     .map((result) => result.memory?.trim())
     .filter(Boolean)

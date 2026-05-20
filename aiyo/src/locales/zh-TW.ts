@@ -31,6 +31,8 @@ export const zhTW = {
   },
   sidebar: {
     guest: "訪客模式",
+    sessionLoading: "載入中…",
+    sessionLoadingHint: "正在確認登入狀態",
     signInHint: "登入以同步行程",
     signIn: "登入",
     signOut: "登出",
@@ -151,6 +153,17 @@ export const zhTW = {
   },
   mapPage: {
     openItineraryPanel: "開啟行程面板",
+  },
+  tripMapPage: {
+    invalidId: "網址中的行程識別無效。",
+    tripNotFound: "找不到此行程，連結可能過期或不正確。",
+    tripForbidden: "你沒有權限檢視此行程。",
+    loadFailed: "無法載入此行程。",
+    loadingTitle: "載入行程中…",
+    backToItinerary: "行程規劃",
+    backToItineraryAria: "返回行程規劃頁",
+    openTripMapAria: "以地圖與時間軸檢視：{title}",
+    openTripMapTitle: "地圖檢視",
   },
   bootstrap: {
     failedTitle: "初始化失敗",
@@ -559,6 +572,7 @@ export const zhTW = {
     toastMap: "已將地點加入地圖。",
     toastItinerary: "已從此影片建立新的行程日。",
     openOnYoutube: "在 YouTube 開啟影片",
+    openSegmentOnYoutube: "在 YouTube 開啟此片段",
     previewThumbOnly: "縮圖預覽",
     closeDrawerAria: "關閉影片摘要",
     refreshSummaryAria: "重新分析此影片（清除已存摘要並再跑一次 AI）",

@@ -58,6 +58,28 @@ test("parseTripPlanResponse repairs alias keys and malformed times", () => {
   assert.equal(parsed.diagnostics.parseMode, "normalized");
 });
 
+test("parseTripPlanResponse drops null-island placeholder locations", () => {
+  const raw = JSON.stringify({
+    summary: "Trip",
+    days: [
+      {
+        dayNumber: 1,
+        items: [
+          {
+            title: "神農街",
+            time: "09:00",
+            type: "attraction",
+            location: { name: "神農街", lat: 0, lng: 0, description: "placeholder" },
+          },
+        ],
+      },
+    ],
+  });
+
+  const parsed = parseTripPlanResponse(raw, request);
+  assert.equal(parsed.result.days[0].items[0].location, undefined);
+});
+
 test("parseTripPlanResponse reports avoid pollution and must-visit issues in warnings", () => {
   const raw = JSON.stringify({
     summary: "Trip",

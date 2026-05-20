@@ -6,8 +6,12 @@ test("searchWeb normalizes results and filters empty rows", async () => {
   process.env.SEARXNG_BASE_URL = "http://localhost:8081";
 
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = (async () =>
-    new Response(
+  globalThis.fetch = (async (_input, init) => {
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get("X-Forwarded-For"), "127.0.0.1");
+    assert.equal(headers.get("X-Real-IP"), "127.0.0.1");
+
+    return new Response(
       JSON.stringify({
         results: [
           {
@@ -25,7 +29,8 @@ test("searchWeb normalizes results and filters empty rows", async () => {
         ],
       }),
       { status: 200 },
-    )) as typeof fetch;
+    );
+  }) as typeof fetch;
 
   try {
     const { searchWeb } = await import("@/server/search/searxngClient");

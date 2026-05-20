@@ -2018,8 +2018,8 @@ DATABASE_URL=
 - [ ] Google Place source 可以顯示 address/rating。
 - [ ] 沒有外部 API key 時仍能跑 mock demo。
 - [ ] lint/typecheck/build 通過。
-- [ ] docs/AIYO_ONYX_GAP_REPORT.md 已完成。
-- [ ] docs/IMPLEMENTATION_NOTES.md 已更新。
+- [x] docs/AIYO_ONYX_GAP_REPORT.md 已完成。
+- [x] docs/IMPLEMENTATION_NOTES.md 已更新。
 - [ ] `.env.example` 已更新。
 - [ ] README 或開發文件已加入啟動方式與功能說明。
 
@@ -2043,3 +2043,11 @@ DATABASE_URL=
 ```
 
 完成後，等待使用者確認，再開始 PR 1。
+
+### 執行狀態（2026-05-17）
+
+- [x] 已掃描 `AIYO_new/aiyo` 架構
+- [x] 已掃描 `F:\Projects\Githubs\onyx`（read-only，路徑已確認存在）
+- [x] 已建立 `docs/AIYO_ONYX_GAP_REPORT.md`
+- [x] 已建立 `docs/IMPLEMENTATION_NOTES.md`（本階段筆記）
+- [x] 未修改 Onyx；未修改 AIYO 功能程式碼

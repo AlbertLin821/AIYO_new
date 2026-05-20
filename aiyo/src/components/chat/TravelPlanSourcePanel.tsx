@@ -10,7 +10,7 @@ export default function TravelPlanSourcePanel({
 }: {
   sources: TravelPlanResponse["sources"];
 }) {
-  const sourceEntries = Object.values(sources || {});
+  const sourceEntries = Object.values(sources || {}).filter((source) => source.type !== "weather");
   const [open, setOpen] = useState(false);
 
   if (!sourceEntries.length) {
@@ -26,7 +26,7 @@ export default function TravelPlanSourcePanel({
       >
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary/70">Sources</p>
-          <p className="mt-1 text-sm text-muted">本次規劃引用的景點、天氣、官方與網頁來源。</p>
+          <p className="mt-1 text-sm text-muted">本次規劃引用的景點、官方與網頁來源。</p>
         </div>
         <span className="inline-flex size-10 items-center justify-center rounded-full border border-border-light bg-white text-slate-600">
           <ChevronDown className={cn("size-4 transition-transform", open ? "rotate-180" : "")} aria-hidden />

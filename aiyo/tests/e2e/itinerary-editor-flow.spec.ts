@@ -47,7 +47,10 @@ test.describe("嘉義情境行程編輯器", () => {
       page.getByTestId("activity-card").filter({ hasText: "E2E排序乙" }),
     ).toBeVisible();
 
-    const handles = page.getByTitle("拖曳排序");
+    const handles = page
+      .getByTestId("activity-card")
+      .filter({ hasText: /E2E排序[甲乙]/ })
+      .getByTitle("拖曳排序");
     await expect(handles).toHaveCount(2);
     await handles.first().dragTo(handles.nth(1));
     await page.waitForTimeout(800);

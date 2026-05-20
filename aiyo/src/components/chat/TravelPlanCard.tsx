@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import { CitationGroup } from "@/components/chat/SourceTag";
 import TravelPlanDayAccordion from "@/components/chat/TravelPlanDayAccordion";
 import TravelPlanSourcePanel from "@/components/chat/TravelPlanSourcePanel";
+import type { SourceReference } from "@/lib/types/sources";
 import type { TravelPlanResponse } from "@/types";
 
 const REVISION_ACTIONS = ["放慢步調", "改成自駕", "加入更多美食", "減少購物"] as const;
@@ -44,10 +45,12 @@ export default function TravelPlanCard({
   plan,
   onRevise,
   revisionDisabled,
+  onOpenGroundedSource,
 }: {
   plan: TravelPlanResponse;
   onRevise: (instruction: string) => void;
   revisionDisabled?: boolean;
+  onOpenGroundedSource?: (source: SourceReference) => void;
 }) {
   const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(plan.days.map((day, index) => [day.day, index === 0])),
@@ -111,6 +114,7 @@ export default function TravelPlanCard({
             sources={sources}
             expanded={Boolean(expandedDays[day.day])}
             onToggle={() => setExpandedDays((prev) => ({ ...prev, [day.day]: !prev[day.day] }))}
+            onOpenGroundedDetail={onOpenGroundedSource}
           />
         ))}
       </div>
@@ -135,19 +139,31 @@ export default function TravelPlanCard({
               {plan.weather_alerts.map((alert) => (
                 <div key={`${alert.day}_${alert.message}`} className="rounded-2xl border border-slate-200/80 bg-white px-3 py-3">
                   <p className="font-medium text-slate-900">{`${alert.day}：${alert.message}`}</p>
-                  <CitationGroup citations={alert.citations} sources={sources} />
+                  <CitationGroup
+                    citations={alert.citations}
+                    sources={sources}
+                    onOpenGroundedDetail={onOpenGroundedSource}
+                  />
                 </div>
               ))}
               {plan.event_alerts.map((alert, index) => (
                 <div key={`${alert.day || "event"}_${index}`} className="rounded-2xl border border-slate-200/80 bg-white px-3 py-3">
                   <p className="font-medium text-slate-900">{alert.day ? `${alert.day}：${alert.message}` : alert.message}</p>
-                  <CitationGroup citations={alert.citations} sources={sources} />
+                  <CitationGroup
+                    citations={alert.citations}
+                    sources={sources}
+                    onOpenGroundedDetail={onOpenGroundedSource}
+                  />
                 </div>
               ))}
               {plan.assumptions.map((item, index) => (
                 <div key={`assumption_${index}_${item.text}`} className="rounded-2xl border border-slate-200/80 bg-white px-3 py-3">
                   <p className="font-medium text-slate-900">{item.text}</p>
-                  <CitationGroup citations={item.citations} sources={sources} />
+                  <CitationGroup
+                    citations={item.citations}
+                    sources={sources}
+                    onOpenGroundedDetail={onOpenGroundedSource}
+                  />
                 </div>
               ))}
             </div>

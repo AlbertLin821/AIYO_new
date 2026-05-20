@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
 import { getTripAccess, requireTripAccess } from "@/server/tripAccess";
 import type {
   BootstrapPayload,
@@ -279,7 +280,10 @@ function serializeTrip(trip: {
       transport: item.transportMode || undefined,
       notes: item.description || undefined,
       location:
-        item.location && item.latitude != null && item.longitude != null
+        item.location &&
+        item.latitude != null &&
+        item.longitude != null &&
+        hasUsableMapCoordinate({ lat: item.latitude, lng: item.longitude })
           ? {
               name: item.location,
               lat: item.latitude,
@@ -306,7 +310,7 @@ function serializeTrip(trip: {
   const itinerary = Array.from(grouped.values())
     .sort((left, right) => left.dayNumber - right.dayNumber)
     .map((day) => hydrateSparseDayItems(day, trip.destination));
-  const pins: MapPin[] = trip.pins.map((pin) => ({
+  const pins: MapPin[] = trip.pins.filter((pin) => hasUsableMapCoordinate(pin)).map((pin) => ({
     id: pin.id,
     name: pin.label,
     lat: pin.lat,
@@ -802,34 +806,37 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
   }
 
   const items = normalizedDays.flatMap((day) =>
-    day.items.map((item, index) => ({
-      id: item.id,
-      tripId: trip.id,
-      day: day.dayNumber,
-      title: item.title,
-      description: item.notes || null,
-      timeSlot: item.time,
-      itemType: item.type,
-      transportMode: item.transport || null,
-      source: item.source || "manual",
-      location: item.location?.name || null,
-      latitude: item.location?.lat ?? null,
-      longitude: item.location?.lng ?? null,
-      locationDesc: item.location?.description || null,
-      locationAddress: item.location?.address || null,
-      placeId: item.location?.placeId || null,
-      photoUrl: item.location?.photoUrl || null,
-      thumbnail: item.location?.thumbnail || null,
-      openingHours: item.location?.openingHours || null,
-      phoneNumber: item.location?.phoneNumber || null,
-      website: item.location?.website || null,
-      googleMapsUrl: item.location?.googleMapsUrl || null,
-      rating: item.location?.rating ?? null,
-      userRatingsTotal: item.location?.userRatingsTotal ?? null,
-      confidence: item.location?.confidence ?? null,
-      verified: item.location?.verified ?? null,
-      order: index,
-    })),
+    day.items.map((item, index) => {
+      const location = hasUsableMapCoordinate(item.location) ? item.location : undefined;
+      return {
+        id: item.id,
+        tripId: trip.id,
+        day: day.dayNumber,
+        title: item.title,
+        description: item.notes || null,
+        timeSlot: item.time,
+        itemType: item.type,
+        transportMode: item.transport || null,
+        source: item.source || "manual",
+        location: location?.name || null,
+        latitude: location?.lat ?? null,
+        longitude: location?.lng ?? null,
+        locationDesc: location?.description || null,
+        locationAddress: location?.address || null,
+        placeId: location?.placeId || null,
+        photoUrl: location?.photoUrl || null,
+        thumbnail: location?.thumbnail || null,
+        openingHours: location?.openingHours || null,
+        phoneNumber: location?.phoneNumber || null,
+        website: location?.website || null,
+        googleMapsUrl: location?.googleMapsUrl || null,
+        rating: location?.rating ?? null,
+        userRatingsTotal: location?.userRatingsTotal ?? null,
+        confidence: location?.confidence ?? null,
+        verified: location?.verified ?? null,
+        order: index,
+      };
+    }),
   );
 
   if (items.length > 0) {
@@ -839,9 +846,10 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
     });
   }
 
-  if (input.pins.length > 0) {
+  const validPins = input.pins.filter((pin) => hasUsableMapCoordinate(pin));
+  if (validPins.length > 0) {
     await prisma.mapPin.createMany({
-      data: input.pins.map((pin) => ({
+      data: validPins.map((pin) => ({
         id: pin.id,
         tripId: trip.id,
         label: pin.name,

@@ -32,6 +32,7 @@ test("POST /api/search/web returns results on success", async () => {
     assert.equal(body.data.query, "嘉義美食景點");
     assert.equal(Array.isArray(body.data.results), true);
     assert.equal(body.data.results.length, 1);
+    assert.equal(body.data.provider, "searxng");
   } finally {
     globalThis.fetch = originalFetch;
   }

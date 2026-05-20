@@ -23,6 +23,8 @@ import ChatHistorySidebar from "@/components/chat/ChatHistorySidebar";
 import ChatWorkflowRail from "@/components/chat/ChatWorkflowRail";
 import MarkdownMessage from "@/components/chat/MarkdownMessage";
 import TravelPlanCard from "@/components/chat/TravelPlanCard";
+import { CitationList } from "@/components/sources/CitationList";
+import { SourceDrawer } from "@/components/sources/SourceDrawer";
 import VideoCard from "@/components/home/VideoCard";
 import { zhTW as t } from "@/locales/zh-TW";
 import {
@@ -45,6 +47,7 @@ import {
   readChatBackgroundPresetId,
 } from "@/lib/chatBackground";
 import { buildWorkflowSteps } from "@/lib/workflowSteps";
+import { createMockGroundedAssistantMessage } from "@/lib/mocks/groundedChatMock";
 import { cn } from "@/lib/utils";
 import { reviseTripPlan, sendChatMessage } from "@/services/aiClient";
 import { createNewTrip, listTripsForLibrary, setActiveTrip } from "@/services/itineraryClient";
@@ -52,10 +55,12 @@ import { syncService } from "@/services/syncService";
 import { fetchVideoRecommendations, shouldSkipClientVideoSummarize, summarizeVideo } from "@/services/videoClient";
 import { useChatStore } from "@/stores/useChatStore";
 import { useToastStore } from "@/stores/useToastStore";
+import { useMapStore } from "@/stores/useMapStore";
 import { useTripStore } from "@/stores/useTripStore";
 import { useUserStore } from "@/stores/useUserStore";
 import { useVideoStore } from "@/stores/useVideoStore";
 import type { ItineraryListItem } from "@/lib/itinerary-sort";
+import type { SourceReference } from "@/lib/types/sources";
 import type {
   AiProposedChange,
   ChatMessage,
@@ -365,6 +370,7 @@ export default function ChatPage() {
   const [expandedContextDays, setExpandedContextDays] = useState<Record<number, boolean>>({});
   const [contextPanelWidth, setContextPanelWidth] = useState(288);
   const [autoSummaryProgress, setAutoSummaryProgress] = useState<{ current: number; total: number } | null>(null);
+  const [sourceDrawerSource, setSourceDrawerSource] = useState<SourceReference | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const statusStreamRef = useRef<EventSource | null>(null);
   const chatAbortControllerRef = useRef<AbortController | null>(null);
@@ -550,6 +556,37 @@ export default function ChatPage() {
     isSending ||
     Boolean(workflowRail.questionCard) ||
     workflowView.length > 0;
+
+  useEffect(() => {
+    if (itinerarySyncState.status === "syncing" || itinerarySyncState.status === "failed") {
+      return;
+    }
+    const itemCount = tripStore.itinerary.reduce((total, day) => total + day.items.length, 0);
+    if (!tripStore.tripId && itemCount === 0) {
+      setItinerarySyncState({
+        status: "idle",
+        title: "尚未同步",
+        detail: "送出需求後，這裡會顯示右側行程欄的最新同步結果。",
+      });
+      return;
+    }
+    if (tripStore.tripId) {
+      setItinerarySyncState({
+        status: "synced",
+        title: "已載入目前行程",
+        detail:
+          itemCount > 0
+            ? `目前行程已連結，右側顯示 ${tripStore.itinerary.length} 天、${itemCount} 個活動。`
+            : "目前行程已連結，尚未建立每日活動。",
+      });
+      return;
+    }
+    setItinerarySyncState({
+      status: "syncing",
+      title: "準備建立行程",
+      detail: `已產生 ${tripStore.itinerary.length} 天、${itemCount} 個活動，正在等待同步到行程資料。`,
+    });
+  }, [itinerarySyncState.status, tripStore.itinerary, tripStore.tripId]);
 
   const extractedValues = [
     contextDestination || t.chat.valueUnset,
@@ -944,6 +981,7 @@ export default function ChatPage() {
   ) {
     const hasQuestionAnswers = Boolean(options?.questionAnswers?.length);
     const message = (rawInput || input).trim();
+    const userTextForRetry = hasQuestionAnswers ? "" : message;
     if ((!message && !hasQuestionAnswers) || isSending) {
       return;
     }
@@ -1141,11 +1179,13 @@ export default function ChatPage() {
       const shouldDirectMergeGeneratedPlan =
         response.reply.responseType === "travel_plan" &&
         response.tripProfile?.plan_integration !== "self_merge";
+      const hasApplicableProposedChanges = Boolean(
+        response.proposedChanges?.length && response.reply.responseType !== "question_card",
+      );
       const shouldApplyItineraryUpdate =
-        Boolean(useTripStore.getState().tripId) &&
         Boolean(
           response.itinerarySuggestion ||
-            (response.proposedChanges?.length && response.reply.responseType !== "question_card") ||
+            hasApplicableProposedChanges ||
             isItineraryMutationCommand(message) ||
             shouldDirectMergeGeneratedPlan,
         );
@@ -1253,6 +1293,15 @@ export default function ChatPage() {
       failFrontendDebugProcess(chatProcessId, error, {
         progressSessionId,
       });
+      setStreamingStatusSteps([]);
+      setWorkflowRail((prev) => ({
+        ...prev,
+        steps: [],
+        visible: Boolean(prev.questionCard),
+      }));
+      if (userTextForRetry) {
+        setInput(userTextForRetry);
+      }
       const description =
         error instanceof Error ? error.message : t.chat.requestFailedGeneric;
       setErrorMessage(description);
@@ -1273,6 +1322,7 @@ export default function ChatPage() {
           chatAbortControllerRef.current = null;
         }
         stopStatusStream();
+        setStreamingStatusSteps([]);
         setIsSending(false);
       }
     }
@@ -1371,6 +1421,12 @@ export default function ChatPage() {
       failFrontendDebugProcess(reviseProcessId, error, {
         progressSessionId,
       });
+      setStreamingStatusSteps([]);
+      setWorkflowRail((prev) => ({
+        ...prev,
+        steps: [],
+        visible: Boolean(prev.questionCard),
+      }));
       const description =
         error instanceof Error ? error.message : t.chat.requestFailedGeneric;
       setErrorMessage(description);
@@ -1389,6 +1445,7 @@ export default function ChatPage() {
           chatAbortControllerRef.current = null;
         }
         stopStatusStream();
+        setStreamingStatusSteps([]);
         setIsSending(false);
       }
     }
@@ -1455,10 +1512,23 @@ export default function ChatPage() {
       }
       if (change.locationName) {
         if (target.item.location) {
-          patch.location = {
-            ...target.item.location,
-            name: change.locationName,
-          };
+          const currentLocationName = target.item.location.name.trim();
+          const nextLocationName = change.locationName.trim();
+          if (currentLocationName === nextLocationName) {
+            patch.location = target.item.location;
+          } else {
+            patch.location = undefined;
+            patch.notes = [
+              patch.notes ?? target.item.notes ?? "",
+              `AI 建議改為「${nextLocationName}」，但尚未取得可驗證座標，已暫不沿用原本地圖標點。`,
+            ]
+              .filter(Boolean)
+              .join("\n");
+            const mapStore = useMapStore.getState();
+            mapStore.setPins(
+              mapStore.pins.filter((pin) => pin.linkedTripItemId !== target.item.id),
+            );
+          }
         } else if (!change.notes) {
           patch.notes = [target.item.notes || "", `地點：${change.locationName}`].filter(Boolean).join("\n");
         }
@@ -1728,6 +1798,14 @@ export default function ChatPage() {
     status === "authenticated" ? t.chat.emptyHintAuthed : t.chat.emptyHintGuest;
   const chatBackgroundPreset = getChatBackgroundPreset(chatBackgroundId);
 
+  function handleInsertGroundedMockExample() {
+    appendMessage(createMockGroundedAssistantMessage());
+  }
+
+  function handleOpenSourceDrawer(source: SourceReference) {
+    setSourceDrawerSource(source);
+  }
+
   function handleChatBackgroundChange(nextId: ChatBackgroundPresetId) {
     setChatBackgroundId(nextId);
     persistChatBackgroundPresetId(nextId);
@@ -1873,6 +1951,13 @@ export default function ChatPage() {
             <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
               <h1 className="font-semibold text-slate-900">{t.chat.pageTitle}</h1>
               <ChatBackgroundPicker value={chatBackgroundId} onChange={handleChatBackgroundChange} />
+              <button
+                type="button"
+                onClick={handleInsertGroundedMockExample}
+                className="rounded-full border border-dashed border-slate-300 bg-white/90 px-3 py-1 text-[11px] font-medium text-slate-600 transition-colors hover:border-slate-400 hover:bg-slate-50"
+              >
+                載入可溯源範例
+              </button>
             </div>
             <button
               type="button"
@@ -1903,7 +1988,14 @@ export default function ChatPage() {
           </div>
         )}
 
-        <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto bg-[rgba(255,255,255,0.42)] px-6 py-6">
+        <div
+          className={cn(
+            "relative z-[1] flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto bg-[rgba(255,255,255,0.42)] px-6 py-6",
+            hasWorkflowRail && workflowRail.questionCard
+              ? "scroll-pb-28 pb-[max(5rem,env(safe-area-inset-bottom))]"
+              : "",
+          )}
+        >
           {hasWorkflowRail ? (
             <ChatWorkflowRail
               visible={hasWorkflowRail}
@@ -1918,6 +2010,13 @@ export default function ChatPage() {
             <div className="rounded-3xl border border-dashed border-slate-300 bg-white px-4 py-10 text-center text-sm text-slate-500">
               <p className="font-medium text-slate-900">{t.chat.emptyTitle}</p>
               <p className="mt-2 text-xs text-slate-500">{emptyChatHint}</p>
+              <button
+                type="button"
+                onClick={handleInsertGroundedMockExample}
+                className="mt-4 rounded-full border border-slate-200 bg-slate-900 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-slate-800"
+              >
+                載入可溯源 AI 範例回覆
+              </button>
             </div>
           )}
 
@@ -1974,6 +2073,7 @@ export default function ChatPage() {
                           plan={message.travelPlan}
                           revisionDisabled={isSending}
                           onRevise={(instruction) => void handleRevisePlan(instruction, message.tripProfile || tripProfile)}
+                          onOpenGroundedSource={handleOpenSourceDrawer}
                         />
                       </div>
                     ) : message.responseType === "status_step" ? (
@@ -1987,6 +2087,17 @@ export default function ChatPage() {
                       />
                     )}
                   </div>
+                  {message.role !== "user" &&
+                    message.sourceReferences &&
+                    message.sourceReferences.length > 0 && (
+                      <div className="mt-2 max-w-[min(100%,24rem)] rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2">
+                        <CitationList
+                          sources={message.sourceReferences}
+                          maxVisible={6}
+                          onOpenSourceDetail={handleOpenSourceDrawer}
+                        />
+                      </div>
+                    )}
                   <p
                     className={`mt-1 text-[10px] text-muted ${
                       message.role === "user" ? "text-right" : ""
@@ -2294,6 +2405,11 @@ export default function ChatPage() {
         onRefreshSummary={
           selectedVideo?.videoId ? () => refreshVideoSummary(selectedVideo) : undefined
         }
+      />
+      <SourceDrawer
+        source={sourceDrawerSource}
+        open={sourceDrawerSource !== null}
+        onClose={() => setSourceDrawerSource(null)}
       />
     </div>
   );

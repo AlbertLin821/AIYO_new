@@ -2,8 +2,9 @@
 
 import { memo } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { motion } from "framer-motion";
-import { CalendarDays, Copy, MapPin, Folder, PencilLine, Trash2, Users } from "lucide-react";
+import { CalendarDays, Copy, MapPinned, MapPin, Folder, PencilLine, Trash2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { zhTW as t } from "@/locales/zh-TW";
 import type { ItineraryListItem } from "@/lib/itinerary-sort";
@@ -13,13 +14,24 @@ type Props = {
   index: number;
   disabled?: boolean;
   duplicating?: boolean;
+  tripMapHref?: string;
   onClick: (item: ItineraryListItem) => void;
   onEdit?: (item: ItineraryListItem) => void;
   onDuplicate?: (item: ItineraryListItem) => void;
   onDelete?: (item: ItineraryListItem) => void;
 };
 
-function TripLandingCard({ item, index, disabled, duplicating, onClick, onEdit, onDuplicate, onDelete }: Props) {
+function TripLandingCard({
+  item,
+  index,
+  disabled,
+  duplicating,
+  tripMapHref,
+  onClick,
+  onEdit,
+  onDuplicate,
+  onDelete,
+}: Props) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -86,8 +98,25 @@ function TripLandingCard({ item, index, disabled, duplicating, onClick, onEdit, 
         </div>
       </button>
 
-      {(onEdit || onDuplicate || onDelete) && (
+      {(tripMapHref || onEdit || onDuplicate || onDelete) && (
         <div className="absolute right-2 top-2 z-20 flex gap-1 rounded-lg bg-surface/95 p-1 opacity-0 shadow-soft transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          {tripMapHref && (
+            <Link
+              href={tripMapHref}
+              aria-label={t.tripMapPage.openTripMapAria.replace("{title}", item.title)}
+              title={t.tripMapPage.openTripMapTitle}
+              aria-disabled={disabled ? true : undefined}
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
+              className={cn(
+                "rounded-lg p-2 text-muted transition-colors hover:bg-cream/70 hover:text-primary",
+                disabled && "pointer-events-none opacity-40",
+              )}
+            >
+              <MapPinned className="size-4" aria-hidden />
+            </Link>
+          )}
           {onEdit && (
             <button
               type="button"

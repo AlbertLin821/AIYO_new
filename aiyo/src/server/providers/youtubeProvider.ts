@@ -835,6 +835,10 @@ function getLanguagePriority(code?: string): number {
   return CAPTION_LANGUAGE_PRIORITY.length + 10;
 }
 
+function isSupportedCaptionLanguage(code?: string): boolean {
+  return getLanguagePriority(code) < CAPTION_LANGUAGE_PRIORITY.length + 10;
+}
+
 function isAsrTrack(track: CaptionTrack): boolean {
   return track.kind === "asr" || /a\./i.test(track.vssId || "") || /auto/i.test(readCaptionTrackName(track));
 }
@@ -844,7 +848,12 @@ function selectCaptionTrack(tracks: CaptionTrack[]): CaptionTrack | null {
     return null;
   }
 
-  const ranked = [...tracks].sort((left, right) => {
+  const supportedTracks = tracks.filter((track) => isSupportedCaptionLanguage(track.languageCode));
+  if (supportedTracks.length === 0) {
+    return null;
+  }
+
+  const ranked = [...supportedTracks].sort((left, right) => {
     const languageDiff = getLanguagePriority(left.languageCode) - getLanguagePriority(right.languageCode);
     if (languageDiff !== 0) {
       return languageDiff;
@@ -902,7 +911,8 @@ async function tryFetchTimedTextXml(
   kind?: "manual" | "asr";
   source?: "timedtext";
 }> {
-  const candidateTracks = tracks.length > 0 ? [...tracks].sort((left, right) => {
+  const supportedTracks = tracks.filter((track) => isSupportedCaptionLanguage(track.languageCode));
+  const candidateTracks = supportedTracks.length > 0 ? [...supportedTracks].sort((left, right) => {
     const languageDiff = getLanguagePriority(left.languageCode) - getLanguagePriority(right.languageCode);
     if (languageDiff !== 0) {
       return languageDiff;
@@ -1067,9 +1077,9 @@ export async function fetchYouTubeTranscript(videoId: string): Promise<Transcrip
       entries: [],
       source: "none",
       fallbackReason: "No usable caption track was available for this video.",
-      captionLanguage: normalizeLanguageCode(selectedTrack?.languageCode) || undefined,
-      captionKind: selectedTrack ? (isAsrTrack(selectedTrack) ? "asr" : "manual") : undefined,
-      captionSource: selectedTrack ? "watch-page-captions" : undefined,
+      captionLanguage: undefined,
+      captionKind: undefined,
+      captionSource: undefined,
     };
   } catch (error) {
     return {

@@ -6,6 +6,7 @@ import {
   CalendarDays,
   Compass,
   Home,
+  Loader2,
   LogOut,
   Map,
   Menu,
@@ -148,14 +149,18 @@ export default function Sidebar() {
                   className="min-w-0 flex-1 overflow-hidden"
                 >
                   <p className="truncate text-sm font-medium text-foreground">
-                    {status === "authenticated"
-                      ? session?.user?.name || session?.user?.email || t.sidebar.guest
-                      : t.sidebar.guest}
+                    {status === "loading"
+                      ? t.sidebar.sessionLoading
+                      : status === "authenticated"
+                        ? session?.user?.name || session?.user?.email || t.sidebar.guest
+                        : t.sidebar.guest}
                   </p>
                   <p className="truncate text-[11px] text-muted">
-                    {status === "authenticated"
-                      ? session?.user?.email || ""
-                      : t.sidebar.signInHint}
+                    {status === "loading"
+                      ? t.sidebar.sessionLoadingHint
+                      : status === "authenticated"
+                        ? session?.user?.email || ""
+                        : t.sidebar.signInHint}
                   </p>
                 </motion.div>
               )}
@@ -163,7 +168,7 @@ export default function Sidebar() {
           </div>
 
           <div className={cn("mt-3 flex gap-2", collapsed ? "flex-col" : "")}>
-            {status === "authenticated" && (
+            {status === "authenticated" ? (
               <button
                 onClick={() => setSettingsModalOpen(true)}
                 className={cn(
@@ -188,24 +193,37 @@ export default function Sidebar() {
                   )}
                 </AnimatePresence>
               </button>
-            )}
+            ) : null}
             <button
               onClick={() =>
                 status === "authenticated"
                   ? void signOut({ callbackUrl: "/" })
-                  : setLoginModalOpen(true)
+                  : status === "unauthenticated"
+                    ? setLoginModalOpen(true)
+                    : undefined
               }
+              disabled={status === "loading"}
               className={cn(
                 "flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-colors",
                 status === "authenticated"
                   ? "bg-border-light text-foreground hover:bg-border"
-                  : "bg-primary text-white hover:bg-primary-dark",
+                  : status === "loading"
+                    ? "cursor-not-allowed bg-border-light/60 text-muted"
+                    : "bg-primary text-white hover:bg-primary-dark",
                 collapsed ? "w-full" : status === "authenticated" ? "flex-1" : "w-full",
               )}
-              title={status === "authenticated" ? t.sidebar.signOut : t.sidebar.signIn}
+              title={
+                status === "loading"
+                  ? t.sidebar.sessionLoading
+                  : status === "authenticated"
+                    ? t.sidebar.signOut
+                    : t.sidebar.signIn
+              }
             >
               {status === "authenticated" ? (
                 <LogOut className="size-4" />
+              ) : status === "loading" ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden />
               ) : (
                 <ArrowRightToLine className="size-4" />
               )}
@@ -218,7 +236,11 @@ export default function Sidebar() {
                     transition={{ duration: 0.15 }}
                     className="whitespace-nowrap overflow-hidden"
                   >
-                    {status === "authenticated" ? t.sidebar.signOut : t.sidebar.signIn}
+                    {status === "loading"
+                      ? t.sidebar.sessionLoading
+                      : status === "authenticated"
+                        ? t.sidebar.signOut
+                        : t.sidebar.signIn}
                   </motion.span>
                 )}
               </AnimatePresence>

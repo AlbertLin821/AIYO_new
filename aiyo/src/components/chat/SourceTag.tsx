@@ -3,8 +3,11 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { ExternalLink, Link2, Loader2 } from "lucide-react";
+import { CitationList } from "@/components/sources/CitationList";
+import { chatSourcesRecordToReferences } from "@/lib/sources/chatSourceAdapter";
 import { fetchSourcePreview } from "@/services/aiClient";
 import { cn } from "@/lib/utils";
+import type { SourceReference } from "@/lib/types/sources";
 import type { ChatSource } from "@/types";
 
 function buildSourceBadgeLabel(sourceId: string, source?: ChatSource): string {
@@ -166,15 +169,34 @@ export function SourceTag({
 export function CitationGroup({
   citations,
   sources,
+  onOpenGroundedDetail,
 }: {
   citations?: string[];
   sources?: Record<string, ChatSource>;
+  onOpenGroundedDetail?: (source: SourceReference) => void;
 }) {
   const validCitations = (citations || []).filter((citation) => Boolean(sources?.[citation]));
 
   if (!validCitations.length) {
     return null;
   }
+
+  if (onOpenGroundedDetail) {
+    const refs = chatSourcesRecordToReferences(validCitations, sources);
+    if (!refs.length) {
+      return null;
+    }
+    return (
+      <div className="mt-1">
+        <CitationList
+          sources={refs}
+          maxVisible={8}
+          onOpenSourceDetail={onOpenGroundedDetail}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="mt-1 flex flex-wrap gap-1.5">
       {validCitations.map((citation) => (

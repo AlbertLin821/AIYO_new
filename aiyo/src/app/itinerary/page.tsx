@@ -928,6 +928,7 @@ export default function ItineraryPage() {
                     index={index}
                     disabled={tripSwitching || tripDeletingId !== null}
                     duplicating={tripDuplicatingId === item.id}
+                    tripMapHref={`/trip/${item.id}`}
                     onClick={(selected) => void handleSelectTripFromLibrary(selected)}
                     onEdit={handleEditTripFromLibrary}
                     onDuplicate={(selected) => void handleDuplicateTrip(selected)}

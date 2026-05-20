@@ -70,9 +70,10 @@ export async function chatWithOllama({
   task = "default",
 }: OllamaChatOptions): Promise<string> {
   const controller = new AbortController();
+  const cap = Math.max(5000, serverConfig.ollamaTimeoutCapMs);
   const effectiveTimeout = Math.min(
     Math.max(5000, timeoutMs ?? serverConfig.ollamaTimeoutMs),
-    120_000,
+    cap,
   );
   const timeout = setTimeout(() => controller.abort(), effectiveTimeout);
 

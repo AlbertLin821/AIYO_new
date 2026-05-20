@@ -31,7 +31,7 @@ import type {
 } from "@/types";
 
 const VIDEO_PIPELINE_VERSION =
-  serverConfig.videoExtractionMode === "simple-ollama" ? "video-simple-ollama-v1" : "video-quality-v6";
+  serverConfig.videoExtractionMode === "simple-ollama" ? "video-simple-ollama-v2" : "video-quality-v7";
 const NO_VERIFIED_PLACES_MESSAGE = "此影片未擷取到足夠明確且可驗證的地點名稱。";
 const NO_SIMPLE_RESULTS_MESSAGE = "此影片未擷取到明確地點或食物名稱。";
 

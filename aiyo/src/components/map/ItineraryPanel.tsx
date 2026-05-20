@@ -20,6 +20,7 @@ import { zhTW as t } from "@/locales/zh-TW";
 import { buildItineraryRouteSegments } from "@/lib/routeSegments";
 import { getRegionalTransitOptions } from "@/lib/tripTransportRegion";
 import { cn } from "@/lib/utils";
+import { findLinkedPinForItem } from "@/lib/mapPinItineraryLink";
 import { listTripsForLibrary, setActiveTrip } from "@/services/itineraryClient";
 import { syncService } from "@/services/syncService";
 import { useMapStore } from "@/stores/useMapStore";
@@ -41,36 +42,6 @@ function transportSelectRows(destination: string) {
     value: row.value,
     label: (t.itineraryPanel as Record<string, string>)[row.labelKey] ?? row.value,
   }));
-}
-
-function normalizePlaceText(value: string | undefined): string {
-  return (value || "").trim().toLowerCase();
-}
-
-function findLinkedPinForItem(item: TripPlanItem, pins: TripMapPin[]): TripMapPin | undefined {
-  const location = item.location;
-  const normalizedLocationName = normalizePlaceText(location?.name);
-  const normalizedTitle = normalizePlaceText(item.title);
-  return pins.find((pin) => {
-    if (pin.linkedTripItemId === item.id) {
-      return true;
-    }
-    if (location?.placeId && pin.placeId && location.placeId === pin.placeId) {
-      return true;
-    }
-    if (
-      location &&
-      Math.abs(pin.lat - location.lat) < 0.00001 &&
-      Math.abs(pin.lng - location.lng) < 0.00001
-    ) {
-      return true;
-    }
-    const normalizedPinName = normalizePlaceText(pin.name);
-    return Boolean(
-      normalizedPinName &&
-      (normalizedPinName === normalizedLocationName || normalizedPinName === normalizedTitle),
-    );
-  });
 }
 
 function nextActivityTime(items: TripPlanItem[]): string {
@@ -263,10 +234,24 @@ function SortableMapStop({
               </p>
             )}
             {item.location && (
-              <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted">
+              <button
+                type="button"
+                disabled={!canSelectOnMap}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (linkedPin) {
+                    onSelectPin();
+                  }
+                }}
+                className={cn(
+                  "mt-0.5 flex max-w-full items-center gap-1 text-left text-[11px] text-muted transition-colors",
+                  canSelectOnMap && "hover:text-primary hover:underline",
+                  !canSelectOnMap && "cursor-default",
+                )}
+              >
                 <MapPin className="size-3" />
-                {item.location.name}
-              </p>
+                <span className="truncate">{item.location.name}</span>
+              </button>
             )}
             {!canSelectOnMap && (
               <p className="mt-1 text-[10px] text-muted">{t.itineraryPanel.noMapPinYet}</p>

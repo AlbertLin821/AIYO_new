@@ -9,7 +9,8 @@ import {
 } from "@/server/ai/promptBuilder";
 import { serverConfig } from "@/server/config";
 import { shouldUseWebSearch } from "@/server/search/searchIntent";
-import { searchWeb, type WebSearchResult } from "@/server/search/searxngClient";
+import { runUnifiedWebSearch, type WebSearchBackend } from "@/server/search/webSearchService";
+import type { WebSearchResult } from "@/server/search/searxngClient";
 import { mergeChatSources, normalizeWebSearchSources, pickCitationIdsForText } from "@/server/chat/sourceNormalization";
 import { registerChatSources } from "@/server/chat/sourcePreviewStore";
 import { publishChatProgress } from "@/server/chat/chatProgressStore";
@@ -22,16 +23,18 @@ import {
 } from "@/server/services/travelResearchTools";
 import type { PlaceSearchHit } from "@/server/geo/placesSearchService";
 import { parseTripPlanResponse, StructuredOutputError } from "@/server/ai/responseParser";
+import { isUsableMapCoordinate } from "@/lib/geoCoordinates";
 import type {
   AiProposedChange,
   ChatContext,
   ChatMessage,
   ChatQuestionAnswer,
+  ChatResponsePayload,
   ChatSource,
   CitationText,
-  ChatResponsePayload,
   QuestionCardPayload,
   StatusStepPayload,
+  StatusStepProvider,
   TravelPlanResponse,
   TravelPlanRevisionMeta,
   TripProfile,
@@ -1709,6 +1712,21 @@ async function handleStructuredTripWorkflow(input: {
   };
 }
 
+function webSearchBackendToProgressProvider(backend: WebSearchBackend): StatusStepProvider {
+  switch (backend) {
+    case "serper":
+      return "serper";
+    case "tavily":
+      return "tavily";
+    case "mock":
+      return "mock_web";
+    case "searxng":
+      return "searxng";
+    default:
+      return "searxng";
+  }
+}
+
 async function runWebSearch(
   query: string,
   limit?: number,
@@ -1716,33 +1734,31 @@ async function runWebSearch(
   options?: { skipIntentGate?: boolean },
 ): Promise<WebSearchBundle> {
   const allowWithoutIntent = Boolean(options?.skipIntentGate);
-  if (
-    !serverConfig.aiWebSearchEnabled ||
-    !serverConfig.searxngEnabled ||
-    (!allowWithoutIntent && !shouldUseWebSearch(query))
-  ) {
+  if (!serverConfig.aiWebSearchEnabled || (!allowWithoutIntent && !shouldUseWebSearch(query))) {
     return { results: [], digest: "" };
   }
 
+  const cap = Math.min(serverConfig.aiWebSearchMaxResults, limit ?? serverConfig.aiWebSearchMaxResults);
   publishProgressStep(progressSessionId, {
     phase: "research",
     label: "查詢一般網頁資料",
     detail: `正在查詢：${query}`,
     status: "running",
-    provider: "searxng",
     query,
   });
-  const results = await searchWeb({
+  const { results, backend } = await runUnifiedWebSearch({
     query,
-    limit: Math.min(serverConfig.aiWebSearchMaxResults, limit ?? serverConfig.aiWebSearchMaxResults),
+    limit: cap,
   });
+  const progressProvider = webSearchBackendToProgressProvider(backend === "none" ? "searxng" : backend);
+
   if (!results.length) {
     publishProgressStep(progressSessionId, {
       phase: "research",
       label: "查詢一般網頁資料",
       detail: "未取得可用結果，將改以既有資料繼續整理。",
       status: "failed",
-      provider: "searxng",
+      provider: progressProvider,
       query,
     });
     return {
@@ -1756,7 +1772,7 @@ async function runWebSearch(
     label: "查詢一般網頁資料",
     detail: `已取得 ${results.length} 筆網頁結果。`,
     status: "completed",
-    provider: "searxng",
+    provider: progressProvider,
     query,
   });
   return {
@@ -1886,6 +1902,73 @@ function isRestaurantLikePlace(place: PlaceSearchHit): boolean {
   return place.types.some((type) => /restaurant|food|cafe|bakery|meal_takeaway|bar/i.test(type));
 }
 
+function isUsablePlaceHit(place: PlaceSearchHit | undefined): place is PlaceSearchHit {
+  return Boolean(place && isUsableMapCoordinate(place.lat, place.lng));
+}
+
+function normalizePlaceLookupText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, "");
+}
+
+function placeHitToLocation(place: PlaceSearchHit, description: string) {
+  return {
+    name: place.name,
+    lat: place.lat,
+    lng: place.lng,
+    description,
+    address: place.formattedAddress || undefined,
+    placeId: place.placeId,
+    openingHours: place.openingHours,
+    phoneNumber: place.phoneNumber,
+    website: place.website,
+    googleMapsUrl: place.googleMapsUrl,
+    photoUrl: place.photoUrl,
+    thumbnail: place.photoUrl,
+    rating: place.rating,
+    userRatingsTotal: place.userRatingsTotal,
+    resolvedFrom: "google-geocode" as const,
+    verified: true,
+  };
+}
+
+function enrichPlanLocationsFromPlaceHits(plan: TripPlanResult, placeHits: PlaceSearchHit[]): TripPlanResult {
+  const usableHits = dedupePlaceHitsByName(placeHits.filter(isUsablePlaceHit));
+  if (!usableHits.length) {
+    return plan;
+  }
+
+  const findPlaceForItem = (title: string, locationName?: string) => {
+    const candidates = [locationName, title].filter((value): value is string => Boolean(value?.trim()));
+    return usableHits.find((place) => {
+      const placeKey = normalizePlaceLookupText(place.name);
+      return candidates.some((candidate) => {
+        const key = normalizePlaceLookupText(candidate);
+        return key.length >= 2 && (placeKey.includes(key) || key.includes(placeKey));
+      });
+    });
+  };
+
+  return {
+    ...plan,
+    days: plan.days.map((day) => ({
+      ...day,
+      items: day.items.map((item) => {
+        if (item.location && isUsableMapCoordinate(item.location.lat, item.location.lng)) {
+          return item;
+        }
+        const place = findPlaceForItem(item.title, item.location?.name);
+        if (!place) {
+          return item.location ? { ...item, location: undefined } : item;
+        }
+        return {
+          ...item,
+          location: placeHitToLocation(place, item.notes || `${place.name} · ${day.theme || `Day ${day.dayNumber}`}`),
+        };
+      }),
+    })),
+  };
+}
+
 function createSyntheticFallbackStops(destination: string, chinese: boolean): PlaceSearchHit[] {
   const names = chinese
     ? [
@@ -1965,7 +2048,7 @@ function buildFallbackTripPlan(request: TripPlanRequest, placeHits: PlaceSearchH
     : `Created a ${request.days}-day starter itinerary for ${request.destination}.`;
   const mustVisit = request.preferences.mustVisit || [];
   const normalizedMustVisit = new Set(mustVisit.map((value) => value.trim().toLowerCase()).filter(Boolean));
-  const validPlaces = dedupePlaceHitsByName(placeHits.filter((place) => place.name.trim().length > 1));
+  const validPlaces = dedupePlaceHitsByName(placeHits.filter((place) => place.name.trim().length > 1 && isUsablePlaceHit(place)));
   const restaurants = validPlaces.filter(isRestaurantLikePlace);
   const attractions = validPlaces.filter((place) => !isRestaurantLikePlace(place));
   const preferredStops = dedupePlaceHitsByName([
@@ -1979,15 +2062,7 @@ function buildFallbackTripPlan(request: TripPlanRequest, placeHits: PlaceSearchH
   const fallbackMeals = restaurants.length ? dedupePlaceHitsByName(restaurants) : [];
 
   const toLocation = (place: PlaceSearchHit | undefined, description: string) =>
-    place && Number.isFinite(place.lat) && Number.isFinite(place.lng) && Math.abs(place.lat) <= 90 && Math.abs(place.lng) <= 180
-      ? {
-          name: place.name,
-          lat: place.lat,
-          lng: place.lng,
-          description,
-          address: place.formattedAddress || undefined,
-        }
-      : undefined;
+    isUsablePlaceHit(place) ? placeHitToLocation(place, description) : undefined;
 
   const days: TripPlanDay[] = Array.from({ length: request.days }, (_, index) => {
     const dayNumber = index + 1;
@@ -2186,7 +2261,7 @@ export async function generateTripPlan(
           provider: "ollama",
         });
         return {
-          plan: enrichPlanWithSearchSources(fallback, webSearch.results, webSearch.warning),
+          plan: enrichPlanWithSearchSources(enrichPlanLocationsFromPlaceHits(fallback, researchPlaceHits), webSearch.results, webSearch.warning),
           sources: researchSources,
           diagnostics: {
             planGenerationMode: "fallback",
@@ -2214,7 +2289,7 @@ export async function generateTripPlan(
       provider: "ollama",
     });
     return {
-      plan: enrichPlanWithSearchSources(parsed.result, webSearch.results, webSearch.warning),
+      plan: enrichPlanWithSearchSources(enrichPlanLocationsFromPlaceHits(parsed.result, researchPlaceHits), webSearch.results, webSearch.warning),
       sources: researchSources,
       diagnostics: {
         planGenerationMode: "model",
@@ -2278,7 +2353,7 @@ export async function generateTripPlan(
             provider: "ollama",
           });
           return {
-            plan: enrichPlanWithSearchSources(fallback, webSearch.results, webSearch.warning),
+            plan: enrichPlanWithSearchSources(enrichPlanLocationsFromPlaceHits(fallback, researchPlaceHits), webSearch.results, webSearch.warning),
             sources: researchSources,
             diagnostics: {
               planGenerationMode: "fallback",
@@ -2308,7 +2383,7 @@ export async function generateTripPlan(
         provider: "ollama",
       });
       return {
-        plan: enrichPlanWithSearchSources(parsed.result, webSearch.results, webSearch.warning),
+        plan: enrichPlanWithSearchSources(enrichPlanLocationsFromPlaceHits(parsed.result, researchPlaceHits), webSearch.results, webSearch.warning),
         sources: researchSources,
         diagnostics: {
           planGenerationMode: "model",
@@ -2332,7 +2407,7 @@ export async function generateTripPlan(
         provider: "ollama",
       });
       return {
-        plan: enrichPlanWithSearchSources(fallback, webSearch.results, webSearch.warning),
+        plan: enrichPlanWithSearchSources(enrichPlanLocationsFromPlaceHits(fallback, researchPlaceHits), webSearch.results, webSearch.warning),
         sources: researchSources,
         diagnostics: {
           planGenerationMode: "fallback",
@@ -2426,7 +2501,10 @@ export async function chatWithTravelAssistant(input: {
     status: "completed",
   });
 
-  const perRoundTimeout = Math.min(90_000, Math.max(45_000, Math.floor(serverConfig.ollamaTimeoutMs * 0.75)));
+  const perRoundTimeout = Math.min(
+    serverConfig.ollamaTimeoutCapMs,
+    Math.max(45_000, serverConfig.ollamaTimeoutMs),
+  );
 
   const shouldResearch = needsTravelResearch({
     message: input.message,

@@ -1,3 +1,7 @@
+import type { ItineraryPatch } from "@/lib/types/itinerary";
+import type { SourceReference } from "@/lib/types/sources";
+import type { ToolCallRecord } from "@/lib/types/tools";
+
 export type TravelPace = "relaxed" | "moderate" | "intensive";
 
 export type TripItemType =
@@ -270,6 +274,8 @@ export type StatusStepProvider =
   | "tavily"
   | "youtube"
   | "searxng"
+  | "serper"
+  | "mock_web"
   | "ollama";
 
 export type StatusStepPayload = {
@@ -406,6 +412,11 @@ export interface ChatMessage {
     title: string;
     url: string;
   }> | Record<string, ChatSource>;
+  /** 結構化可溯源引用（Grounded Chat contract）；與 `sources` 並存時以此為主顯示 citation UI。 */
+  sourceReferences?: SourceReference[];
+  toolCalls?: ToolCallRecord[];
+  itineraryPatch?: ItineraryPatch;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ChatRequestPayload {

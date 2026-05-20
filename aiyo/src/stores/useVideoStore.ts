@@ -79,7 +79,11 @@ export const useVideoStore = create<VideoState>((set) => ({
   setVideos: (videos) => set({ videos }),
   upsertVideo: (video) =>
     set((state) => {
-      const existingIndex = state.videos.findIndex((item) => item.id === video.id);
+      const existingIndex = state.videos.findIndex(
+        (item) =>
+          item.id === video.id ||
+          (Boolean(item.videoId) && Boolean(video.videoId) && item.videoId === video.videoId),
+      );
       if (existingIndex === -1) {
         return { videos: [video, ...state.videos] };
       }

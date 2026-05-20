@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
 import { extractYouTubeVideoId } from "@/server/providers/youtubeProvider";
-import { summarizeVideo } from "@/server/services/videoSummaryService";
+import { summarizeVideoForApi } from "@/server/services/videoSummaryConnector";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      const result = await summarizeVideo(body);
+      const result = await summarizeVideoForApi(body);
       return NextResponse.json(createSuccess(result));
     } catch (error) {
       if (error instanceof Error && error.message === "INVALID_VIDEO_REFERENCE") {

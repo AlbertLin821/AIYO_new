@@ -46,7 +46,10 @@ export const serverConfig = {
    * 預設關閉；與 `isGenericTravelLocation` 並存時為第二道閘門。
    */
   ollamaVideoLocationJsonFilter: readBoolean("OLLAMA_VIDEO_LOCATION_JSON_FILTER", false),
-  ollamaTimeoutMs: readNumber("OLLAMA_TIMEOUT_MS", 120000),
+  /** 單次 Ollama HTTP 請求逾時（毫秒）。較大的本機模型建議 180000–300000。 */
+  ollamaTimeoutMs: readNumber("OLLAMA_TIMEOUT_MS", 180000),
+  /** 單次請求允許的上限（避免環境變數誤設過大）；預設 10 分鐘。 */
+  ollamaTimeoutCapMs: readNumber("OLLAMA_TIMEOUT_CAP_MS", 600_000),
   videoExtractionChunkMaxChars: readNumber("VIDEO_EXTRACTION_CHUNK_MAX_CHARS", 12000),
   videoExtractionChunkOverlapChars: readNumber("VIDEO_EXTRACTION_CHUNK_OVERLAP_CHARS", 500),
   videoExtractionChunkMaxCount: readNumber("VIDEO_EXTRACTION_CHUNK_MAX_COUNT", 8),
@@ -79,4 +82,12 @@ export const serverConfig = {
   aiWebSearchEnabled: readBoolean("AI_WEB_SEARCH_ENABLED", true),
   aiWebSearchMaxResults: readNumber("AI_WEB_SEARCH_MAX_RESULTS", 6),
   aiWebSearchRequireCitations: readBoolean("AI_WEB_SEARCH_REQUIRE_CITATIONS", true),
+  /**
+   * `auto` | `searxng` | `serper` | `tavily` | `mock`
+   * - `auto`: Serper (if SERPER_API_KEY) → Tavily → SearxNG → mock (if AIYO_WEB_SEARCH_MOCK) → none
+   */
+  webSearchProvider: readString("WEB_SEARCH_PROVIDER", "auto").toLowerCase(),
+  serperApiKey: readString("SERPER_API_KEY", ""),
+  /** When no live provider is usable, return deterministic mock rows (dev/demo only). */
+  aiWebSearchMock: readBoolean("AIYO_WEB_SEARCH_MOCK", false),
 };

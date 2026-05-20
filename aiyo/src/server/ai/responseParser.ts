@@ -1,4 +1,5 @@
 import { parseTimestampToSeconds } from "@/lib/videoTimestamp";
+import { isUsableMapCoordinate } from "@/lib/geoCoordinates";
 import { mergeVideoSummarySegmentsByStartSeconds } from "@/server/video/momentSegmentBuilder";
 import type {
   ChatMessage,
@@ -172,7 +173,7 @@ function normalizeLocation(
   if (!location) {
     return undefined;
   }
-  if (Math.abs(location.lat) > 90 || Math.abs(location.lng) > 180) {
+  if (!isUsableMapCoordinate(location.lat, location.lng)) {
     return undefined;
   }
   return location;

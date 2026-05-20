@@ -103,6 +103,10 @@ export async function searchWeb(options: WebSearchOptions): Promise<WebSearchRes
     const response = await fetch(`${baseUrl}/search?${params.toString()}`, {
       method: "GET",
       cache: "no-store",
+      headers: {
+        "X-Forwarded-For": "127.0.0.1",
+        "X-Real-IP": "127.0.0.1",
+      },
       signal: controller.signal,
     });
     if (!response.ok) {

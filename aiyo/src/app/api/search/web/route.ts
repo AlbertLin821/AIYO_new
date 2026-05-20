@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
-import { searchWeb } from "@/server/search/searxngClient";
+import { runUnifiedWebSearch } from "@/server/search/webSearchService";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     }
 
     const limit = Math.min(10, Math.max(1, Number(body.limit || 8)));
-    const results = await searchWeb({
+    const { results, backend } = await runUnifiedWebSearch({
       query,
       language: body.language,
       categories: body.categories,
@@ -35,6 +35,7 @@ export async function POST(request: Request) {
       createSuccess({
         query,
         results,
+        provider: backend,
       }),
     );
   } catch {

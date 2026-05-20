@@ -1,4 +1,5 @@
 import { serverConfig } from "@/server/config";
+import { isUsableMapCoordinate } from "@/lib/geoCoordinates";
 import {
   mergeAndDedupeExtractions,
   type PlaceCandidate,
@@ -470,7 +471,7 @@ export async function geocodeWithGoogle(
 
   const first = payload.results[0];
   const loc = first.geometry?.location;
-  if (!loc || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lng)) {
+  if (!loc || !isUsableMapCoordinate(loc.lat, loc.lng)) {
     return { ok: false, reason: "Geocoding response missing coordinates.", googleStatus: status };
   }
 

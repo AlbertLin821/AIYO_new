@@ -19,6 +19,7 @@ import {
 import type { Video } from "@/types";
 import { cn } from "@/lib/utils";
 import { getSegmentSeekSeconds, parseTimestampToSeconds } from "@/lib/videoTimestamp";
+import { buildYoutubeWatchUrl } from "@/lib/youtubeWatchUrl";
 import {
   clearPendingVideoImport,
   readPendingVideoImport,
@@ -46,6 +47,28 @@ interface VideoSummaryDrawerProps {
 }
 
 const NEW_TRIP_OPTION = "__new_trip__";
+
+function inferDestinationFromVideoImport(video: Video, names: string[]) {
+  const fromLocations = video.extractedLocations
+    .map((location) => location.address || location.description || "")
+    .join(" ");
+  const combined = `${video.title} ${fromLocations}`;
+  const cityMatch = combined.match(/([\p{Script=Han}]{2,4}(?:市|縣))/u);
+  if (cityMatch?.[1]) {
+    return cityMatch[1];
+  }
+  return names[0] || "";
+}
+
+function buildImportedTripTitle(video: Video, destination: string, names: string[]) {
+  if (destination) {
+    return `${destination} 影片行程`;
+  }
+  if (names[0]) {
+    return `${names[0]} 影片行程`;
+  }
+  return video.title ? `${video.title.slice(0, 24)} 行程` : "影片行程";
+}
 
 function drawerSummarySourceLabel(key: SummaryDiagnostics["summarySource"]): string | null {
   switch (key) {
@@ -382,7 +405,13 @@ export default function VideoSummaryDrawer({
       const targetTripId = importTargetTripId || currentTripId;
       const creatingNewTrip = !targetTripId || targetTripId === NEW_TRIP_OPTION;
       if (creatingNewTrip) {
-        const created = await createNewTrip();
+        const inferredDestination = inferDestinationFromVideoImport(activeVideo, names);
+        const created = await createNewTrip({
+          title: buildImportedTripTitle(activeVideo, inferredDestination, names),
+          destination: inferredDestination,
+          days: 1,
+          coverImageUrl: activeVideo.thumbnail || null,
+        });
         const snapshot = await setActiveTrip(created.tripId);
         syncService.applyTripSwitch(snapshot);
         syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
@@ -595,39 +624,77 @@ export default function VideoSummaryDrawer({
                     {summaryDiagnostics?.summaryUnavailable ? (
                       <p className="text-sm text-muted">無法取得逐字稿，暫時無法產生精準片段。</p>
                     ) : activeVideo.summarySegments && activeVideo.summarySegments.length > 0 ? (
-                      activeVideo.summarySegments.map((segment, segmentIndex) => (
-                        <div
-                          key={`${segment.id}_${segmentIndex}`}
-                          data-testid="summary-segment"
-                          className="rounded-xl bg-primary/5 px-3 py-3"
-                        >
-                          <div className="flex items-start gap-3">
-                            <button
-                              type="button"
-                              disabled={getSegmentSeekSeconds(segment) === null}
-                              onClick={() => {
-                                const sec = getSegmentSeekSeconds(segment);
-                                if (sec !== null) {
-                                  bumpSeek(sec);
+                      activeVideo.summarySegments.map((segment, segmentIndex) => {
+                        const seekSec = getSegmentSeekSeconds(segment);
+                        const hintList = Array.from(
+                          new Set((segment.locationHints ?? []).map((h) => h.trim()).filter(Boolean)),
+                        );
+                        const snippet =
+                          segment.summary?.trim() ||
+                          segment.highlights?.find((h) => h.trim())?.trim() ||
+                          segment.text?.trim();
+                        const segmentYoutubeHref =
+                          activeVideo.videoId && seekSec !== null
+                            ? buildYoutubeWatchUrl(activeVideo.videoId, seekSec)
+                            : null;
+                        return (
+                          <div
+                            key={`${segment.id}_${segmentIndex}`}
+                            data-testid="summary-segment"
+                            className="rounded-xl bg-primary/5 px-3 py-3"
+                          >
+                            <div className="flex items-start gap-3">
+                              <button
+                                type="button"
+                                disabled={seekSec === null}
+                                onClick={() => {
+                                  if (seekSec !== null) {
+                                    bumpSeek(seekSec);
+                                  }
+                                }}
+                                title={
+                                  seekSec === null ? t.drawer.jumpUnavailable : t.drawer.jumpToTimestamp
                                 }
-                              }}
-                              title={
-                                getSegmentSeekSeconds(segment) === null
-                                  ? t.drawer.jumpUnavailable
-                                  : t.drawer.jumpToTimestamp
-                              }
-                              className="min-w-[52px] rounded-md bg-primary/10 px-2 py-0.5 text-center font-mono text-xs text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                              {segment.startLabel || segment.timestamp}
-                            </button>
-                            <div className="min-w-0 flex-1">
-                              {segment.title && (
-                                <p className="text-sm font-medium text-foreground">{segment.title}</p>
-                              )}
+                                className="min-w-[52px] rounded-md bg-primary/10 px-2 py-0.5 text-center font-mono text-xs text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                {segment.startLabel || segment.timestamp}
+                              </button>
+                              <div className="min-w-0 flex-1 space-y-2">
+                                {segment.title ? (
+                                  <p className="text-sm font-medium text-foreground">{segment.title}</p>
+                                ) : null}
+                                {hintList.length > 0 ? (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {hintList.map((name) => (
+                                      <span
+                                        key={`${segment.id}_${name}`}
+                                        className="inline-flex items-center gap-0.5 rounded-full bg-background/80 px-2 py-0.5 text-[11px] font-medium text-primary ring-1 ring-primary/15"
+                                      >
+                                        <MapPin className="size-3 shrink-0 opacity-80" aria-hidden />
+                                        {name}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
+                                {snippet ? (
+                                  <p className="text-xs leading-relaxed text-muted">{snippet}</p>
+                                ) : null}
+                                {segmentYoutubeHref ? (
+                                  <a
+                                    href={segmentYoutubeHref}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                  >
+                                    {t.drawer.openSegmentOnYoutube}
+                                    <ExternalLink className="size-3" aria-hidden />
+                                  </a>
+                                ) : null}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     ) : activeVideo.timestamps.length > 0 ? (
                       activeVideo.timestamps.map((timestamp) => (
                         <div

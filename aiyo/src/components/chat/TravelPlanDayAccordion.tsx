@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { CitationGroup } from "@/components/chat/SourceTag";
 import { cn } from "@/lib/utils";
+import type { SourceReference } from "@/lib/types/sources";
 import type { TravelPlanResponse } from "@/types";
 
 function normalizeDisplayText(value: string): string {
@@ -27,11 +28,13 @@ export default function TravelPlanDayAccordion({
   sources,
   expanded,
   onToggle,
+  onOpenGroundedDetail,
 }: {
   day: TravelPlanResponse["days"][number];
   sources?: TravelPlanResponse["sources"];
   expanded: boolean;
   onToggle: () => void;
+  onOpenGroundedDetail?: (source: SourceReference) => void;
 }) {
   const routeNames = uniqueByName(day.spots).map((spot) => spot.name);
 
@@ -64,7 +67,11 @@ export default function TravelPlanDayAccordion({
           </button>
         </div>
         <div className="mt-3">
-          <CitationGroup citations={day.citations} sources={sources} />
+          <CitationGroup
+            citations={day.citations}
+            sources={sources}
+            onOpenGroundedDetail={onOpenGroundedDetail}
+          />
         </div>
       </div>
 
@@ -83,7 +90,11 @@ export default function TravelPlanDayAccordion({
                   {day.transportation.map((item, index) => (
                     <li key={`${day.day}_transport_${index}_${item.text}`} className="rounded-xl bg-white/80 px-3 py-2">
                       <p>{item.text}</p>
-                      <CitationGroup citations={item.citations} sources={sources} />
+                      <CitationGroup
+                        citations={item.citations}
+                        sources={sources}
+                        onOpenGroundedDetail={onOpenGroundedDetail}
+                      />
                     </li>
                   ))}
                 </ul>
@@ -97,7 +108,11 @@ export default function TravelPlanDayAccordion({
                   >
                     <p className="text-sm font-semibold text-slate-900">{spot.name}</p>
                     <p className="mt-2 text-sm leading-6 text-slate-700">{spot.feature}</p>
-                    <CitationGroup citations={spot.citations} sources={sources} />
+                    <CitationGroup
+                      citations={spot.citations}
+                      sources={sources}
+                      onOpenGroundedDetail={onOpenGroundedDetail}
+                    />
                   </div>
                 ))}
 
@@ -109,7 +124,11 @@ export default function TravelPlanDayAccordion({
                     <div key={`${day.day}_food_${index}_${food.name}`} className="rounded-xl bg-white/85 px-3 py-3">
                       <p className="text-sm font-semibold text-foreground">{food.name}</p>
                       <p className="mt-1 text-xs leading-6 text-muted">{food.description}</p>
-                      <CitationGroup citations={food.citations} sources={sources} />
+                      <CitationGroup
+                        citations={food.citations}
+                        sources={sources}
+                        onOpenGroundedDetail={onOpenGroundedDetail}
+                      />
                     </div>
                   ))}
                 </div>
@@ -123,7 +142,11 @@ export default function TravelPlanDayAccordion({
                   {day.tips.map((tip, index) => (
                     <li key={`${day.day}_tip_${index}_${tip.text}`} className="rounded-xl bg-white/85 px-3 py-2 text-xs leading-6 text-muted">
                       <p>{tip.text}</p>
-                      <CitationGroup citations={tip.citations} sources={sources} />
+                      <CitationGroup
+                        citations={tip.citations}
+                        sources={sources}
+                        onOpenGroundedDetail={onOpenGroundedDetail}
+                      />
                     </li>
                   ))}
                 </ul>

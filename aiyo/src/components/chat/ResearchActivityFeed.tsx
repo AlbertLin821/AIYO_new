@@ -10,6 +10,8 @@ const PROVIDER_LABELS: Record<NonNullable<StatusStepPayload["provider"]>, string
   tavily: "Tavily",
   youtube: "YouTube",
   searxng: "SearXNG",
+  serper: "Serper",
+  mock_web: "離線示範",
   ollama: "Ollama",
 };
 

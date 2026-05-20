@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { SyncMutationSource } from "@/stores/syncMutationSource";
 import { withSyncMutationSource } from "@/stores/syncMutationSource";
+import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
 import type { MapPin } from "@/types";
 
 interface MapState {
@@ -28,10 +29,10 @@ export const useMapStore = create<MapState>((set) => ({
   setPins: (pins, source: SyncMutationSource = "local-user-edit") =>
     withSyncMutationSource(source, () =>
       set((state) => ({
-        pins,
-        selectedPinId: pins.some((pin) => pin.id === state.selectedPinId)
+        pins: pins.filter((pin) => hasUsableMapCoordinate(pin)),
+        selectedPinId: pins.some((pin) => pin.id === state.selectedPinId && hasUsableMapCoordinate(pin))
           ? state.selectedPinId
-          : (pins[0]?.id ?? null),
+          : (pins.find((pin) => hasUsableMapCoordinate(pin))?.id ?? null),
         lastSyncedAt: new Date().toISOString(),
       })),
     ),
@@ -41,7 +42,7 @@ export const useMapStore = create<MapState>((set) => ({
         const existingNames = new Set(state.pins.map((pin) => pin.name));
         const pins = [
           ...state.pins,
-          ...incomingPins.filter((pin) => !existingNames.has(pin.name)),
+          ...incomingPins.filter((pin) => hasUsableMapCoordinate(pin) && !existingNames.has(pin.name)),
         ];
         return {
           pins,

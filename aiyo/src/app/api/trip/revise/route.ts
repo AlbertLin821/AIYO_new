@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
 import { OllamaRequestError } from "@/server/ai/ollamaClient";
 import { completeChatProgress, ensureChatProgressSession } from "@/server/chat/chatProgressStore";
-import { addMemories, formatMemoryContext, searchMemories } from "@/server/memory/mem0Client";
+import { addMemories, formatMemoryContext } from "@/server/memory/mem0Client";
+import { retrieveRelevantMemoriesForUser } from "@/server/memory/memoryRetrieval";
 import { requireSessionUser } from "@/server/auth";
 import { resolveSessionTrip, saveChatMessage } from "@/server/data/appStateService";
 import { chatWithTravelAssistant } from "@/server/services/travelPlannerService";
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
       persistedUserId = userId;
       persistedTripId = trip?.id;
       await saveChatMessage(userId, "user", body.instruction.trim(), persistedTripId);
-      const memories = await searchMemories({
+      const { memories } = await retrieveRelevantMemoriesForUser({
         userId,
         query: [body.tripProfile.destination || "", body.instruction.trim()].filter(Boolean).join(" "),
       });

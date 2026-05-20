@@ -115,6 +115,9 @@ export async function apiPost<TRequest, TResponse>(
       }
       throw new Error(t.api.planTimeout);
     }
+    if (error instanceof ApiRequestError) {
+      throw error;
+    }
     throw new Error(
       error instanceof Error ? error.message : t.api.postFailed,
     );
@@ -168,6 +171,9 @@ export async function apiPostWithMeta<TRequest, TResponse>(
         throw error;
       }
       throw new Error(t.api.planTimeout);
+    }
+    if (error instanceof ApiRequestError) {
+      throw error;
     }
     throw new Error(
       error instanceof Error ? error.message : t.api.postFailed,

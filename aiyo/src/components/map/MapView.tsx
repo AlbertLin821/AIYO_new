@@ -26,6 +26,7 @@ import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
 import type { LocationReference, MapPin as MapPinType } from "@/types";
 import { zhTW as t } from "@/locales/zh-TW";
+import { buildPinStopOrderByPinId } from "@/lib/mapPinItineraryLink";
 import { createMapPinElement, encodeMapPinDataUrl, MAP_PIN_VIEWBOX_H, MAP_PIN_VIEWBOX_W } from "@/components/map/mapPinIcon";
 import { MapPinMarker } from "@/components/map/MapPinMarker";
 
@@ -108,11 +109,11 @@ function segmentRouteDisplayMinutes(
   return segment.estimatedMinutes;
 }
 
-function buildMarkerPinIcon(maps: GoogleMapsApi, color: string, selected: boolean) {
+function buildMarkerPinIcon(maps: GoogleMapsApi, color: string, selected: boolean, stopLabel?: number) {
   const baseW = selected ? 40 : 34;
   const height = Math.round((MAP_PIN_VIEWBOX_H / MAP_PIN_VIEWBOX_W) * baseW);
   return {
-    url: encodeMapPinDataUrl(color, selected),
+    url: encodeMapPinDataUrl(color, selected, stopLabel),
     scaledSize: new maps.Size(baseW, height),
     anchor: new maps.Point(baseW / 2, height),
   };
@@ -356,6 +357,7 @@ function segmentTouchesLinkedItem(
 
 function MockMapFallback({
   pins,
+  pinStopById,
   routeSegments,
   highlightedRouteIds,
   selectedPinId,
@@ -363,6 +365,7 @@ function MockMapFallback({
   zoom,
 }: {
   pins: MapPinType[];
+  pinStopById: ReadonlyMap<string, number>;
   routeSegments: ItineraryRouteSegment[];
   highlightedRouteIds: Set<string>;
   selectedPinId: string | null;
@@ -475,7 +478,12 @@ function MockMapFallback({
                 onClick={() => setSelectedPinId(pin.id)}
               >
                 <div className="group relative cursor-pointer transition-transform group-hover:scale-105">
-                  <MapPinMarker fill={pin.color || "#5a7ea3"} selected={isSelected} decorative />
+                  <MapPinMarker
+                    fill={pin.color || "#5a7ea3"}
+                    selected={isSelected}
+                    stopOrder={pinStopById.get(pin.id)}
+                    decorative
+                  />
                   {hoveredPin === pin.id && (
                     <div className="absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-xl border border-border bg-surface px-3 py-2 text-left shadow-soft-lg">
                       <p className="text-xs font-semibold text-foreground">{pin.name}</p>
@@ -545,6 +553,10 @@ export default function MapView() {
     [pins, selectedPinId],
   );
   const routeSegments = useMemo(() => buildItineraryRouteSegments(itinerary), [itinerary]);
+  const pinStopById = useMemo(
+    () => buildPinStopOrderByPinId(itinerary, pins),
+    [itinerary, pins],
+  );
   const highlightedItem = useMemo(
     () => findLinkedItineraryItem(itinerary, selectedPin),
     [itinerary, selectedPin],
@@ -734,7 +746,7 @@ export default function MapView() {
   }, [sdkState, useGoogleSdk]);
 
   useEffect(() => {
-    if (sdkState !== "ready") {
+    if (!runtimeConfigChecked || pins.length === 0) {
       return;
     }
 
@@ -844,7 +856,7 @@ export default function MapView() {
     return () => {
       cancelled = true;
     };
-  }, [itinerary, pins, sdkState, tripDestination]);
+  }, [itinerary, pins, runtimeConfigChecked, tripDestination]);
 
   useEffect(() => {
     const maps = window.google?.maps;
@@ -1010,20 +1022,8 @@ export default function MapView() {
           });
 
           if (selectedPin) {
-            const focusBounds = new mapsApi.LatLngBounds();
-            focusBounds.extend({ lat: selectedPin.lat, lng: selectedPin.lng });
-            resolved.forEach((entry) => {
-              if (!highlightedRouteIds.has(entry.segment.id)) {
-                return;
-              }
-              entry.path.forEach((point) => focusBounds.extend(point));
-            });
-            if (highlightedRouteIds.size > 0) {
-              map.fitBounds(focusBounds, 120);
-            } else {
-              map.panTo({ lat: selectedPin.lat, lng: selectedPin.lng });
-              map.setZoom(Math.max(map.getZoom() || 12, 14));
-            }
+            map.panTo({ lat: selectedPin.lat, lng: selectedPin.lng });
+            map.setZoom(Math.max(map.getZoom() || 12, 15));
             openInfoForSelectedPin();
           } else if (resolved.some((entry) => entry.usedDirections)) {
             map.fitBounds(routeBounds, 72);
@@ -1045,7 +1045,8 @@ export default function MapView() {
 
           pins.forEach((pin) => {
             const selected = pin.id === selectedPinId;
-            const content = createMapPinElement(pin.color || "#5a7ea3", selected);
+            const stopN = pinStopById.get(pin.id);
+            const content = createMapPinElement(pin.color || "#5a7ea3", selected, stopN);
             const marker = new lib.AdvancedMarkerElement({
               map,
               position: { lat: pin.lat, lng: pin.lng },
@@ -1077,7 +1078,12 @@ export default function MapView() {
               map,
               position: { lat: pin.lat, lng: pin.lng },
               title: pin.name,
-              icon: buildMarkerPinIcon(mapsApi, pin.color || "#5a7ea3", pin.id === selectedPinId),
+              icon: buildMarkerPinIcon(
+                mapsApi,
+                pin.color || "#5a7ea3",
+                pin.id === selectedPinId,
+                pinStopById.get(pin.id),
+              ),
             });
             marker.addListener("click", () => setSelectedPinId(pin.id));
             markersRef.current.set(pin.id, marker);
@@ -1103,7 +1109,12 @@ export default function MapView() {
         map,
         position: { lat: pin.lat, lng: pin.lng },
         title: pin.name,
-        icon: buildMarkerPinIcon(mapsApi, pin.color || "#5a7ea3", pin.id === selectedPinId),
+        icon: buildMarkerPinIcon(
+          mapsApi,
+          pin.color || "#5a7ea3",
+          pin.id === selectedPinId,
+          pinStopById.get(pin.id),
+        ),
       });
       marker.addListener("click", () => setSelectedPinId(pin.id));
       markersRef.current.set(pin.id, marker);
@@ -1120,6 +1131,7 @@ export default function MapView() {
     };
   }, [
     itinerary,
+    pinStopById,
     pins,
     pushToast,
     routeSegments,
@@ -1205,6 +1217,7 @@ export default function MapView() {
         <div className="relative z-0 min-h-0 flex-1 overflow-hidden">
           <MockMapFallback
             pins={pins}
+            pinStopById={pinStopById}
             routeSegments={routeSegments}
             highlightedRouteIds={highlightedRouteIds}
             selectedPinId={selectedPinId}

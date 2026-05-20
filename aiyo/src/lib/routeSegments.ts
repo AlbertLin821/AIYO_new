@@ -1,4 +1,5 @@
 import type { TripPlanDay, TripPlanItem } from "@/types";
+import { isUsableMapCoordinate } from "@/lib/geoCoordinates";
 
 const DAY_ROUTE_COLORS = [
   "#4a6d91",
@@ -85,6 +86,9 @@ function itemLocation(item: TripPlanItem) {
   if (!item.location) {
     return null;
   }
+  if (!isUsableMapCoordinate(item.location.lat, item.location.lng)) {
+    return null;
+  }
   return {
     lat: item.location.lat,
     lng: item.location.lng,
@@ -93,7 +97,9 @@ function itemLocation(item: TripPlanItem) {
 
 export function buildItineraryRouteSegments(days: TripPlanDay[]): ItineraryRouteSegment[] {
   return days.flatMap((day) => {
-    const locatedItems = day.items.filter((item) => item.location);
+    const locatedItems = day.items.filter(
+      (item) => item.location && isUsableMapCoordinate(item.location.lat, item.location.lng),
+    );
     return locatedItems.slice(1).map((item, index) => {
       const previous = locatedItems[index];
       const from = itemLocation(previous);
