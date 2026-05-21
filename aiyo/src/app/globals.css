@@ -98,25 +98,8 @@ body {
   -webkit-backdrop-filter: blur(12px);
 }
 
-/* AI 對話頁：玻璃擬態與主題色（由 .chat-page-root 的 data-chat-theme 切換） */
+/* AI 對話頁：固定淺色介面變數 */
 .chat-page-root {
-  --chat-fg: 255, 255, 255;
-  --chat-fg-muted: 212, 212, 216;
-  --chat-fg-subtle: 161, 161, 170;
-  --chat-fg-soft: 244, 244, 245;
-  --chat-glass-panel-bg: rgba(12, 20, 16, 0.52);
-  --chat-glass-card-bg: rgba(255, 255, 255, 0.1);
-  --chat-glass-card-strong-bg: rgba(255, 255, 255, 0.16);
-  --chat-glass-border: rgba(255, 255, 255, 0.12);
-  --chat-glass-date-pill-bg: rgba(0, 0, 0, 0.32);
-  --chat-dash-border: rgba(255, 255, 255, 0.2);
-  --chat-hover: rgba(255, 255, 255, 0.14);
-  --chat-chip-active-bg: rgba(255, 255, 255, 0.2);
-  --chat-chip-idle-bg: rgba(255, 255, 255, 0.1);
-  --chat-placeholder: 161, 161, 170;
-}
-
-.chat-page-root[data-chat-theme="light"] {
   --chat-fg: 30, 41, 59;
   --chat-fg-muted: 71, 85, 105;
   --chat-fg-subtle: 100, 116, 139;

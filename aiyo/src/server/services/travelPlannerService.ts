@@ -15,6 +15,7 @@ import { mergeChatSources, normalizeWebSearchSources, pickCitationIdsForText } f
 import { registerChatSources } from "@/server/chat/sourcePreviewStore";
 import { publishChatProgress } from "@/server/chat/chatProgressStore";
 import { applyRevisionInstructionToProfile } from "@/server/chat/tripRevision";
+import { enrichTripPlanWithRouteTravelTimes } from "@/server/geo/routeTravelTimeService";
 import {
   buildDefaultTravelToolRequests,
   buildTripPlanResearchRequests,
@@ -167,6 +168,7 @@ function normalizeProposedChange(value: unknown): AiProposedChange | null {
     time: normalizedTime || "18:30",
     title,
     locationName: record.locationName ? String(record.locationName) : title,
+    transport: record.transport ? String(record.transport) : undefined,
     notes: record.notes ? String(record.notes) : undefined,
     reason: record.reason ? String(record.reason) : undefined,
     source: "ai-chat",
@@ -1377,11 +1379,20 @@ function toUserFacingTransportLabel(value: string): string {
   if (!normalized) {
     return value;
   }
-  if (normalized === "public_transport") {
+  if (normalized === "public_transport" || normalized === "transit") {
     return "大眾運輸";
   }
-  if (normalized === "self_drive") {
+  if (normalized === "self_drive" || normalized === "driving") {
     return "自駕";
+  }
+  if (normalized === "walking" || normalized === "walk") {
+    return "步行";
+  }
+  if (normalized === "bicycling" || normalized === "bicycle" || normalized === "bike") {
+    return "自行車";
+  }
+  if (normalized === "taxi") {
+    return "計程車";
   }
   if (normalized === "charter_or_tour") {
     return "包車 / 一日遊";
@@ -1390,6 +1401,38 @@ function toUserFacingTransportLabel(value: string): string {
     return "依路線由 AI 建議交通方式";
   }
   return value;
+}
+
+function formatTransportMinutes(minutes: number): string {
+  if (minutes < 60) {
+    return `${minutes} 分鐘`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest > 0 ? `${hours} 小時 ${rest} 分鐘` : `${hours} 小時`;
+}
+
+function buildDayTransportationTexts(day: TripPlanDay): string[] {
+  const routeTexts = day.items.flatMap((item, index) => {
+    if (index === 0 || !item.transport?.trim()) {
+      return [];
+    }
+    const previous = day.items[index - 1];
+    const label = toUserFacingTransportLabel(item.transport);
+    if (typeof item.transportDurationMinutes === "number" && item.transportDurationMinutes > 0) {
+      const providerNote = item.transportDataSource === "google_routes" ? "（Google Maps 路線資料）" : "";
+      return [
+        `${previous.title} → ${item.title}：${label}，約 ${formatTransportMinutes(item.transportDurationMinutes)}${providerNote}`,
+      ];
+    }
+    return [`${previous.title} → ${item.title}：${label}`];
+  });
+  if (routeTexts.length > 0) {
+    return routeTexts;
+  }
+  return uniqueStrings(day.items.map((item) => item.transport || "").filter(Boolean))
+    .slice(0, 4)
+    .map(toUserFacingTransportLabel);
 }
 
 function hasTemplatePollutionWarning(warnings?: string[]): boolean {
@@ -1535,9 +1578,9 @@ export function convertTripPlanToTravelPlanWithSources(
         citations: cite(`${day.theme || ""} ${day.summary || ""}`.trim(), {
           preferredTypes: ["official", "web", "weather"],
         }),
-        transportation: uniqueStrings(day.items.map((item) => item.transport || "").filter(Boolean))
+        transportation: buildDayTransportationTexts(day)
           .slice(0, 4)
-          .map((text) => citeText(toUserFacingTransportLabel(text), { preferredTypes: ["official", "web"] })),
+          .map((text) => citeText(text, { preferredTypes: ["official", "web"] })),
         spots: spotItems.map((item) => ({
           name: item.title,
           feature: item.notes || item.sourceSnippet || "依照目前旅遊需求安排的停靠點",
@@ -2261,7 +2304,9 @@ export async function generateTripPlan(
           provider: "ollama",
         });
         return {
-          plan: enrichPlanWithSearchSources(enrichPlanLocationsFromPlaceHits(fallback, researchPlaceHits), webSearch.results, webSearch.warning),
+          plan: await enrichTripPlanWithRouteTravelTimes(
+            enrichPlanWithSearchSources(enrichPlanLocationsFromPlaceHits(fallback, researchPlaceHits), webSearch.results, webSearch.warning),
+          ),
           sources: researchSources,
           diagnostics: {
             planGenerationMode: "fallback",
@@ -2289,7 +2334,9 @@ export async function generateTripPlan(
       provider: "ollama",
     });
     return {
-      plan: enrichPlanWithSearchSources(enrichPlanLocationsFromPlaceHits(parsed.result, researchPlaceHits), webSearch.results, webSearch.warning),
+      plan: await enrichTripPlanWithRouteTravelTimes(
+        enrichPlanWithSearchSources(enrichPlanLocationsFromPlaceHits(parsed.result, researchPlaceHits), webSearch.results, webSearch.warning),
+      ),
       sources: researchSources,
       diagnostics: {
         planGenerationMode: "model",
@@ -2353,7 +2400,9 @@ export async function generateTripPlan(
             provider: "ollama",
           });
           return {
-            plan: enrichPlanWithSearchSources(enrichPlanLocationsFromPlaceHits(fallback, researchPlaceHits), webSearch.results, webSearch.warning),
+            plan: await enrichTripPlanWithRouteTravelTimes(
+              enrichPlanWithSearchSources(enrichPlanLocationsFromPlaceHits(fallback, researchPlaceHits), webSearch.results, webSearch.warning),
+            ),
             sources: researchSources,
             diagnostics: {
               planGenerationMode: "fallback",
@@ -2383,7 +2432,9 @@ export async function generateTripPlan(
         provider: "ollama",
       });
       return {
-        plan: enrichPlanWithSearchSources(enrichPlanLocationsFromPlaceHits(parsed.result, researchPlaceHits), webSearch.results, webSearch.warning),
+        plan: await enrichTripPlanWithRouteTravelTimes(
+          enrichPlanWithSearchSources(enrichPlanLocationsFromPlaceHits(parsed.result, researchPlaceHits), webSearch.results, webSearch.warning),
+        ),
         sources: researchSources,
         diagnostics: {
           planGenerationMode: "model",
@@ -2407,7 +2458,9 @@ export async function generateTripPlan(
         provider: "ollama",
       });
       return {
-        plan: enrichPlanWithSearchSources(enrichPlanLocationsFromPlaceHits(fallback, researchPlaceHits), webSearch.results, webSearch.warning),
+        plan: await enrichTripPlanWithRouteTravelTimes(
+          enrichPlanWithSearchSources(enrichPlanLocationsFromPlaceHits(fallback, researchPlaceHits), webSearch.results, webSearch.warning),
+        ),
         sources: researchSources,
         diagnostics: {
           planGenerationMode: "fallback",

@@ -34,7 +34,7 @@ test.describe("地圖 marker info card", () => {
     });
   });
 
-  test("選取 marker 會顯示完整資訊與路線連結", async ({ page }) => {
+  test("選取 marker 不再顯示左下角資訊卡", async ({ page }) => {
     await loginAs(page, E2E_OWNER, "/map");
     const initialBootstrap = page.waitForResponse(
       (res) => res.url().includes("/api/bootstrap") && res.ok(),
@@ -48,13 +48,6 @@ test.describe("地圖 marker info card", () => {
     await expect(marker).toBeVisible({ timeout: 40_000 });
     await marker.click();
 
-    const card = page.getByTestId("selected-map-pin");
-    await expect(card).toBeVisible();
-    await expect(card).toContainText("赤崁樓");
-    await expect(card).toContainText("台南市中西區民族路二段212號");
-    await expect(card).toContainText("08:30-21:30");
-    await expect(card).toContainText("06-220-5647");
-    await expect(page.getByTestId("map-route-link")).toHaveAttribute("href", /google\.com\/maps\/dir/);
-    await expect(page.getByTestId("map-google-maps-link")).toHaveAttribute("href", /google\.com\/maps/);
+    await expect(page.getByTestId("selected-map-pin")).toHaveCount(0);
   });
 });

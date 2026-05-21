@@ -122,7 +122,7 @@ export function buildChatPrompt(
         ? "You MUST output JSON only with this exact shape: { \"replyText\": string, \"proposedChanges\": array }."
         : "Prefer output JSON with shape { \"replyText\": string, \"proposedChanges\": array } when possible; otherwise reply in concise plain Traditional Chinese.",
       hasResearch
-        ? 'proposedChanges may include: { "type": "add_itinerary_item", "day": number, "time": "HH:MM", "title": string, "locationName"?: string, "notes"?: string, "reason"?: string }, { "type": "update_itinerary_item", "itemId"?: string, "day"?: number, "targetTitle"?: string, "time"?: "HH:MM", "title"?: string, "locationName"?: string, "notes"?: string, "transport"?: string, "reason"?: string }, or { "type": "remove_itinerary_item", "itemId"?: string, "day"?: number, "targetTitle"?: string, "reason"?: string }.'
+        ? 'proposedChanges may include: { "type": "add_itinerary_item", "day": number, "time": "HH:MM", "title": string, "locationName"?: string, "transport"?: string, "notes"?: string, "reason"?: string }, { "type": "update_itinerary_item", "itemId"?: string, "day"?: number, "targetTitle"?: string, "time"?: "HH:MM", "title"?: string, "locationName"?: string, "notes"?: string, "transport"?: string, "reason"?: string }, or { "type": "remove_itinerary_item", "itemId"?: string, "day"?: number, "targetTitle"?: string, "reason"?: string }.'
         : "",
       hasResearch
         ? "For add_itinerary_item, concrete restaurants, attractions, or shops MUST match a venue listed under \"Verified research\" below (same name or clear substring). For update_itinerary_item or remove_itinerary_item, target an existing itinerary item by id when possible, otherwise by day + targetTitle. If the user only asks a question, return proposedChanges: []."
@@ -228,6 +228,8 @@ export function buildItineraryPrompt(
     "- Item times must be chronological within each day.",
     "- Keep route flow realistic and spatially coherent.",
     "- `transport` should align with transport preference unless a clear local reason requires a change.",
+    "- For every item after the first located stop of a day, `transport` means how to travel from the previous stop to this item. Prefer concrete modes such as 大眾運輸、步行、開車、計程車、JR、地鐵、巴士.",
+    "- Do not invent travel minutes. The system will attach provider-backed route duration after JSON generation.",
     "- `mustVisit` places must be covered in the nearest appropriate day(s).",
     "- `avoid` terms must not appear in `title`, `notes`, or `location.name`.",
     "- Prefer complete `location` objects (name, lat, lng, description, address). If unknown, you may omit `location` for that item instead of inventing nonsense.",

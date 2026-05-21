@@ -20,6 +20,7 @@ import { zhTW as t } from "@/locales/zh-TW";
 import { buildItineraryRouteSegments } from "@/lib/routeSegments";
 import { getRegionalTransitOptions } from "@/lib/tripTransportRegion";
 import { cn } from "@/lib/utils";
+import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
 import { findLinkedPinForItem } from "@/lib/mapPinItineraryLink";
 import { listTripsForLibrary, setActiveTrip } from "@/services/itineraryClient";
 import { syncService } from "@/services/syncService";
@@ -44,6 +45,36 @@ function transportSelectRows(destination: string) {
   }));
 }
 
+function transportDisplayLabel(value: string, options: TransportSelectOption[]): string {
+  const trimmed = value.trim();
+  const option = options.find((row) => row.value === trimmed);
+  if (option) {
+    return option.label;
+  }
+  const normalized = trimmed.toLowerCase();
+  const labelByValue: Record<string, string> = {
+    driving: t.itineraryPanel.transportDriving,
+    drive: t.itineraryPanel.transportDriving,
+    car: t.itineraryPanel.transportCar,
+    transit: t.itineraryPanel.transportTransit,
+    public_transport: t.itineraryPanel.transportTransit,
+    publictransport: t.itineraryPanel.transportTransit,
+    walking: t.itineraryPanel.transportWalking,
+    walk: t.itineraryPanel.transportWalking,
+    bicycling: t.itineraryPanel.transportBicycling,
+    bicycle: t.itineraryPanel.transportBicycling,
+    bike: t.itineraryPanel.transportBicycling,
+    metro: t.itineraryPanel.transportMetro,
+    subway: t.itineraryPanel.transportMetro,
+    mrt: t.itineraryPanel.transportMetro,
+    train: t.itineraryPanel.transportTrain,
+    bus: t.itineraryPanel.transportBus,
+    taxi: t.itineraryPanel.transportTaxi,
+    mixed: t.itineraryPanel.transportMixed,
+  };
+  return labelByValue[normalized.replace(/[\s-]+/g, "_")] ?? trimmed;
+}
+
 function nextActivityTime(items: TripPlanItem[]): string {
   const lastTime = [...items]
     .reverse()
@@ -56,19 +87,46 @@ function nextActivityTime(items: TripPlanItem[]): string {
   return `${String(Math.min(23, hour + 1)).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
+function buildPinFromItineraryItem(item: TripPlanItem, dayNumber: number): TripMapPin | null {
+  const location = item.location;
+  if (!location || !hasUsableMapCoordinate(location)) {
+    return null;
+  }
+  return {
+    id: `day_${dayNumber}_${item.id}`,
+    name: location.name,
+    lat: location.lat,
+    lng: location.lng,
+    description: item.notes || location.description,
+    address: location.address,
+    placeId: location.placeId,
+    photoUrl: location.photoUrl,
+    thumbnail: location.thumbnail || location.photoUrl,
+    openingHours: location.openingHours,
+    phoneNumber: location.phoneNumber,
+    website: location.website,
+    googleMapsUrl: location.googleMapsUrl,
+    rating: location.rating,
+    userRatingsTotal: location.userRatingsTotal,
+    source: "itinerary",
+    linkedTripItemId: item.id,
+    dayNumber,
+    color: "#5a7ea3",
+    confidence: location.confidence,
+    verified: location.verified,
+  };
+}
+
 type TransportSelectOption = { value: string; label: string };
 
 type SortableStopProps = {
   item: TripPlanItem;
   index: number;
   itemsLength: number;
-  linkedPin: TripMapPin | undefined;
   isSelected: boolean;
   canSelectOnMap: boolean;
   incomingRoute: ReturnType<typeof buildItineraryRouteSegments>[number] | undefined;
-  routeDisplayMinutes: number;
   currentTransport: string;
-  hasKnownTransport: boolean;
   transportOptions: TransportSelectOption[];
   isEditingTitle: boolean;
   editingTitle: string;
@@ -86,13 +144,10 @@ function SortableMapStop({
   item,
   index,
   itemsLength,
-  linkedPin,
   isSelected,
   canSelectOnMap,
   incomingRoute,
-  routeDisplayMinutes,
   currentTransport,
-  hasKnownTransport,
   transportOptions,
   isEditingTitle,
   editingTitle,
@@ -117,25 +172,19 @@ function SortableMapStop({
     <div ref={setNodeRef} style={style} className={cn(isDragging && "opacity-90 shadow-md")}>
       {incomingRoute && (
         <div className="ml-5 rounded-xl border border-border-light bg-surface-elevated/60 px-3 py-2">
-          <div className="mb-1.5 flex items-center justify-between gap-2">
-            <p className="min-w-0 truncate text-[11px] font-medium text-foreground">
-              {incomingRoute.fromName} → {incomingRoute.toName}
-            </p>
-            <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
-              {routeDisplayMinutes} {t.itineraryPanel.minutesUnit}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="shrink-0 text-[10px] text-muted" htmlFor={`transport_${incomingRoute.id}`}>
+          <div className="flex items-center">
+            <label className="sr-only" htmlFor={`transport_${incomingRoute.id}`}>
               {t.itineraryPanel.segmentTransport}
             </label>
             <select
               id={`transport_${incomingRoute.id}`}
               value={currentTransport}
               onChange={(event) => onTransportChange(event.target.value)}
-              className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/25"
+              className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/25"
             >
-              {!hasKnownTransport && <option value={currentTransport}>{currentTransport}</option>}
+              {!transportOptions.some((option) => option.value === currentTransport) && (
+                <option value={currentTransport}>{transportDisplayLabel(currentTransport, transportOptions)}</option>
+              )}
               {transportOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -159,9 +208,9 @@ function SortableMapStop({
           role="button"
           tabIndex={canSelectOnMap ? 0 : -1}
           aria-disabled={!canSelectOnMap && !isEditingTitle}
-          onClick={() => linkedPin && onSelectPin()}
+          onClick={() => canSelectOnMap && onSelectPin()}
           onKeyDown={(event) => {
-            if (!linkedPin || (event.key !== "Enter" && event.key !== " ")) {
+            if (!canSelectOnMap || (event.key !== "Enter" && event.key !== " ")) {
               return;
             }
             event.preventDefault();
@@ -239,7 +288,7 @@ function SortableMapStop({
                 disabled={!canSelectOnMap}
                 onClick={(event) => {
                   event.stopPropagation();
-                  if (linkedPin) {
+                  if (canSelectOnMap) {
                     onSelectPin();
                   }
                 }}
@@ -307,7 +356,6 @@ export default function ItineraryPanel() {
   const [editingItem, setEditingItem] = useState<{ dayNumber: number; itemId: string; title: string } | null>(null);
   const manualItemCounter = useRef(0);
   const routeSegments = useMemo(() => buildItineraryRouteSegments(itinerary), [itinerary]);
-  const segmentDirectionsMinutes = useMapStore((s) => s.segmentDirectionsMinutes);
   const transportOptions = useMemo(() => transportSelectRows(tripDestination), [tripDestination]);
 
   const [tripList, setTripList] = useState<ItineraryListItem[]>([]);
@@ -736,8 +784,8 @@ export default function ItineraryPanel() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-border-light px-1.5 py-0.5 text-[10px] text-muted">
-                      {day.items.length} {t.itineraryPanel.stops}
+                    <span className="shrink-0 whitespace-nowrap rounded-full bg-border-light px-1.5 py-0.5 text-[10px] text-muted">
+                      {day.items.length} 個地點
                     </span>
                     {expandedDay === day.dayNumber ? (
                       <ChevronUp className="size-4 text-muted" />
@@ -769,7 +817,7 @@ export default function ItineraryPanel() {
                             {day.items.map((item, index) => {
                               const linkedPin = findLinkedPinForItem(item, pins);
                               const isSelected = linkedPin?.id === selectedPinId;
-                              const canSelectOnMap = Boolean(linkedPin);
+                              const canSelectOnMap = Boolean(linkedPin || hasUsableMapCoordinate(item.location));
                               const incomingRoute = routeSegments.find(
                                 (segment) =>
                                   segment.dayNumber === day.dayNumber && segment.toItemId === item.id,
@@ -780,17 +828,9 @@ export default function ItineraryPanel() {
                                 trimmedItemTransport !== ""
                                   ? trimmedItemTransport
                                   : (incomingRoute?.transport ?? "Transit");
-                              const hasKnownTransport = transportOptions.some(
-                                (option) => option.value === currentTransport,
-                              );
                               const isEditingTitle = editingItem?.itemId === item.id;
                               const editingTitleValue =
                                 isEditingTitle && editingItem ? editingItem.title : "";
-                              const segId = incomingRoute?.id;
-                              const routeDisplayMinutes =
-                                incomingRoute && segId
-                                  ? (segmentDirectionsMinutes[segId] ?? incomingRoute.estimatedMinutes)
-                                  : 0;
 
                               return (
                                 <SortableMapStop
@@ -798,17 +838,29 @@ export default function ItineraryPanel() {
                                   item={item}
                                   index={index}
                                   itemsLength={day.items.length}
-                                  linkedPin={linkedPin}
                                   isSelected={isSelected}
                                   canSelectOnMap={canSelectOnMap}
                                   incomingRoute={incomingRoute}
-                                  routeDisplayMinutes={routeDisplayMinutes}
                                   currentTransport={currentTransport}
-                                  hasKnownTransport={hasKnownTransport}
                                   transportOptions={transportOptions}
                                   isEditingTitle={isEditingTitle}
                                   editingTitle={editingTitleValue}
-                                  onSelectPin={() => linkedPin && setSelectedPinId(linkedPin.id)}
+                                  onSelectPin={() => {
+                                    if (linkedPin) {
+                                      setSelectedPinId(linkedPin.id);
+                                      return;
+                                    }
+                                    const pin = buildPinFromItineraryItem(item, day.dayNumber);
+                                    if (!pin) {
+                                      return;
+                                    }
+                                    const currentPins = useMapStore.getState().pins;
+                                    useMapStore.getState().setPins([
+                                      ...currentPins.filter((currentPin) => currentPin.id !== pin.id),
+                                      pin,
+                                    ]);
+                                    setSelectedPinId(pin.id);
+                                  }}
                                   onTransportChange={(value) =>
                                     updateItineraryItemTransport(day.dayNumber, item.id, value)
                                   }

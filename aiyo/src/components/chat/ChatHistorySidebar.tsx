@@ -150,8 +150,8 @@ export default function ChatHistorySidebar({
   return (
     <aside
       className={cn(
-        "relative z-10 hidden min-h-0 shrink-0 flex-col border-r border-slate-200 bg-white/92 transition-[width,padding] duration-200 ease-out backdrop-blur md:flex",
-        expanded ? "w-[300px] px-4 py-4" : "w-[52px] items-center px-2 py-4",
+        "relative z-10 hidden min-h-0 shrink-0 flex-col border-r border-slate-300 bg-white shadow-[1px_0_0_rgba(15,23,42,0.06)] transition-[width,padding] duration-200 ease-out md:flex",
+        expanded ? "w-[300px] px-4 py-4" : "w-[52px] items-center border-slate-300 px-2 py-4",
       )}
     >
       {!expanded ? (
@@ -185,7 +185,7 @@ export default function ChatHistorySidebar({
             aria-label={t.chat.startNewChatAria}
           >
             <span className="text-sm font-semibold text-slate-900">{t.chat.startNewChat}</span>
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-2xl bg-slate-200 text-slate-700">
               <MessageSquarePlus className="size-4" aria-hidden />
             </span>
           </button>
@@ -301,7 +301,7 @@ function CollapsedRail({
       <button
         type="button"
         onClick={onExpand}
-        className="flex size-9 shrink-0 items-center justify-center rounded-xl text-zinc-200 chat-glass-card transition-colors hover:bg-[var(--chat-hover)]"
+        className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-100"
         aria-expanded={false}
         title={t.chat.expandHistorySidebar}
         aria-label={t.chat.expandHistorySidebar}
@@ -311,14 +311,14 @@ function CollapsedRail({
       <button
         type="button"
         onClick={onNewConversation}
-        className="flex size-9 shrink-0 items-center justify-center rounded-xl text-violet-200 chat-glass-card transition-colors hover:bg-[var(--chat-hover)]"
+        className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-primary/30 bg-primary/10 text-primary shadow-sm transition-colors hover:border-primary/45 hover:bg-primary/15"
         title={t.chat.newConversationAria}
         aria-label={t.chat.newConversationAria}
       >
         <Plus className="size-4" aria-hidden />
       </button>
       <div className="flex flex-1 flex-col items-center pt-1">
-        <History className="size-4 text-chat-subtle" aria-hidden />
+        <History className="size-4 text-slate-500" aria-hidden />
       </div>
     </div>
   );

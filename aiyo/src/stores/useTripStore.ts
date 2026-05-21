@@ -212,7 +212,15 @@ export const useTripStore = create<TripState>((set) => ({
             ? {
                 ...day,
                 items: day.items.map((item) =>
-                  item.id === itemId ? { ...item, transport: nextTransport } : item,
+                  item.id === itemId
+                    ? {
+                        ...item,
+                        transport: nextTransport,
+                        transportDurationMinutes: undefined,
+                        transportDistanceMeters: undefined,
+                        transportDataSource: undefined,
+                      }
+                    : item,
                 ),
               }
             : day,

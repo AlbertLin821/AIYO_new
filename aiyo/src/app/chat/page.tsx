@@ -3,22 +3,21 @@
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import ChatScenicBackground from "@/components/effects/ChatScenicBackground";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
 import {
+  ArrowUp,
   CalendarDays,
   ChevronDown,
   DollarSign,
   Heart,
   Loader2,
   MapPin,
+  Mic,
   Plus,
-  Send,
   Square,
 } from "lucide-react";
-import ChatBackgroundPicker from "@/components/chat/ChatBackgroundPicker";
 import ChatHistorySidebar from "@/components/chat/ChatHistorySidebar";
 import ChatWorkflowRail from "@/components/chat/ChatWorkflowRail";
 import MarkdownMessage from "@/components/chat/MarkdownMessage";
@@ -40,17 +39,10 @@ import {
   startFrontendDebugProcess,
   updateFrontendDebugProcess,
 } from "@/lib/frontendDebug";
-import {
-  type ChatBackgroundPresetId,
-  getChatBackgroundPreset,
-  persistChatBackgroundPresetId,
-  readChatBackgroundPresetId,
-} from "@/lib/chatBackground";
 import { buildWorkflowSteps } from "@/lib/workflowSteps";
-import { createMockGroundedAssistantMessage } from "@/lib/mocks/groundedChatMock";
 import { cn } from "@/lib/utils";
 import { reviseTripPlan, sendChatMessage } from "@/services/aiClient";
-import { createNewTrip, listTripsForLibrary, setActiveTrip } from "@/services/itineraryClient";
+import { createNewTrip, setActiveTrip } from "@/services/itineraryClient";
 import { syncService } from "@/services/syncService";
 import { fetchVideoRecommendations, shouldSkipClientVideoSummarize, summarizeVideo } from "@/services/videoClient";
 import { useChatStore } from "@/stores/useChatStore";
@@ -59,7 +51,6 @@ import { useMapStore } from "@/stores/useMapStore";
 import { useTripStore } from "@/stores/useTripStore";
 import { useUserStore } from "@/stores/useUserStore";
 import { useVideoStore } from "@/stores/useVideoStore";
-import type { ItineraryListItem } from "@/lib/itinerary-sort";
 import type { SourceReference } from "@/lib/types/sources";
 import type {
   AiProposedChange,
@@ -78,6 +69,37 @@ const VideoSummaryDrawer = dynamic(
   () => import("@/components/home/VideoSummaryDrawer"),
   { ssr: false },
 );
+
+type ChatSpeechRecognitionResult = {
+  isFinal: boolean;
+  0: { transcript: string };
+};
+
+type ChatSpeechRecognitionEvent = {
+  resultIndex: number;
+  results: {
+    length: number;
+    [index: number]: ChatSpeechRecognitionResult;
+  };
+};
+
+type ChatSpeechRecognitionErrorEvent = {
+  error?: string;
+};
+
+type ChatSpeechRecognition = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: ChatSpeechRecognitionEvent) => void) | null;
+  onerror: ((event: ChatSpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+};
+
+type ChatSpeechRecognitionConstructor = new () => ChatSpeechRecognition;
 
 function buildVideoSummaryKey(input: {
   videoId?: string;
@@ -133,17 +155,6 @@ function buildAssistantLocalMessage(content: string): ChatMessage {
     }),
     responseType: "text_message",
   };
-}
-
-function formatTripUpdatedDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleDateString("zh-TW", {
-    month: "short",
-    day: "numeric",
-  });
 }
 
 function shouldRecommendVideos(message: string): boolean {
@@ -229,6 +240,7 @@ function buildItineraryItemFromAiChange(change: AddItineraryChange): TripPlanIte
     time: change.time,
     title,
     type: /夜市|飯|餐|小吃|美食|魚頭/.test(title) ? "restaurant" : "attraction",
+    transport: change.transport?.trim() || undefined,
     notes: [change.locationName ? `地點：${change.locationName}` : "", change.notes || ""].filter(Boolean).join("\n") || undefined,
     source: "ai",
     location: undefined,
@@ -346,7 +358,6 @@ export default function ChatPage() {
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [historySidebarExpanded, setHistorySidebarExpanded] = useState(false);
-  const [chatBackgroundId, setChatBackgroundId] = useState<ChatBackgroundPresetId>("mist");
   const [tripProfile, setTripProfile] = useState<TripProfile | null>(null);
   const [streamingStatusSteps, setStreamingStatusSteps] = useState<StatusStepPayload[]>([]);
   const [workflowRail, setWorkflowRail] = useState<WorkflowRailState>({
@@ -362,18 +373,19 @@ export default function ChatPage() {
     detail: "送出需求後，這裡會顯示右側行程欄的最新同步結果。",
   });
 
-  const [tripPickerOpen, setTripPickerOpen] = useState(false);
-  const [tripPickerTrips, setTripPickerTrips] = useState<ItineraryListItem[]>([]);
-  const [tripPickerLoading, setTripPickerLoading] = useState(false);
-  const [tripPickerError, setTripPickerError] = useState<string | null>(null);
-  const [tripPickerAction, setTripPickerAction] = useState<"new" | string | null>(null);
+  const [isStartingNewConversation, setIsStartingNewConversation] = useState(false);
   const [expandedContextDays, setExpandedContextDays] = useState<Record<number, boolean>>({});
   const [contextPanelWidth, setContextPanelWidth] = useState(288);
   const [autoSummaryProgress, setAutoSummaryProgress] = useState<{ current: number; total: number } | null>(null);
   const [sourceDrawerSource, setSourceDrawerSource] = useState<SourceReference | null>(null);
+  const [isVoiceInputActive, setIsVoiceInputActive] = useState(false);
+  const chatInputRef = useRef<HTMLInputElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const statusStreamRef = useRef<EventSource | null>(null);
   const chatAbortControllerRef = useRef<AbortController | null>(null);
+  const speechRecognitionRef = useRef<ChatSpeechRecognition | null>(null);
+  const speechBaseInputRef = useRef("");
+  const speechFinalTranscriptRef = useRef("");
   const chatRequestEpochRef = useRef(0);
   const videoSummaryQueueTokenRef = useRef(0);
   const videoSummaryInflightRef = useRef(new Map<string, Promise<VideoSummaryResult>>());
@@ -398,6 +410,13 @@ export default function ChatPage() {
   const pushToast = useToastStore((state) => state.pushToast);
   const setSummaryDiagnostics = useVideoStore((state) => state.setSummaryDiagnostics);
   const setIsSummarizing = useVideoStore((state) => state.setIsSummarizing);
+
+  useEffect(() => {
+    return () => {
+      speechRecognitionRef.current?.abort();
+      speechRecognitionRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isSending || streamingStatusSteps.length === 0) {
@@ -480,10 +499,6 @@ export default function ChatPage() {
     } catch {
       /* ignore */
     }
-  }, []);
-
-  useEffect(() => {
-    setChatBackgroundId(readChatBackgroundPresetId());
   }, []);
 
   useEffect(() => {
@@ -780,29 +795,10 @@ export default function ChatPage() {
     window.addEventListener("pointerup", handlePointerUp);
   }
 
-  async function openNewConversationPicker() {
-    if (isSending || tripPickerLoading || tripPickerAction) {
-      return;
-    }
-    setTripPickerOpen(true);
-    setTripPickerError(null);
-    setTripPickerLoading(true);
-    try {
-      const rows = await listTripsForLibrary("recent");
-      setTripPickerTrips(rows);
-    } catch (error) {
-      setTripPickerError(error instanceof Error ? error.message : "無法載入行程清單。");
-    } finally {
-      setTripPickerLoading(false);
-    }
-  }
-
   function finishNewConversationSetup(tripId: string, title?: string) {
     createConversation(title, tripId);
     setInput("");
     setTripProfile(null);
-    setTripPickerOpen(false);
-    setTripPickerAction(null);
   }
 
   async function ensureTripPlanningContext(conversationTitle?: string) {
@@ -864,32 +860,11 @@ export default function ChatPage() {
     }
   }
 
-  async function startConversationWithTrip(tripId: string) {
-    if (tripPickerAction) {
-      return;
-    }
-    setTripPickerAction(tripId);
-    setTripPickerError(null);
-    try {
-      const selectedTrip = tripPickerTrips.find((trip) => trip.id === tripId);
-      if (tripId !== useTripStore.getState().tripId) {
-        const snapshot = await setActiveTrip(tripId);
-        syncService.applyTripSwitch(snapshot);
-        syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
-      }
-      finishNewConversationSetup(tripId, selectedTrip?.title);
-    } catch (error) {
-      setTripPickerError(error instanceof Error ? error.message : "無法切換行程。");
-      setTripPickerAction(null);
-    }
-  }
-
   async function startConversationWithNewTrip() {
-    if (tripPickerAction) {
+    if (isSending || isStartingNewConversation) {
       return;
     }
-    setTripPickerAction("new");
-    setTripPickerError(null);
+    setIsStartingNewConversation(true);
     try {
       const created = await createNewTrip();
       const snapshot = await setActiveTrip(created.tripId);
@@ -897,8 +872,13 @@ export default function ChatPage() {
       syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
       finishNewConversationSetup(created.tripId);
     } catch (error) {
-      setTripPickerError(error instanceof Error ? error.message : "無法建立新行程。");
-      setTripPickerAction(null);
+      pushToast({
+        variant: "warning",
+        title: "無法開始新對話",
+        description: error instanceof Error ? error.message : "無法建立新行程。",
+      });
+    } finally {
+      setIsStartingNewConversation(false);
     }
   }
 
@@ -968,6 +948,77 @@ export default function ChatPage() {
       questionAnswers: answers,
       tripProfile: profile,
     });
+  }
+
+  function handleToggleVoiceInput() {
+    if (isVoiceInputActive) {
+      speechRecognitionRef.current?.stop();
+      setIsVoiceInputActive(false);
+      return;
+    }
+
+    const recognitionWindow = window as Window & {
+      SpeechRecognition?: ChatSpeechRecognitionConstructor;
+      webkitSpeechRecognition?: ChatSpeechRecognitionConstructor;
+    };
+    const Recognition = recognitionWindow.SpeechRecognition ?? recognitionWindow.webkitSpeechRecognition;
+    if (!Recognition) {
+      pushToast({
+        variant: "warning",
+        title: "此瀏覽器不支援語音輸入",
+        description: "請改用 Chrome 或直接輸入文字。",
+      });
+      return;
+    }
+
+    const recognition = new Recognition();
+    const initialInput = input.trim();
+    speechBaseInputRef.current = initialInput ? `${initialInput} ` : "";
+    speechFinalTranscriptRef.current = "";
+    speechRecognitionRef.current?.abort();
+    speechRecognitionRef.current = recognition;
+    recognition.lang = "zh-TW";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onresult = (event) => {
+      let interimTranscript = "";
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const transcript = result?.[0]?.transcript ?? "";
+        if (result?.isFinal) {
+          speechFinalTranscriptRef.current = `${speechFinalTranscriptRef.current}${transcript}`;
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+      setInput(
+        `${speechBaseInputRef.current}${speechFinalTranscriptRef.current}${interimTranscript}`.trimStart(),
+      );
+    };
+    recognition.onerror = () => {
+      setIsVoiceInputActive(false);
+      pushToast({
+        variant: "warning",
+        title: "語音輸入中斷",
+        description: "請再試一次，或直接輸入文字。",
+      });
+    };
+    recognition.onend = () => {
+      setIsVoiceInputActive(false);
+      if (speechRecognitionRef.current === recognition) {
+        speechRecognitionRef.current = null;
+      }
+      chatInputRef.current?.focus();
+    };
+
+    try {
+      recognition.start();
+      setIsVoiceInputActive(true);
+    } catch {
+      speechRecognitionRef.current = null;
+      setIsVoiceInputActive(false);
+    }
   }
 
   async function handleSend(
@@ -1794,21 +1845,8 @@ export default function ChatPage() {
     }
   }
 
-  const emptyChatHint =
-    status === "authenticated" ? t.chat.emptyHintAuthed : t.chat.emptyHintGuest;
-  const chatBackgroundPreset = getChatBackgroundPreset(chatBackgroundId);
-
-  function handleInsertGroundedMockExample() {
-    appendMessage(createMockGroundedAssistantMessage());
-  }
-
   function handleOpenSourceDrawer(source: SourceReference) {
     setSourceDrawerSource(source);
-  }
-
-  function handleChatBackgroundChange(nextId: ChatBackgroundPresetId) {
-    setChatBackgroundId(nextId);
-    persistChatBackgroundPresetId(nextId);
   }
 
   if (status === "loading") {
@@ -1825,113 +1863,8 @@ export default function ChatPage() {
 
   return (
     <div
-      className="chat-page-root relative flex h-[calc(100dvh-3.5rem-env(safe-area-inset-bottom,0px))] min-h-0 overflow-hidden lg:h-screen"
-      data-chat-theme={chatBackgroundPreset.theme}
+      className="chat-page-root relative flex h-[calc(100dvh-3.5rem-env(safe-area-inset-bottom,0px))] min-h-0 overflow-hidden bg-slate-50 lg:h-screen"
     >
-      <ChatScenicBackground preset={chatBackgroundPreset} />
-      {tripPickerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 py-6 backdrop-blur-sm">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="chat-trip-picker-title"
-            className="w-full max-w-lg overflow-hidden rounded-3xl border border-border-light bg-white shadow-2xl"
-          >
-            <div className="border-b border-border-light px-5 py-4">
-              <p id="chat-trip-picker-title" className="text-base font-semibold text-foreground">
-                和AI聊聊你的行程
-              </p>
-            </div>
-
-            <div className="max-h-[60vh] space-y-3 overflow-y-auto px-5 py-4">
-              <button
-                type="button"
-                disabled={Boolean(tripPickerAction)}
-                onClick={() => void startConversationWithNewTrip()}
-                className="flex w-full items-start justify-between gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-left transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <span>
-                  <span className="block text-sm font-semibold text-primary">
-                    開始新旅程
-                  </span>
-                  <span className="mt-1 block text-xs leading-relaxed text-muted">
-                    這個對話會從空白行程開始，後續套用 AI 建議時會儲存在新行程中。
-                  </span>
-                </span>
-                {tripPickerAction === "new" ? (
-                  <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-primary" aria-hidden />
-                ) : (
-                  <Plus className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
-                )}
-              </button>
-
-              {tripPickerLoading ? (
-                <div className="flex items-center gap-2 rounded-2xl border border-border-light bg-surface px-4 py-3 text-sm text-muted">
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                  載入行程清單中…
-                </div>
-              ) : tripPickerTrips.length > 0 ? (
-                <div className="space-y-2">
-                  {tripPickerTrips.map((trip) => {
-                    const isCurrentTrip = trip.id === tripStore.tripId;
-                    const isSwitching = tripPickerAction === trip.id;
-                    return (
-                      <button
-                        key={trip.id}
-                        type="button"
-                        disabled={Boolean(tripPickerAction)}
-                        onClick={() => void startConversationWithTrip(trip.id)}
-                        className="flex w-full items-start justify-between gap-3 rounded-2xl border border-border-light bg-white px-4 py-3 text-left transition-colors hover:border-primary/30 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        <span className="min-w-0">
-                          <span className="flex items-center gap-2">
-                            <span className="truncate text-sm font-semibold text-foreground">
-                              {trip.title}
-                            </span>
-                            {isCurrentTrip && (
-                              <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                                目前
-                              </span>
-                            )}
-                          </span>
-                          <span className="mt-1 block text-xs text-muted">
-                            {trip.destination} · {trip.days} 天 · 最近編輯 {formatTripUpdatedDate(trip.updatedAt)}
-                          </span>
-                        </span>
-                        {isSwitching && (
-                          <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-primary" aria-hidden />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-dashed border-border-light bg-cream/40 px-4 py-5 text-center text-sm text-muted">
-                  目前沒有可選擇的行程。
-                </div>
-              )}
-
-              {tripPickerError && (
-                <p className="rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">
-                  {tripPickerError}
-                </p>
-              )}
-            </div>
-
-            <div className="flex justify-end gap-2 border-t border-border-light px-5 py-4">
-              <button
-                type="button"
-                disabled={Boolean(tripPickerAction)}
-                onClick={() => setTripPickerOpen(false)}
-                className="rounded-xl border border-border-light bg-white px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-cream/60 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                取消
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <ChatHistorySidebar
         expanded={historySidebarExpanded}
         conversations={conversations}
@@ -1940,7 +1873,7 @@ export default function ChatPage() {
         userImage={session?.user?.image}
         onExpand={() => persistHistorySidebarExpanded(true)}
         onCollapse={() => persistHistorySidebarExpanded(false)}
-        onNewConversation={() => void openNewConversationPicker()}
+        onNewConversation={() => void startConversationWithNewTrip()}
         onSelectConversation={(conversationId) => void selectConversationForChat(conversationId)}
         onDeleteConversation={(conversationId) => void deleteConversation(conversationId)}
       />
@@ -1950,18 +1883,10 @@ export default function ChatPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
               <h1 className="font-semibold text-slate-900">{t.chat.pageTitle}</h1>
-              <ChatBackgroundPicker value={chatBackgroundId} onChange={handleChatBackgroundChange} />
-              <button
-                type="button"
-                onClick={handleInsertGroundedMockExample}
-                className="rounded-full border border-dashed border-slate-300 bg-white/90 px-3 py-1 text-[11px] font-medium text-slate-600 transition-colors hover:border-slate-400 hover:bg-slate-50"
-              >
-                載入可溯源範例
-              </button>
             </div>
             <button
               type="button"
-              onClick={() => void openNewConversationPicker()}
+              onClick={() => void startConversationWithNewTrip()}
               className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-900 transition-colors hover:bg-slate-50 md:hidden"
             >
               <Plus className="size-3.5" aria-hidden />
@@ -2009,14 +1934,6 @@ export default function ChatPage() {
           {messages.length === 0 && !isSending && !errorMessage && (
             <div className="rounded-3xl border border-dashed border-slate-300 bg-white px-4 py-10 text-center text-sm text-slate-500">
               <p className="font-medium text-slate-900">{t.chat.emptyTitle}</p>
-              <p className="mt-2 text-xs text-slate-500">{emptyChatHint}</p>
-              <button
-                type="button"
-                onClick={handleInsertGroundedMockExample}
-                className="mt-4 rounded-full border border-slate-200 bg-slate-900 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-slate-800"
-              >
-                載入可溯源 AI 範例回覆
-              </button>
             </div>
           )}
 
@@ -2190,24 +2107,48 @@ export default function ChatPage() {
           <div ref={messagesEndRef} aria-hidden className="h-px shrink-0" />
         </div>
 
-        <div className="relative z-10 border-t border-slate-200 bg-white/88 px-6 pb-6 pt-4 backdrop-blur">
-          <div className="flex items-center gap-3 rounded-3xl border border-slate-200 bg-white px-4 py-2 shadow-[0_12px_32px_rgba(15,23,42,0.06)]">
+        <div className="relative z-10 border-t border-slate-200 bg-white/88 px-4 pb-5 pt-4 backdrop-blur sm:px-6 sm:pb-6">
+          <div className="flex min-h-[58px] items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 shadow-[0_12px_32px_rgba(15,23,42,0.06)] transition-colors focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/20 sm:min-h-[64px] sm:gap-3 sm:px-5">
+            <button
+              type="button"
+              onClick={() => chatInputRef.current?.focus()}
+              className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-950 sm:size-10"
+              aria-label="聚焦輸入欄"
+            >
+              <Plus className="size-5 sm:size-6" aria-hidden />
+            </button>
             <input
+              ref={chatInputRef}
               type="text"
               value={input}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => event.key === "Enter" && void handleSend()}
               placeholder={t.chat.placeholder}
               data-testid="chat-input"
-              className="min-w-0 flex-1 bg-transparent py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+              className="min-w-0 flex-1 bg-transparent py-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none sm:py-3"
             />
+
+            <button
+              type="button"
+              onClick={handleToggleVoiceInput}
+              className={cn(
+                "flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors sm:size-10",
+                isVoiceInputActive
+                  ? "bg-primary/10 text-primary"
+                  : "text-slate-700 hover:bg-slate-100 hover:text-slate-950",
+              )}
+              aria-label={isVoiceInputActive ? "停止語音輸入" : "開始語音輸入"}
+              aria-pressed={isVoiceInputActive}
+            >
+              <Mic className="size-[18px] sm:size-5" aria-hidden />
+            </button>
 
             {isSending ? (
               <button
                 type="button"
                 onClick={handleStopGeneration}
                 data-testid="chat-stop-button"
-                className="flex size-10 cursor-pointer items-center justify-center rounded-2xl bg-slate-900 text-white transition-colors hover:bg-slate-800"
+                className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-slate-900 text-white transition-colors hover:bg-slate-800 sm:size-12"
                 aria-label={t.chat.stopGenerationAria}
               >
                 <Square className="size-4 fill-current" aria-hidden />
@@ -2218,10 +2159,10 @@ export default function ChatPage() {
                 onClick={() => void handleSend()}
                 disabled={!input.trim()}
                 data-testid="chat-send-button"
-                className="flex size-10 cursor-pointer items-center justify-center rounded-2xl bg-slate-900 text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-30"
-                aria-label={t.floatingChat.sendAria}
+                className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-slate-900 text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-30 sm:size-12"
+                aria-label={t.chat.sendAria}
               >
-                <Send className="size-4" aria-hidden />
+                <ArrowUp className="size-5 sm:size-6" aria-hidden />
               </button>
             )}
           </div>
@@ -2229,7 +2170,7 @@ export default function ChatPage() {
       </div>
 
       <div
-        className="relative z-10 hidden shrink-0 overflow-y-auto border-l border-slate-200 bg-white/90 p-5 backdrop-blur lg:block"
+        className="relative z-10 hidden shrink-0 overflow-y-auto border-l border-slate-300 bg-white p-5 shadow-[-1px_0_0_rgba(15,23,42,0.08)] lg:block"
         style={{ width: contextPanelWidth }}
       >
         <div
@@ -2238,7 +2179,7 @@ export default function ChatPage() {
           aria-label="調整目前行程脈絡寬度"
           title="拖曳調整寬度"
           onPointerDown={startContextPanelResize}
-          className="absolute left-0 top-0 z-20 h-full w-2 -translate-x-1 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-slate-300/60"
+          className="absolute left-0 top-0 z-20 h-full w-2 -translate-x-1 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-slate-400/50"
         />
         <h3 className="mb-4 text-sm font-semibold text-slate-900">即時行程</h3>
 

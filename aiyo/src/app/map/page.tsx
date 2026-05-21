@@ -10,8 +10,6 @@ const MapView = dynamic(() => import("@/components/map/MapView"), {
   loading: () => <div className="min-h-0 flex-1 rounded-2xl border-2 border-border bg-surface" />,
 });
 const ItineraryPanel = dynamic(() => import("@/components/map/ItineraryPanel"), { ssr: false });
-const FloatingAIChat = dynamic(() => import("@/components/map/FloatingAIChat"), { ssr: false });
-const VoicePlanningButton = dynamic(() => import("@/components/map/VoicePlanningButton"), { ssr: false });
 
 export default function MapPage() {
   const { panelOpen, setPanelOpen } = useMapStore();
@@ -34,8 +32,6 @@ export default function MapPage() {
         </button>
       )}
 
-      <VoicePlanningButton />
-      <FloatingAIChat />
     </div>
   );
 }

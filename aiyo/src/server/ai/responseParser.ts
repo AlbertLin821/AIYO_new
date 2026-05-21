@@ -311,6 +311,15 @@ function parseTripPlanJson(
           title,
           type: mapItemType(String(record.type || record.category || "attraction")),
           transport: record.transport ? String(record.transport) : undefined,
+          transportDurationMinutes:
+            typeof record.transportDurationMinutes === "number" && record.transportDurationMinutes > 0
+              ? Math.round(record.transportDurationMinutes)
+              : undefined,
+          transportDistanceMeters:
+            typeof record.transportDistanceMeters === "number" && record.transportDistanceMeters > 0
+              ? Math.round(record.transportDistanceMeters)
+              : undefined,
+          transportDataSource: record.transportDataSource === "google_routes" ? "google_routes" as const : undefined,
           notes: String(record.notes || record.desc || record.description || "").trim() || undefined,
           location: normalizeLocation(
             locationInput,

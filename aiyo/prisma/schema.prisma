@@ -119,6 +119,9 @@ model TripItem {
   timeSlot         String?
   itemType         String?
   transportMode    String?
+  transportDurationMinutes Int?
+  transportDistanceMeters Int?
+  transportDataSource String?
   source           String?
   location         String?
   latitude         Float?

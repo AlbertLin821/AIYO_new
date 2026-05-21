@@ -624,11 +624,6 @@ export default function HomePage() {
           <span className="text-xs text-muted bg-border-light px-2 py-0.5 rounded-full">
             {videos.length} {t.home.items}
           </span>
-          {recommendationSource === "youtube-data-api" && (
-            <span className="text-[10px] uppercase tracking-wide rounded-full bg-tertiary/15 px-2 py-0.5 text-foreground/80">
-              {t.home.sourceYoutube}
-            </span>
-          )}
           {recommendationSource === "default-taiwan-cities" && (
             <span className="text-[10px] uppercase tracking-wide rounded-full bg-primary/15 px-2 py-0.5 text-foreground/80">
               {t.home.sourceDefault}

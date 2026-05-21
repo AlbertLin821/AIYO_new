@@ -93,6 +93,12 @@ export interface TripPlanItem {
   title: string;
   type: TripItemType;
   transport?: string;
+  /** Minutes from the previous located item in the same day, when backed by a routing provider. */
+  transportDurationMinutes?: number;
+  /** Distance from the previous located item in meters, when backed by a routing provider. */
+  transportDistanceMeters?: number;
+  /** Provider used to resolve the transport time. */
+  transportDataSource?: "google_routes";
   notes?: string;
   location?: LocationReference;
   source?: "manual" | "ai" | "video";
@@ -164,6 +170,7 @@ export type AiProposedChange =
   time: string;
   title: string;
   locationName?: string;
+  transport?: string;
   notes?: string;
   reason?: string;
   source: "ai-chat";

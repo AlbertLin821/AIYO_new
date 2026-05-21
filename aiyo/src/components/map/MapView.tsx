@@ -41,6 +41,9 @@ const GOOGLE_MAPS_MAP_ID = (process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || "").tr
 /** 無任何標記時：地圖預設對準台灣本島（略放大、視覺置中）。 */
 const DEFAULT_MAP_TW_CENTER = { lat: 23.62, lng: 121.0 };
 const DEFAULT_MAP_TW_ZOOM = 8;
+const PLACE_DETAILS_CACHE_PREFIX = "aiyo:place-details:";
+const PLACE_DETAILS_HIT_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+const PLACE_DETAILS_MISS_TTL_MS = 1000 * 60 * 60 * 24;
 
 const MAP_TYPE_OPTIONS: Array<{ value: GoogleMapTypeId; label: string }> = [
   { value: "roadmap", label: t.map.mapTypeRoadmap },
@@ -69,6 +72,12 @@ type RuntimeMapsConfig = {
   enableMockMaps: boolean;
 };
 
+type PlaceDetailsCacheEntry = {
+  cachedAt: number;
+  details?: Partial<MapPinType>;
+  miss?: boolean;
+};
+
 function normalizeMapId(value: string): string {
   if (!value || /NEXT_PUBLIC_|GOOGLE_MAPS_API_KEY|Frontend_/i.test(value)) {
     return "";
@@ -83,6 +92,102 @@ function escapeHtml(value: string | number | undefined): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+const WEEKDAY_ORDER = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"] as const;
+const WEEKDAY_ALIASES: Record<string, number> = {
+  "週一": 0,
+  "星期一": 0,
+  "禮拜一": 0,
+  Monday: 0,
+  Mon: 0,
+  "週二": 1,
+  "星期二": 1,
+  "禮拜二": 1,
+  Tuesday: 1,
+  Tue: 1,
+  "週三": 2,
+  "星期三": 2,
+  "禮拜三": 2,
+  Wednesday: 2,
+  Wed: 2,
+  "週四": 3,
+  "星期四": 3,
+  "禮拜四": 3,
+  Thursday: 3,
+  Thu: 3,
+  "週五": 4,
+  "星期五": 4,
+  "禮拜五": 4,
+  Friday: 4,
+  Fri: 4,
+  "週六": 5,
+  "星期六": 5,
+  "禮拜六": 5,
+  Saturday: 5,
+  Sat: 5,
+  "週日": 6,
+  "週天": 6,
+  "星期日": 6,
+  "星期天": 6,
+  "禮拜日": 6,
+  "禮拜天": 6,
+  Sunday: 6,
+  Sun: 6,
+};
+
+function normalizeOpeningHours(value?: string): Array<{ day: string; hours: string }> {
+  const raw = value?.trim();
+  if (!raw) {
+    return [];
+  }
+  const rows = raw
+    .split(/[；;\n\r]+/u)
+    .map((row) => row.trim())
+    .filter(Boolean);
+  const byDay = new Map<number, string>();
+  const unmatched: Array<{ day: string; hours: string }> = [];
+
+  for (const row of rows) {
+    const rangeMatch = row.match(/(週一|星期一|禮拜一)\s*(?:至|到|-|–|~)\s*(週日|週天|星期日|星期天|禮拜日|禮拜天)\s*[:：]?\s*(.+)$/u);
+    if (rangeMatch?.[3]) {
+      WEEKDAY_ORDER.forEach((_, index) => byDay.set(index, rangeMatch[3]!.trim()));
+      continue;
+    }
+
+    const aliases = Object.keys(WEEKDAY_ALIASES).sort((left, right) => right.length - left.length);
+    const alias = aliases.find((candidate) => row.toLowerCase().startsWith(candidate.toLowerCase()));
+    if (!alias) {
+      unmatched.push({ day: "", hours: row });
+      continue;
+    }
+    const dayIndex = WEEKDAY_ALIASES[alias];
+    const hours = row
+      .slice(alias.length)
+      .replace(/^[\s:：,，-]+/u, "")
+      .trim();
+    byDay.set(dayIndex, hours || row);
+  }
+
+  const ordered = WEEKDAY_ORDER.flatMap((day, index) => {
+    const hours = byDay.get(index);
+    return hours ? [{ day, hours }] : [];
+  });
+  return ordered.length > 0 ? ordered : unmatched;
+}
+
+function buildOpeningHoursInfoHtml(value: string | undefined, empty: string): string {
+  const rows = normalizeOpeningHours(value);
+  if (rows.length === 0) {
+    return escapeHtml(empty);
+  }
+  return `<ul style="list-style:none;margin:0;padding:0;display:grid;gap:3px;">${rows
+    .map((row) =>
+      row.day
+        ? `<li><span style="display:inline-block;min-width:34px;color:#6b7280;">${escapeHtml(row.day)}</span>${escapeHtml(row.hours)}</li>`
+        : `<li>${escapeHtml(row.hours)}</li>`,
+    )
+    .join("")}</ul>`;
 }
 
 function formatDistanceKm(distanceKm: number): string {
@@ -207,6 +312,36 @@ function detailsRequestKey(pin: MapPinType, linkedItem?: { location?: LocationRe
   return `name:${pin.name.trim().toLowerCase()}:${pin.lat.toFixed(5)}:${pin.lng.toFixed(5)}`;
 }
 
+function readPlaceDetailsCache(key: string): PlaceDetailsCacheEntry | null {
+  try {
+    const raw = window.localStorage.getItem(`${PLACE_DETAILS_CACHE_PREFIX}${key}`);
+    if (!raw) {
+      return null;
+    }
+    const entry = JSON.parse(raw) as PlaceDetailsCacheEntry;
+    const age = Date.now() - Number(entry.cachedAt || 0);
+    const ttl = entry.miss ? PLACE_DETAILS_MISS_TTL_MS : PLACE_DETAILS_HIT_TTL_MS;
+    if (!Number.isFinite(age) || age < 0 || age > ttl) {
+      window.localStorage.removeItem(`${PLACE_DETAILS_CACHE_PREFIX}${key}`);
+      return null;
+    }
+    return entry;
+  } catch {
+    return null;
+  }
+}
+
+function writePlaceDetailsCache(key: string, entry: Omit<PlaceDetailsCacheEntry, "cachedAt">) {
+  try {
+    window.localStorage.setItem(
+      `${PLACE_DETAILS_CACHE_PREFIX}${key}`,
+      JSON.stringify({ ...entry, cachedAt: Date.now() }),
+    );
+  } catch {
+    /* localStorage can be unavailable in private or restricted contexts. */
+  }
+}
+
 function findLinkedItineraryItem(
   itinerary: ReturnType<typeof useTripStore.getState>["itinerary"],
   pin: MapPinType | null,
@@ -292,13 +427,11 @@ function buildPinInfoContent(
         <dt style="color:#6b7280;">${escapeHtml(t.map.infoAddress)}</dt>
         <dd style="margin:0;color:#1f2937;">${escapeHtml(resolvedPin.address || empty)}</dd>
         <dt style="color:#6b7280;">${escapeHtml(t.map.infoOpeningHours)}</dt>
-        <dd style="margin:0;color:#1f2937;">${escapeHtml(resolvedPin.openingHours || empty)}</dd>
+        <dd style="margin:0;color:#1f2937;">${buildOpeningHoursInfoHtml(resolvedPin.openingHours, empty)}</dd>
         <dt style="color:#6b7280;">${escapeHtml(t.map.infoPhone)}</dt>
         <dd style="margin:0;color:#1f2937;">${escapeHtml(resolvedPin.phoneNumber || empty)}</dd>
         <dt style="color:#6b7280;">${escapeHtml(t.map.infoSource)}</dt>
         <dd style="margin:0;color:#1f2937;">${escapeHtml(pinSourceLabel(resolvedPin.source))}${resolvedPin.dayNumber ? ` · D${escapeHtml(resolvedPin.dayNumber)}` : ""}</dd>
-        <dt style="color:#6b7280;">${escapeHtml(t.map.infoCoords)}</dt>
-        <dd style="margin:0;color:#1f2937;">${escapeHtml(resolvedPin.lat.toFixed(5))}, ${escapeHtml(resolvedPin.lng.toFixed(5))}</dd>
       </dl>
       <a href="${escapeHtml(routeUrl)}" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;justify-content:center;margin:12px 8px 0;padding:9px 12px;border-radius:10px;background:#426991;color:white;font-size:12px;font-weight:700;text-decoration:none;">
         ${escapeHtml(t.map.infoRoute)}
@@ -308,18 +441,6 @@ function buildPinInfoContent(
           ? `<a href="${escapeHtml(googleMapsUrl)}" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;justify-content:center;margin:8px 8px 0;padding:9px 12px;border-radius:10px;border:1px solid #cbd5e1;color:#1f2937;font-size:12px;font-weight:700;text-decoration:none;">
               ${escapeHtml(t.map.infoGoogleMaps)}
             </a>`
-          : ""
-      }
-      ${
-        linkedItem
-          ? `<div style="margin:12px 8px 0;padding:9px 10px;border-radius:12px;background:#f4f7fb;border:1px solid #dbe7f3;">
-              <div style="font-size:11px;font-weight:700;color:#426991;letter-spacing:.04em;">${escapeHtml(t.map.linkedItinerary)}</div>
-              <div style="margin-top:4px;font-size:13px;font-weight:650;color:#111827;">${escapeHtml(linkedItem.time)} ${escapeHtml(linkedItem.title)}</div>${
-                linkedItem.transport
-                  ? `<div style="margin-top:3px;font-size:12px;color:#4b5563;">${escapeHtml(linkedItem.transport)}</div>`
-                  : ""
-              }
-            </div>`
           : ""
       }
     </article>
@@ -514,8 +635,7 @@ export default function MapView() {
   const tripStore = useTripStore();
   const itinerary = tripStore.itinerary;
   const tripDestination = tripStore.destination;
-  const { pins, selectedPinId, setSelectedPinId } = useMapStore();
-  const segmentDirectionsMinutes = useMapStore((s) => s.segmentDirectionsMinutes);
+  const { pins, selectedPinId, setSelectedPinId, clearPins } = useMapStore();
   const pushToast = useToastStore((state) => state.pushToast);
   const [runtimeMapsConfig, setRuntimeMapsConfig] = useState<RuntimeMapsConfig>({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
@@ -524,6 +644,12 @@ export default function MapView() {
   });
   const [runtimeConfigChecked, setRuntimeConfigChecked] = useState(Boolean(GOOGLE_MAPS_API_KEY) || FORCE_MOCK_MAP);
   const useGoogleSdk = Boolean(runtimeMapsConfig.googleMapsApiKey) && !runtimeMapsConfig.enableMockMaps;
+
+  useEffect(() => {
+    if (!tripStore.tripId && itinerary.length === 0 && pins.length > 0) {
+      clearPins();
+    }
+  }, [clearPins, itinerary.length, pins.length, tripStore.tripId]);
   const useAdvancedMarkers = Boolean(runtimeMapsConfig.googleMapsMapId);
   const [sdkState, setSdkState] = useState<SdkState>(() => (useGoogleSdk ? "loading" : "error"));
   const [mockZoom, setMockZoom] = useState(1);
@@ -746,11 +872,11 @@ export default function MapView() {
   }, [sdkState, useGoogleSdk]);
 
   useEffect(() => {
-    if (!runtimeConfigChecked || pins.length === 0) {
+    if (!runtimeConfigChecked || !runtimeMapsConfig.googleMapsApiKey || pins.length === 0) {
       return;
     }
 
-    const candidates = pins
+    const entries = pins
       .map((pin) => ({ pin, linkedItem: findLinkedItineraryItem(itinerary, pin) }))
       .filter(({ pin, linkedItem }) => needsPlaceDetails(pin, linkedItem))
       .map(({ pin, linkedItem }) => ({
@@ -764,8 +890,48 @@ export default function MapView() {
         linkedItemId: linkedItem?.id,
         linkedItemDay: linkedItem?.dayNumber,
       }))
-      .filter((entry) => entry.name && !requestedPlaceDetailsRef.current.has(entry.key))
+      .filter((entry) => entry.name && !requestedPlaceDetailsRef.current.has(entry.key));
+
+    const cachedPatches = new Map<string, Partial<MapPinType>>();
+    const candidates = entries
+      .filter((entry) => {
+        const cached = readPlaceDetailsCache(entry.key);
+        if (!cached) {
+          return true;
+        }
+        requestedPlaceDetailsRef.current.add(entry.key);
+        if (cached.details && Object.values(cached.details).some((value) => value !== undefined && value !== "")) {
+          cachedPatches.set(entry.pinId, cached.details);
+        }
+        return false;
+      })
       .slice(0, 6);
+
+    if (cachedPatches.size > 0) {
+      const currentPins = useMapStore.getState().pins;
+      useMapStore.getState().setPins(
+        currentPins.map((pin) => {
+          const patch = cachedPatches.get(pin.id);
+          return patch ? mergePinDetails(pin, patch) : pin;
+        }),
+      );
+
+      const trip = useTripStore.getState();
+      entries.forEach((entry) => {
+        const patch = cachedPatches.get(entry.pinId);
+        if (!patch || !entry.linkedItemId || !entry.linkedItemDay) {
+          return;
+        }
+        const day = trip.itinerary.find((candidateDay) => candidateDay.dayNumber === entry.linkedItemDay);
+        const item = day?.items.find((candidateItem) => candidateItem.id === entry.linkedItemId);
+        if (!item?.location) {
+          return;
+        }
+        trip.updateItineraryItem(entry.linkedItemDay, entry.linkedItemId, {
+          location: mergeLocationDetails(item.location, patch),
+        });
+      });
+    }
 
     if (candidates.length === 0) {
       return;
@@ -807,8 +973,14 @@ export default function MapView() {
           if (!row.id || !row.details) {
             return;
           }
+          const candidate = candidates.find((entry) => entry.pinId === row.id);
           if (Object.values(row.details).some((value) => value !== undefined && value !== "")) {
             patches.set(row.id, row.details);
+            if (candidate) {
+              writePlaceDetailsCache(candidate.key, { details: row.details });
+            }
+          } else if (candidate) {
+            writePlaceDetailsCache(candidate.key, { miss: true });
           }
         });
         if (patches.size === 0) {
@@ -856,7 +1028,7 @@ export default function MapView() {
     return () => {
       cancelled = true;
     };
-  }, [itinerary, pins, runtimeConfigChecked, tripDestination]);
+  }, [itinerary, pins, runtimeConfigChecked, runtimeMapsConfig.googleMapsApiKey, tripDestination]);
 
   useEffect(() => {
     const maps = window.google?.maps;
@@ -1196,8 +1368,6 @@ export default function MapView() {
     }));
   }
 
-  const resolvedSelectedPin = selectedPin ? buildLocationBackfilledPin(selectedPin, highlightedItem) : null;
-
   const showRealMap = useGoogleSdk && sdkState !== "error";
   const mapReady = sdkState === "ready";
 
@@ -1364,94 +1534,6 @@ export default function MapView() {
             <p className="font-semibold">{t.map.fallbackMode}</p>
             <p className="mt-1 text-xs text-muted">{providerError}</p>
           </div>
-        </div>
-      )}
-
-      {resolvedSelectedPin && (
-        <div className="absolute bottom-4 left-4 z-[11] max-h-[min(70vh,28rem)] w-80 overflow-y-auto rounded-2xl border-2 border-primary/25 bg-peach-light/60 p-4 shadow-soft-lg backdrop-blur-sm" data-testid="selected-map-pin">
-          <div className="mb-3 flex h-28 items-center justify-center overflow-hidden rounded-xl bg-surface-elevated">
-            {resolvedSelectedPin.thumbnail || resolvedSelectedPin.photoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element -- Google Places photo URLs are runtime-provided.
-              <img
-                src={resolvedSelectedPin.thumbnail || resolvedSelectedPin.photoUrl}
-                alt={t.map.infoThumbnail}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <span className="text-xs font-medium text-muted">{t.map.infoThumbnail}</span>
-            )}
-          </div>
-          <p className="mb-2 text-xs uppercase tracking-wide text-muted">{t.map.selectedPinTitle}</p>
-          <h3 className="text-base font-semibold text-foreground">{resolvedSelectedPin.name}</h3>
-          <p className="mt-1 text-sm text-muted">{resolvedSelectedPin.description}</p>
-          <div className="mt-3 grid grid-cols-[4.5rem_1fr] gap-x-2 gap-y-1 text-xs">
-            <span className="text-muted">{t.map.infoAddress}</span>
-            <span className="text-foreground">{resolvedSelectedPin.address || t.map.notProvided}</span>
-            <span className="text-muted">{t.map.infoOpeningHours}</span>
-            <span className="text-foreground">{resolvedSelectedPin.openingHours || t.map.notProvided}</span>
-            <span className="text-muted">{t.map.infoPhone}</span>
-            <span className="text-foreground">{resolvedSelectedPin.phoneNumber || t.map.notProvided}</span>
-            <span className="text-muted">{t.map.infoSource}</span>
-            <span className="text-foreground">
-              {pinSourceLabel(resolvedSelectedPin.source)}
-              {resolvedSelectedPin.dayNumber ? ` · D${resolvedSelectedPin.dayNumber}` : ""}
-            </span>
-            <span className="text-muted">{t.map.infoCoords}</span>
-            <span className="font-mono text-[11px] text-foreground">
-              {resolvedSelectedPin.lat.toFixed(5)}, {resolvedSelectedPin.lng.toFixed(5)}
-            </span>
-          </div>
-          <a
-            href={buildRoutePlanningUrl(resolvedSelectedPin)}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-testid="map-route-link"
-            className="mt-3 flex w-full items-center justify-center rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-dark"
-          >
-            {t.map.infoRoute}
-          </a>
-          {buildGoogleMapsUrl(resolvedSelectedPin) && (
-            <a
-              href={buildGoogleMapsUrl(resolvedSelectedPin) || undefined}
-              target="_blank"
-              rel="noopener noreferrer"
-              data-testid="map-google-maps-link"
-              className="mt-2 flex w-full items-center justify-center rounded-xl border border-border px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-surface-elevated"
-            >
-              {t.map.infoGoogleMaps}
-            </a>
-          )}
-          {highlightedItem && (
-            <div className="mt-3 rounded-xl bg-primary/5 px-3 py-2">
-              <p className="text-[11px] uppercase tracking-wide text-primary">{t.map.linkedItinerary}</p>
-              <p className="mt-1 text-sm font-medium text-foreground">{highlightedItem.time} {highlightedItem.title}</p>
-              {highlightedItem.transport && (
-                <p className="mt-1 text-xs text-muted">{highlightedItem.transport}</p>
-              )}
-            </div>
-          )}
-          {selectedPinRoutes.length > 0 && (
-            <div className="mt-3 rounded-xl border border-border/80 bg-surface/80 px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                {t.map.relatedRoutes}
-              </p>
-              <div className="mt-2 flex flex-col gap-2">
-                {selectedPinRoutes.map((segment) => (
-                  <div key={segment.id} data-testid="selected-map-route" className="text-xs leading-relaxed text-foreground">
-                    <p className="font-medium">
-                      D{segment.dayNumber} {segment.fromTime} {segment.fromName} → {segment.toTime} {segment.toName}
-                    </p>
-                    <p className="text-muted">
-                      {segment.transport} · {formatDistanceKm(segment.distanceKm)} ·{" "}
-                      {formatRouteMinutes(
-                        segmentDirectionsMinutes[segment.id] ?? segment.estimatedMinutes,
-                      )}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 

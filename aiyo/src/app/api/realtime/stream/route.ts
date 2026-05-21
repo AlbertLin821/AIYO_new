@@ -107,7 +107,7 @@ export async function GET(request: Request) {
         };
 
         request.signal.addEventListener("abort", closeStream);
-        lifetimeHandle = setTimeout(closeStream, 15_000);
+        lifetimeHandle = setTimeout(closeStream, 5 * 60_000);
 
         send("connected", { ok: true });
         await pump();

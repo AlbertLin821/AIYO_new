@@ -52,6 +52,8 @@ class SyncService {
   private roomId: string | null = null;
   private hydrated = false;
   private realtimeErrorShown = false;
+  private realtimeReconnectWarnTimer: number | null = null;
+  private manuallyClosingRealtime = false;
   private isApplyingRemote = false;
   private isSyncing = false;
   private lastSyncedPayloadKey: string | null = null;
@@ -100,6 +102,9 @@ class SyncService {
           title: item.title,
           type: item.type,
           transport: item.transport || "",
+          transportDurationMinutes: item.transportDurationMinutes || 0,
+          transportDistanceMeters: item.transportDistanceMeters || 0,
+          transportDataSource: item.transportDataSource || "",
           notes: item.notes || "",
           source: item.source || "manual",
           location: item.location
@@ -306,10 +311,15 @@ class SyncService {
     this.stopRealtime();
     useCollabStore.getState().setConnectionStatus("connecting");
     this.realtimeErrorShown = false;
+    this.manuallyClosingRealtime = false;
 
     this.eventSource = new EventSource(`/api/realtime/stream?roomId=${roomId}`);
     this.eventSource.addEventListener("connected", () => {
       this.realtimeErrorShown = false;
+      if (this.realtimeReconnectWarnTimer !== null) {
+        window.clearTimeout(this.realtimeReconnectWarnTimer);
+        this.realtimeReconnectWarnTimer = null;
+      }
       useCollabStore.getState().setConnectionStatus("connected");
     });
     this.eventSource.addEventListener("snapshot", (event) => {
@@ -317,19 +327,34 @@ class SyncService {
       this.applyBootstrap(payload.data, { source: "realtime" });
     });
     this.eventSource.onerror = () => {
+      if (this.manuallyClosingRealtime) {
+        return;
+      }
       useCollabStore.getState().setConnectionStatus("reconnecting");
-      if (!this.realtimeErrorShown) {
+      if (this.realtimeReconnectWarnTimer !== null || this.realtimeErrorShown) {
+        return;
+      }
+      this.realtimeReconnectWarnTimer = window.setTimeout(() => {
+        this.realtimeReconnectWarnTimer = null;
+        if (this.manuallyClosingRealtime || useCollabStore.getState().connectionStatus === "connected") {
+          return;
+        }
         this.realtimeErrorShown = true;
         useToastStore.getState().pushToast({
           variant: "error",
           title: t.bootstrap.realtimeLostTitle,
           description: t.bootstrap.realtimeLostDesc,
         });
-      }
+      }, 10_000);
     };
   }
 
   stopRealtime() {
+    this.manuallyClosingRealtime = true;
+    if (this.realtimeReconnectWarnTimer !== null) {
+      window.clearTimeout(this.realtimeReconnectWarnTimer);
+      this.realtimeReconnectWarnTimer = null;
+    }
     this.eventSource?.close();
     this.eventSource = null;
     useCollabStore.getState().setConnectionStatus("disconnected");

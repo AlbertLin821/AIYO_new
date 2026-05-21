@@ -12,7 +12,7 @@ import type { TravelPreferences, TripPlanRequest } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-/** 與客戶端 `VOICE_PLAN_CLIENT_TIMEOUT_MS` 對齊；Vercel 等環境需足夠上限才能完成網搜＋多輪模型。 */
+/** 行程 JSON 會觸發網搜、Mem0 與一或多輪 Ollama；Vercel 等環境需足夠上限才能完成。 */
 export const maxDuration = 300;
 
 function normalizePreferences(input: Partial<TravelPreferences> | undefined): TravelPreferences {

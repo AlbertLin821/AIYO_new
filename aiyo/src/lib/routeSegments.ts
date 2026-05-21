@@ -109,7 +109,15 @@ export function buildItineraryRouteSegments(days: TripPlanDay[]): ItineraryRoute
       }
 
       const transport = item.transport?.trim() || "Transit";
-      const distanceKm = estimateDistanceKm(from, to);
+      const storedDistanceMeters =
+        typeof item.transportDistanceMeters === "number" && item.transportDistanceMeters > 0
+          ? item.transportDistanceMeters
+          : undefined;
+      const distanceKm = storedDistanceMeters ? storedDistanceMeters / 1000 : estimateDistanceKm(from, to);
+      const storedMinutes =
+        typeof item.transportDurationMinutes === "number" && item.transportDurationMinutes > 0
+          ? Math.round(item.transportDurationMinutes)
+          : undefined;
       const legColor = DAY_ROUTE_COLORS[index % DAY_ROUTE_COLORS.length];
       return {
         id: `day_${day.dayNumber}_${previous.id}_${item.id}_${segmentTransportKey(transport)}_${previous.time}_${item.time}`,
@@ -122,7 +130,7 @@ export function buildItineraryRouteSegments(days: TripPlanDay[]): ItineraryRoute
         toTime: item.time,
         transport,
         distanceKm,
-        estimatedMinutes: estimateTravelMinutes(distanceKm, transport),
+        estimatedMinutes: storedMinutes ?? estimateTravelMinutes(distanceKm, transport),
         color: legColor,
         from,
         to,

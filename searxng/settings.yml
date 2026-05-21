@@ -1,4 +1,13 @@
-use_default_settings: true
+use_default_settings:
+  engines:
+    remove:
+      - brave
+      - brave.images
+      - brave.videos
+      - brave.news
+      - wikidata
+      - ahmia
+      - torch
 
 general:
   instance_name: "AIYO SearXNG"

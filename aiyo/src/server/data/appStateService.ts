@@ -121,6 +121,9 @@ function hydrateSparseDayItems<T extends { dayNumber: number; theme?: string | n
   title: string;
   type: "attraction" | "restaurant" | "transport" | "hotel" | "activity" | "shopping";
   transport?: string;
+  transportDurationMinutes?: number;
+  transportDistanceMeters?: number;
+  transportDataSource?: "google_routes";
   notes?: string;
   source?: "ai" | "manual" | "video";
   location?: {
@@ -205,6 +208,9 @@ function serializeTrip(trip: {
     timeSlot: string | null;
     itemType: string | null;
     transportMode: string | null;
+    transportDurationMinutes: number | null;
+    transportDistanceMeters: number | null;
+    transportDataSource: string | null;
     source: string | null;
     location: string | null;
     latitude: number | null;
@@ -278,6 +284,9 @@ function serializeTrip(trip: {
       title: item.title,
       type: (item.itemType || "activity") as PersistedTripPayload["itinerary"][number]["items"][number]["type"],
       transport: item.transportMode || undefined,
+      transportDurationMinutes: item.transportDurationMinutes ?? undefined,
+      transportDistanceMeters: item.transportDistanceMeters ?? undefined,
+      transportDataSource: item.transportDataSource === "google_routes" ? "google_routes" : undefined,
       notes: item.description || undefined,
       location:
         item.location &&
@@ -817,6 +826,9 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
         timeSlot: item.time,
         itemType: item.type,
         transportMode: item.transport || null,
+        transportDurationMinutes: item.transportDurationMinutes ?? null,
+        transportDistanceMeters: item.transportDistanceMeters ?? null,
+        transportDataSource: item.transportDataSource ?? null,
         source: item.source || "manual",
         location: location?.name || null,
         latitude: location?.lat ?? null,
