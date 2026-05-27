@@ -1,5 +1,10 @@
-import type { LocationReference, MapPin, TripPlanDay } from "@/types";
 import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
+import {
+  extractPrimaryPlaceName,
+  shouldSkipDedicatedMapPinForItem,
+} from "@/lib/itineraryPlaceTitle";
+import { findLinkedPinForItem } from "@/lib/mapPinItineraryLink";
+import type { LocationReference, MapPin, TripPlanDay, TripPlanItem } from "@/types";
 
 const PIN_COLORS = [
   "#F4A7B9",
@@ -10,6 +15,67 @@ const PIN_COLORS = [
   "#FFB347",
   "#87CEEB",
 ];
+
+function locationFromPin(pin: MapPin, item: TripPlanItem): LocationReference {
+  return {
+    name: pin.name,
+    lat: pin.lat,
+    lng: pin.lng,
+    description: item.notes || pin.description || pin.name,
+    address: pin.address,
+    placeId: pin.placeId,
+    photoUrl: pin.photoUrl,
+    thumbnail: pin.thumbnail || pin.photoUrl,
+    openingHours: pin.openingHours,
+    phoneNumber: pin.phoneNumber,
+    website: pin.website,
+    googleMapsUrl: pin.googleMapsUrl,
+    rating: pin.rating,
+    userRatingsTotal: pin.userRatingsTotal,
+    confidence: pin.confidence,
+    verified: pin.verified,
+  };
+}
+
+function buildItineraryPin(item: TripPlanItem, dayNumber: number, colorIndex: number): MapPin {
+  const location = item.location!;
+  const name = extractPrimaryPlaceName(location.name || item.title);
+  return {
+    id: `day_${dayNumber}_${item.id}`,
+    name,
+    lat: location.lat,
+    lng: location.lng,
+    description: item.notes || location.description,
+    address: location.address,
+    placeId: location.placeId,
+    photoUrl: location.photoUrl,
+    thumbnail: location.thumbnail,
+    openingHours: location.openingHours,
+    phoneNumber: location.phoneNumber,
+    website: location.website,
+    googleMapsUrl: location.googleMapsUrl,
+    rating: location.rating,
+    userRatingsTotal: location.userRatingsTotal,
+    dayNumber,
+    linkedTripItemId: item.id,
+    color: PIN_COLORS[colorIndex % PIN_COLORS.length],
+    source: "itinerary",
+    confidence: location.confidence,
+    verified: location.verified,
+  };
+}
+
+function pinDedupeKey(pin: Pick<MapPin, "dayNumber" | "name" | "lat" | "lng">): string {
+  return `${pin.dayNumber || 0}:${pin.name.trim().toLowerCase()}:${pin.lat.toFixed(5)}:${pin.lng.toFixed(5)}`;
+}
+
+function pinMatchesItem(pin: MapPin, item: TripPlanItem): boolean {
+  if (pin.linkedTripItemId === item.id) {
+    return true;
+  }
+  const linked = findLinkedPinForItem(item, [pin]);
+  return linked?.id === pin.id;
+}
 
 export function buildPinsFromLocations(
   locations: LocationReference[],
@@ -61,6 +127,9 @@ export function buildPinsFromTripPlan(days: TripPlanDay[]): MapPin[] {
 
   for (const day of days) {
     for (const item of day.items) {
+      if (shouldSkipDedicatedMapPinForItem({ title: item.title, type: item.type })) {
+        continue;
+      }
       if (!item.location) {
         continue;
       }
@@ -72,29 +141,7 @@ export function buildPinsFromTripPlan(days: TripPlanDay[]): MapPin[] {
         continue;
       }
       seen.add(dedupeKey);
-      pins.push({
-        id: `day_${day.dayNumber}_${item.id}`,
-        name: item.location.name,
-        lat: item.location.lat,
-        lng: item.location.lng,
-        description: item.notes || item.location.description,
-        address: item.location.address,
-        placeId: item.location.placeId,
-        photoUrl: item.location.photoUrl,
-        thumbnail: item.location.thumbnail,
-        openingHours: item.location.openingHours,
-        phoneNumber: item.location.phoneNumber,
-        website: item.location.website,
-        googleMapsUrl: item.location.googleMapsUrl,
-        rating: item.location.rating,
-        userRatingsTotal: item.location.userRatingsTotal,
-        dayNumber: day.dayNumber,
-        linkedTripItemId: item.id,
-        color: PIN_COLORS[pins.length % PIN_COLORS.length],
-        source: "itinerary",
-        confidence: item.location.confidence,
-        verified: item.location.verified,
-      });
+      pins.push(buildItineraryPin(item, day.dayNumber, pins.length));
     }
   }
 
@@ -106,12 +153,101 @@ export function buildPinsFromTripPlan(days: TripPlanDay[]): MapPin[] {
  */
 export function mergeTripItineraryPins(currentPins: MapPin[], days: TripPlanDay[]): MapPin[] {
   const preserved = currentPins.filter((pin) => pin.source !== "itinerary");
-  const preservedKeys = new Set(
-    preserved.map((pin) => `${pin.dayNumber || 0}:${pin.name.trim().toLowerCase()}:${pin.lat.toFixed(5)}:${pin.lng.toFixed(5)}`),
-  );
-  const itineraryPins = buildPinsFromTripPlan(days).filter((pin) => {
-    const key = `${pin.dayNumber || 0}:${pin.name.trim().toLowerCase()}:${pin.lat.toFixed(5)}:${pin.lng.toFixed(5)}`;
-    return !preservedKeys.has(key);
-  });
+  const preservedKeys = new Set(preserved.map((pin) => pinDedupeKey(pin)));
+  const itineraryPins = buildPinsFromTripPlan(days).filter((pin) => !preservedKeys.has(pinDedupeKey(pin)));
   return [...preserved, ...itineraryPins];
+}
+
+/**
+ * 雙向修復行程與地圖標記：從標記補回缺少座標的行程項目，並為有座標的項目建立/連結標記。
+ */
+export function reconcileTripMapState(
+  days: TripPlanDay[],
+  currentPins: MapPin[],
+): { itinerary: TripPlanDay[]; pins: MapPin[] } {
+  const itinerary = days.map((day) => ({
+    ...day,
+    items: day.items.map((item) => ({ ...item })),
+  }));
+  let pins = currentPins
+    .filter((pin) => hasUsableMapCoordinate(pin))
+    .map((pin) => ({ ...pin }));
+
+  for (const day of itinerary) {
+    for (const item of day.items) {
+      if (hasUsableMapCoordinate(item.location)) {
+        continue;
+      }
+      const linkedPin = findLinkedPinForItem(item, pins);
+      if (!linkedPin || !hasUsableMapCoordinate(linkedPin)) {
+        continue;
+      }
+      item.location = locationFromPin(linkedPin, item);
+    }
+  }
+
+  const preserved = pins.filter((pin) => pin.source !== "itinerary");
+  const preservedKeys = new Set(preserved.map((pin) => pinDedupeKey(pin)));
+  const nextPins: MapPin[] = [...preserved];
+  const seenItineraryKeys = new Set<string>();
+
+  for (const day of itinerary) {
+    for (const item of day.items) {
+      if (!item.location || !hasUsableMapCoordinate(item.location)) {
+        continue;
+      }
+
+      const existingPin = pins.find((pin) => pinMatchesItem(pin, item));
+      const dedupeKey = `${day.dayNumber}:${item.location.name.trim().toLowerCase()}`;
+      if (seenItineraryKeys.has(dedupeKey)) {
+        continue;
+      }
+      seenItineraryKeys.add(dedupeKey);
+
+      if (existingPin) {
+        const mergedPin: MapPin = {
+          ...existingPin,
+          name: item.location.name,
+          lat: item.location.lat,
+          lng: item.location.lng,
+          description: item.notes || item.location.description || existingPin.description,
+          address: item.location.address ?? existingPin.address,
+          placeId: item.location.placeId ?? existingPin.placeId,
+          photoUrl: item.location.photoUrl ?? existingPin.photoUrl,
+          thumbnail: item.location.thumbnail ?? item.location.photoUrl ?? existingPin.thumbnail,
+          openingHours: item.location.openingHours ?? existingPin.openingHours,
+          phoneNumber: item.location.phoneNumber ?? existingPin.phoneNumber,
+          website: item.location.website ?? existingPin.website,
+          googleMapsUrl: item.location.googleMapsUrl ?? existingPin.googleMapsUrl,
+          rating: item.location.rating ?? existingPin.rating,
+          userRatingsTotal: item.location.userRatingsTotal ?? existingPin.userRatingsTotal,
+          linkedTripItemId: item.id,
+          dayNumber: day.dayNumber,
+          source: existingPin.source === "video" ? existingPin.source : "itinerary",
+          confidence: item.location.confidence ?? existingPin.confidence,
+          verified: item.location.verified ?? existingPin.verified,
+        };
+        const mergedKey = pinDedupeKey(mergedPin);
+        if (!preservedKeys.has(mergedKey) || existingPin.source === "itinerary") {
+          const withoutDuplicate = nextPins.filter((pin) => pin.id !== existingPin.id);
+          nextPins.splice(0, nextPins.length, ...withoutDuplicate, mergedPin);
+        }
+        continue;
+      }
+
+      const candidate = buildItineraryPin(item, day.dayNumber, nextPins.length);
+      if (preservedKeys.has(pinDedupeKey(candidate))) {
+        continue;
+      }
+      nextPins.push(candidate);
+    }
+  }
+
+  pins = nextPins.filter(
+    (pin, index, all) =>
+      all.findIndex((entry) => entry.id === pin.id) === index &&
+      all.findIndex((entry) => pinDedupeKey(entry) === pinDedupeKey(pin)) === index,
+  );
+
+  return { itinerary, pins };
 }

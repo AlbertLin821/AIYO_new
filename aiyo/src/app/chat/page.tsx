@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import ChatHistorySidebar from "@/components/chat/ChatHistorySidebar";
 import ChatWorkflowRail from "@/components/chat/ChatWorkflowRail";
+import PlanningWaitGame from "@/components/chat/PlanningWaitGame";
 import MarkdownMessage from "@/components/chat/MarkdownMessage";
 import TravelPlanCard from "@/components/chat/TravelPlanCard";
 import { CitationList } from "@/components/sources/CitationList";
@@ -40,9 +41,15 @@ import {
   updateFrontendDebugProcess,
 } from "@/lib/frontendDebug";
 import { buildWorkflowSteps } from "@/lib/workflowSteps";
+import {
+  buildItineraryItemFromAiChange,
+  findItineraryItemTarget,
+} from "@/app/chat/itineraryPatchUtils";
+import { CHAT_HISTORY_WINDOW } from "@/lib/chatConstants";
 import { cn } from "@/lib/utils";
 import { reviseTripPlan, sendChatMessage } from "@/services/aiClient";
 import { createNewTrip, setActiveTrip } from "@/services/itineraryClient";
+import { geocodeItineraryItemsMissingLocation } from "@/services/geocodeItineraryItems";
 import { syncService } from "@/services/syncService";
 import { fetchVideoRecommendations, shouldSkipClientVideoSummarize, summarizeVideo } from "@/services/videoClient";
 import { useChatStore } from "@/stores/useChatStore";
@@ -144,21 +151,31 @@ function isAbortError(error: unknown): boolean {
   );
 }
 
-function buildAssistantLocalMessage(content: string): ChatMessage {
-  return {
-    id: `chat_assistant_local_${Date.now()}`,
-    role: "assistant",
-    content,
-    timestamp: new Date().toLocaleTimeString("zh-TW", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-    responseType: "text_message",
-  };
+function shouldRecommendVideos(message: string): boolean {
+  return /影片|youtube|YouTube|video|vlog|推薦.*看|找.*看|旅遊.*看|景點.*影片|更多.*影片|再推.*影片|還有.*影片|其他.*影片|再給.*影片|多看.*影片|推薦.*更多|more.*video|another.*video/i.test(
+    message,
+  );
 }
 
-function shouldRecommendVideos(message: string): boolean {
-  return /影片|youtube|YouTube|video|vlog|推薦.*看|找.*看|旅遊.*看|景點.*影片/i.test(message);
+function getVideoIdentity(video: VideoRecommendation): string {
+  return (video.videoId || video.id || "").trim();
+}
+
+function mergeRecommendedVideos(
+  existing: VideoRecommendation[],
+  incoming: VideoRecommendation[],
+): VideoRecommendation[] {
+  const seen = new Set(existing.map(getVideoIdentity).filter(Boolean));
+  const merged = [...existing];
+  for (const video of incoming) {
+    const key = getVideoIdentity(video);
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    merged.push(video);
+  }
+  return merged;
 }
 
 function shouldFetchVideoRecommendations(input: {
@@ -209,14 +226,14 @@ function buildChatVideoSearchKeyword(userMessage: string, itinerary: TripPlanDay
 }
 
 function isItineraryMutationCommand(message: string): boolean {
-  return /新增|加入|加上|刪除|移除|修改|調整|改成|換成|改到|提前|延後|移到|重排|重新規劃|幫我(?:安排|規劃|新增|加入|調整|修改|刪除|移除)|請(?:安排|規劃|新增|加入|調整|修改|刪除|移除)/u.test(message);
+  return /新增|加入|加上|刪除|刪掉|移除|取消|去掉|修改|調整|改成|換成|改到|提前|延後|移到|重排|重新規劃|幫我(?:安排|規劃|新增|加入|調整|修改|刪除|刪掉|移除|取消|去掉)|請(?:安排|規劃|新增|加入|調整|修改|刪除|刪掉|移除|取消|去掉)/u.test(message);
 }
 
-type AddItineraryChange = Extract<AiProposedChange, { type: "add_itinerary_item" }>;
-type ExistingItemChange = Extract<
-  AiProposedChange,
-  { type: "update_itinerary_item" | "remove_itinerary_item" }
->;
+function isFullItineraryRevisionCommand(message: string): boolean {
+  return /重新規劃|重排|整份|整個|全部|從頭|完整(?:安排|規劃)|(?:規劃|安排).{0,8}(?:新|完整|整份|全部)?行程/u.test(
+    message,
+  );
+}
 
 type WorkflowRailState = {
   visible: boolean;
@@ -231,60 +248,6 @@ type ItinerarySyncState = {
   title: string;
   detail: string;
 };
-
-function buildItineraryItemFromAiChange(change: AddItineraryChange): TripPlanItem {
-  const title = change.title.trim() || change.locationName?.trim() || "AI 建議行程";
-  return {
-    id: `ai_chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    dayNumber: change.day,
-    time: change.time,
-    title,
-    type: /夜市|飯|餐|小吃|美食|魚頭/.test(title) ? "restaurant" : "attraction",
-    transport: change.transport?.trim() || undefined,
-    notes: [change.locationName ? `地點：${change.locationName}` : "", change.notes || ""].filter(Boolean).join("\n") || undefined,
-    source: "ai",
-    location: undefined,
-  };
-}
-
-function compactItineraryText(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/臺/g, "台")
-    .replace(/[^\p{Letter}\p{Number}]+/gu, "")
-    .trim();
-}
-
-function findItineraryItemTarget(change: ExistingItemChange) {
-  const itinerary = useTripStore.getState().itinerary;
-  const scopedDays = change.day
-    ? itinerary.filter((day) => day.dayNumber === change.day)
-    : itinerary;
-  if (change.itemId) {
-    for (const day of scopedDays) {
-      const item = day.items.find((candidate) => candidate.id === change.itemId);
-      if (item) {
-        return { dayNumber: day.dayNumber, item };
-      }
-    }
-  }
-
-  const targetTitle = compactItineraryText(change.targetTitle || "");
-  if (!targetTitle) {
-    return null;
-  }
-  for (const day of scopedDays) {
-    const item = day.items.find((candidate) => {
-      const title = compactItineraryText(candidate.title);
-      const location = compactItineraryText(candidate.location?.name || "");
-      return title.includes(targetTitle) || targetTitle.includes(title) || Boolean(location && (location.includes(targetTitle) || targetTitle.includes(location)));
-    });
-    if (item) {
-      return { dayNumber: day.dayNumber, item };
-    }
-  }
-  return null;
-}
 
 const CHAT_HISTORY_SIDEBAR_KEY = "aiyo:chat-history-sidebar-expanded";
 const CHAT_CONTEXT_PANEL_WIDTH_KEY = "aiyo:chat-context-panel-width";
@@ -390,7 +353,9 @@ export default function ChatPage() {
   const videoSummaryQueueTokenRef = useRef(0);
   const videoSummaryInflightRef = useRef(new Map<string, Promise<VideoSummaryResult>>());
   const autoSummaryActiveRef = useRef(false);
+  const conversationVideosRef = useRef<Map<string, VideoRecommendation[]>>(new Map());
   const hydratedConversationTripRef = useRef<string | null>(null);
+  const [videosPanelExpanded, setVideosPanelExpanded] = useState(true);
   const {
     conversations,
     activeConversationId,
@@ -404,6 +369,7 @@ export default function ChatPage() {
     setIsSending,
     errorMessage,
     setErrorMessage,
+    clearProposedChangesForMessage,
   } = useChatStore();
   const tripStore = useTripStore();
   const userStore = useUserStore();
@@ -457,6 +423,16 @@ export default function ChatPage() {
       });
       return;
     }
+    if (last.responseType === "travel_plan") {
+      setWorkflowRail({
+        visible: false,
+        steps: [],
+        questionCard: null,
+        tripProfile: last.tripProfile ?? tripProfile,
+        questionMessageId: null,
+      });
+      return;
+    }
     if (last.statusSteps?.length) {
       setWorkflowRail({
         visible: true,
@@ -487,6 +463,15 @@ export default function ChatPage() {
   ];
 
   useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (last?.responseType === "travel_plan" && last.travelPlan) {
+      requestAnimationFrame(() => {
+        document
+          .querySelector(`[data-travel-plan-message-id="${last.id}"]`)
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      return;
+    }
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, isSending, errorMessage]);
 
@@ -571,6 +556,16 @@ export default function ChatPage() {
     isSending ||
     Boolean(workflowRail.questionCard) ||
     workflowView.length > 0;
+  const activePlanningSteps =
+    isSending && streamingStatusSteps.length > 0 ? streamingStatusSteps : workflowRail.steps;
+  const planningWorkflowView = buildWorkflowSteps(activePlanningSteps);
+  const lastAssistantMessage = [...messages].reverse().find((message) => message.role === "assistant");
+  const planningComplete =
+    planningWorkflowView.length > 0 &&
+    (planningWorkflowView.every((step) => step.status === "completed") ||
+      lastAssistantMessage?.responseType === "travel_plan");
+  const isPlanningActive =
+    isSending || (hasWorkflowRail && !planningComplete && activePlanningSteps.length > 0);
 
   useEffect(() => {
     if (itinerarySyncState.status === "syncing" || itinerarySyncState.status === "failed") {
@@ -681,6 +676,35 @@ export default function ChatPage() {
       cancelled = true;
     };
   }, [activeConversationId, activeConversationTripId, tripStore.tripId]);
+
+  useEffect(() => {
+    const stored = activeConversationId
+      ? conversationVideosRef.current.get(activeConversationId) ?? []
+      : [];
+    setRecommendedVideos(stored);
+    setVideoError(null);
+    setVideosPanelExpanded(stored.length > 0);
+  }, [activeConversationId]);
+
+  function updateRecommendedVideos(
+    updater: VideoRecommendation[] | ((prev: VideoRecommendation[]) => VideoRecommendation[]),
+  ) {
+    setRecommendedVideos((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      const conversationId = useChatStore.getState().activeConversationId;
+      if (conversationId) {
+        conversationVideosRef.current.set(conversationId, next);
+      }
+      return next;
+    });
+  }
+
+  function getStoredConversationVideos(conversationId: string | null): VideoRecommendation[] {
+    if (!conversationId) {
+      return [];
+    }
+    return conversationVideosRef.current.get(conversationId) ?? [];
+  }
   const isCitationList = (
     sources: ChatMessage["sources"],
   ): sources is Array<{ title: string; url: string }> => Array.isArray(sources);
@@ -889,12 +913,21 @@ export default function ChatPage() {
     setStreamingStatusSteps([]);
   }
 
-  function startStatusStream() {
+  async function startStatusStream() {
     stopStatusStream();
     const sessionId = `chat_${Date.now()}`;
     const processId = startFrontendDebugProcess("chat-sse", "監聽聊天進度 SSE", {
       sessionId,
     });
+    try {
+      await fetch("/api/chat/stream/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      });
+    } catch {
+      /* SSE may fail; chat still works without progress steps */
+    }
     const source = new EventSource(`/api/chat/stream/${encodeURIComponent(sessionId)}`);
     source.addEventListener("status_step", (event) => {
       try {
@@ -944,7 +977,6 @@ export default function ChatPage() {
     }));
     void handleSend("", {
       displayMessage,
-      displayAsAssistant: true,
       questionAnswers: answers,
       tripProfile: profile,
     });
@@ -1021,11 +1053,117 @@ export default function ChatPage() {
     }
   }
 
+  async function fetchChatVideoRecommendations(input: {
+    userMessage: string;
+    planningSnapshot: ReturnType<typeof derivePlanningSnapshot>;
+    chatProcessId?: string;
+  }) {
+    const conversationId = useChatStore.getState().activeConversationId;
+    const existingVideos = getStoredConversationVideos(conversationId);
+    const videoSummaryQueueToken = videoSummaryQueueTokenRef.current + 1;
+    videoSummaryQueueTokenRef.current = videoSummaryQueueToken;
+    autoSummaryActiveRef.current = false;
+    setAutoSummaryProgress(null);
+    setIsLoadingVideos(true);
+    setIsSummarizing(false);
+    setVideoError(null);
+    setVideosPanelExpanded(true);
+
+    let autoSummaryStarted = false;
+    try {
+      if (input.chatProcessId) {
+        updateFrontendDebugProcess(input.chatProcessId, "video-recommendation-start", {
+          destination: input.planningSnapshot.destination,
+        });
+      }
+      const videoKeyword = buildChatVideoSearchKeyword(
+        input.userMessage,
+        useTripStore.getState().itinerary,
+      );
+      const outcome = await fetchVideoRecommendations({
+        destination: input.planningSnapshot.destination,
+        keyword: videoKeyword,
+        days: input.planningSnapshot.days,
+        preferences: useUserStore.getState().interests,
+        limit: 6,
+        excludeVideoIds: existingVideos.map(getVideoIdentity).filter(Boolean),
+      });
+      const previousIds = new Set(existingVideos.map(getVideoIdentity).filter(Boolean));
+      const newlyAdded = outcome.videos.filter((video) => {
+        const key = getVideoIdentity(video);
+        return key && !previousIds.has(key);
+      });
+      const mergedVideos = mergeRecommendedVideos(existingVideos, outcome.videos);
+      updateRecommendedVideos(mergedVideos);
+      autoSummaryStarted = newlyAdded
+        .slice(0, 6)
+        .some((video) => !shouldSkipClientVideoSummarize(video));
+      if (input.chatProcessId) {
+        updateFrontendDebugProcess(input.chatProcessId, "video-recommendation-complete", {
+          resultCount: newlyAdded.length,
+          totalCount: mergedVideos.length,
+          source: outcome.source,
+          titles: newlyAdded.slice(0, 6).map((video) => video.title),
+          autoSummaryStarted,
+        });
+      }
+      if (autoSummaryStarted) {
+        void processRecommendedVideoSummaries(
+          newlyAdded,
+          input.planningSnapshot.destination,
+          videoSummaryQueueToken,
+        );
+      } else if (newlyAdded.length === 0 && existingVideos.length > 0) {
+        pushToast({
+          variant: "info",
+          title: t.chat.noMoreVideosTitle,
+          description: t.chat.noMoreVideosDesc,
+        });
+      }
+      if (outcome.source === "mock-fallback") {
+        pushToast({
+          variant: "warning",
+          title: t.video.mockVideosTitle,
+          description: outcome.fallbackReason || t.video.mockVideosDesc,
+        });
+      }
+    } catch (error) {
+      if (input.chatProcessId) {
+        failFrontendDebugProcess(input.chatProcessId, error, {
+          stage: "video-recommendation",
+        });
+      }
+      const description =
+        error instanceof Error ? error.message : t.video.requestFailedGeneric;
+      setVideoError(description);
+      pushToast({
+        variant: "error",
+        title: t.video.requestFailed,
+        description,
+      });
+    } finally {
+      if (!autoSummaryStarted) {
+        setIsLoadingVideos(false);
+      }
+    }
+  }
+
+  async function handleLoadMoreVideos() {
+    if (isLoadingVideos) {
+      return;
+    }
+    const lastUserMessage =
+      [...messages].reverse().find((item) => item.role === "user")?.content?.trim() || "";
+    await fetchChatVideoRecommendations({
+      userMessage: lastUserMessage,
+      planningSnapshot,
+    });
+  }
+
   async function handleSend(
     rawInput?: string,
     options?: {
       displayMessage?: string;
-      displayAsAssistant?: boolean;
       questionAnswers?: ChatQuestionAnswer[];
       tripProfile?: TripProfile | null;
     },
@@ -1051,11 +1189,8 @@ export default function ChatPage() {
 
     const previousMessages = useChatStore.getState().messages;
     const displayMessage = options?.displayMessage || message;
-    appendMessage(
-      options?.displayAsAssistant
-        ? buildAssistantLocalMessage(displayMessage)
-        : buildUserMessage(displayMessage),
-    );
+    const optimisticMessage = buildUserMessage(displayMessage);
+    appendMessage(optimisticMessage);
     setInput("");
     setErrorMessage(null);
     setIsSending(true);
@@ -1071,7 +1206,7 @@ export default function ChatPage() {
       hasQuestionAnswers,
       hasTripProfile: Boolean(options?.tripProfile ?? tripProfile),
     });
-    const { sessionId: progressSessionId, processId: sseProcessId } = startStatusStream();
+    const { sessionId: progressSessionId, processId: sseProcessId } = await startStatusStream();
     const { requestEpoch, signal } = beginChatGenerationRequest();
 
     try {
@@ -1089,10 +1224,9 @@ export default function ChatPage() {
         undefined;
       const shouldUseTripRevisionFlow =
         !hasQuestionAnswers &&
-        !options?.displayAsAssistant &&
         Boolean(activeProfile) &&
         useTripStore.getState().itinerary.length > 0 &&
-        isItineraryMutationCommand(message);
+        isFullItineraryRevisionCommand(message);
 
       if (shouldUseTripRevisionFlow && activeProfile) {
         const revisionProfile: TripProfile = {
@@ -1144,7 +1278,10 @@ export default function ChatPage() {
         if (response.itinerarySuggestion) {
           await applyGeneratedTripPlan(response);
         } else if (response.proposedChanges?.length) {
-          await applyAiProposedChanges(response.proposedChanges, { navigate: false });
+          await applyAiProposedChanges(response.proposedChanges, {
+            navigate: false,
+            sourceMessageId: response.reply.id,
+          });
         } else {
           pushToast({
             variant: "warning",
@@ -1171,7 +1308,8 @@ export default function ChatPage() {
       const response = await sendChatMessage(
         {
           message,
-          messages: previousMessages.slice(-10),
+          displayMessage: options?.displayMessage,
+          messages: previousMessages.slice(-CHAT_HISTORY_WINDOW),
           context: {
             destination: planningSnapshot.destination,
             days: planningSnapshot.days,
@@ -1207,6 +1345,14 @@ export default function ChatPage() {
           questionCard: response.reply.questionCard,
           tripProfile: response.tripProfile ?? options?.tripProfile ?? tripProfile ?? null,
           questionMessageId: response.reply.id,
+        });
+      } else if (response.reply.responseType === "travel_plan") {
+        setWorkflowRail({
+          visible: false,
+          steps: [],
+          questionCard: null,
+          tripProfile: response.tripProfile ?? options?.tripProfile ?? tripProfile ?? null,
+          questionMessageId: null,
         });
       } else if (response.reply.statusSteps?.length) {
         setWorkflowRail((prev) => ({
@@ -1244,7 +1390,10 @@ export default function ChatPage() {
         if (response.itinerarySuggestion) {
           await applyGeneratedTripPlan(response);
         } else if (response.proposedChanges?.length) {
-          await applyAiProposedChanges(response.proposedChanges, { navigate: false });
+          await applyAiProposedChanges(response.proposedChanges, {
+            navigate: false,
+            sourceMessageId: response.reply.id,
+          });
         }
       } else if (
         response.reply.responseType === "travel_plan" &&
@@ -1266,70 +1415,11 @@ export default function ChatPage() {
         replyResponseType: response.reply.responseType,
         hadItinerarySuggestion: Boolean(response.itinerarySuggestion),
       })) {
-        const videoSummaryQueueToken = videoSummaryQueueTokenRef.current + 1;
-        videoSummaryQueueTokenRef.current = videoSummaryQueueToken;
-        autoSummaryActiveRef.current = false;
-        setAutoSummaryProgress(null);
-        setIsLoadingVideos(true);
-        setIsSummarizing(false);
-        setVideoError(null);
-        let autoSummaryStarted = false;
-        try {
-          updateFrontendDebugProcess(chatProcessId, "video-recommendation-start", {
-            destination: planningSnapshot.destination,
-          });
-          const videoKeyword = buildChatVideoSearchKeyword(
-            message,
-            useTripStore.getState().itinerary,
-          );
-          const outcome = await fetchVideoRecommendations({
-            destination: planningSnapshot.destination,
-            keyword: videoKeyword,
-            days: planningSnapshot.days,
-            preferences: useUserStore.getState().interests,
-            limit: 6,
-          });
-          setRecommendedVideos(outcome.videos);
-          autoSummaryStarted = outcome.videos
-            .slice(0, 6)
-            .some((video) => !shouldSkipClientVideoSummarize(video));
-          updateFrontendDebugProcess(chatProcessId, "video-recommendation-complete", {
-            resultCount: outcome.videos.length,
-            source: outcome.source,
-            titles: outcome.videos.slice(0, 6).map((video) => video.title),
-            autoSummaryStarted,
-          });
-          if (autoSummaryStarted) {
-            void processRecommendedVideoSummaries(
-              outcome.videos,
-              planningSnapshot.destination,
-              videoSummaryQueueToken,
-            );
-          }
-          if (outcome.source === "mock-fallback") {
-            pushToast({
-              variant: "warning",
-              title: t.video.mockVideosTitle,
-              description: outcome.fallbackReason || t.video.mockVideosDesc,
-            });
-          }
-        } catch (error) {
-          failFrontendDebugProcess(chatProcessId, error, {
-            stage: "video-recommendation",
-          });
-          const description =
-            error instanceof Error ? error.message : t.video.requestFailedGeneric;
-          setVideoError(description);
-          pushToast({
-            variant: "error",
-            title: t.video.requestFailed,
-            description,
-          });
-        } finally {
-          if (!autoSummaryStarted) {
-            setIsLoadingVideos(false);
-          }
-        }
+        await fetchChatVideoRecommendations({
+          userMessage: message,
+          planningSnapshot,
+          chatProcessId,
+        });
       } else {
         startAutoVideoSummaryQueue(recommendedVideos, planningSnapshot.destination);
       }
@@ -1339,8 +1429,10 @@ export default function ChatPage() {
       });
     } catch (error) {
       if (isAbortError(error) || signal.aborted) {
+        useChatStore.getState().removeMessageById(optimisticMessage.id);
         return;
       }
+      useChatStore.getState().removeMessageById(optimisticMessage.id);
       failFrontendDebugProcess(chatProcessId, error, {
         progressSessionId,
       });
@@ -1352,16 +1444,19 @@ export default function ChatPage() {
       }));
       if (userTextForRetry) {
         setInput(userTextForRetry);
+      } else if (options?.displayMessage) {
+        setInput(options.displayMessage);
       }
       const description =
         error instanceof Error ? error.message : t.chat.requestFailedGeneric;
       setErrorMessage(description);
+      const retryOptions = options;
       pushToast({
         variant: "error",
         title: t.chat.requestFailed,
         description,
         actionLabel: t.common.retry,
-        action: () => void handleSend(message),
+        action: () => void handleSend(rawInput ?? userTextForRetry, retryOptions),
       });
     } finally {
       finishFrontendDebugProcess(sseProcessId, {
@@ -1409,7 +1504,7 @@ export default function ChatPage() {
       instruction,
       destination: activeProfile.destination,
     });
-    const { sessionId: progressSessionId, processId: sseProcessId } = startStatusStream();
+    const { sessionId: progressSessionId, processId: sseProcessId } = await startStatusStream();
     const { requestEpoch, signal } = beginChatGenerationRequest();
 
     try {
@@ -1453,7 +1548,10 @@ export default function ChatPage() {
       if (response.itinerarySuggestion) {
         await applyGeneratedTripPlan(response);
       } else if (response.proposedChanges?.length) {
-        await applyAiProposedChanges(response.proposedChanges, { navigate: false });
+        await applyAiProposedChanges(response.proposedChanges, {
+          navigate: false,
+          sourceMessageId: response.reply.id,
+        });
       } else {
         pushToast({
           variant: "warning",
@@ -1504,7 +1602,7 @@ export default function ChatPage() {
 
   async function applyAiProposedChanges(
     changes: AiProposedChange[],
-    options: { navigate?: boolean; silent?: boolean } = {},
+    options: { navigate?: boolean; silent?: boolean; sourceMessageId?: string } = {},
   ) {
     if (!changes.length) {
       return;
@@ -1515,6 +1613,7 @@ export default function ChatPage() {
       detail: `正在把 ${changes.length} 筆 AI 建議寫入右側行程欄。`,
     });
     let appliedCount = 0;
+    const addedForGeocode: Array<{ dayNumber: number; item: TripPlanItem }> = [];
     const trip = useTripStore.getState();
     if (trip.itinerary.length === 0) {
       trip.addDay();
@@ -1522,6 +1621,20 @@ export default function ChatPage() {
     const days = useTripStore.getState().itinerary;
     const maxDay = Math.max(1, ...days.map((day) => day.dayNumber));
     for (const change of changes) {
+      if (change.type === "remove_itinerary_day") {
+        const targetDay = Math.max(1, Math.floor(Number(change.day) || 1));
+        const itinerary = useTripStore.getState().itinerary;
+        if (itinerary.length <= 1) {
+          continue;
+        }
+        if (!itinerary.some((day) => day.dayNumber === targetDay)) {
+          continue;
+        }
+        useTripStore.getState().removeDay(targetDay);
+        appliedCount += 1;
+        continue;
+      }
+
       if (change.type === "add_itinerary_item") {
         const targetDay = Math.max(1, Math.floor(Number(change.day) || 1));
         while (!useTripStore.getState().itinerary.some((day) => day.dayNumber === targetDay)) {
@@ -1530,10 +1643,9 @@ export default function ChatPage() {
             break;
           }
         }
-        useTripStore.getState().addItineraryItem(
-          targetDay,
-          buildItineraryItemFromAiChange({ ...change, day: targetDay }),
-        );
+        const newItem = buildItineraryItemFromAiChange({ ...change, day: targetDay });
+        useTripStore.getState().addItineraryItem(targetDay, newItem);
+        addedForGeocode.push({ dayNumber: targetDay, item: newItem });
         appliedCount += 1;
         continue;
       }
@@ -1592,6 +1704,16 @@ export default function ChatPage() {
 
     const unappliedCount = Math.max(changes.length - appliedCount, 0);
 
+    if (addedForGeocode.length > 0) {
+      const region = useTripStore.getState().destination || useUserStore.getState().destination;
+      const geocodeUpdates = await geocodeItineraryItemsMissingLocation(addedForGeocode, region);
+      for (const update of geocodeUpdates) {
+        useTripStore.getState().updateItineraryItem(update.dayNumber, update.itemId, {
+          location: update.location,
+        });
+      }
+    }
+
     if (appliedCount > 0) {
       try {
         await syncService.flushTripSyncNow({ force: true });
@@ -1620,6 +1742,9 @@ export default function ChatPage() {
               ? `已更新 ${appliedCount} 筆，另有 ${unappliedCount} 筆未找到對應項目。`
               : `已更新 ${appliedCount} 筆行程內容。`,
         });
+      }
+      if (options.sourceMessageId) {
+        clearProposedChangesForMessage(options.sourceMessageId);
       }
       if (options.navigate ?? false) {
         router.push("/itinerary");
@@ -1677,7 +1802,7 @@ export default function ChatPage() {
   }
 
   function applyVideoSummaryResult(sourceVideo: VideoRecommendation, result: VideoSummaryResult) {
-    setRecommendedVideos((videos) =>
+    updateRecommendedVideos((videos) =>
       videos.map((item) => (videoMatches(item, sourceVideo) ? result.video : item)),
     );
     setSelectedVideo((current) => (videoMatches(current, sourceVideo) ? result.video : current));
@@ -1985,7 +2110,10 @@ export default function ChatPage() {
                         ) : null}
                       </div>
                     ) : message.responseType === "travel_plan" && message.travelPlan ? (
-                      <div className="max-w-full rounded-[28px] border border-slate-200/80 bg-white/95 p-4 shadow-md ring-1 ring-black/5 sm:p-5">
+                      <div
+                        data-travel-plan-message-id={message.id}
+                        className="max-w-full rounded-[28px] border border-slate-200/80 bg-white/95 p-4 shadow-md ring-1 ring-black/5 sm:p-5"
+                      >
                         <TravelPlanCard
                           plan={message.travelPlan}
                           revisionDisabled={isSending}
@@ -2073,35 +2201,88 @@ export default function ChatPage() {
           )}
 
           {(isLoadingVideos || videoError || recommendedVideos.length > 0) && (
-            <section className="rounded-3xl border border-slate-200/80 px-4 py-4 chat-glass-card-strong text-chat-soft shadow-sm">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-chat-fg">AI 推薦影片</h2>
-                  {autoSummaryProgress && (
+            <section
+              data-testid="chat-recommended-videos"
+              className="rounded-3xl border border-slate-200/80 chat-glass-card-strong text-chat-soft shadow-sm"
+            >
+              <button
+                type="button"
+                onClick={() => setVideosPanelExpanded((expanded) => !expanded)}
+                aria-expanded={videosPanelExpanded}
+                aria-controls="chat-recommended-videos-panel"
+                className="flex w-full items-center justify-between gap-3 rounded-3xl px-4 py-4 text-left transition-colors hover:bg-white/50"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-sm font-semibold text-chat-fg">{t.chat.recommendedVideosTitle}</h2>
+                    {recommendedVideos.length > 0 ? (
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                        {t.chat.recommendedVideosCount.replace("{n}", String(recommendedVideos.length))}
+                      </span>
+                    ) : null}
+                  </div>
+                  {autoSummaryProgress && videosPanelExpanded ? (
                     <p className="mt-1 text-xs text-chat-muted">
                       正在依序處理影片資料 {autoSummaryProgress.current}/{autoSummaryProgress.total}
                     </p>
+                  ) : null}
+                  {!videosPanelExpanded && recommendedVideos.length > 0 ? (
+                    <p className="mt-1 text-xs text-chat-muted">{t.chat.loadMoreVideosHint}</p>
+                  ) : null}
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {isLoadingVideos ? <Loader2 className="size-4 animate-spin text-primary" aria-hidden /> : null}
+                  <ChevronDown
+                    className={cn(
+                      "size-4 text-slate-500 transition-transform duration-200",
+                      videosPanelExpanded && "rotate-180",
+                    )}
+                    aria-hidden
+                  />
+                  <span className="sr-only">
+                    {videosPanelExpanded ? t.chat.collapseRecommendedVideos : t.chat.expandRecommendedVideos}
+                  </span>
+                </div>
+              </button>
+
+              {videosPanelExpanded ? (
+                <div id="chat-recommended-videos-panel" className="border-t border-slate-200/70 px-4 pb-4 pt-3">
+                  {videoError && (
+                    <p className="mb-3 rounded-xl border border-danger/20 bg-danger/10 px-3 py-2 text-sm text-danger">
+                      {videoError}
+                    </p>
+                  )}
+                  {recommendedVideos.length > 0 && (
+                    <>
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                        {recommendedVideos.map((video, index) => (
+                          <VideoCard
+                            key={video.id}
+                            video={video}
+                            index={index}
+                            onClick={() => void openVideoSummary(video)}
+                          />
+                        ))}
+                      </div>
+                      <div className="mt-4 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-xs text-chat-muted">{t.chat.loadMoreVideosHint}</p>
+                        <button
+                          type="button"
+                          data-testid="chat-load-more-videos"
+                          disabled={isLoadingVideos}
+                          onClick={() => void handleLoadMoreVideos()}
+                          className="inline-flex items-center gap-2 rounded-2xl border border-primary/25 bg-primary/8 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/12 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isLoadingVideos ? (
+                            <Loader2 className="size-4 animate-spin" aria-hidden />
+                          ) : null}
+                          {t.chat.loadMoreVideos}
+                        </button>
+                      </div>
+                    </>
                   )}
                 </div>
-                {isLoadingVideos && <Loader2 className="size-4 animate-spin text-primary" aria-hidden />}
-              </div>
-              {videoError && (
-                <p className="mb-3 rounded-xl border border-danger/20 bg-danger/10 px-3 py-2 text-sm text-danger">
-                  {videoError}
-                </p>
-              )}
-              {recommendedVideos.length > 0 && (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {recommendedVideos.map((video, index) => (
-                    <VideoCard
-                      key={video.id}
-                      video={video}
-                      index={index}
-                      onClick={() => void openVideoSummary(video)}
-                    />
-                  ))}
-                </div>
-              )}
+              ) : null}
             </section>
           )}
           <div ref={messagesEndRef} aria-hidden className="h-px shrink-0" />
@@ -2338,6 +2519,12 @@ export default function ChatPage() {
           </div>
         )}
       </div>
+
+      <PlanningWaitGame
+        steps={activePlanningSteps}
+        isPlanning={isPlanningActive}
+        planningComplete={planningComplete}
+      />
 
       <VideoSummaryDrawer
         video={selectedVideo}

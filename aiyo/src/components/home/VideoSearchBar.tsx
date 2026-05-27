@@ -15,7 +15,18 @@ import { useToastStore } from "@/stores/useToastStore";
 import { useVideoStore } from "@/stores/useVideoStore";
 import { fetchVideoRecommendations, summarizeVideo } from "@/services/videoClient";
 
-const VideoSearchBar = forwardRef<HTMLInputElement>(function VideoSearchBar(_, ref) {
+export type VideoSearchBarMode = "video" | "itinerary";
+
+type VideoSearchBarProps = {
+  mode?: VideoSearchBarMode;
+  onItinerarySearch?: (query: string) => void;
+  isItinerarySearching?: boolean;
+};
+
+const VideoSearchBar = forwardRef<HTMLInputElement, VideoSearchBarProps>(function VideoSearchBar(
+  { mode = "video", onItinerarySearch, isItinerarySearching = false },
+  ref,
+) {
   const [input, setInput] = useState("");
   const innerRef = useRef<HTMLInputElement>(null);
   useImperativeHandle(ref, () => innerRef.current as HTMLInputElement, []);
@@ -52,9 +63,15 @@ const VideoSearchBar = forwardRef<HTMLInputElement>(function VideoSearchBar(_, r
     trimmed.includes("youtu.be");
 
   async function handleSearch() {
+    if (mode === "itinerary") {
+      onItinerarySearch?.(trimmed);
+      return;
+    }
+
     if (!trimmed) {
       return;
     }
+
     const processId = startFrontendDebugProcess("video-search-ui", "手動搜尋影片或摘要單支影片", {
       query: trimmed,
       isUrl,
@@ -167,7 +184,10 @@ const VideoSearchBar = forwardRef<HTMLInputElement>(function VideoSearchBar(_, r
     }
   }
 
-  const isBusy = isSearching || isSummarizing;
+  const isBusy = mode === "itinerary" ? isItinerarySearching : isSearching || isSummarizing;
+  const placeholder =
+    mode === "itinerary" ? t.home.itinerarySearchPlaceholder : "搜尋";
+  const submitAria = mode === "itinerary" ? t.home.recommendedItineraries : isUrl ? t.video.summarize : t.video.search;
 
   return (
     <div className="mx-auto w-full max-w-2xl">
@@ -179,13 +199,13 @@ const VideoSearchBar = forwardRef<HTMLInputElement>(function VideoSearchBar(_, r
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event) => event.key === "Enter" && void handleSearch()}
           data-testid="video-search-input"
-          placeholder="搜尋"
+          placeholder={placeholder}
           className="min-w-0 flex-1 bg-transparent px-5 py-2.5 text-base font-medium text-foreground outline-none placeholder:text-muted-light sm:px-6"
         />
         <button
           onClick={() => void handleSearch()}
           disabled={isBusy || !trimmed}
-          aria-label={isUrl ? t.video.summarize : t.video.search}
+          aria-label={submitAria}
           data-testid="video-search-submit"
           className="flex w-16 shrink-0 cursor-pointer items-center justify-center border-l border-border bg-primary text-white transition-colors hover:bg-primary-dark active:bg-primary-dark/90 disabled:cursor-not-allowed disabled:opacity-55 sm:w-18"
         >

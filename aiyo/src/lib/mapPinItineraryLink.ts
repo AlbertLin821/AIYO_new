@@ -1,14 +1,16 @@
+import { extractPrimaryPlaceName, normalizePlaceLookupKey } from "@/lib/itineraryPlaceTitle";
 import type { MapPin, TripPlanDay, TripPlanItem } from "@/types";
 
 function normalizePlaceText(value: string | undefined): string {
-  return (value || "").trim().toLowerCase();
+  return normalizePlaceLookupKey(value);
 }
 
 /** Match an itinerary item to its map pin (same rules as the itinerary side panel). */
 export function findLinkedPinForItem(item: TripPlanItem, pins: MapPin[]): MapPin | undefined {
   const location = item.location;
   const normalizedLocationName = normalizePlaceText(location?.name);
-  const normalizedTitle = normalizePlaceText(item.title);
+  const normalizedTitle = normalizePlaceText(extractPrimaryPlaceName(item.title));
+  const normalizedRawTitle = normalizePlaceText(item.title);
   return pins.find((pin) => {
     if (pin.linkedTripItemId === item.id) {
       return true;
@@ -26,7 +28,9 @@ export function findLinkedPinForItem(item: TripPlanItem, pins: MapPin[]): MapPin
     const normalizedPinName = normalizePlaceText(pin.name);
     return Boolean(
       normalizedPinName &&
-        (normalizedPinName === normalizedLocationName || normalizedPinName === normalizedTitle),
+        (normalizedPinName === normalizedLocationName ||
+          normalizedPinName === normalizedTitle ||
+          normalizedPinName === normalizedRawTitle),
     );
   });
 }

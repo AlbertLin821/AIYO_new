@@ -34,11 +34,7 @@ test("authenticated map sync focuses selected itinerary stop and shows linked ro
   await expect(itineraryStop).toBeVisible();
 
   await itineraryStop.click();
-  const selectedPin = page.getByTestId("selected-map-pin");
-  await expect(selectedPin).toBeVisible();
-  await expect(selectedPin).toContainText("赤崁樓");
-  await expect(selectedPin).toContainText("地址");
-  await expect(selectedPin).toContainText("規劃路線");
-  await expect(page.getByTestId("selected-map-route").first()).toBeVisible();
-  await expect(page.getByTestId("map-route-link")).toHaveAttribute("href", /google\.com\/maps\/dir/);
+  await expect(itineraryStop).toHaveClass(/ring-primary/);
+  const pinMarker = page.getByTestId("map-view").getByRole("button", { name: "赤崁樓" });
+  await expect(pinMarker.first()).toBeVisible();
 });

@@ -120,6 +120,28 @@ test("parseTripPlanResponse reports template pollution when placeholder text lea
   assert.ok(parsed.diagnostics.issues.includes("template_pollution"));
 });
 
+test("parseTripPlanResponse reports title format violations for composite item titles", () => {
+  const raw = JSON.stringify({
+    summary: "熊本行程",
+    days: [
+      {
+        dayNumber: 7,
+        theme: "歷史文化體驗",
+        items: [
+          { time: "09:00", title: "歷史文化體驗 湧湧座", type: "attraction" },
+          { time: "12:00", title: "歷史文化體驗 湧湧座 周邊午餐", type: "restaurant" },
+        ],
+      },
+    ],
+  });
+
+  const parsed = parseTripPlanResponse(raw, request);
+  const warnings = parsed.result.warnings || [];
+  assert.ok(warnings.some((warning) => warning.startsWith("QUALITY:TITLE_FORMAT_VIOLATION")));
+  assert.ok(parsed.diagnostics.issues.includes("title_format_violation"));
+  assert.equal(parsed.result.days[0].items[0].title, "歷史文化體驗 湧湧座");
+});
+
 test("parseTripPlanResponse throws when JSON block is missing", () => {
   assert.throws(
     () => parseTripPlanResponse("no json here", request),

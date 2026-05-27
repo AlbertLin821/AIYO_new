@@ -17,6 +17,7 @@ async function handleChatPost(request: Request) {
   try {
     const body = (await request.json()) as {
       message?: string;
+      displayMessage?: string;
       messages?: ChatMessage[];
       context?: ChatContext;
       structuredTravelPlanning?: boolean;
@@ -26,7 +27,9 @@ async function handleChatPost(request: Request) {
     };
 
     const normalizedMessage = body.message?.trim() || "";
+    const displayMessage = body.displayMessage?.trim() || "";
     const hasQuestionAnswers = Boolean(body.questionAnswers?.length);
+    const userPersistContent = normalizedMessage || displayMessage;
 
     if (!normalizedMessage && !hasQuestionAnswers) {
       return NextResponse.json(createError("invalid_request", "訊息內容不能為空。"), {
@@ -35,10 +38,6 @@ async function handleChatPost(request: Request) {
     }
 
     progressSessionId = body.progressSessionId?.trim() || undefined;
-    if (progressSessionId) {
-      ensureChatProgressSession(progressSessionId);
-    }
-
     let persistedUserId: string | null = null;
     let persistedTripId: string | undefined;
     let memoryContext: string | undefined;
@@ -48,16 +47,25 @@ async function handleChatPost(request: Request) {
       const trip = await resolveSessionTrip(userId);
       persistedUserId = userId;
       persistedTripId = trip?.id;
-      if (normalizedMessage) {
-        await saveChatMessage(userId, "user", normalizedMessage, persistedTripId);
+      if (progressSessionId) {
+        ensureChatProgressSession(progressSessionId, userId);
+      }
+      if (userPersistContent) {
+        await saveChatMessage(userId, "user", userPersistContent, persistedTripId);
         const { memories } = await retrieveRelevantMemoriesForUser({
           userId,
-          query: normalizedMessage,
+          query: userPersistContent,
         });
         memoryContext = formatMemoryContext(memories);
       }
     } catch {
       // Chat remains functional even if the user is not authenticated.
+    }
+
+    if (progressSessionId && !persistedUserId) {
+      return NextResponse.json(createError("unauthorized", "請先登入以使用行程規劃進度。"), {
+        status: 401,
+      });
     }
 
     const response = await chatWithTravelAssistant({
@@ -78,6 +86,7 @@ async function handleChatPost(request: Request) {
           response.reply.role,
           response.reply.content,
           persistedTripId,
+          response.reply,
         );
       } catch {
         // Assistant reply persistence should not block the response.
@@ -87,7 +96,7 @@ async function handleChatPost(request: Request) {
         await addMemories({
           userId: persistedUserId,
           messages: [
-            { role: "user", content: normalizedMessage || "[questionnaire_answers_submitted]" },
+            { role: "user", content: userPersistContent || "[questionnaire_answers_submitted]" },
             { role: "assistant", content: response.reply.content },
           ],
           metadata: {

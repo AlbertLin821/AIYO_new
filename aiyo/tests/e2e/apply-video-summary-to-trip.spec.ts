@@ -58,10 +58,11 @@ test.describe("影片摘要套用到地圖與行程", () => {
     await expect(page.getByTestId("activity-card").filter({ hasText: "民主火雞肉飯" })).toBeVisible();
 
     await page.goto("/map");
-    await expect(page.getByRole("button", { name: "林聰明砂鍋魚頭" })).toBeVisible({
+    const mapView = page.getByTestId("map-view");
+    await expect(mapView.getByRole("button", { name: "林聰明砂鍋魚頭" })).toBeVisible({
       timeout: 40_000,
     });
-    await expect(page.getByRole("button", { name: "民主火雞肉飯" })).toBeVisible();
+    await expect(mapView.getByRole("button", { name: "民主火雞肉飯" })).toBeVisible();
 
     const mapPins = await page.getByTestId("map-pin-marker").evaluateAll((els) =>
       els.map((el) => el.getAttribute("aria-label") || ""),
@@ -77,7 +78,7 @@ test.describe("影片摘要套用到地圖與行程", () => {
     await page.reload({ waitUntil: "domcontentloaded" });
     await bootstrap.catch(() => {});
 
-    await expect(page.getByRole("button", { name: "文化路夜市" })).toBeVisible({
+    await expect(page.getByTestId("map-view").getByRole("button", { name: "文化路夜市" })).toBeVisible({
       timeout: 40_000,
     });
   });

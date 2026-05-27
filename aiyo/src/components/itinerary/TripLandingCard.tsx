@@ -47,6 +47,7 @@ function TripLandingCard({
         type="button"
         onClick={() => onClick(item)}
         disabled={disabled}
+        aria-label={t.itineraryPage.editTripAria.replace("{title}", item.title)}
         data-testid="trip-landing-card"
         className="flex w-full flex-col text-left"
       >

@@ -1,5 +1,6 @@
 import { parseTimestampToSeconds } from "@/lib/videoTimestamp";
 import { isUsableMapCoordinate } from "@/lib/geoCoordinates";
+import { getItineraryItemTitleViolation } from "@/lib/itineraryPlaceTitle";
 import { mergeVideoSummarySegmentsByStartSeconds } from "@/server/video/momentSegmentBuilder";
 import type {
   ChatMessage,
@@ -23,7 +24,7 @@ export class StructuredOutputError extends Error {
 export interface TripPlanParseDiagnostics {
   parseMode: "direct" | "repaired" | "normalized";
   repairStage: "none" | "json_repair" | "normalized_repair";
-  issues: Array<"json_missing" | "json_invalid" | "normalized" | "must_visit_uncovered" | "avoid_pollution" | "template_pollution">;
+  issues: Array<"json_missing" | "json_invalid" | "normalized" | "must_visit_uncovered" | "avoid_pollution" | "template_pollution" | "title_format_violation">;
 }
 
 export function extractJsonBlock(raw: string): string | null {
@@ -395,6 +396,14 @@ function parseTripPlanJson(
   if (templatePollutionCount > 0) {
     warnings.add(`QUALITY:TEMPLATE_POLLUTION:${templatePollutionCount}`);
     issues.push("template_pollution");
+  }
+
+  const titleViolationCount = days
+    .flatMap((day) => day.items)
+    .filter((item) => getItineraryItemTitleViolation(item.title)).length;
+  if (titleViolationCount > 0) {
+    warnings.add(`QUALITY:TITLE_FORMAT_VIOLATION:${titleViolationCount}`);
+    issues.push("title_format_violation");
   }
 
   if (normalized) {

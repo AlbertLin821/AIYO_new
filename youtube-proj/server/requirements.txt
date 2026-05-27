@@ -1,8 +1,0 @@
-# NVIDIA GPU（CUDA 13.0 對應之 PyTorch wheel）。須能連線 https://download.pytorch.org
-# 若無 GPU，請改用：pip install -r requirements-cpu.txt
---extra-index-url https://download.pytorch.org/whl/cu130
--r requirements-base.txt
-torch==2.11.0
-torchaudio==2.11.0
-# Windows 上與 PyTorch 一併註冊 CUDA DLL 路徑（main.py）；版本須與環境相容
-nvidia-cublas-cu12>=12.6,<13

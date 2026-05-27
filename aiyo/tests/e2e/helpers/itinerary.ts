@@ -12,6 +12,18 @@ export async function openItineraryEditor(page: Page) {
     return;
   }
 
-  await landingCards.first().click();
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (await editor.isVisible({ timeout: 500 }).catch(() => false)) {
+      return;
+    }
+    try {
+      await landingCards.first().click({ timeout: 10_000 });
+      break;
+    } catch (error) {
+      if (attempt === 2) {
+        throw error;
+      }
+    }
+  }
   await expect(editor).toBeVisible({ timeout: 40_000 });
 }

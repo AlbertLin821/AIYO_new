@@ -31,6 +31,8 @@ interface ChatState {
   setMessages: (messages: ChatMessage[]) => void;
   mergeRemoteMessages: (messages: ChatMessage[]) => void;
   appendMessage: (message: ChatMessage) => void;
+  removeMessageById: (messageId: string) => void;
+  clearProposedChangesForMessage: (messageId: string) => void;
   setIsSending: (isSending: boolean) => void;
   setErrorMessage: (message: string | null) => void;
   clearMessages: () => void;
@@ -42,6 +44,58 @@ function messageSignature(message: ChatMessage): string {
 
 function isEphemeralMessage(message: ChatMessage): boolean {
   return /^(chat_user_|user_|voice_user_)/.test(message.id);
+}
+
+function hasStructuredChatPayload(message: ChatMessage): boolean {
+  return Boolean(
+    message.travelPlan ||
+      message.questionCard ||
+      message.responseType === "travel_plan" ||
+      message.responseType === "question_card" ||
+      (message.proposedChanges?.length ?? 0) > 0 ||
+      (message.sourceReferences?.length ?? 0) > 0,
+  );
+}
+
+function mergeStructuredChatFields(remote: ChatMessage, local: ChatMessage): ChatMessage {
+  if (!hasStructuredChatPayload(local)) {
+    return remote;
+  }
+  return {
+    ...remote,
+    responseType: local.responseType ?? remote.responseType,
+    travelPlan: local.travelPlan ?? remote.travelPlan,
+    questionCard: local.questionCard ?? remote.questionCard,
+    statusSteps: local.statusSteps?.length ? local.statusSteps : remote.statusSteps,
+    tripProfile: local.tripProfile ?? remote.tripProfile,
+    proposedChanges: local.proposedChanges ?? remote.proposedChanges,
+    sourceReferences: local.sourceReferences ?? remote.sourceReferences,
+    sources: local.sources ?? remote.sources,
+  };
+}
+
+function mergeRemoteWithLocalChatMessages(
+  remoteMessages: ChatMessage[],
+  localMessages: ChatMessage[],
+): ChatMessage[] {
+  const localById = new Map(localMessages.map((message) => [message.id, message]));
+  const localBySignature = new Map(localMessages.map((message) => [messageSignature(message), message]));
+
+  const mergedRemote = remoteMessages.map((remoteMessage) => {
+    const localMatch =
+      localById.get(remoteMessage.id) ||
+      localBySignature.get(messageSignature(remoteMessage));
+    return localMatch ? mergeStructuredChatFields(remoteMessage, localMatch) : remoteMessage;
+  });
+
+  const remoteSignatures = new Set(remoteMessages.map(messageSignature));
+  const pendingLocal = localMessages.filter(
+    (message) =>
+      (isEphemeralMessage(message) || hasStructuredChatPayload(message)) &&
+      !remoteSignatures.has(messageSignature(message)),
+  );
+
+  return [...mergedRemote, ...pendingLocal];
 }
 
 function nowIso(): string {
@@ -207,15 +261,13 @@ export const useChatStore = create<ChatState>((set) => ({
         };
       }
 
-      const remoteSignatures = new Set(messages.map(messageSignature));
       const remoteConversation = state.conversations.find(
         (conversation) => conversation.id === CHAT_REMOTE_CONVERSATION_ID,
       );
-      const pendingLocal = (remoteConversation?.messages || []).filter(
-        (message) =>
-          isEphemeralMessage(message) && !remoteSignatures.has(messageSignature(message)),
+      const mergedMessages = mergeRemoteWithLocalChatMessages(
+        messages,
+        remoteConversation?.messages || [],
       );
-      const mergedMessages = [...messages, ...pendingLocal];
       const conversations = upsertRemoteConversation(state.conversations, mergedMessages);
       const nextActiveConversation = conversations.find(
         (conversation) => conversation.id === state.activeConversationId,
@@ -259,6 +311,38 @@ export const useChatStore = create<ChatState>((set) => ({
           };
         })(),
       }));
+    }),
+  removeMessageById: (messageId) =>
+    withSyncMutationSource("local-user-edit", () => {
+      set((state) => {
+        const strip = (messages: ChatMessage[]) =>
+          messages.filter((message) => message.id !== messageId);
+        return {
+          messages: strip(state.messages),
+          conversations: state.conversations.map((conversation) =>
+            conversation.id === state.activeConversationId
+              ? { ...conversation, messages: strip(conversation.messages) }
+              : conversation,
+          ),
+        };
+      });
+    }),
+  clearProposedChangesForMessage: (messageId) =>
+    withSyncMutationSource("local-user-edit", () => {
+      set((state) => {
+        const stripProposedChanges = (messages: ChatMessage[]) =>
+          messages.map((message) =>
+            message.id === messageId ? { ...message, proposedChanges: undefined } : message,
+          );
+        return {
+          messages: stripProposedChanges(state.messages),
+          conversations: state.conversations.map((conversation) =>
+            conversation.id === state.activeConversationId
+              ? { ...conversation, messages: stripProposedChanges(conversation.messages) }
+              : conversation,
+          ),
+        };
+      });
     }),
   setIsSending: (isSending) => set({ isSending }),
   setErrorMessage: (errorMessage) => set({ errorMessage }),

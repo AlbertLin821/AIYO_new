@@ -189,15 +189,26 @@ export default function QuestionCard({
   });
 
   return (
-    <div className="w-full space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+    <div
+      className="question-card-attention w-full space-y-4 rounded-3xl border-2 border-primary/30 bg-slate-50 p-4"
+      aria-label={card.title}
+    >
       <div className="space-y-1">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">條件補充</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
+          {card.eyebrow || "AI 動態提問"}
+        </p>
         <h3 className="text-sm font-semibold leading-relaxed text-slate-900">{card.title}</h3>
+        {card.description ? (
+          <p className="text-xs leading-relaxed text-slate-600">{card.description}</p>
+        ) : null}
       </div>
       <div className="space-y-4">
         {card.questions.map((question) => (
           <div key={question.slot} className="space-y-2">
             <p className="text-sm font-medium text-slate-900">{question.question}</p>
+            {question.helperText ? (
+              <p className="text-xs leading-relaxed text-slate-600">{question.helperText}</p>
+            ) : null}
             {question.type === "single_choice" ? (
               <div className="flex flex-wrap gap-2">
                 {(question.options || []).map((option) => {
@@ -285,7 +296,7 @@ export default function QuestionCard({
               <div className="space-y-3 rounded-3xl border border-slate-200 bg-white p-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <CalendarDateField
-                    label="出發日期"
+                    label={question.startLabel || "開始日期"}
                     disabled={disabled}
                     value={
                       typeof answers[question.slot] === "object" && !Array.isArray(answers[question.slot])
@@ -295,7 +306,7 @@ export default function QuestionCard({
                     onChange={(value) => setDateRange(question, "start", value)}
                   />
                   <CalendarDateField
-                    label="返回日期"
+                    label={question.endLabel || "結束日期"}
                     disabled={disabled}
                     min={
                       typeof answers[question.slot] === "object" && !Array.isArray(answers[question.slot])

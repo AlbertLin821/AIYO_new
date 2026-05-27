@@ -19,6 +19,7 @@ import type {
 export async function sendChatMessage(
   input: {
     message: string;
+    displayMessage?: string;
     messages?: ChatMessage[];
     context?: ChatContext;
     structuredTravelPlanning?: boolean;

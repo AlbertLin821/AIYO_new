@@ -37,9 +37,6 @@ export async function POST(request: Request) {
     }
 
     progressSessionId = body.progressSessionId?.trim() || undefined;
-    if (progressSessionId) {
-      ensureChatProgressSession(progressSessionId);
-    }
 
     let memoryContext: string | undefined;
     let persistedUserId: string | null = null;
@@ -49,6 +46,9 @@ export async function POST(request: Request) {
       const trip = await resolveSessionTrip(userId);
       persistedUserId = userId;
       persistedTripId = trip?.id;
+      if (progressSessionId) {
+        ensureChatProgressSession(progressSessionId, userId);
+      }
       await saveChatMessage(userId, "user", body.instruction.trim(), persistedTripId);
       const { memories } = await retrieveRelevantMemoriesForUser({
         userId,
@@ -76,6 +76,7 @@ export async function POST(request: Request) {
           response.reply.role,
           response.reply.content,
           persistedTripId,
+          response.reply,
         );
       } catch {
         // Assistant reply persistence should not block the response.

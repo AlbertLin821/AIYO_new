@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+
+process.env.AIYO_SKIP_LLM_PATCH = "1";
+process.env.AIYO_DYNAMIC_QUESTION_CARD = "0";
+
 import {
   applyQuestionAnswers,
   buildQuestionCard,
@@ -10,6 +14,8 @@ import {
   isExistingItineraryInquiry,
   isTripWorkflowMessage,
   needsTravelResearch,
+  resolveProposedChangesFromContext,
+  sanitizeDynamicQuestionCard,
 } from "@/server/services/travelPlannerService";
 import type { ChatSource, TripPlanDay, TripPlanResult, TripProfile } from "@/types";
 
@@ -123,6 +129,103 @@ test("existing itinerary question card asks how to merge instead of output forma
     ["直接加入", "自行加入"],
   );
   assert.ok(card?.questions.every((question) => !question.question.includes("最後用哪種形式呈現")));
+});
+
+test("dynamic question card sanitizer keeps AI wording while preserving parseable values", () => {
+  const fallback = buildQuestionCard({
+    ...makeStructuredProfile(),
+    preferences: [],
+    pace: null,
+  });
+  assert.ok(fallback);
+
+  const card = sanitizeDynamicQuestionCard(
+    {
+      response_type: "question_card",
+      eyebrow: "依你剛剛說的調整",
+      title: "熊本這趟先抓出你最在意的玩法",
+      description: "我會用這幾個答案決定景點密度和住宿區域。",
+      questions: [
+        {
+          slot: "preferences",
+          type: "multi_choice",
+          question: "你想讓熊本行程更偏向哪幾種體驗？",
+          helperText: "可複選，之後路線會依這些偏好排序。",
+          options: [
+            { label: "阿蘇自然景觀", value: "nature", recommended: true },
+            { label: "馬肉、拉麵等在地美食", value: "food" },
+          ],
+        },
+        {
+          slot: "pace",
+          type: "single_choice",
+          question: "每天安排要偏慢還是偏滿？",
+          options: [
+            { label: "慢慢玩，保留咖啡和休息時間", value: "relaxed", recommended: true },
+            { label: "行程排滿，景點多一點", value: "intensive" },
+            { label: "不合法值會被丟掉", value: "packed" },
+          ],
+        },
+      ],
+      action: { label: "用這樣規劃", shortcut: "Enter" },
+    },
+    fallback,
+  );
+
+  assert.equal(card?.eyebrow, "依你剛剛說的調整");
+  assert.equal(card?.questions[0]?.question, "你想讓熊本行程更偏向哪幾種體驗？");
+  assert.deepEqual(
+    card?.questions.find((question) => question.slot === "pace")?.options?.map((option) => option.value),
+    ["relaxed", "intensive"],
+  );
+  assert.equal(card?.action?.label, "用這樣規劃");
+});
+
+test("preference options for Tokyo avoid Kumamoto-specific labels", () => {
+  const card = buildQuestionCard({
+    ...makeStructuredProfile(),
+    destination: "東京",
+    preferences: [],
+    companions: "solo",
+    pace: "normal",
+  });
+
+  const preferenceQuestion = card?.questions.find((question) => question.slot === "preferences");
+  assert.ok(preferenceQuestion);
+  const labels = preferenceQuestion?.options?.map((option) => option.label).join(" ") ?? "";
+  assert.ok(!labels.includes("阿蘇"));
+  assert.ok(!labels.includes("溫泉放鬆"));
+  assert.ok(labels.includes("城市綠地") || labels.includes("自然風景"));
+});
+
+test("東基 speech typo normalizes to Tokyo in question card copy", () => {
+  const card = buildQuestionCard({
+    ...makeStructuredProfile(),
+    destination: "東基",
+    preferences: [],
+    companions: "solo",
+    pace: "normal",
+  });
+
+  assert.ok(card?.title?.includes("東京"));
+  const preferenceQuestion = card?.questions.find((question) => question.slot === "preferences");
+  const labels = preferenceQuestion?.options?.map((option) => option.label).join(" ") ?? "";
+  assert.ok(!labels.includes("阿蘇"));
+});
+
+test("preference options for Kumamoto still mention Aso and onsen", () => {
+  const card = buildQuestionCard({
+    ...makeStructuredProfile(),
+    destination: "熊本",
+    preferences: [],
+    companions: "solo",
+    pace: "normal",
+  });
+
+  const preferenceQuestion = card?.questions.find((question) => question.slot === "preferences");
+  const labels = preferenceQuestion?.options?.map((option) => option.label).join(" ") ?? "";
+  assert.ok(labels.includes("阿蘇"));
+  assert.ok(labels.includes("溫泉放鬆"));
 });
 
 test("budget question uses dynamic options based on trip profile instead of fixed template", () => {
@@ -320,6 +423,132 @@ test("existing itinerary replacement request becomes a targeted proposed change"
     },
   ]);
   assert.equal(response.itinerarySuggestion, undefined);
+});
+
+test("existing itinerary delete whole day request becomes remove_itinerary_day proposed change", async () => {
+  const context = {
+    destination: "釜山",
+    days: 5,
+    itinerary: [
+      { dayNumber: 1, items: [{ id: "d1", time: "09:00", title: "海雲台", type: "attraction" as const }] },
+      { dayNumber: 2, items: [{ id: "d2", time: "09:00", title: "甘川文化村", type: "attraction" as const }] },
+      { dayNumber: 3, items: [{ id: "d3", time: "09:00", title: "札嘎其市場", type: "attraction" as const }] },
+      { dayNumber: 4, items: [{ id: "d4", time: "09:00", title: "太宗台", type: "attraction" as const }] },
+      { dayNumber: 5, items: [{ id: "d5", time: "09:00", title: "機場返程", type: "transport" as const }] },
+    ],
+  };
+
+  for (const message of [
+    "幫我刪掉第五天的行程",
+    "刪除第5天",
+    "把第五天移除",
+    "取消第五天的安排",
+    "最后一天不要了",
+  ]) {
+    const response = await chatWithTravelAssistant({
+      message,
+      structuredTravelPlanning: true,
+      context,
+    });
+
+    assert.equal(response.reply.responseType, "text_message", message);
+    assert.match(response.reply.content, /已刪除第 5 天行程/, message);
+    assert.deepEqual(
+      response.proposedChanges,
+      [
+        {
+          type: "remove_itinerary_day",
+          day: 5,
+          reason: "依照使用者要求刪除整天行程",
+          source: "ai-chat",
+        },
+      ],
+      message,
+    );
+  }
+});
+
+test("existing itinerary delete item request respects the requested day", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "幫我刪掉地7天的熊本城",
+    structuredTravelPlanning: true,
+    context: {
+      destination: "熊本",
+      days: 7,
+      itinerary: [
+        { dayNumber: 2, items: [{ id: "d2", time: "09:00", title: "熊本城", type: "attraction" as const }] },
+        { dayNumber: 7, items: [{ id: "d7", time: "10:00", title: "熊本城", type: "attraction" as const }] },
+      ],
+    },
+  });
+
+  assert.equal(response.reply.responseType, "text_message");
+  assert.match(response.reply.content, /已從第 7 天移除「熊本城」/);
+  assert.deepEqual(response.proposedChanges, [
+    {
+      type: "remove_itinerary_item",
+      day: 7,
+      itemId: "d7",
+      targetTitle: "熊本城",
+      reason: "依照使用者要求，自第 7 天移除此行程項目",
+      source: "ai-chat",
+    },
+  ]);
+});
+
+test("existing itinerary delete item request reports missing item on requested day", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "刪掉第7天的熊本城",
+    structuredTravelPlanning: true,
+    context: {
+      destination: "熊本",
+      days: 7,
+      itinerary: [
+        { dayNumber: 2, items: [{ id: "d2", time: "09:00", title: "熊本城", type: "attraction" as const }] },
+        { dayNumber: 7, items: [{ id: "d7", time: "10:00", title: "水前寺成趣園", type: "attraction" as const }] },
+      ],
+    },
+  });
+
+  assert.equal(response.reply.responseType, "text_message");
+  assert.match(response.reply.content, /第 7 天找不到「熊本城」/);
+  assert.equal(response.proposedChanges?.length ?? 0, 0);
+});
+
+test("resolveProposedChangesFromContext prefers explicit day in user message over wrong model day", () => {
+  const context = {
+    destination: "熊本",
+    days: 7,
+    itinerary: [
+      { dayNumber: 2, items: [{ id: "d2", time: "09:00", title: "熊本城", type: "attraction" as const }] },
+      { dayNumber: 7, items: [{ id: "d7", time: "10:00", title: "熊本城", type: "attraction" as const }] },
+    ],
+  };
+
+  const { resolved, issues } = resolveProposedChangesFromContext({
+    userMessage: "幫我刪掉地7天的熊本城",
+    context,
+    changes: [
+      {
+        type: "remove_itinerary_item",
+        day: 2,
+        targetTitle: "熊本城",
+        source: "ai-chat",
+      },
+    ],
+  });
+
+  assert.equal(issues.length, 0);
+  assert.deepEqual(resolved, [
+    {
+      type: "remove_itinerary_item",
+      day: 7,
+      itemId: "d7",
+      targetTitle: "熊本城",
+      reason: "依照使用者要求，自第 7 天移除此行程項目",
+      source: "ai-chat",
+    },
+  ]);
 });
 
 test("structured planning template only starts for explicit planning intent", () => {

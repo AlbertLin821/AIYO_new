@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import Image from "next/image";
-import { CalendarDays, MapPin, Share2 } from "lucide-react";
+import { CalendarDays, Globe, MapPin, Share2 } from "lucide-react";
 import type { Session } from "next-auth";
 import { zhTW as t } from "@/locales/zh-TW";
 
@@ -19,6 +19,11 @@ type Props = {
   showTripSummaryRow: boolean;
   onShare: () => void;
   onOpenMap: () => void;
+  onPublish?: () => void;
+  isPublished?: boolean;
+  isPublishing?: boolean;
+  canPublish?: boolean;
+  onUnpublish?: () => void;
 };
 
 function ItineraryPageHeader({
@@ -33,6 +38,11 @@ function ItineraryPageHeader({
   showTripSummaryRow,
   onShare,
   onOpenMap,
+  onPublish,
+  isPublished = false,
+  isPublishing = false,
+  canPublish = true,
+  onUnpublish,
 }: Props) {
   const displayTitle = title.trim() || t.itineraryPage.title;
   const displayDestination = destination.trim() || t.common.notSet;
@@ -136,6 +146,33 @@ function ItineraryPageHeader({
               <MapPin className="size-4 text-secondary" />
               {t.itineraryPage.workflowMap}
             </button>
+            {onPublish && (
+              <button
+                type="button"
+                onClick={onPublish}
+                disabled={!canPublish || isPublishing}
+                data-testid="publish-itinerary-button"
+                className="inline-flex items-center gap-2 rounded-xl border border-border-light bg-surface px-4 py-2.5 text-sm font-medium text-foreground shadow-soft transition-colors hover:bg-cream/60 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Globe className="size-4 text-primary" />
+                {isPublishing
+                  ? t.itineraryPage.publishing
+                  : isPublished
+                    ? t.itineraryPage.republish
+                    : t.itineraryPage.publish}
+              </button>
+            )}
+            {isPublished && onUnpublish && (
+              <button
+                type="button"
+                onClick={onUnpublish}
+                disabled={isPublishing}
+                data-testid="unpublish-itinerary-button"
+                className="inline-flex items-center gap-2 rounded-xl border border-border-light bg-surface px-4 py-2.5 text-sm font-medium text-muted shadow-soft transition-colors hover:bg-cream/60 disabled:opacity-60"
+              >
+                {t.itineraryPage.unpublish}
+              </button>
+            )}
           </div>
         </div>
       </div>

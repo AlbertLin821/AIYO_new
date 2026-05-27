@@ -5,9 +5,11 @@ import dynamic from "next/dynamic";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Loader2, PlusCircle, Sparkles, TrendingUp } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import HomeHeroBanner from "@/components/home/HomeHeroBanner";
-import VideoCard from "@/components/home/VideoCard";
+import HomeRecommendationsSection, {
+  type HomeRecommendPanel,
+} from "@/components/home/HomeRecommendationsSection";
 import VideoSearchBar from "@/components/home/VideoSearchBar";
 import { getDefaultTaiwanCityVideos } from "@/data/defaultTaiwanCityVideos";
 import {
@@ -29,6 +31,20 @@ import type { VideoRecommendation } from "@/types";
 const VideoSummaryDrawer = dynamic(() => import("@/components/home/VideoSummaryDrawer"), {
   ssr: false,
 });
+
+const HOME_RECOMMEND_PANEL_KEY = "aiyo:home-recommend-panel";
+
+function readStoredRecommendPanel(): HomeRecommendPanel {
+  if (typeof window === "undefined") {
+    return "videos";
+  }
+  try {
+    const stored = window.localStorage.getItem(HOME_RECOMMEND_PANEL_KEY);
+    return stored === "itineraries" ? "itineraries" : "videos";
+  } catch {
+    return "videos";
+  }
+}
 
 const AD_PREVIEWS = [
   {
@@ -140,11 +156,14 @@ const AD_PREVIEWS = [
 export default function HomePage() {
   const router = useRouter();
   const { status: sessionStatus } = useSession();
+  const isAuthenticated = sessionStatus === "authenticated";
   const resumeImportHandledRef = useRef(false);
   const videoSearchInputRef = useRef<HTMLInputElement | null>(null);
   const adScrollRef = useRef<HTMLDivElement | null>(null);
 
   const [isLoadingMoreVideos, setIsLoadingMoreVideos] = useState(false);
+  const [recommendPanel, setRecommendPanel] = useState<HomeRecommendPanel>("videos");
+  const [itinerarySearchQuery, setItinerarySearchQuery] = useState("");
   const {
     videos,
     selectedVideo,
@@ -176,6 +195,22 @@ export default function HomePage() {
     Boolean(lastRecommendationRequest || hasSearched || hasTripSeed);
   const showEmptyGrid = videos.length === 0 && !errorMessage;
   const defaultVideos = useMemo(() => getDefaultTaiwanCityVideos(6), []);
+
+  useEffect(() => {
+    setRecommendPanel(readStoredRecommendPanel());
+  }, []);
+
+  const handleRecommendPanelChange = useCallback((panel: HomeRecommendPanel) => {
+    setRecommendPanel(panel);
+    try {
+      window.localStorage.setItem(HOME_RECOMMEND_PANEL_KEY, panel);
+    } catch {
+      /* ignore */
+    }
+    if (panel === "videos") {
+      setItinerarySearchQuery("");
+    }
+  }, []);
 
   useEffect(() => {
     if (!hasSearched && !hasTripSeed && videos.length === 0) {
@@ -614,75 +649,31 @@ export default function HomePage() {
         transition={{ delay: 0.1 }}
         className="mb-10"
       >
-        <VideoSearchBar ref={videoSearchInputRef} />
+        <VideoSearchBar
+          ref={videoSearchInputRef}
+          mode={recommendPanel === "itineraries" ? "itinerary" : "video"}
+          onItinerarySearch={setItinerarySearchQuery}
+        />
       </motion.div>
 
-      <div className="max-w-6xl mx-auto">
-        <div className="mb-5 flex flex-wrap items-center gap-2">
-          <TrendingUp className="size-4 text-secondary" />
-          <h2 className="font-semibold text-foreground">{t.home.recommended}</h2>
-          <span className="text-xs text-muted bg-border-light px-2 py-0.5 rounded-full">
-            {videos.length} {t.home.items}
-          </span>
-          {recommendationSource === "default-taiwan-cities" && (
-            <span className="text-[10px] uppercase tracking-wide rounded-full bg-primary/15 px-2 py-0.5 text-foreground/80">
-              {t.home.sourceDefault}
-            </span>
-          )}
-          {recommendationSource === "mock-fallback" && (
-            <span className="text-[10px] uppercase tracking-wide rounded-full bg-secondary/15 px-2 py-0.5 text-foreground/80">
-              {t.home.sourceFallback}
-            </span>
-          )}
-          {recommendationSource === "single-video-url" && (
-            <span className="text-[10px] uppercase tracking-wide rounded-full bg-lavender/20 px-2 py-0.5 text-foreground/80">
-              {t.home.sourceSingleVideo}
-            </span>
-          )}
-          {videos.length > 0 && canLoadMoreVideos && !isSearching && (
-            <button
-              type="button"
-              onClick={() => void handleLoadMoreVideos()}
-              disabled={isLoadingMoreVideos}
-              className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border-light bg-surface px-3 py-1 text-xs font-medium text-foreground shadow-soft transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
-              aria-label={t.home.moreVideos}
-            >
-              {isLoadingMoreVideos ? (
-                <Loader2 className="size-3.5 animate-spin" aria-hidden />
-              ) : (
-                <PlusCircle className="size-3.5" aria-hidden />
-              )}
-              {isLoadingMoreVideos ? t.home.loadingMoreVideos : t.home.moreVideos}
-            </button>
-          )}
-        </div>
-
-        {errorMessage && (
-          <div className="mb-4 rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">
-            {errorMessage}
-          </div>
-        )}
-
-        {showEmptyGrid ? (
-          <div className="rounded-2xl border border-dashed border-border-light bg-cream/40 px-6 py-16 text-center">
-            <p className="text-base font-medium text-foreground">
-              {hasSearched ? t.home.noApiResults : t.home.emptyTitle}
-            </p>
-            <p className="mt-2 text-sm text-muted">{t.home.emptyHint}</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {videos.map((video, index) => (
-              <VideoCard
-                key={video.id}
-                video={video}
-                index={index}
-                onClick={() => void openVideoSummary(video)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      <HomeRecommendationsSection
+        activePanel={recommendPanel}
+        onPanelChange={handleRecommendPanelChange}
+        isAuthenticated={isAuthenticated}
+        itineraryQuery={itinerarySearchQuery}
+        videoPanel={{
+          videos,
+          recommendationSource,
+          errorMessage,
+          showEmptyGrid,
+          hasSearched,
+          isSearching,
+          canLoadMoreVideos,
+          isLoadingMoreVideos,
+          onVideoClick: (video) => void openVideoSummary(video),
+          onLoadMoreVideos: () => void handleLoadMoreVideos(),
+        }}
+      />
 
       <VideoSummaryDrawer
         video={selectedVideo}

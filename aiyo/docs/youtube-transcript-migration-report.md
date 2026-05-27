@@ -30,7 +30,7 @@
 | 前端：行程編輯 | 無直接對應 | `src/components/map/ItineraryPanel.tsx` | Modify |
 | 固定字幕測資 | 無正式測試；由 outline API 格式抽出 | `src/server/video/__tests__/fixtures/youtubeTranscriptOutlineFixture.ts` | Add |
 | 遷移測試入口 | 無 | `package.json` (`test:video-migration`) | Modify |
-| 舊 Python FastAPI runtime | `youtube-proj/server/*.py` | 不搬入 AIYO runtime；作為參考實作 | Deprecated |
+| 舊 Python FastAPI runtime | （已移除的 `youtube-proj` 參考實作） | 不搬入 AIYO runtime；作為參考實作 | Deprecated |
 
 ## 型別相容性
 

@@ -8,7 +8,7 @@ import { requireSessionUser } from "@/server/auth";
 import { resolveSessionTrip, saveTripPayload } from "@/server/data/appStateService";
 import { generateTripPlan } from "@/server/services/travelPlannerService";
 import { buildPinsFromTripPlan } from "@/services/mapSync";
-import type { TravelPreferences, TripPlanRequest } from "@/types";
+import type { TravelPreferences, TripPlanRequest, TripPlanResult } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +41,50 @@ function inferDestinationFromTranscript(transcript: string): string {
   }
   const guided = t.match(/(?:想去|到|去|玩)([^，。\n\s]{2,10})/);
   return guided?.[1]?.trim() || "";
+}
+
+function ensurePlanHasEditableItems(plan: TripPlanResult, request: TripPlanRequest): TripPlanResult {
+  if (plan.days.some((day) => day.items.length > 0)) {
+    return plan;
+  }
+
+  const seeds = request.preferences.mustVisit?.length
+    ? request.preferences.mustVisit
+    : [request.destination];
+  const dayCount = Math.max(1, request.days);
+  const days =
+    plan.days.length > 0
+      ? plan.days
+      : Array.from({ length: dayCount }, (_, index) => ({
+          dayNumber: index + 1,
+          theme: `Day ${index + 1}`,
+          summary: "",
+          items: [],
+        }));
+
+  return {
+    ...plan,
+    days: days.map((day, index) => {
+      const title = seeds[index % seeds.length] || request.destination;
+      return {
+        ...day,
+        dayNumber: day.dayNumber || index + 1,
+        theme: day.theme || `Day ${day.dayNumber || index + 1}`,
+        summary: day.summary || `${request.destination} 行程安排`,
+        items: [
+          {
+            id: `fallback_${day.dayNumber || index + 1}_1`,
+            dayNumber: day.dayNumber || index + 1,
+            time: index === 0 ? "09:30" : "10:00",
+            title,
+            type: "attraction",
+            notes: "AI 回傳的活動清單為空，已依照你的必訪清單建立可編輯項目。",
+            source: "ai",
+          },
+        ],
+      };
+    }),
+  };
 }
 
 export async function POST(request: Request) {
@@ -96,7 +140,7 @@ export async function POST(request: Request) {
     });
 
     const generated = await generateTripPlan(tripRequest, formatMemoryContext(memories));
-    const result = generated.plan;
+    const result = ensurePlanHasEditableItems(generated.plan, tripRequest);
 
     const existingTrip = await resolveSessionTrip(userId);
     const savedTrip = await saveTripPayload(userId, {

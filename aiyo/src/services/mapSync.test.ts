@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildPinsFromLocations, buildPinsFromTripPlan, mergeTripItineraryPins } from "@/services/mapSync";
+import {
+  buildPinsFromLocations,
+  buildPinsFromTripPlan,
+  mergeTripItineraryPins,
+  reconcileTripMapState,
+} from "@/services/mapSync";
 import type { LocationReference, TripPlanDay } from "@/types";
 
 const locationWithDetails: LocationReference = {
@@ -155,5 +160,88 @@ test("mergeTripItineraryPins keeps non-itinerary pins while rebuilding itinerary
   assert.ok(merged.some((pin) => pin.id === "video-pin"));
   assert.ok(!merged.some((pin) => pin.id === "stale-itinerary-pin"));
   assert.ok(merged.some((pin) => pin.id === "day_1_item-1"));
+});
+
+test("reconcileTripMapState backfills item location from existing pin", () => {
+  const days: TripPlanDay[] = [
+    {
+      dayNumber: 1,
+      items: [
+        {
+          id: "item-1",
+          time: "10:00",
+          title: "孔廟",
+          type: "attraction",
+        },
+      ],
+    },
+  ];
+  const pins = [
+    {
+      id: "pin-1",
+      name: "孔廟",
+      lat: 22.9908,
+      lng: 120.2026,
+      description: "台南孔廟",
+      linkedTripItemId: "item-1",
+      dayNumber: 1,
+      source: "itinerary" as const,
+    },
+  ];
+
+  const reconciled = reconcileTripMapState(days, pins);
+  assert.ok(reconciled.itinerary[0]?.items[0]?.location);
+  assert.equal(reconciled.itinerary[0]?.items[0]?.location?.lat, 22.9908);
+  assert.equal(reconciled.pins[0]?.linkedTripItemId, "item-1");
+});
+
+test("reconcileTripMapState creates pins for items that already have coordinates", () => {
+  const days: TripPlanDay[] = [
+    {
+      dayNumber: 1,
+      items: [
+        {
+          id: "item-2",
+          time: "12:00",
+          title: "午餐",
+          type: "restaurant",
+          location: locationWithDetails,
+        },
+      ],
+    },
+  ];
+
+  const reconciled = reconcileTripMapState(days, []);
+  assert.equal(reconciled.pins.length, 1);
+  assert.equal(reconciled.pins[0]?.id, "day_1_item-2");
+  assert.equal(reconciled.pins[0]?.linkedTripItemId, "item-2");
+});
+
+test("buildPinsFromTripPlan skips anchored synthetic meal stops", () => {
+  const days: TripPlanDay[] = [
+    {
+      dayNumber: 7,
+      items: [
+        {
+          id: "attraction-1",
+          time: "09:00",
+          title: "湧湧座",
+          type: "attraction",
+          location: locationWithDetails,
+        },
+        {
+          id: "meal-1",
+          time: "12:00",
+          title: "湧湧座 附近午餐",
+          type: "restaurant",
+          location: locationWithDetails,
+        },
+      ],
+    },
+  ];
+
+  const pins = buildPinsFromTripPlan(days);
+  assert.equal(pins.length, 1);
+  assert.equal(pins[0].linkedTripItemId, "attraction-1");
 });
 

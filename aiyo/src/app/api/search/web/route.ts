@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { createError, createSuccess } from "@/lib/api-response";
-import { runUnifiedWebSearch } from "@/server/search/webSearchService";
+import { createError } from "@/lib/api-response";
+import { requireSessionUser } from "@/server/auth";
+import { handleWebSearchRequest } from "@/app/api/search/web/handleWebSearch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,31 +15,14 @@ type SearchBody = {
 
 export async function POST(request: Request) {
   try {
+    await requireSessionUser();
     const body = (await request.json()) as SearchBody;
-    const query = body.query?.trim() || "";
-    if (!query) {
-      return NextResponse.json(
-        createError("invalid_request", "query 不能為空。"),
-        { status: 400 },
-      );
+    const result = await handleWebSearchRequest(body);
+    return NextResponse.json(result.body, { status: result.status });
+  } catch (error) {
+    if (error instanceof Error && error.message === "unauthorized") {
+      return NextResponse.json(createError("unauthorized", "請先登入。"), { status: 401 });
     }
-
-    const limit = Math.min(10, Math.max(1, Number(body.limit || 8)));
-    const { results, backend } = await runUnifiedWebSearch({
-      query,
-      language: body.language,
-      categories: body.categories,
-      limit,
-    });
-
-    return NextResponse.json(
-      createSuccess({
-        query,
-        results,
-        provider: backend,
-      }),
-    );
-  } catch {
     return NextResponse.json(
       createError("search_failed", "搜尋服務暫時不可用。"),
       { status: 502 },

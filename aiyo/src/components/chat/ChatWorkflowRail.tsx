@@ -178,8 +178,14 @@ export default function ChatWorkflowRail({
       </ol>
 
       {questionCard ? (
-        <div className="relative z-10 rounded-b-3xl border-t border-slate-200/80 bg-white/90 px-5 pb-5 pt-5 backdrop-blur-sm">
-          <p className="mb-3 text-sm font-semibold text-slate-900">補齊資料</p>
+        <div className="relative z-10 rounded-b-3xl border-t border-primary/15 bg-white/90 px-5 pb-5 pt-5 backdrop-blur-sm">
+          <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <span
+              className="inline-block size-2 shrink-0 rounded-full bg-primary/80 shadow-[0_0_8px_rgb(90_126_163/0.55)]"
+              aria-hidden
+            />
+            補齊資料
+          </p>
           <QuestionCard card={questionCard} disabled={disabled} onSubmit={onSubmitQuestion} />
         </div>
       ) : null}

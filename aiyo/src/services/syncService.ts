@@ -1,5 +1,6 @@
 import { zhTW as t } from "@/locales/zh-TW";
 import { markPersistenceServerHydrated, persistActiveUserSnapshotNow } from "@/services/persistence";
+import { reconcileTripMapState } from "@/services/mapSync";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/services/apiClient";
 import { CHAT_REMOTE_CONVERSATION_ID, useChatStore } from "@/stores/useChatStore";
 import { useCollabStore } from "@/stores/useCollabStore";
@@ -82,6 +83,22 @@ class SyncService {
     if (process.env.NODE_ENV !== "production") {
       console.info(`[sync] ${message}`, payload || {});
     }
+  }
+
+  private applyReconciledTripSnapshot(
+    trip: PersistedTripPayload,
+    budget: number | undefined,
+    source: "bootstrap" | "realtime" | "server-ack",
+  ) {
+    const reconciled = reconcileTripMapState(trip.itinerary, trip.pins);
+    const nextTrip: PersistedTripPayload = {
+      ...trip,
+      itinerary: reconciled.itinerary,
+      pins: reconciled.pins,
+    };
+    useTripStore.getState().setRemoteTrip(nextTrip, budget, source);
+    useMapStore.getState().setPins(reconciled.pins, source);
+    return nextTrip;
   }
 
   private normalizePayload(payload: PersistedTripPayload) {
@@ -202,13 +219,12 @@ class SyncService {
         const tripSnapshotSource = source === "realtime" ? "realtime" : "bootstrap";
         this.isApplyingRemote = true;
         try {
-          useTripStore.getState().setRemoteTrip(
+          const nextTrip = this.applyReconciledTripSnapshot(
             snapshot.trip,
             snapshot.profile.budget,
             tripSnapshotSource,
           );
-          useMapStore.getState().setPins(snapshot.trip.pins, tripSnapshotSource);
-          this.lastSyncedPayloadKey = remoteKey;
+          this.lastSyncedPayloadKey = this.getPayloadKey(nextTrip);
           this.log("remote snapshot applied", { source, updatedAt: remoteUpdatedAt });
         } finally {
           this.isApplyingRemote = false;
@@ -278,13 +294,14 @@ class SyncService {
     trip: PersistedTripPayload;
     collaboration: CollaborationPresenceState | null;
   }) {
-    const remoteKey = this.getPayloadKey(snapshot.trip);
-
     this.isApplyingRemote = true;
     try {
-      useTripStore.getState().setRemoteTrip(snapshot.trip, snapshot.trip.budget, "bootstrap");
-      useMapStore.getState().setPins(snapshot.trip.pins, "bootstrap");
-      this.lastSyncedPayloadKey = remoteKey;
+      const nextTrip = this.applyReconciledTripSnapshot(
+        snapshot.trip,
+        snapshot.trip.budget,
+        "bootstrap",
+      );
+      this.lastSyncedPayloadKey = this.getPayloadKey(nextTrip);
       this.log("trip switch snapshot applied", { tripId: snapshot.trip.tripId });
     } finally {
       this.isApplyingRemote = false;

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
+import { requireSessionUser } from "@/server/auth";
 import { extractYouTubeVideoId } from "@/server/providers/youtubeProvider";
 import { summarizeVideoForApi } from "@/server/services/videoSummaryConnector";
 
@@ -21,6 +22,7 @@ function summarizeErrorMeta(error: unknown) {
 
 export async function POST(request: Request) {
   try {
+    await requireSessionUser();
     const body = (await request.json()) as {
       url?: string;
       videoId?: string;
@@ -59,6 +61,9 @@ export async function POST(request: Request) {
       throw error;
     }
   } catch (error) {
+    if (error instanceof Error && error.message === "unauthorized") {
+      return NextResponse.json(createError("unauthorized", "請先登入。"), { status: 401 });
+    }
     console.error("[video-summarize] Failed to summarize video.", summarizeErrorMeta(error));
     return NextResponse.json(
       createError(

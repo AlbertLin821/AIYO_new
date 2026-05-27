@@ -309,6 +309,7 @@ function TripLibraryItem({
       <button
         type="button"
         disabled={disabledActions}
+        aria-label={t.itineraryPage.editTripAria.replace("{title}", item.title)}
         onClick={() => onSelectTrip(item)}
         className={cn("flex w-full text-left", compact ? "items-center gap-3 px-3 py-3" : "flex-col")}
       >

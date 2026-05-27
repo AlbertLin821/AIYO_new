@@ -10,6 +10,9 @@ type GoogleRoutesResponse = {
   }>;
 };
 
+const GOOGLE_ROUTES_TIMEOUT_MS = 4000;
+const GOOGLE_ROUTES_MAX_SEGMENTS = 8;
+
 function parseGoogleDurationSeconds(value: string | undefined): number | null {
   const match = value?.trim().match(/^(\d+(?:\.\d+)?)s$/);
   if (!match) {
@@ -54,6 +57,8 @@ async function fetchGoogleRouteDuration(input: {
     requestBody.departureTime = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), GOOGLE_ROUTES_TIMEOUT_MS);
   const response = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
     method: "POST",
     headers: {
@@ -62,7 +67,8 @@ async function fetchGoogleRouteDuration(input: {
       "X-Goog-FieldMask": "routes.duration,routes.distanceMeters",
     },
     body: JSON.stringify(requestBody),
-  });
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timeout));
   if (!response.ok) {
     return null;
   }
@@ -97,23 +103,28 @@ export async function enrichTripPlanWithRouteTravelTimes(plan: TripPlanResult): 
     distanceMeters?: number;
   }>();
 
-  for (const segment of segments) {
-    try {
-      const result = await fetchGoogleRouteDuration({
+  const lookups = await Promise.allSettled(
+    segments.slice(0, GOOGLE_ROUTES_MAX_SEGMENTS).map(async (segment) => ({
+      segment,
+      result: await fetchGoogleRouteDuration({
         from: segment.from,
         to: segment.to,
         fromPlaceId: segment.fromPlaceId,
         toPlaceId: segment.toPlaceId,
         transport: segment.transport,
-      });
-      if (result) {
-        patches.set(`${segment.dayNumber}:${segment.toItemId}`, result);
-      }
-    } catch (error) {
+      }),
+    })),
+  );
+
+  for (const lookup of lookups) {
+    if (lookup.status === "rejected") {
       console.warn("[route-travel-time] google route lookup failed", {
-        segmentId: segment.id,
-        error: error instanceof Error ? error.message : String(error),
+        error: lookup.reason instanceof Error ? lookup.reason.message : String(lookup.reason),
       });
+      continue;
+    }
+    if (lookup.value.result) {
+      patches.set(`${lookup.value.segment.dayNumber}:${lookup.value.segment.toItemId}`, lookup.value.result);
     }
   }
 

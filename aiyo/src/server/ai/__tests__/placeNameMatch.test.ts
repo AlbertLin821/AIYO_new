@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { PlaceSearchHit } from "@/server/geo/placesSearchService";
-import { segmentTitleMatchesAnyPlace } from "@/server/ai/placeNameMatch";
+import {
+  filterProposedChangesByVerifiedPlaces,
+  segmentTitleMatchesAnyPlace,
+} from "@/server/ai/placeNameMatch";
+import type { AiProposedChange } from "@/types";
 
 test("segmentTitleMatchesAnyPlace accepts close title to place name", () => {
   const places: PlaceSearchHit[] = [
@@ -29,4 +33,19 @@ test("segmentTitleMatchesAnyPlace rejects unrelated title", () => {
     },
   ];
   assert.equal(segmentTitleMatchesAnyPlace("完全不相干店名", places), false);
+});
+
+test("filterProposedChangesByVerifiedPlaces keeps adds when no place hits", () => {
+  const changes: AiProposedChange[] = [
+    {
+      type: "add_itinerary_item",
+      day: 1,
+      time: "10:00",
+      title: "測試餐廳",
+      locationName: "測試餐廳",
+      source: "ai-chat",
+    },
+  ];
+  const filtered = filterProposedChangesByVerifiedPlaces(changes, []);
+  assert.equal(filtered.length, 1);
 });

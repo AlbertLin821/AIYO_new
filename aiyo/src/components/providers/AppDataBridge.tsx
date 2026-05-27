@@ -6,7 +6,7 @@ import { signOut, useSession } from "next-auth/react";
 import { zhTW as t } from "@/locales/zh-TW";
 import { clearPersistedState } from "@/services/persistence";
 import { ApiRequestError, apiGet } from "@/services/apiClient";
-import { mergeTripItineraryPins } from "@/services/mapSync";
+import { reconcileTripMapState } from "@/services/mapSync";
 import { syncService } from "@/services/syncService";
 import { useChatStore } from "@/stores/useChatStore";
 import { useCollabStore } from "@/stores/useCollabStore";
@@ -164,8 +164,16 @@ export default function AppDataBridge() {
       if (
         JSON.stringify(state.itinerary) !== JSON.stringify(previousState.itinerary)
       ) {
-        const merged = mergeTripItineraryPins(useMapStore.getState().pins, state.itinerary);
-        useMapStore.getState().setPins(merged, "local-user-edit");
+        const reconciled = reconcileTripMapState(state.itinerary, useMapStore.getState().pins);
+        withSyncMutationSource("local-user-edit", () => {
+          if (JSON.stringify(reconciled.itinerary) !== JSON.stringify(state.itinerary)) {
+            useTripStore.setState({
+              itinerary: reconciled.itinerary,
+              lastUpdatedAt: new Date().toISOString(),
+            });
+          }
+          useMapStore.getState().setPins(reconciled.pins, "local-user-edit");
+        });
       }
     });
 

@@ -14,6 +14,11 @@ export function toApiError(error: unknown, fallbackMessage: string) {
     if (error.message === "not_found") {
       return NextResponse.json(createError("not_found", "找不到請求的資源。"), { status: 404 });
     }
+    if (error.message === "validation_error") {
+      return NextResponse.json(createError("validation_error", "行程內容不符合公開條件。"), {
+        status: 422,
+      });
+    }
   }
 
   return NextResponse.json(createError("internal_error", fallbackMessage), { status: 500 });

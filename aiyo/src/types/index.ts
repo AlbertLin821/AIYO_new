@@ -195,7 +195,19 @@ export type AiProposedChange =
   targetTitle?: string;
   reason?: string;
   source: "ai-chat";
+}
+  | {
+  type: "remove_itinerary_day";
+  day: number;
+  reason?: string;
+  source: "ai-chat";
 };
+
+export type AddItineraryChange = Extract<AiProposedChange, { type: "add_itinerary_item" }>;
+export type ExistingItemChange = Extract<
+  AiProposedChange,
+  { type: "update_itinerary_item" | "remove_itinerary_item" }
+>;
 
 export type ChatResponseType = "text_message" | "question_card" | "status_step" | "travel_plan" | "error";
 
@@ -244,11 +256,16 @@ export type ChatQuestion = {
   type: ChatQuestionType;
   options?: ChatQuestionOption[];
   placeholder?: string;
+  helperText?: string;
+  startLabel?: string;
+  endLabel?: string;
 };
 
 export type QuestionCardPayload = {
   response_type: "question_card";
   title: string;
+  eyebrow?: string;
+  description?: string;
   questions: ChatQuestion[];
   action?: {
     label: string;
@@ -354,6 +371,8 @@ export type TravelPlanRevisionMeta = {
 export type TravelPlanResponse = {
   response_type: "travel_plan";
   title: string;
+  summary?: string;
+  citations?: string[];
   revision?: TravelPlanRevisionMeta;
   sources?: Record<string, ChatSource>;
   summary_table: Array<{
@@ -428,6 +447,8 @@ export interface ChatMessage {
 
 export interface ChatRequestPayload {
   message: string;
+  /** User-visible summary when `message` is empty (e.g. questionnaire submit). */
+  displayMessage?: string;
   messages?: ChatMessage[];
   context?: ChatContext;
   structuredTravelPlanning?: boolean;
@@ -639,6 +660,56 @@ export interface PersistedTripPayload {
   itinerary: TripPlanDay[];
   pins: MapPin[];
   updatedAt: string;
+}
+
+export interface PublicItineraryItem {
+  id: string;
+  dayNumber?: number;
+  time: string;
+  title: string;
+  type: TripItemType;
+  transport?: string;
+  transportDurationMinutes?: number;
+  transportDistanceMeters?: number;
+  transportDataSource?: "google_routes";
+  location?: Pick<
+    LocationReference,
+    "name" | "lat" | "lng" | "address" | "placeId" | "photoUrl" | "thumbnail" | "googleMapsUrl" | "rating" | "userRatingsTotal"
+  >;
+}
+
+export interface PublicItineraryDay {
+  dayNumber: number;
+  items: PublicItineraryItem[];
+}
+
+export interface PublicItinerarySnapshot {
+  title: string;
+  destination: string;
+  days: number;
+  coverImageUrl?: string | null;
+  itinerary: PublicItineraryDay[];
+  pins: MapPin[];
+}
+
+export interface PublicItinerarySummary {
+  id: string;
+  title: string;
+  coverImageUrl?: string | null;
+  days: number;
+  destination?: string | null;
+  publishedAt: string;
+  publisherImage?: string | null;
+}
+
+export interface PublicItineraryDetail extends PublicItinerarySummary {
+  snapshot: PublicItinerarySnapshot;
+}
+
+export interface TripPublicationStatus {
+  published: boolean;
+  publicationId?: string;
+  publishedAt?: string;
 }
 
 export interface CollaborationPresenceState {

@@ -255,3 +255,32 @@ body {
     radial-gradient(ellipse 60% 45% at 85% 25%, rgb(210 226 238), transparent),
     linear-gradient(165deg, rgb(226 236 246) 0%, rgb(200 218 228) 45%, rgb(205 223 206) 100%);
 }
+
+/* 對話「補齊資料」表單：微微閃爍的藍色框線 */
+@keyframes questionCardBorderPulse {
+  0%,
+  100% {
+    border-color: rgb(90 126 163 / 0.28);
+    box-shadow:
+      0 0 0 0 rgb(90 126 163 / 0),
+      0 2px 8px -2px rgb(90 126 163 / 0.06);
+  }
+  50% {
+    border-color: rgb(90 126 163 / 0.92);
+    box-shadow:
+      0 0 0 3px rgb(90 126 163 / 0.18),
+      0 4px 14px -4px rgb(90 126 163 / 0.22);
+  }
+}
+
+.question-card-attention {
+  animation: questionCardBorderPulse 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .question-card-attention {
+    animation: none;
+    border-color: rgb(90 126 163 / 0.55);
+    box-shadow: 0 0 0 2px rgb(90 126 163 / 0.12);
+  }
+}

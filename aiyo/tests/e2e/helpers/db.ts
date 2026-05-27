@@ -271,6 +271,77 @@ export async function seedTripForUser(userId: string, title = "E2E 台南行程"
   });
 }
 
+export async function seedPublishedTripForUser(userId: string, title = "E2E 公開台南") {
+  const trip = await seedTripForUser(userId, title);
+  const fullTrip = await prisma.trip.findUnique({
+    where: { id: trip.id },
+    include: { items: true, pins: true },
+  });
+  if (!fullTrip) {
+    throw new Error("seedPublishedTripForUser: trip missing after create");
+  }
+  const item = fullTrip.items[0];
+  const pin = fullTrip.pins[0];
+  const snapshot = {
+    title: fullTrip.title,
+    destination: fullTrip.destination ?? "",
+    days: fullTrip.days,
+    coverImageUrl: fullTrip.coverImageUrl,
+    itinerary: [
+      {
+        dayNumber: 1,
+        items: item
+          ? [
+              {
+                id: item.id,
+                dayNumber: 1,
+                time: item.timeSlot ?? "09:00",
+                title: item.title,
+                type: item.itemType ?? "attraction",
+                location: item.location
+                  ? {
+                      name: item.location,
+                      lat: item.latitude ?? undefined,
+                      lng: item.longitude ?? undefined,
+                      address: item.locationAddress ?? undefined,
+                    }
+                  : undefined,
+              },
+            ]
+          : [],
+      },
+    ],
+    pins: pin
+      ? [
+          {
+            id: pin.id,
+            name: pin.label,
+            lat: pin.lat,
+            lng: pin.lng,
+            address: pin.address ?? undefined,
+            phoneNumber: pin.phoneNumber ?? undefined,
+            website: pin.website ?? undefined,
+            description: pin.label,
+          },
+        ]
+      : [],
+  };
+  const publication = await prisma.tripPublication.create({
+    data: {
+      tripId: trip.id,
+      publisherId: userId,
+      title: snapshot.title,
+      coverImageUrl: snapshot.coverImageUrl,
+      days: snapshot.days,
+      destination: snapshot.destination || null,
+      searchText: `${snapshot.title} ${snapshot.destination} ${item?.title ?? ""}`.toLowerCase(),
+      snapshotJson: snapshot,
+      publisherImage: null,
+    },
+  });
+  return { trip, publicationId: publication.id };
+}
+
 /** 單日兩個有經緯度的 TripItem，供地圖行程面板路段與 Directions 相關測試。 */
 export async function seedTwoLocatedStopsTripForUser(userId: string) {
   const trip = await prisma.trip.create({

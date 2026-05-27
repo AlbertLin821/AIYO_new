@@ -3,6 +3,7 @@ import { expect } from "@playwright/test";
 import { E2E_COLLABORATOR, E2E_OWNER, seedAuthUsers, type E2EUser } from "./db";
 
 export { E2E_COLLABORATOR, E2E_OWNER, seedAuthUsers };
+export type { E2EUser };
 
 function loginCallbackPath(callbackUrl: string): string {
   if (!callbackUrl || callbackUrl === "/") {
@@ -100,4 +101,27 @@ export async function loginAs(page: Page, user: E2EUser, callbackUrl = "/itinera
 
 export async function logout(page: Page) {
   await page.context().clearCookies();
+}
+
+/** Wait until NextAuth session is available to server-side API routes. */
+export async function waitForAuthenticatedSession(page: Page, email?: string) {
+  await expect
+    .poll(
+      async () => {
+        const response = await page.request.get("/api/auth/session");
+        if (!response.ok()) {
+          return null;
+        }
+        const session = (await response.json()) as { user?: { id?: string; email?: string } };
+        if (!session.user?.id) {
+          return null;
+        }
+        if (email && session.user.email !== email) {
+          return null;
+        }
+        return session.user.email ?? session.user.id;
+      },
+      { timeout: 20_000 },
+    )
+    .not.toBeNull();
 }

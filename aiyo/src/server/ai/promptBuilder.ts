@@ -106,6 +106,41 @@ export function buildChatResearchPlanningPrompt(input: {
   };
 }
 
+export function buildItineraryPatchIntentPrompt(input: {
+  message: string;
+  context?: ChatContext;
+}): { system: string; user: string } {
+  return {
+    system: [
+      "You are AIYO itinerary action parser. Output JSON only (no markdown fences).",
+      'Shape: { "replyText": string, "proposedChanges": array }.',
+      "Step 1: infer what the user wants to do to the EXISTING itinerary (not a full replan).",
+      "Step 2: emit ONLY actions from the executable catalog below.",
+      "",
+      "Executable actions:",
+      '- remove_itinerary_day: { "type": "remove_itinerary_day", "day": number, "reason"?: string } — delete an entire day.',
+      '- remove_itinerary_item: { "type": "remove_itinerary_item", "day"?: number, "itemId"?: string, "targetTitle"?: string, "reason"?: string } — remove one activity.',
+      '- update_itinerary_item: { "type": "update_itinerary_item", "day"?: number, "itemId"?: string, "targetTitle"?: string, "time"?: "HH:MM", "title"?: string, "locationName"?: string, "notes"?: string, "transport"?: string, "reason"?: string } — rename, retime, or replace one activity.',
+      '- add_itinerary_item: { "type": "add_itinerary_item", "day": number, "time"?: "HH:MM", "title": string, "locationName"?: string, "transport"?: string, "notes"?: string, "reason"?: string } — add one activity.',
+      "",
+      "Rules:",
+      "- Prefer itemId from the itinerary context when targeting an existing item.",
+      "- When the user names a day (第N天; 地N天 is a common typo for 第N天), scope remove/update to that day only.",
+      "- Use remove_itinerary_day only for deleting a whole day, not a single POI.",
+      "- Do not replan the entire trip; do not add research tool requests.",
+      "- If the user is only asking a question, return proposedChanges: [].",
+      "- replyText: concise Traditional Chinese confirmation of what will change.",
+      "Reply only in Traditional Chinese.",
+    ].join("\n"),
+    user: [
+      `User message: ${input.message}`,
+      "",
+      "Current trip context:",
+      formatContext(input.context),
+    ].join("\n"),
+  };
+}
+
 export function buildChatPrompt(
   message: string,
   context?: ChatContext,
@@ -122,10 +157,10 @@ export function buildChatPrompt(
         ? "You MUST output JSON only with this exact shape: { \"replyText\": string, \"proposedChanges\": array }."
         : "Prefer output JSON with shape { \"replyText\": string, \"proposedChanges\": array } when possible; otherwise reply in concise plain Traditional Chinese.",
       hasResearch
-        ? 'proposedChanges may include: { "type": "add_itinerary_item", "day": number, "time": "HH:MM", "title": string, "locationName"?: string, "transport"?: string, "notes"?: string, "reason"?: string }, { "type": "update_itinerary_item", "itemId"?: string, "day"?: number, "targetTitle"?: string, "time"?: "HH:MM", "title"?: string, "locationName"?: string, "notes"?: string, "transport"?: string, "reason"?: string }, or { "type": "remove_itinerary_item", "itemId"?: string, "day"?: number, "targetTitle"?: string, "reason"?: string }.'
+        ? 'proposedChanges may include: { "type": "add_itinerary_item", "day": number, "time": "HH:MM", "title": string, "locationName"?: string, "transport"?: string, "notes"?: string, "reason"?: string }, { "type": "update_itinerary_item", "itemId"?: string, "day"?: number, "targetTitle"?: string, "time"?: "HH:MM", "title"?: string, "locationName"?: string, "notes"?: string, "transport"?: string, "reason"?: string }, { "type": "remove_itinerary_item", "itemId"?: string, "day"?: number, "targetTitle"?: string, "reason"?: string }, or { "type": "remove_itinerary_day", "day": number, "reason"?: string }.'
         : "",
       hasResearch
-        ? "For add_itinerary_item, concrete restaurants, attractions, or shops MUST match a venue listed under \"Verified research\" below (same name or clear substring). For update_itinerary_item or remove_itinerary_item, target an existing itinerary item by id when possible, otherwise by day + targetTitle. If the user only asks a question, return proposedChanges: []."
+        ? "For add_itinerary_item, concrete restaurants, attractions, or shops MUST match a venue listed under \"Verified research\" below (same name or clear substring). For update_itinerary_item or remove_itinerary_item, target an existing itinerary item by id when possible, otherwise by day + targetTitle. Use remove_itinerary_day only when the user wants to delete an entire day, not a single activity. If the user only asks a question, return proposedChanges: []."
         : "",
       hasWebSearch
         ? "You may use web search results as factual grounding. Do not invent place names, opening hours, prices, or addresses."
@@ -200,7 +235,9 @@ export function buildItineraryPrompt(
           "- Do not include any prose before or after JSON.",
           "- Every day must include an `items` array.",
           "- Every item must include: `time`, `title`, `type`.",
+          "- Item `title` must be a single searchable place/venue name only — no interest prefixes, meal suffixes, or multi-stop joins.",
           "- Prefer to include `location` with `name`, `lat`, `lng`, `description`, `address` whenever possible.",
+          "- `location.name` must match the searchable place name used in `title`.",
           "- Validate JSON mentally before output.",
         ]
       : [];
@@ -234,6 +271,15 @@ export function buildItineraryPrompt(
     "- `avoid` terms must not appear in `title`, `notes`, or `location.name`.",
     "- Prefer complete `location` objects (name, lat, lng, description, address). If unknown, you may omit `location` for that item instead of inventing nonsense.",
     "",
+    "TITLE & LOCATION RULES (critical for map geocoding):",
+    "- Each item `title` must be ONE searchable place or venue name only (Google Maps style), e.g. `湧湧座`, `熊本城`, `林聰明砂鍋魚頭`.",
+    "- NEVER prefix item titles with interest/theme labels. Bad: `歷史文化體驗 湧湧座`. Good: title=`湧湧座`, theme=`歷史文化體驗`.",
+    "- NEVER suffix item titles with meal or activity wrappers. Bad: `湧湧座 周邊午餐`, `熊本城 晚餐與散步`. Good: title=`某某餐廳` or `午餐`, notes=`於湧湧座附近用餐`.",
+    "- NEVER put multiple stops in one title. Bad: `熊本城・白川水源`. Create separate items instead.",
+    "- For `type: restaurant`, prefer a concrete restaurant/shop name. If no specific venue is known, use `午餐` or `晚餐` as title and describe the area in `notes`.",
+    "- When `location` is present, `location.name` must equal the searchable place name (same as `title` for attractions/activities, or the restaurant name for meals).",
+    "- Put interests, pace, and route style in `theme` / `summary` / `notes` — not inside `title`.",
+    "",
     "DESTINATION CONSTRAINTS:",
     `Destination: ${request.destination}`,
     `Days: ${request.days}`,
@@ -256,6 +302,7 @@ export function buildItineraryPrompt(
     "- `days` length matches requested number of days.",
     "- `mustVisit` covered and `avoid` excluded.",
     "- Times are sorted and types are from allowed enum.",
+    "- Every item title is a single searchable place/venue name with no interest prefix, meal suffix, or `・` multi-stop join.",
     ...(itineraryDraftSummary
       ? [
           "- This request includes an existing itinerary draft. Edit and preserve useful structure when possible instead of rewriting everything from scratch.",

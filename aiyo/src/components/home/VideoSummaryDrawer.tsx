@@ -440,6 +440,7 @@ export default function VideoSummaryDrawer({
       setImportDayPickerOpen(false);
       showToastMessage(t.drawer.toastItinerary);
       onClose();
+      router.push("/itinerary");
     } finally {
       setAdding(false);
     }

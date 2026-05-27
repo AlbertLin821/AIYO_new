@@ -8,7 +8,7 @@
 |------|------|
 | `aiyo/` | Next.js 16 應用程式、Prisma 綱要、遷移、種子腳本與應用層文件 |
 | `docs/` | 架構說明、遷移筆記、實作報告等（若專案內有） |
-| `youtube-proj/` | 舊版 YouTube 字幕／outline 參考實作（Vite＋Python server），已去除巢狀 `.git`，與主專案一併版本化 |
+| `youtube-proj/` | 舊版 YouTube 字幕／outline 參考實作（Vite＋Python server）；已於「中等」清理階段移除 |
 | `vendor/mem0/` | Mem0 上游原始碼快照（已去除 `.git`），供 `docker-compose.yml` 的 `mem0-memory` 建置使用；可用環境變數 `MEM0_REPO_PATH` 覆寫 |
 | `docker-compose.yml` | 本地 PostgreSQL、Redis、選用應用容器與選用 Mem0 相關服務 |
 | `dev-up.ps1` | Windows 上僅啟動 Docker Compose（含 `dev` 與 `mem0` 設定檔），不安裝 npm／不檢查 Ollama |

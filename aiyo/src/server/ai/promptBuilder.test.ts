@@ -24,13 +24,14 @@ test("buildItineraryPrompt includes layered constraints and memory context", () 
   assert.match(prompt, /DESTINATION CONSTRAINTS:/);
   assert.match(prompt, /Must visit: 神農街/);
   assert.match(prompt, /Avoid: 酒吧/);
-  assert.match(prompt, /Relevant long-term memory: 1\. user likes ramen/);
+  assert.match(prompt, /TITLE & LOCATION RULES/);
+  assert.match(prompt, /NEVER prefix item titles with interest/);
 });
 
 test("buildItineraryPrompt strict-format mode adds strict retry instructions", () => {
   const prompt = buildItineraryPrompt(request, undefined, { retryMode: "strict-format" });
   assert.match(prompt, /STRICT FORMAT RETRY MODE:/);
-  assert.match(prompt, /Every day must include an `items` array\./);
+  assert.match(prompt, /Item `title` must be a single searchable place\/venue name only/);
   assert.match(prompt, /Output raw JSON only/);
 });
 
