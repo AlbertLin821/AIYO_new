@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import type { DragEndEvent } from "@dnd-kit/core";
 import {
@@ -18,6 +18,7 @@ import ItineraryEditorSection from "@/components/itinerary/ItineraryEditorSectio
 import ItineraryLibraryPanel, { type TripLibrarySort } from "@/components/itinerary/ItineraryLibraryPanel";
 import ItineraryPageHeader from "@/components/itinerary/ItineraryPageHeader";
 import ItineraryShareDialog from "@/components/itinerary/ItineraryShareDialog";
+import JoinTripDialog from "@/components/itinerary/JoinTripDialog";
 import PublishItineraryDialog from "@/components/itinerary/PublishItineraryDialog";
 import RenameTripDialog from "@/components/itinerary/RenameTripDialog";
 import TripLandingCard from "@/components/itinerary/TripLandingCard";
@@ -100,6 +101,7 @@ async function compressImageFileToDataUrl(
 
 export default function ItineraryPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { status, data: session } = useSession();
   const {
     itinerary,
@@ -168,6 +170,25 @@ export default function ItineraryPage() {
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [joinLoading, setJoinLoading] = useState(false);
+
+  useEffect(() => {
+    const requestedTripId = searchParams.get("tripId")?.trim();
+    if (status !== "authenticated" || !requestedTripId || requestedTripId === useTripStore.getState().tripId) {
+      return;
+    }
+    void setActiveTrip(requestedTripId)
+      .then((snapshot) => {
+        syncService.applyTripSwitch(snapshot);
+        syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
+      })
+      .catch(() => {
+        pushToast({
+          variant: "warning",
+          title: "載入指定行程失敗",
+          description: "找不到指定行程，已保留目前內容。",
+        });
+      });
+  }, [pushToast, searchParams, status]);
   const itemIdCounter = useRef(0);
   const lastCursorSentAt = useRef(0);
 
@@ -1143,56 +1164,17 @@ export default function ItineraryPage() {
               </button>
             </div>
 
-            <AnimatePresence>
-              {joinDialogOpen && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4"
-                  onClick={() => { if (!joinLoading) { setJoinDialogOpen(false); setJoinCode(""); } }}
-                >
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95, y: 12 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95, y: 12 }}
-                    transition={{ duration: 0.2 }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="w-full max-w-sm rounded-2xl border border-border-light bg-surface p-6 shadow-soft-lg"
-                  >
-                    <h3 className="mb-1 text-base font-bold text-foreground">加入別人的行程</h3>
-                    <p className="mb-4 text-xs text-muted">輸入邀請碼或貼上邀請連結來加入他人的共用行程</p>
-                    <input
-                      value={joinCode}
-                      onChange={(e) => setJoinCode(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter" && joinCode.trim()) void handleJoinCollab(); }}
-                      placeholder="邀請碼 或 邀請連結"
-                      autoFocus
-                      disabled={joinLoading}
-                      className="mb-4 w-full rounded-xl border border-border-light bg-cream/30 px-4 py-3 text-sm text-foreground placeholder:text-muted-light focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
-                    />
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => { setJoinDialogOpen(false); setJoinCode(""); }}
-                        disabled={joinLoading}
-                        className="rounded-xl px-4 py-2.5 text-sm font-medium text-muted transition-colors hover:text-foreground disabled:opacity-60"
-                      >
-                        取消
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!joinCode.trim() || joinLoading}
-                        onClick={() => void handleJoinCollab()}
-                        className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-60"
-                      >
-                        {joinLoading ? "加入中..." : "加入"}
-                      </button>
-                    </div>
-                  </motion.div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <JoinTripDialog
+              open={joinDialogOpen}
+              joinCode={joinCode}
+              joinLoading={joinLoading}
+              onJoinCodeChange={setJoinCode}
+              onClose={() => {
+                setJoinDialogOpen(false);
+                setJoinCode("");
+              }}
+              onJoin={() => void handleJoinCollab()}
+            />
           </motion.div>
         ) : (
           <motion.div

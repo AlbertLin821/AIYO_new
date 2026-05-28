@@ -427,9 +427,19 @@ function mergeTripProfile(base?: TripProfile | null, context?: ChatContext): Tri
   if (!profile.destination && context?.destination) {
     profile.destination = context.destination;
   }
-  if (!profile.duration_days && context?.days) {
-    profile.duration_days = context.days;
-    profile.duration_nights = Math.max(0, context.days - 1);
+  const itineraryDerivedDays = Math.max(
+    0,
+    ...(context?.itinerary?.map((day) => day.dayNumber).filter((day) => Number.isFinite(day) && day > 0) || [0]),
+  );
+  const contextDerivedDays =
+    itineraryDerivedDays > 0
+      ? itineraryDerivedDays
+      : typeof context?.days === "number" && context.days > 1
+        ? Math.floor(context.days)
+        : 0;
+  if (!profile.duration_days && contextDerivedDays > 0) {
+    profile.duration_days = contextDerivedDays;
+    profile.duration_nights = Math.max(0, contextDerivedDays - 1);
   }
   if (!profile.travel_dates && (context?.tripStartDate || context?.tripEndDate)) {
     profile.travel_dates = {
@@ -961,14 +971,8 @@ function buildTransportOptions(destination: string): Array<{
   ];
 }
 
-export function buildQuestionCard(profile: TripProfile, context?: ChatContext): QuestionCardPayload | null {
+export function buildQuestionCard(profile: TripProfile, _context?: ChatContext): QuestionCardPayload | null {
   const destination = normalizeDestinationLabel(profile.destination || "這次");
-  const durationLabel = profile.duration_days ? `${profile.duration_days}天${profile.duration_nights ?? Math.max(0, profile.duration_days - 1)}夜` : "這趟";
-  const hints = getDestinationTravelHints(destination);
-  const hasExistingItinerary = Boolean(context?.itinerary?.length);
-  const budgetOptions = estimateBudgetOptions({ ...profile, destination });
-  const preferenceOptions = buildPreferenceOptions({ ...profile, destination });
-  const transportOptions = buildTransportOptions(destination);
 
   if (!profile.destination || !profile.duration_days) {
     return {
@@ -993,120 +997,6 @@ export function buildQuestionCard(profile: TripProfile, context?: ChatContext): 
             }]),
       ],
       action: { label: "繼續", shortcut: "Enter" },
-    };
-  }
-
-  const firstRound = [
-    !profile.companions
-      ? {
-          slot: "companions" as const,
-          question: `這次${destination}${durationLabel}，你預計是幾個人一起去？`,
-          type: "single_choice" as const,
-          options: [
-            { label: "一個人獨旅", value: "solo", recommended: true },
-            { label: "兩個人（情侶 / 朋友）", value: "couple_or_friend" },
-            { label: "三到四人小團", value: "small_group" },
-            { label: "家庭或四人以上大團", value: "family_group" },
-          ],
-        }
-      : null,
-    profile.preferences.length === 0
-      ? {
-          slot: "preferences" as const,
-          question: hints.isJapan
-            ? `這次${destination}${durationLabel}，你最想補強哪一類體驗？`
-            : `這次${destination}${durationLabel}，你最想優先安排哪一類體驗？`,
-          type: "multi_choice" as const,
-          options: preferenceOptions,
-        }
-      : null,
-    !profile.pace
-      ? {
-          slot: "pace" as const,
-          question: "你希望每天的行程步調大概是？",
-          type: "single_choice" as const,
-          options: [
-            { label: "輕鬆版：一天 2-3 個點，留很多休息時間", value: "relaxed", recommended: true },
-            { label: "普通版：一天 3-4 個點，節奏剛好", value: "normal" },
-            { label: "扎實版：一天 4-6 個點，走到腿軟也沒關係", value: "intensive" },
-          ],
-        }
-      : null,
-    hasExistingItinerary && !profile.plan_integration
-      ? {
-          slot: "plan_integration" as const,
-          question: "是否直接加入現有行程規劃呢？",
-          type: "single_choice" as const,
-          options: [
-            { label: "直接加入", value: "direct_merge", recommended: true },
-            { label: "自行加入", value: "self_merge" },
-          ],
-        }
-      : null,
-  ].filter((question): question is NonNullable<typeof question> => Boolean(question));
-
-  if (firstRound.length) {
-    return {
-      response_type: "question_card",
-      title: `先幫我了解你的${destination}旅遊需求，這樣行程會更貼合你`,
-      questions: firstRound.slice(0, 4),
-      action: { label: "繼續", shortcut: "Enter" },
-    };
-  }
-
-  const secondRound = [
-    !profile.departure_location
-      ? {
-          slot: "departure_location" as const,
-          question: "你會從哪裡出發？",
-          type: "text" as const,
-          placeholder: "例如：台北、嘉義、高雄、福岡、東京",
-        }
-      : null,
-    !profile.travel_dates
-      ? {
-          slot: "travel_dates" as const,
-          question: `${destination}這趟旅程的出發與返回日期是？`,
-          type: "date_range" as const,
-        }
-      : null,
-    !profile.budget
-      ? {
-          slot: "budget" as const,
-          question: `${destination}${durationLabel}的總預算大概抓多少比較合適？`,
-          type: "budget" as const,
-          placeholder: "也可以直接輸入，例如：每人 28000，或總預算 56000",
-          options: budgetOptions,
-        }
-      : null,
-    !profile.transportation
-      ? {
-          slot: "transportation" as const,
-          question: `你在${destination}當地打算怎麼移動？`,
-          type: "single_choice" as const,
-          options: transportOptions,
-        }
-      : null,
-    {
-      slot: "special_needs" as const,
-      question: "有沒有特殊需求？",
-      type: "multi_choice" as const,
-      options: [
-        { label: "有長輩同行", value: "elderly" },
-        { label: "有小孩同行", value: "children" },
-        { label: "行動不便", value: "mobility_issue" },
-        { label: "飲食限制 / 過敏", value: "dietary_restriction" },
-        { label: "沒有特殊需求", value: "none", recommended: true },
-      ],
-    },
-  ].filter((question): question is NonNullable<typeof question> => Boolean(question));
-
-  if (!profile.departure_location || !profile.travel_dates || !profile.budget || !profile.transportation) {
-    return {
-      response_type: "question_card",
-      title: "再確認幾個行程安排會用到的條件",
-      questions: secondRound.slice(0, 4),
-      action: { label: "開始規劃", shortcut: "Enter" },
     };
   }
 
@@ -1299,7 +1189,7 @@ function buildExistingItineraryInquiryResponse(input: {
 }
 
 function hasTripPlanningIntent(message: string): boolean {
-  return /(?:幫我|請|可以|能不能|想要|我要|我想|需要).{0,12}(?:規劃|安排|建立|創建|產生|生成|做一份|排|新增|加入|加上|修改|調整|重排|重新規劃)|(?:規劃|安排|建立|產生|生成|新增|加入|修改|調整|重排|重新規劃).{0,12}(?:行程|旅行|旅遊|景點|活動|餐廳|美食)|(?:想去|我要去|我想去).{0,30}(?:玩|旅遊|旅行|自由行|[一二兩三四五六七八九十\d]+\s*天)|(?:玩|排)[一二兩三四五六七八九十\d]+\s*天|[一二兩三四五六七八九十\d]+\s*天[一二兩三四五六七八九十\d]*\s*夜(?:行程|旅行|旅遊|自由行)?/u.test(message);
+  return /(?:幫我|請|可以|能不能|想要|我要|我想|需要).{0,12}(?:規劃|安排|建立|創建|產生|生成|做一份|排|新增|加入|加上|修改|調整|重排|重新規劃)|(?:規劃|安排|建立|產生|生成|新增|加入|修改|調整|重排|重新規劃).{0,12}(?:行程|旅行|旅遊|景點|活動|餐廳|美食)|(?:想去|我要去|我想去).{0,30}(?:旅遊|旅行|自由行|[一二兩三四五六七八九十\d]+\s*天)|(?:玩|排)[一二兩三四五六七八九十\d]+\s*天|[一二兩三四五六七八九十\d]+\s*天[一二兩三四五六七八九十\d]*\s*夜(?:行程|旅行|旅遊|自由行)?/u.test(message);
 }
 
 function isExistingItineraryPatchRequest(input: {

@@ -1,8 +1,16 @@
 "use client";
 
 import { memo } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, X } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -33,79 +41,60 @@ function ConfirmDialog({
   const isDanger = variant === "danger";
 
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          role="presentation"
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/25 p-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={() => !pending && onCancel()}
-        >
-          <motion.div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="site-confirm-heading"
-            aria-describedby="site-confirm-description"
-            className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-soft-lg"
-            initial={{ scale: 0.96, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.96, opacity: 0 }}
-            onClick={(event) => event.stopPropagation()}
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !pending) {
+          onCancel();
+        }
+      }}
+    >
+      <DialogContent
+        showCloseButton={!pending}
+        className="rounded-2xl border-border-light shadow-soft-lg sm:max-w-md"
+      >
+        <DialogHeader className="gap-3">
+          <div className="flex items-start gap-3">
+            <span
+              className={cn(
+                "flex size-10 shrink-0 items-center justify-center rounded-full",
+                isDanger ? "bg-danger/10 text-danger" : "bg-primary/10 text-primary",
+              )}
+            >
+              <AlertTriangle className="size-5" aria-hidden />
+            </span>
+            <div className="flex flex-col gap-1.5 pt-0.5">
+              <DialogTitle className="text-base font-semibold">{title}</DialogTitle>
+              <DialogDescription className="leading-6">{description}</DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+        <DialogFooter className="mt-2 gap-2 border-0 bg-transparent p-0 sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={onCancel}
+            className="rounded-xl border-border-light"
           >
-            <div className="mb-4 flex items-start justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <span
-                  className={cn(
-                    "flex size-10 items-center justify-center rounded-full",
-                    isDanger ? "bg-danger/10 text-danger" : "bg-primary/10 text-primary",
-                  )}
-                >
-                  <AlertTriangle className="size-5" aria-hidden />
-                </span>
-                <h2 id="site-confirm-heading" className="font-semibold text-foreground">
-                  {title}
-                </h2>
-              </div>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={onCancel}
-                className="rounded-lg p-1 text-muted hover:bg-border-light disabled:opacity-50"
-                aria-label={cancelLabel}
-              >
-                <X className="size-4" aria-hidden />
-              </button>
-            </div>
-            <p id="site-confirm-description" className="text-sm leading-6 text-muted">
-              {description}
-            </p>
-            <div className="mt-6 flex justify-end gap-2">
-              <button
-                type="button"
-                disabled={pending}
-                onClick={onCancel}
-                className="rounded-xl border border-border-light bg-surface px-4 py-2 text-xs font-medium text-muted hover:bg-cream/50 disabled:opacity-50"
-              >
-                {cancelLabel}
-              </button>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={onConfirm}
-                className={cn(
-                  "rounded-xl px-4 py-2 text-xs font-medium text-white disabled:opacity-50",
-                  isDanger ? "bg-danger hover:bg-danger/90" : "bg-primary hover:bg-primary-dark",
-                )}
-              >
-                {pending ? pendingLabel || confirmLabel : confirmLabel}
-              </button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+            {cancelLabel}
+          </Button>
+          <Button
+            type="button"
+            disabled={pending}
+            onClick={onConfirm}
+            className={cn(
+              "rounded-xl",
+              isDanger
+                ? "bg-danger text-white hover:bg-danger/90"
+                : "bg-primary text-primary-foreground hover:bg-primary-dark",
+            )}
+          >
+            {pending ? pendingLabel || confirmLabel : confirmLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

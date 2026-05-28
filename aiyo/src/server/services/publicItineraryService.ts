@@ -115,10 +115,13 @@ function toPersistedLocation(
   if (!location?.name?.trim()) {
     return undefined;
   }
+  if (!Number.isFinite(location.lat) || !Number.isFinite(location.lng)) {
+    return undefined;
+  }
   return {
     name: location.name.trim(),
-    lat: location.lat ?? 0,
-    lng: location.lng ?? 0,
+    lat: location.lat,
+    lng: location.lng,
     description: location.name.trim(),
     address: location.address,
     placeId: location.placeId,

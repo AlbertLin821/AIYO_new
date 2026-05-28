@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import {
   Check,
   Globe,
@@ -13,6 +12,13 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { zhTW as t } from "@/locales/zh-TW";
 import { deleteMemory, listMemories, updateMemory } from "@/services/aiClient";
 import { syncService } from "@/services/syncService";
@@ -179,35 +185,32 @@ export default function SettingsModal() {
   }
 
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4"
-          onClick={() => close(false)}
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 12 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 12 }}
-            transition={{ duration: 0.2 }}
-            onClick={(e) => e.stopPropagation()}
-            className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl border border-border-light bg-surface shadow-soft-lg"
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          close(false);
+        }
+      }}
+    >
+      <DialogContent
+        showCloseButton={false}
+        className="flex max-h-[85vh] w-full max-w-lg flex-col gap-0 overflow-hidden rounded-2xl border-border-light bg-surface p-0 shadow-soft-lg sm:max-w-lg"
+      >
+        <DialogHeader className="flex-row items-center justify-between border-b border-border-light px-6 py-4">
+          <DialogTitle className="text-base font-bold">設定</DialogTitle>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => close(false)}
+            className="rounded-lg"
           >
-            <div className="flex items-center justify-between border-b border-border-light px-6 py-4">
-              <h2 className="text-base font-bold text-foreground">設定</h2>
-              <button
-                type="button"
-                onClick={() => close(false)}
-                className="rounded-lg p-1.5 text-muted transition-colors hover:bg-border-light hover:text-foreground"
-              >
-                <X className="size-5" aria-hidden />
-              </button>
-            </div>
+            <X className="size-5" aria-hidden />
+          </Button>
+        </DialogHeader>
 
-            <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
+        <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
               <section>
                 <h3 className="mb-3 font-semibold text-foreground">{t.profile.travelPace}</h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -446,10 +449,8 @@ export default function SettingsModal() {
                   </div>
                 )}
               </section>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

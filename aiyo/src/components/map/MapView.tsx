@@ -631,7 +631,11 @@ function MockMapFallback({
   );
 }
 
-export default function MapView() {
+type MapViewProps = {
+  embedded?: boolean;
+};
+
+export default function MapView({ embedded = false }: MapViewProps) {
   const tripStore = useTripStore();
   const itinerary = tripStore.itinerary;
   const tripDestination = tripStore.destination;
@@ -698,6 +702,18 @@ export default function MapView() {
     () => new Set(selectedPinRoutes.map((segment) => segment.id)),
     [selectedPinRoutes],
   );
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !selectedPinId) {
+      return;
+    }
+    const pin = pins.find((entry) => entry.id === selectedPinId);
+    if (!pin) {
+      return;
+    }
+    map.panTo({ lat: pin.lat, lng: pin.lng });
+  }, [pins, sdkState, selectedPinId]);
   useEffect(() => {
     let cancelled = false;
     fetch("/api/runtime-config", { cache: "no-store" })
@@ -1374,17 +1390,23 @@ export default function MapView() {
   return (
     <div
       data-testid="map-view"
-      className="relative flex min-h-0 flex-1 w-full flex-col overflow-hidden rounded-2xl border-2 border-border bg-surface shadow-soft-lg ring-1 ring-black/5"
+      className={cn(
+        "relative w-full overflow-hidden rounded-2xl border-2 border-border bg-surface shadow-soft-lg ring-1 ring-black/5",
+        embedded ? "h-full" : "flex min-h-0 flex-1 flex-col",
+      )}
     >
       {showRealMap ? (
-        <div className="relative z-0 min-h-0 flex-1">
+        <div className={cn("relative z-0 min-h-0", embedded ? "h-full" : "flex-1")}>
           <div
             ref={mapElementRef}
-            className="absolute inset-0 min-h-[200px] bg-[var(--surface-elevated)]"
+            className={cn(
+              "absolute inset-0 bg-[var(--surface-elevated)]",
+              embedded ? "min-h-0" : "min-h-[200px]",
+            )}
           />
         </div>
       ) : (
-        <div className="relative z-0 min-h-0 flex-1 overflow-hidden">
+        <div className={cn("relative z-0 min-h-0 overflow-hidden", embedded ? "h-full" : "flex-1")}>
           <MockMapFallback
             pins={pins}
             pinStopById={pinStopById}

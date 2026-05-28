@@ -1,13 +1,14 @@
 import { create } from "zustand";
 import type { SyncMutationSource } from "@/stores/syncMutationSource";
 import { withSyncMutationSource } from "@/stores/syncMutationSource";
+import { retimeDayItems } from "@/lib/itineraryRetime";
 import type { PersistedTripPayload, TripPlanDay, TripPlanItem, TripPlanResult } from "@/types";
 
 export const EMPTY_TRIP_STATE = {
   tripId: null,
   title: "",
   destination: "",
-  days: 1,
+  days: 0,
   budget: 0,
   coverImageUrl: null as string | null,
   itinerary: [] as TripPlanDay[],
@@ -54,7 +55,7 @@ export const useTripStore = create<TripState>((set) => ({
     }),
   setDays: (days) =>
     withSyncMutationSource("local-user-edit", () => {
-      set({ days: Math.max(1, days) });
+      set({ days: Math.max(0, days) });
     }),
   setBudget: (budget) =>
     withSyncMutationSource("local-user-edit", () => {
@@ -142,16 +143,18 @@ export const useTripStore = create<TripState>((set) => ({
           day.dayNumber === dayNumber
             ? {
                 ...day,
-                items: day.items.map((item) =>
-                  item.id === itemId
-                    ? {
-                        ...item,
-                        transport: nextTransport,
-                        transportDurationMinutes: undefined,
-                        transportDistanceMeters: undefined,
-                        transportDataSource: undefined,
-                      }
-                    : item,
+                items: retimeDayItems(
+                  day.items.map((item) =>
+                    item.id === itemId
+                      ? {
+                          ...item,
+                          transport: nextTransport,
+                          transportDurationMinutes: undefined,
+                          transportDistanceMeters: undefined,
+                          transportDataSource: undefined,
+                        }
+                      : item,
+                  ),
                 ),
               }
             : day,
@@ -250,7 +253,7 @@ export const useTripStore = create<TripState>((set) => ({
           const items = [...day.items];
           const [moved] = items.splice(oldIndex, 1);
           items.splice(newIndex, 0, moved);
-          return { ...day, items };
+          return { ...day, items: retimeDayItems(items) };
         }),
         lastUpdatedAt: new Date().toISOString(),
       }));

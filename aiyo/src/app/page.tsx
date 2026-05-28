@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import HomeHeroBanner from "@/components/home/HomeHeroBanner";
 import HomeRecommendationsSection, {
   type HomeRecommendPanel,
@@ -633,15 +634,17 @@ export default function HomePage() {
   return (
     <div className="min-h-screen">
       <HomeHeroBanner>
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="sm"
             onClick={focusVideoSearch}
-            className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 text-white backdrop-blur-sm rounded-full text-xs font-medium mb-4 cursor-pointer transition-opacity hover:opacity-90"
+            className="mb-4 h-auto rounded-full border-0 bg-white/20 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm hover:bg-white/30"
             aria-label={t.home.badgeFocusSearch}
           >
             <Sparkles className="size-3" aria-hidden />
             {t.home.badge}
-          </button>
+          </Button>
           <h1 className="text-3xl font-bold text-white mb-2 drop-shadow-md">{t.home.title}</h1>
           <p className="text-white/80 text-sm max-w-2xl mx-auto drop-shadow-sm">{t.home.subtitle}</p>
       </HomeHeroBanner>

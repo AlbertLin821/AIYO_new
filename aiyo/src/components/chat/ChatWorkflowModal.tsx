@@ -2,6 +2,10 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { Loader2, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+} from "@/components/ui/dialog";
 import QuestionCard from "@/components/chat/QuestionCard";
 import ResearchActivityFeed from "@/components/chat/ResearchActivityFeed";
 import WorkflowTravelerScene from "@/components/chat/WorkflowTravelerScene";
@@ -70,55 +74,50 @@ export default function ChatWorkflowModal({
       resolvedSteps.some((step) => step.phase === "research" && step.status === "running"));
 
   return (
-    <AnimatePresence>
-      {open ? (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 sm:p-6">
-          <motion.button
-            type="button"
-            aria-label="關閉行程規劃視窗"
-            className="absolute inset-0 bg-slate-900/45 backdrop-blur-[2px]"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={allowDismiss ? onClose : undefined}
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && allowDismiss) {
+          onClose();
+        }
+      }}
+    >
+      <DialogContent
+        showCloseButton={false}
+        className="flex max-h-[min(90vh,860px)] w-full max-w-xl flex-col gap-0 overflow-hidden rounded-[28px] border border-primary/10 bg-white p-0 shadow-[0_28px_80px_rgba(15,23,42,0.18)] sm:max-w-xl"
+      >
+        <motion.div
+          key={contentKey}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+          className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        >
+          <WorkflowModalHeader
+            progressBadge={progressBadge}
+            progressLabel={progressLabel}
+            progressPercent={progressPercent}
+            headerHeading={headerHeading}
+            processingHint={processingHint}
+            workflowSteps={workflowSteps}
+            allowDismiss={allowDismiss}
+            onClose={onClose}
           />
-          <motion.div
-            key={contentKey}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="chat-workflow-modal-title"
-            initial={{ opacity: 0, y: 16, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 12, scale: 0.98 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
-            className="relative z-10 flex max-h-[min(90vh,860px)] w-full max-w-xl flex-col overflow-hidden rounded-[28px] border border-primary/10 bg-white shadow-[0_28px_80px_rgba(15,23,42,0.18)]"
-          >
-            <WorkflowModalHeader
-              progressBadge={progressBadge}
-              progressLabel={progressLabel}
-              progressPercent={progressPercent}
-              headerHeading={headerHeading}
-              processingHint={processingHint}
-              workflowSteps={workflowSteps}
-              allowDismiss={allowDismiss}
-              onClose={onClose}
-            />
-            <WorkflowModalBody
-              contentKey={contentKey}
-              showQuestionForm={showQuestionForm}
-              questionCard={questionCard}
-              disabled={disabled}
-              onSubmitQuestion={onSubmitQuestion}
-              activeStep={activeStep}
-              questionStep={questionStep}
-              showResearchFeed={showResearchFeed}
-              resolvedSteps={resolvedSteps}
-              progressPercent={progressPercent}
-            />
-          </motion.div>
-        </div>
-      ) : null}
-    </AnimatePresence>
+          <WorkflowModalBody
+            contentKey={contentKey}
+            showQuestionForm={showQuestionForm}
+            questionCard={questionCard}
+            disabled={disabled}
+            onSubmitQuestion={onSubmitQuestion}
+            activeStep={activeStep}
+            questionStep={questionStep}
+            showResearchFeed={showResearchFeed}
+            resolvedSteps={resolvedSteps}
+            progressPercent={progressPercent}
+          />
+        </motion.div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

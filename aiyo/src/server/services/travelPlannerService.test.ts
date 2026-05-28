@@ -46,18 +46,15 @@ function makeStructuredProfile(): TripProfile {
   };
 }
 
-test("structured chat asks for travel_dates before itinerary generation when dates are missing", async () => {
+test("structured chat generates itinerary when destination and duration are already complete", async () => {
   const response = await chatWithTravelAssistant({
     message: "請幫我規劃熊本行程",
     structuredTravelPlanning: true,
     tripProfile: makeStructuredProfile(),
   });
 
-  assert.equal(response.reply.responseType, "question_card");
-  assert.equal(response.reply.questionCard?.response_type, "question_card");
-  assert.ok(response.reply.questionCard?.questions.some((question) => question.slot === "travel_dates"));
-  assert.equal(response.reply.statusSteps?.[1]?.phase, "waiting_user");
-  assert.equal(response.reply.statusSteps?.[1]?.status, "waiting_input");
+  assert.equal(response.reply.responseType, "travel_plan");
+  assert.ok(response.reply.travelPlan);
 });
 
 test("travel chat retries once when the first compose request times out", async () => {
@@ -182,43 +179,45 @@ test("travel_dates answers override stale duration to the actual inclusive span"
   });
 });
 
-test("existing itinerary question card asks how to merge instead of output format", () => {
-  const card = buildQuestionCard(
-    {
-      ...makeStructuredProfile(),
-      plan_integration: null,
-    },
-    {
-      destination: "熊本",
-      days: 2,
-      itinerary: [
-        {
-          dayNumber: 1,
-          items: [
-            { id: "item_1", time: "09:00", title: "熊本城", type: "attraction" },
-          ],
-        },
-      ],
-    },
-  );
-
-  assert.equal(card?.response_type, "question_card");
-  assert.ok(card?.questions.some((question) => question.slot === "plan_integration"));
-  assert.ok(card?.questions.some((question) => question.question === "是否直接加入現有行程規劃呢？"));
-  assert.deepEqual(
-    card?.questions.find((question) => question.slot === "plan_integration")?.options?.map((option) => option.label),
-    ["直接加入", "自行加入"],
-  );
-  assert.ok(card?.questions.every((question) => !question.question.includes("最後用哪種形式呈現")));
-});
-
-test("dynamic question card sanitizer keeps AI wording while preserving parseable values", () => {
-  const fallback = buildQuestionCard({
+test("question card becomes null after destination and duration are provided", () => {
+  const card = buildQuestionCard({
     ...makeStructuredProfile(),
+    destination: "熊本",
+    duration_days: 5,
+    duration_nights: 4,
+    companions: null,
     preferences: [],
     pace: null,
   });
-  assert.ok(fallback);
+  assert.equal(card, null);
+});
+
+test("dynamic question card sanitizer keeps AI wording while preserving parseable values", () => {
+  const fallback = {
+    response_type: "question_card" as const,
+    title: "先幫我了解你的熊本旅遊需求，這樣行程會更貼合你",
+    questions: [
+      {
+        slot: "preferences" as const,
+        type: "multi_choice" as const,
+        question: "你想讓熊本行程更偏向哪幾種體驗？",
+        options: [
+          { label: "阿蘇自然景觀", value: "nature", recommended: true },
+          { label: "馬肉、拉麵等在地美食", value: "food" },
+        ],
+      },
+      {
+        slot: "pace" as const,
+        type: "single_choice" as const,
+        question: "每天安排要偏慢還是偏滿？",
+        options: [
+          { label: "慢慢玩，保留咖啡和休息時間", value: "relaxed", recommended: true },
+          { label: "行程排滿，景點多一點", value: "intensive" },
+        ],
+      },
+    ],
+    action: { label: "繼續", shortcut: "Enter" },
+  };
 
   const card = sanitizeDynamicQuestionCard(
     {
@@ -262,72 +261,28 @@ test("dynamic question card sanitizer keeps AI wording while preserving parseabl
   assert.equal(card?.action?.label, "用這樣規劃");
 });
 
-test("preference options for Tokyo avoid Kumamoto-specific labels", () => {
-  const card = buildQuestionCard({
-    ...makeStructuredProfile(),
-    destination: "東京",
-    preferences: [],
-    companions: "solo",
-    pace: "normal",
-  });
-
-  const preferenceQuestion = card?.questions.find((question) => question.slot === "preferences");
-  assert.ok(preferenceQuestion);
-  const labels = preferenceQuestion?.options?.map((option) => option.label).join(" ") ?? "";
-  assert.ok(!labels.includes("阿蘇"));
-  assert.ok(!labels.includes("溫泉放鬆"));
-  assert.ok(labels.includes("城市綠地") || labels.includes("自然風景"));
-});
-
-test("東基 speech typo normalizes to Tokyo in question card copy", () => {
+test("東基 speech typo normalizes to Tokyo in required question card copy", () => {
   const card = buildQuestionCard({
     ...makeStructuredProfile(),
     destination: "東基",
-    preferences: [],
-    companions: "solo",
-    pace: "normal",
+    duration_days: null,
+    duration_nights: null,
   });
 
-  assert.ok(card?.title?.includes("東京"));
-  const preferenceQuestion = card?.questions.find((question) => question.slot === "preferences");
-  const labels = preferenceQuestion?.options?.map((option) => option.label).join(" ") ?? "";
-  assert.ok(!labels.includes("阿蘇"));
+  assert.equal(card?.response_type, "question_card");
+  assert.ok(card?.questions.some((question) => question.slot === "duration_days"));
 });
 
-test("preference options for Kumamoto still mention Aso and onsen", () => {
+test("question card includes destination and duration slots when both missing", () => {
   const card = buildQuestionCard({
     ...makeStructuredProfile(),
-    destination: "熊本",
-    preferences: [],
-    companions: "solo",
-    pace: "normal",
+    destination: null,
+    duration_days: null,
+    duration_nights: null,
   });
-
-  const preferenceQuestion = card?.questions.find((question) => question.slot === "preferences");
-  const labels = preferenceQuestion?.options?.map((option) => option.label).join(" ") ?? "";
-  assert.ok(labels.includes("阿蘇"));
-  assert.ok(labels.includes("溫泉放鬆"));
-});
-
-test("budget question uses dynamic options based on trip profile instead of fixed template", () => {
-  const card = buildQuestionCard({
-    ...makeStructuredProfile(),
-    budget: null,
-    transportation: "self_drive",
-    traveler_count: 2,
-    companions: "couple_or_friend",
-    preferences: ["food", "onsen", "shopping"],
-    departure_location: "台北",
-    travel_dates: null,
-  });
-
-  const budgetQuestion = card?.questions.find((question) => question.slot === "budget");
-  assert.ok(budgetQuestion);
-  assert.equal(budgetQuestion?.question, "熊本5天4夜的總預算大概抓多少比較合適？");
-  assert.ok(budgetQuestion?.options?.length === 3);
-  assert.ok(budgetQuestion?.options?.every((option) => /\d{1,3}(,\d{3})*\s*元/.test(option.label)));
-  assert.ok(budgetQuestion?.options?.some((option) => option.recommended));
-  assert.ok(budgetQuestion?.options?.every((option) => !["budget", "mid_range", "comfortable"].includes(option.value)));
+  assert.equal(card?.response_type, "question_card");
+  assert.ok(card?.questions.some((question) => question.slot === "destination"));
+  assert.ok(card?.questions.some((question) => question.slot === "duration_days"));
 });
 
 test("needsTravelResearch stays false for current itinerary queries and modifications", () => {

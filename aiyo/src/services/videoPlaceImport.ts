@@ -42,7 +42,7 @@ function isGenericFoodLocation(location: LocationReference) {
   return GENERIC_FOOD_NAMES.has(normalized);
 }
 
-function buildVideoNotes(video: Video, location: LocationReference) {
+function buildVideoSummarySnippet(video: Video, location: LocationReference) {
   const matchedSegments = (video.summarySegments || []).filter((segment) =>
     (segment.locationHints || []).some((hint) => normalizeLocationName(hint) === normalizeLocationName(location.name)),
   );
@@ -150,7 +150,9 @@ export async function importVideoVerifiedPlacesToTrip(
       time: `${String(9 + index * 2).padStart(2, "0")}:00`,
       title: location.name,
       type: inferredType,
-      notes: buildVideoNotes(video, location),
+      // 備註欄位保留給使用者手動補充交通或訂位資訊，不混入影片摘要段落。
+      notes: location.address || location.description || "",
+      sourceSnippet: buildVideoSummarySnippet(video, location),
       location,
       source: "video",
     });

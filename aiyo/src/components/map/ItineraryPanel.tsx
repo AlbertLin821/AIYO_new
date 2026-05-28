@@ -14,7 +14,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CalendarPlus, ChevronDown, ChevronUp, GripVertical, Loader2, MapPin, Plus, Search, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, GripVertical, Loader2, MapPin, Plus, Search, Trash2, X } from "lucide-react";
 import type { ItineraryListItem } from "@/lib/itinerary-sort";
 import { zhTW as t } from "@/locales/zh-TW";
 import { buildItineraryRouteSegments } from "@/lib/routeSegments";
@@ -272,11 +272,14 @@ function SortableMapStop({
               <p
                 className="truncate text-sm font-medium text-foreground"
                 onClick={(event) => {
-                  if (item.source !== "manual") {
+                  event.stopPropagation();
+                  if (item.source === "manual") {
+                    onStartTitleEdit();
                     return;
                   }
-                  event.stopPropagation();
-                  onStartTitleEdit();
+                  if (canSelectOnMap) {
+                    onSelectPin();
+                  }
                 }}
               >
                 {item.title}
@@ -335,7 +338,11 @@ function typeLabel(itemType: TripPlanItem["type"]) {
   return labels[itemType];
 }
 
-export default function ItineraryPanel() {
+type ItineraryPanelProps = {
+  embedded?: boolean;
+};
+
+export default function ItineraryPanel({ embedded = false }: ItineraryPanelProps) {
   const { status } = useSession();
   const itinerary = useTripStore((state) => state.itinerary);
   const tripTitle = useTripStore((state) => state.title);
@@ -369,8 +376,10 @@ export default function ItineraryPanel() {
     error: string | null;
   } | null>(null);
 
+  const isPanelVisible = embedded || panelOpen;
+
   useEffect(() => {
-    if (status !== "authenticated" || !panelOpen) return;
+    if (status !== "authenticated" || !isPanelVisible) return;
     let cancelled = false;
     setTripListLoading(true);
     listTripsForLibrary("recent")
@@ -378,7 +387,7 @@ export default function ItineraryPanel() {
       .catch(() => {})
       .finally(() => { if (!cancelled) setTripListLoading(false); });
     return () => { cancelled = true; };
-  }, [status, panelOpen]);
+  }, [status, isPanelVisible]);
 
   const handleSwitchTrip = useCallback(
     async (tripId: string) => {
@@ -532,19 +541,29 @@ export default function ItineraryPanel() {
         return;
       }
       reorderItineraryItem(dayNumber, oldIndex, newIndex);
+      pushToast({
+        variant: "success",
+        title: "已更新排序",
+        description: "已依新順序調整行程時間。",
+      });
     },
-    [reorderItineraryItem],
+    [pushToast, reorderItineraryItem],
   );
 
   return (
     <AnimatePresence>
-      {panelOpen && (
+      {isPanelVisible && (
         <motion.div
-          initial={{ x: "100%", opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          exit={{ x: "100%", opacity: 0 }}
-          transition={{ type: "spring", damping: 28, stiffness: 280 }}
-          className="absolute right-0 top-0 z-20 flex h-full w-full max-w-[380px] flex-col border-l-4 border-primary/40 bg-surface shadow-soft-lg sm:w-[380px]"
+          initial={embedded ? undefined : { x: "100%", opacity: 0 }}
+          animate={embedded ? undefined : { x: 0, opacity: 1 }}
+          exit={embedded ? undefined : { x: "100%", opacity: 0 }}
+          transition={embedded ? undefined : { type: "spring", damping: 28, stiffness: 280 }}
+          className={cn(
+            "flex h-full w-full flex-col bg-surface",
+            embedded
+              ? "relative border-0 shadow-none"
+              : "absolute right-0 top-0 z-20 max-w-[380px] border-l-4 border-primary/40 shadow-soft-lg sm:w-[380px]",
+          )}
         >
           <div className="flex items-center justify-between border-b-2 border-border bg-surface-elevated/80 px-5 py-4">
             <div>
@@ -553,16 +572,18 @@ export default function ItineraryPanel() {
                 {t.itineraryPanel.loadedSummary} {itinerary.length} {t.itineraryPanel.dayUnit}
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setPanelOpen(false)}
-                aria-label={t.itineraryPanel.closePanelAria}
-                className="cursor-pointer rounded-lg p-1.5 text-muted transition-colors hover:bg-border-light hover:text-foreground"
-              >
-                <X className="size-4" aria-hidden />
-              </button>
-            </div>
+            {!embedded ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPanelOpen(false)}
+                  aria-label={t.itineraryPanel.closePanelAria}
+                  className="cursor-pointer rounded-lg p-1.5 text-muted transition-colors hover:bg-border-light hover:text-foreground"
+                >
+                  <X className="size-4" aria-hidden />
+                </button>
+              </div>
+            ) : null}
           </div>
 
           <div className="border-b border-border-light bg-cream/30 px-5 py-3">
@@ -759,7 +780,7 @@ export default function ItineraryPanel() {
             )}
           </AnimatePresence>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className={cn("flex-1 overflow-y-auto", embedded && "min-h-0")}>
             {itinerary.map((day) => (
               <div key={day.dayNumber} className="border-b border-border last:border-b-0">
                 <button
@@ -862,7 +883,14 @@ export default function ItineraryPanel() {
                                     setSelectedPinId(pin.id);
                                   }}
                                   onTransportChange={(value) =>
-                                    updateItineraryItemTransport(day.dayNumber, item.id, value)
+                                    {
+                                      updateItineraryItemTransport(day.dayNumber, item.id, value);
+                                      pushToast({
+                                        variant: "success",
+                                        title: "已更新交通方式",
+                                        description: "已依新路線調整時間。",
+                                      });
+                                    }
                                   }
                                   onStartTitleEdit={() =>
                                     setEditingItem({
@@ -910,12 +938,6 @@ export default function ItineraryPanel() {
             ))}
           </div>
 
-          <div className="border-t-2 border-border bg-surface-elevated/50 p-4">
-            <div className="flex items-start gap-2 rounded-2xl border border-secondary/35 bg-peach-light/50 p-3 text-xs text-muted">
-              <CalendarPlus className="mt-0.5 size-4 text-primary" />
-              {t.itineraryPanel.footerHint}
-            </div>
-          </div>
         </motion.div>
       )}
     </AnimatePresence>

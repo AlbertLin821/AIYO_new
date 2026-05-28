@@ -1,10 +1,21 @@
 "use client";
 
 import { memo, useCallback, useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { Lock, Mail, KeyRound, UserPlus, LogIn, X } from "lucide-react";
+import { Lock, Mail, KeyRound, UserPlus, LogIn } from "lucide-react";
 import { signIn } from "next-auth/react";
 import { usePathname } from "next/navigation";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { apiPost } from "@/services/apiClient";
 import { useUIStore } from "@/stores/useUIStore";
 
@@ -169,160 +180,159 @@ function LoginModal() {
   const primaryAction = mode === "login" ? handleCredentialsLogin : handleRegister;
 
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          role="presentation"
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/25 p-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={handleClose}
-        >
-          <motion.div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="login-modal-heading"
-            className="relative w-full max-w-md rounded-3xl border border-border-light bg-surface p-5 shadow-soft-lg sm:p-8"
-            initial={{ scale: 0.96, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.96, opacity: 0 }}
-            onClick={(e) => e.stopPropagation()}
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          handleClose();
+        }
+      }}
+    >
+      <DialogContent
+        showCloseButton={!isSubmitting}
+        className="rounded-3xl border-border-light p-5 shadow-soft-lg sm:max-w-md sm:p-8"
+      >
+        <DialogHeader className="mb-2 text-center sm:text-center">
+          <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-lavender text-white">
+            <Lock className="size-6" />
+          </div>
+          <DialogTitle className="text-2xl font-bold">
+            {mode === "login" ? "登入" : "建立帳號"}
+          </DialogTitle>
+          <DialogDescription className="text-sm">
+            {mode === "login"
+              ? "登入後可同步你的行程、聊天與協作資料。"
+              : "建立帳號後即可開始同步你的旅遊工作區。"}
+          </DialogDescription>
+        </DialogHeader>
+
+        {formError && (
+          <Alert variant="destructive" className="rounded-2xl border-danger/20 bg-danger/5">
+            <AlertDescription className="text-danger">{formError}</AlertDescription>
+          </Alert>
+        )}
+
+        <div className="flex flex-col gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void handleGoogleLogin()}
+            disabled={isSubmitting || googleEnabled === false}
+            className="h-auto rounded-2xl border-border-light px-4 py-3 text-sm font-medium"
+            title={
+              googleEnabled === false
+                ? "Google 登入尚未設定（請確認 GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET）"
+                : "使用 Google 登入"
+            }
           >
-            <button
-              type="button"
-              disabled={isSubmitting}
-              onClick={handleClose}
-              className="absolute right-4 top-4 rounded-lg p-1 text-muted hover:bg-border-light disabled:opacity-50"
-              aria-label="關閉"
+            <GoogleLogo className="size-5" />
+            使用 Google 登入
+          </Button>
+
+          <div className="relative py-1">
+            <Separator className="bg-border-light" />
+            <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-popover px-3 text-xs text-muted">
+              或
+            </span>
+          </div>
+
+          <div className="rounded-2xl border border-border-light bg-cream/40 p-4">
+            <form
+              className="flex flex-col gap-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void primaryAction();
+              }}
             >
-              <X className="size-4" aria-hidden />
-            </button>
+              {mode === "register" && (
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="login-name" className="text-xs text-muted">
+                    名稱
+                  </Label>
+                  <Input
+                    id="login-name"
+                    name="name"
+                    autoComplete="name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="rounded-xl border-border bg-surface"
+                    placeholder="例如：測試使用者"
+                  />
+                </div>
+              )}
 
-            <div className="mb-7 text-center">
-              <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-lavender text-white">
-                <Lock className="size-6" />
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="login-email" className="text-xs text-muted">
+                  電子郵件
+                </Label>
+                <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-1">
+                  <Mail className="size-4 shrink-0 text-muted" />
+                  <Input
+                    id="login-email"
+                    name="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="border-0 bg-transparent px-0 shadow-none ring-0 focus-visible:ring-0"
+                    placeholder="name@example.com"
+                    inputMode="email"
+                  />
+                </div>
               </div>
-              <h2 id="login-modal-heading" className="text-2xl font-bold text-foreground">
-                {mode === "login" ? "登入" : "建立帳號"}
-              </h2>
-              <p className="mt-2 text-sm text-muted">
-                {mode === "login"
-                  ? "登入後可同步你的行程、聊天與協作資料。"
-                  : "建立帳號後即可開始同步你的旅遊工作區。"}
-              </p>
-            </div>
 
-            {formError && (
-              <div className="mb-4 rounded-2xl border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">
-                {formError}
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="login-password" className="text-xs text-muted">
+                  密碼
+                </Label>
+                <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-1">
+                  <KeyRound className="size-4 shrink-0 text-muted" />
+                  <Input
+                    id="login-password"
+                    name="password"
+                    autoComplete={mode === "login" ? "current-password" : "new-password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="border-0 bg-transparent px-0 shadow-none ring-0 focus-visible:ring-0"
+                    type="password"
+                    placeholder="至少 8 個字元"
+                  />
+                </div>
               </div>
-            )}
 
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={() => void handleGoogleLogin()}
-                disabled={isSubmitting || googleEnabled === false}
-                className="flex items-center justify-center gap-2 rounded-2xl border border-border-light px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-cream/60 disabled:cursor-not-allowed disabled:opacity-60"
-                title={
-                  googleEnabled === false
-                    ? "Google 登入尚未設定（請確認 GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET）"
-                    : "使用 Google 登入"
-                }
+              <Button
+                type="submit"
+                disabled={isSubmitting || !email.trim() || !password.trim()}
+                className="mt-1 h-auto rounded-xl bg-primary py-2.5 text-sm font-medium hover:bg-primary-dark"
               >
-                <GoogleLogo className="size-5" />
-                使用 Google 登入
-              </button>
+                {mode === "login" ? (
+                  <>
+                    <LogIn className="size-4" />
+                    登入
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="size-4" />
+                    建立帳號
+                  </>
+                )}
+              </Button>
+            </form>
 
-              <div className="relative py-1 text-center text-xs text-muted">
-                <span className="bg-surface px-3">或</span>
-                <div className="absolute left-0 right-0 top-1/2 -z-10 h-px bg-border-light" />
-              </div>
-
-              <div className="rounded-2xl border border-border-light bg-cream/40 p-4">
-                <form
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void primaryAction();
-                  }}
-                >
-                  {mode === "register" && (
-                    <>
-                      <label className="mb-2 block text-xs font-medium text-muted">名稱</label>
-                      <input
-                        name="name"
-                        autoComplete="name"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        className="mb-3 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                        placeholder="例如：測試使用者"
-                      />
-                    </>
-                  )}
-
-                  <label className="mb-2 block text-xs font-medium text-muted">電子郵件</label>
-                  <div className="mb-3 flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2">
-                    <Mail className="size-4 text-muted" />
-                    <input
-                      name="email"
-                      autoComplete="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full bg-transparent text-sm text-foreground focus:outline-none"
-                      placeholder="name@example.com"
-                      inputMode="email"
-                    />
-                  </div>
-
-                  <label className="mb-2 block text-xs font-medium text-muted">密碼</label>
-                  <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2">
-                    <KeyRound className="size-4 text-muted" />
-                    <input
-                      name="password"
-                      autoComplete={mode === "login" ? "current-password" : "new-password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-transparent text-sm text-foreground focus:outline-none"
-                      type="password"
-                      placeholder="至少 8 個字元"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={isSubmitting || !email.trim() || !password.trim()}
-                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {mode === "login" ? (
-                      <>
-                        <LogIn className="size-4" />
-                        登入
-                      </>
-                    ) : (
-                      <>
-                        <UserPlus className="size-4" />
-                        建立帳號
-                      </>
-                    )}
-                  </button>
-                </form>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormError(null);
-                    setMode((c) => (c === "login" ? "register" : "login"));
-                  }}
-                  className="mt-3 w-full text-center text-xs text-muted hover:text-foreground"
-                >
-                  {mode === "login" ? "尚未有帳號？建立帳號" : "已經有帳號？回到登入"}
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setFormError(null);
+                setMode((c) => (c === "login" ? "register" : "login"));
+              }}
+              className="mt-3 h-auto w-full text-xs text-muted hover:text-foreground"
+            >
+              {mode === "login" ? "尚未有帳號？建立帳號" : "已經有帳號？回到登入"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

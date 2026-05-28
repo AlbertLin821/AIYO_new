@@ -76,6 +76,10 @@ const VideoSummaryDrawer = dynamic(
   () => import("@/components/home/VideoSummaryDrawer"),
   { ssr: false },
 );
+const ChatContextMapView = dynamic(() => import("@/components/map/MapView"), { ssr: false });
+const ChatContextItineraryPanel = dynamic(() => import("@/components/map/ItineraryPanel"), {
+  ssr: false,
+});
 
 type ChatSpeechRecognitionResult = {
   isFinal: boolean;
@@ -235,6 +239,12 @@ function isFullItineraryRevisionCommand(message: string): boolean {
   );
 }
 
+function isLikelyTripWorkflowMessage(message: string): boolean {
+  return /(?:幫我|請|可以|能不能|想要|我要|我想|需要).{0,12}(?:規劃|安排|建立|創建|產生|生成|做一份|排|新增|加入|加上|修改|調整|重排|重新規劃)|(?:規劃|安排|建立|產生|生成|新增|加入|修改|調整|重排|重新規劃).{0,12}(?:行程|旅行|旅遊|景點|活動|餐廳|美食)|(?:想去|我要去|我想去).{0,30}(?:旅遊|旅行|自由行|[一二兩三四五六七八九十\d]+\s*天)|(?:玩|排)[一二兩三四五六七八九十\d]+\s*天|[一二兩三四五六七八九十\d]+\s*天[一二兩三四五六七八九十\d]*\s*夜(?:行程|旅行|旅遊|自由行)?/u.test(
+    message,
+  );
+}
+
 type WorkflowRailState = {
   visible: boolean;
   steps: StatusStepPayload[];
@@ -355,6 +365,7 @@ export default function ChatPage() {
   const autoSummaryActiveRef = useRef(false);
   const conversationVideosRef = useRef<Map<string, VideoRecommendation[]>>(new Map());
   const hydratedConversationTripRef = useRef<string | null>(null);
+  const contextTripResyncAttemptRef = useRef<string | null>(null);
   const [videosPanelExpanded, setVideosPanelExpanded] = useState(true);
   const {
     conversations,
@@ -560,12 +571,14 @@ export default function ChatPage() {
     isSending && streamingStatusSteps.length > 0 ? streamingStatusSteps : workflowRail.steps;
   const planningWorkflowView = buildWorkflowSteps(activePlanningSteps);
   const lastAssistantMessage = [...messages].reverse().find((message) => message.role === "assistant");
+  const completedPlanningPhases = new Set(
+    planningWorkflowView.filter((step) => step.status === "completed").map((step) => step.key),
+  );
   const planningComplete =
-    planningWorkflowView.length > 0 &&
-    (planningWorkflowView.every((step) => step.status === "completed") ||
-      lastAssistantMessage?.responseType === "travel_plan");
+    lastAssistantMessage?.responseType === "travel_plan" &&
+    ["understand", "plan", "research", "compose"].every((phase) => completedPlanningPhases.has(phase));
   const isPlanningActive =
-    isSending || (hasWorkflowRail && !planningComplete && activePlanningSteps.length > 0);
+    isSending || (hasWorkflowRail && !planningComplete && activePlanningSteps.some((step) => step.status === "running"));
 
   useEffect(() => {
     if (itinerarySyncState.status === "syncing" || itinerarySyncState.status === "failed") {
@@ -597,6 +610,26 @@ export default function ChatPage() {
       detail: `已產生 ${tripStore.itinerary.length} 天、${itemCount} 個活動，正在等待同步到行程資料。`,
     });
   }, [itinerarySyncState.status, tripStore.itinerary, tripStore.tripId]);
+
+  useEffect(() => {
+    const itemCount = tripStore.itinerary.reduce((total, day) => total + day.items.length, 0);
+    if (!tripStore.tripId || itemCount > 0) {
+      contextTripResyncAttemptRef.current = null;
+      return;
+    }
+    if (contextTripResyncAttemptRef.current === tripStore.tripId) {
+      return;
+    }
+    contextTripResyncAttemptRef.current = tripStore.tripId;
+    void setActiveTrip(tripStore.tripId)
+      .then((snapshot) => {
+        syncService.applyTripSwitch(snapshot);
+        syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
+      })
+      .catch(() => {
+        contextTripResyncAttemptRef.current = null;
+      });
+  }, [tripStore.itinerary, tripStore.tripId]);
 
   const extractedValues = [
     contextDestination || t.chat.valueUnset,
@@ -1305,6 +1338,18 @@ export default function ChatPage() {
       updateFrontendDebugProcess(chatProcessId, "request-dispatched", {
         progressSessionId,
       });
+      const outgoingProfile = options?.tripProfile ?? tripProfile ?? undefined;
+      const confirmedDays =
+        typeof outgoingProfile?.duration_days === "number" && outgoingProfile.duration_days > 0
+          ? outgoingProfile.duration_days
+          : undefined;
+      const shouldUseStructuredPlanning =
+        Boolean(options?.questionAnswers?.length) ||
+        Boolean(options?.tripProfile) ||
+        Boolean(workflowRail.questionCard) ||
+        isLikelyTripWorkflowMessage(message) ||
+        isItineraryMutationCommand(message) ||
+        isFullItineraryRevisionCommand(message);
       const response = await sendChatMessage(
         {
           message,
@@ -1312,7 +1357,7 @@ export default function ChatPage() {
           messages: previousMessages.slice(-CHAT_HISTORY_WINDOW),
           context: {
             destination: planningSnapshot.destination,
-            days: planningSnapshot.days,
+            days: confirmedDays,
             budget: planningSnapshot.budget,
             itinerary: useTripStore.getState().itinerary,
             tripStartDate: dateRange.tripStartDate,
@@ -1324,8 +1369,8 @@ export default function ChatPage() {
               budget: planningSnapshot.budget,
             },
           },
-          structuredTravelPlanning: true,
-          tripProfile: options?.tripProfile ?? tripProfile ?? undefined,
+          structuredTravelPlanning: shouldUseStructuredPlanning,
+          tripProfile: outgoingProfile,
           questionAnswers: options?.questionAnswers,
           progressSessionId,
         },
@@ -2362,154 +2407,20 @@ export default function ChatPage() {
           onPointerDown={startContextPanelResize}
           className="absolute left-0 top-0 z-20 h-full w-2 -translate-x-1 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-slate-400/50"
         />
-        <h3 className="mb-4 text-sm font-semibold text-slate-900">即時行程</h3>
+        <h3 className="mb-2 text-sm font-semibold text-slate-900">即時行程</h3>
 
         {hasContextPanel ? (
-          <div className="flex flex-col gap-4">
-            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">同步狀態</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">{itinerarySyncState.title}</p>
-                </div>
-                <span
-                  className={cn(
-                    "rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                    itinerarySyncState.status === "synced"
-                      ? "bg-emerald-100 text-emerald-700"
-                      : itinerarySyncState.status === "syncing"
-                        ? "bg-amber-100 text-amber-700"
-                        : itinerarySyncState.status === "failed"
-                          ? "bg-rose-100 text-rose-700"
-                          : "bg-slate-200 text-slate-600",
-                  )}
-                >
-                  {itinerarySyncState.status === "synced"
-                    ? "已同步"
-                    : itinerarySyncState.status === "syncing"
-                      ? "同步中"
-                      : itinerarySyncState.status === "failed"
-                        ? "需確認"
-                        : "待命"}
-                </span>
-              </div>
-              <p className="mt-2 text-xs leading-5 text-slate-600">{itinerarySyncState.detail}</p>
+          <div className="flex flex-col gap-2">
+            <div className="h-72 overflow-hidden rounded-3xl border border-slate-200 bg-white">
+              <ChatContextMapView embedded />
             </div>
-
-            {tagConfigs.map((tag, index) => {
-              const Icon = tag.icon;
-              return (
-                <div
-                  key={tag.label}
-                  className="flex w-full min-w-0 items-center gap-3 rounded-3xl border border-slate-200 bg-white px-3 py-3 text-left"
-                >
-                  <Icon className="size-4 flex-shrink-0 text-slate-500" aria-hidden />
-                  <div className="min-w-0">
-                    <p className="text-[11px] text-slate-500">{tag.label}</p>
-                    <p className="truncate text-sm font-medium text-slate-900">{extractedValues[index]}</p>
-                  </div>
-                </div>
-              );
-            })}
-
-            <div className="rounded-3xl border border-slate-200 bg-white p-3">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Heart className="size-4 shrink-0 text-slate-500" aria-hidden />
-                  <div className="min-w-0">
-                    <p className="text-[11px] text-slate-500">{t.chat.tagItinerary}</p>
-                    <p className="truncate text-sm font-semibold text-slate-900">
-                      {tripStore.itinerary.length > 0
-                        ? `${tripStore.itinerary.length} 天行程`
-                        : t.chat.valueUnset}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => router.push("/itinerary")}
-                  className="shrink-0 rounded-xl border border-slate-200 px-2.5 py-1.5 text-[11px] font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                >
-                  編輯
-                </button>
+            {tripStore.tripId && tripStore.itinerary.length === 0 ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                目前行程尚未載入完成，系統正在同步最新內容。
               </div>
-
-              {tripStore.itinerary.length > 0 ? (
-                <div className="space-y-2">
-                  {tripStore.itinerary.map((day, index) => {
-                    const displayOrdinal = index + 1;
-                    const expanded = expandedContextDays[day.dayNumber] ?? displayOrdinal === 1;
-                    return (
-                      <div
-                        key={day.dayNumber}
-                        className="overflow-hidden rounded-2xl border border-slate-200"
-                      >
-                        <button
-                          type="button"
-                          aria-expanded={expanded}
-                          onClick={() => toggleContextDay(day.dayNumber)}
-                          className="flex w-full items-center justify-between gap-2 bg-slate-50 px-3 py-2.5 text-left transition-colors hover:bg-slate-100"
-                        >
-                          <div className="flex min-w-0 items-center gap-3">
-                            <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-xs font-bold text-white">
-                              D{displayOrdinal}
-                            </span>
-                            <span className="min-w-0">
-                              <span className="block truncate text-sm font-semibold text-slate-900">
-                                第 {displayOrdinal} 天
-                              </span>
-                              <span className="block truncate text-[11px] text-slate-500">
-                                {day.theme && !/^Day\s*\d+$/i.test(day.theme.trim())
-                                  ? day.theme
-                                  : `${day.items.length} 個活動`}
-                              </span>
-                            </span>
-                          </div>
-                          <ChevronDown
-                            className={cn(
-                              "size-4 shrink-0 text-slate-500 transition-transform",
-                              expanded ? "rotate-180" : "",
-                            )}
-                            aria-hidden
-                          />
-                        </button>
-
-                        {expanded && (
-                          <div className="space-y-2 border-t border-slate-200 p-3">
-                            {day.items.length > 0 ? (
-                              day.items.map((item) => (
-                                <div
-                                  key={item.id}
-                                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2"
-                                >
-                                  <div className="grid grid-cols-[3.5rem_minmax(0,1fr)] items-start gap-2">
-                                    <span className="mt-0.5 inline-flex w-14 shrink-0 justify-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
-                                      {item.time}
-                                    </span>
-                                    <div className="min-w-0 flex-1">
-                                      <p className="truncate text-xs font-semibold text-slate-900">
-                                        {item.title}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))
-                            ) : (
-                              <div className="rounded-2xl border border-dashed border-slate-300 px-3 py-4 text-center text-xs text-slate-500">
-                                尚未安排活動
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-dashed border-slate-300 px-3 py-4 text-center text-xs text-slate-500">
-                  尚未建立每日行程
-                </div>
-              )}
+            ) : null}
+            <div className="relative h-[900px] overflow-hidden rounded-3xl border border-slate-200 bg-white">
+              <ChatContextItineraryPanel embedded />
             </div>
           </div>
         ) : (

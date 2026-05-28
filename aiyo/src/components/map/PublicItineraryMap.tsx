@@ -15,20 +15,21 @@ const DEFAULT_ZOOM = 8;
 
 type Props = {
   pins: MapPinType[];
+  selectedPinId?: string | null;
   className?: string;
 };
 
-function buildMarkerIcon(maps: GoogleMapsApi, color: string) {
+function buildMarkerIcon(maps: GoogleMapsApi, color: string, stopLabel: number, selected: boolean) {
   const baseW = 34;
   const height = Math.round((MAP_PIN_VIEWBOX_H / MAP_PIN_VIEWBOX_W) * baseW);
   return {
-    url: encodeMapPinDataUrl(color, false),
+    url: encodeMapPinDataUrl(color, selected, stopLabel),
     scaledSize: new maps.Size(baseW, height),
     anchor: new maps.Point(baseW / 2, height),
   };
 }
 
-export default function PublicItineraryMap({ pins, className }: Props) {
+export default function PublicItineraryMap({ pins, selectedPinId, className }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<GoogleMapInstance | null>(null);
   const markersRef = useRef<GoogleMarkerInstance[]>([]);
@@ -58,22 +59,27 @@ export default function PublicItineraryMap({ pins, className }: Props) {
             zoom: DEFAULT_ZOOM,
             disableDefaultUI: true,
             zoomControl: true,
-            gestureHandling: "cooperative",
+            gestureHandling: "greedy",
           });
         }
 
         markersRef.current.forEach((marker) => marker.setMap(null));
-        markersRef.current = validPins.map((pin) => {
+        markersRef.current = validPins.map((pin, index) => {
+          const isSelected = selectedPinId != null && pin.id === selectedPinId;
           const marker = new maps.Marker({
             map: mapRef.current!,
             position: { lat: pin.lat, lng: pin.lng },
             title: pin.name,
-            icon: buildMarkerIcon(maps, pin.color || "#6366f1"),
+            icon: buildMarkerIcon(maps, pin.color || "#6366f1", index + 1, isSelected),
           });
           return marker;
         });
 
-        if (validPins.length === 1) {
+        const selectedPin =
+          selectedPinId != null ? validPins.find((pin) => pin.id === selectedPinId) ?? null : null;
+        if (selectedPin) {
+          mapRef.current!.panTo({ lat: selectedPin.lat, lng: selectedPin.lng });
+        } else if (validPins.length === 1) {
           mapRef.current!.setCenter({ lat: validPins[0]!.lat, lng: validPins[0]!.lng });
           mapRef.current!.setZoom(13);
         } else if (validPins.length > 1) {
@@ -91,7 +97,7 @@ export default function PublicItineraryMap({ pins, className }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [validPins]);
+  }, [selectedPinId, validPins]);
 
   if (FORCE_MOCK_MAP || !GOOGLE_MAPS_API_KEY || sdkError || validPins.length === 0) {
     return (

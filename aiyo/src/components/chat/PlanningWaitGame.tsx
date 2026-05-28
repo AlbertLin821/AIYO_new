@@ -2,6 +2,11 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { Gamepad2, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+} from "@/components/ui/dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import SkyDashGame from "@/components/chat/skyDash/SkyDashGame";
 import {
@@ -171,6 +176,24 @@ export default function PlanningWaitGame({
     }
   }, [waitingDone, escHint]);
 
+  useEffect(() => {
+    if (!waitingActive && !promptVisible && !gameOpen) {
+      return;
+    }
+    queueMicrotask(() => setSavedHighScore(getSkyDashHighScore()));
+  }, [gameOpen, promptVisible, waitingActive]);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== "aiyo-sky-dash-high-score") {
+        return;
+      }
+      setSavedHighScore(getSkyDashHighScore());
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
+
   const openGame = () => {
     setSavedHighScore(getSkyDashHighScore());
     setPromptVisible(false);
@@ -212,78 +235,62 @@ export default function PlanningWaitGame({
         ) : null}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {gameOpen ? (
-          <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-            <motion.button
+      <Dialog
+        open={gameOpen}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            if (!planningComplete) {
+              return;
+            }
+            saveSkyDashHighScore(latestScoreRef.current);
+            setGameOpen(false);
+          }
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          aria-label="Sky Dash 小遊戲"
+          className="w-full max-w-md gap-0 overflow-hidden rounded-[28px] border border-slate-200 bg-white p-0 shadow-[0_28px_80px_rgba(15,23,42,0.25)] sm:max-w-md"
+        >
+          <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">{gameTitle}</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                {gameDescription}
+                <br />
+                按 ESC 保存分數{waitingDone ? "並關閉遊戲" : "，規劃完成後即可關閉"}。
+              </p>
+            </div>
+            <Button
               type="button"
-              aria-label="關閉遊戲背景"
-              className="absolute inset-0 bg-slate-900/55 backdrop-blur-[2px]"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              variant="ghost"
+              size="icon-sm"
+              aria-label="關閉遊戲"
               onClick={() => {
-                if (!planningComplete) {
-                  return;
-                }
                 saveSkyDashHighScore(latestScoreRef.current);
                 setGameOpen(false);
               }}
-            />
-            <motion.div
-              role="dialog"
-              aria-modal="true"
-              aria-label="Sky Dash 小遊戲"
-              initial={{ opacity: 0, scale: 0.96, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.98, y: 8 }}
-              className="relative z-10 w-full max-w-md overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_28px_80px_rgba(15,23,42,0.25)]"
+              className="rounded-full border border-slate-200"
             >
-              <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">{gameTitle}</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
-                    {gameDescription}
-                    <br />
-                    按 ESC 保存分數{waitingDone ? "並關閉遊戲" : "，規劃完成後即可關閉"}。
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  aria-label="關閉遊戲"
-                  disabled={!waitingDone}
-                  onClick={() => {
-                    saveSkyDashHighScore(latestScoreRef.current);
-                    setGameOpen(false);
-                  }}
-                  className={cn(
-                    "rounded-full border p-1.5 transition-colors",
-                    waitingDone
-                      ? "border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-900"
-                      : "cursor-not-allowed border-slate-100 text-slate-300",
-                  )}
-                >
-                  <X className="size-4" aria-hidden />
-                </button>
-              </div>
-
-              <div className="px-4 py-4">
-                {escHint ? (
-                  <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
-                    {escHint}
-                  </p>
-                ) : null}
-                <SkyDashGame
-                  onPersistScore={(score, highScore) => {
-                    latestScoreRef.current = score;
-                    setSavedHighScore(highScore);
-                  }}
-                />
-              </div>
-            </motion.div>
+              <X className="size-4" aria-hidden />
+            </Button>
           </div>
-        ) : null}
-      </AnimatePresence>
+
+          <div className="px-4 py-4">
+            {escHint ? (
+              <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+                {escHint}
+              </p>
+            ) : null}
+            <SkyDashGame
+              onPersistScore={(score, highScore) => {
+                latestScoreRef.current = score;
+                setSavedHighScore(highScore);
+              }}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <AnimatePresence>
         {completionToastVisible ? (

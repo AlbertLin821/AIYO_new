@@ -11,6 +11,8 @@ import {
   copyPublicItinerary,
   getPublicItineraryDetail,
 } from "@/services/publicItineraryClient";
+import { setActiveTrip } from "@/services/itineraryClient";
+import { syncService } from "@/services/syncService";
 import { useToastStore } from "@/stores/useToastStore";
 import type { PublicItineraryDetail } from "@/types";
 import { zhTW as t } from "@/locales/zh-TW";
@@ -35,6 +37,7 @@ export default function PublicItineraryDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCopying, setIsCopying] = useState(false);
+  const [copiedTripId, setCopiedTripId] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -74,7 +77,7 @@ export default function PublicItineraryDetailPage() {
         title: t.publicItinerary.copySuccessTitle,
         description: t.publicItinerary.copySuccessDesc,
       });
-      router.push(`/itinerary?tripId=${encodeURIComponent(result.tripId)}`);
+      setCopiedTripId(result.tripId);
     } catch (err) {
       pushToast({
         variant: "error",
@@ -84,6 +87,15 @@ export default function PublicItineraryDetailPage() {
     } finally {
       setIsCopying(false);
     }
+  }
+
+  async function switchToCopiedTrip() {
+    if (!copiedTripId) {
+      return;
+    }
+    const snapshot = await setActiveTrip(copiedTripId);
+    syncService.applyTripSwitch(snapshot);
+    syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
   }
 
   if (status === "loading" || status === "unauthenticated") {
@@ -202,20 +214,47 @@ export default function PublicItineraryDetailPage() {
       {detail && (
         <div className="fixed inset-x-0 bottom-0 border-t border-border-light bg-surface/95 p-4 backdrop-blur-sm">
           <div className="mx-auto flex max-w-4xl justify-center">
-            <button
-              type="button"
-              onClick={() => void handleCopy()}
-              disabled={isCopying}
-              data-testid="copy-public-itinerary-button"
-              className="inline-flex w-full max-w-md items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-60 sm:w-auto"
-            >
-              {isCopying ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Copy className="size-4" />
-              )}
-              {t.publicItinerary.copyCta}
-            </button>
+            {copiedTripId ? (
+              <div className="flex w-full max-w-md flex-col gap-2 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void switchToCopiedTrip().then(() => {
+                      router.push(`/trip/${encodeURIComponent(copiedTripId)}`);
+                    });
+                  }}
+                  className="inline-flex flex-1 items-center justify-center rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white hover:bg-primary-dark"
+                >
+                  去看地圖
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void switchToCopiedTrip().then(() => {
+                      router.push(`/itinerary?tripId=${encodeURIComponent(copiedTripId)}`);
+                    });
+                  }}
+                  className="inline-flex flex-1 items-center justify-center rounded-xl border border-border-light bg-surface px-4 py-3 text-sm font-semibold text-foreground hover:bg-border-light"
+                >
+                  編輯行程
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handleCopy()}
+                disabled={isCopying}
+                data-testid="copy-public-itinerary-button"
+                className="inline-flex w-full max-w-md items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-60 sm:w-auto"
+              >
+                {isCopying ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Copy className="size-4" />
+                )}
+                {t.publicItinerary.copyCta}
+              </button>
+            )}
           </div>
         </div>
       )}

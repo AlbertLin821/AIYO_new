@@ -187,6 +187,9 @@ export function getProgressLabel(steps: WorkflowStepView[]): string {
     return "行程已整理完成";
   }
   if (!active) {
+    if (steps.some((step) => step.status === "waiting_input")) {
+      return "等你回覆";
+    }
     return "正在為你規劃行程";
   }
   if (active.status === "waiting_input") {

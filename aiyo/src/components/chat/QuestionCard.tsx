@@ -125,6 +125,25 @@ export default function QuestionCard({
   onSubmit: (answers: ChatQuestionAnswer[], displayMessage: string) => void;
 }) {
   const [answers, setAnswers] = useState<Record<string, string | string[] | { start?: string; end?: string }>>({});
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  const REQUIRED_SLOTS = new Set(["destination", "duration_days"]);
+
+  function isAnswered(question: ChatQuestion, value: unknown): boolean {
+    if (question.type === "multi_choice") {
+      return Array.isArray(value) && value.length > 0;
+    }
+    if (question.type === "date_range") {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return false;
+      }
+      const range = value as { start?: string; end?: string };
+      return Boolean((range.start || "").trim() && (range.end || "").trim());
+    }
+    if (typeof value === "number") {
+      return Number.isFinite(value);
+    }
+    return typeof value === "string" ? value.trim().length > 0 : false;
+  }
 
   function setSingle(question: ChatQuestion, value: string) {
     setAnswers((prev) => ({ ...prev, [question.slot]: value }));
@@ -170,22 +189,11 @@ export default function QuestionCard({
   }));
   const canSubmit = card.questions.every((question) => {
     const value = answers[question.slot];
-    if (question.type === "multi_choice") {
-      return Array.isArray(value) && value.length > 0;
+    const required = REQUIRED_SLOTS.has(question.slot);
+    if (!required) {
+      return true;
     }
-    if (question.type === "date_range") {
-      return Boolean(
-        value &&
-          typeof value === "object" &&
-          !Array.isArray(value) &&
-          (value.start || "").trim() &&
-          (value.end || "").trim(),
-      );
-    }
-    if (typeof value === "number") {
-      return Number.isFinite(value);
-    }
-    return typeof value === "string" ? value.trim().length > 0 : false;
+    return isAnswered(question, value);
   });
 
   return (
@@ -253,20 +261,32 @@ export default function QuestionCard({
                       </button>
                     );
                   })}
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => setSingle(question, "")}
+                    className={cn(
+                      "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                      typeof answers[question.slot] === "string" &&
+                        !(question.options || []).some((option) => option.value === answers[question.slot])
+                        ? "border-slate-900 bg-slate-900 text-white"
+                        : "border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50",
+                    )}
+                  >
+                    自訂預算
+                  </button>
                 </div>
-                <input
-                  type="text"
-                  disabled={disabled}
-                  value={
-                    typeof answers[question.slot] === "string" &&
-                    !(question.options || []).some((option) => option.value === answers[question.slot])
-                      ? (answers[question.slot] as string)
-                      : ""
-                  }
-                  onChange={(event) => setSingle(question, event.target.value)}
-                  placeholder={question.placeholder || "自訂預算，例如：每人 25000，或總預算 80000"}
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
-                />
+                {typeof answers[question.slot] === "string" &&
+                !(question.options || []).some((option) => option.value === answers[question.slot]) ? (
+                  <input
+                    type="text"
+                    disabled={disabled}
+                    value={typeof answers[question.slot] === "string" ? (answers[question.slot] as string) : ""}
+                    onChange={(event) => setSingle(question, event.target.value)}
+                    placeholder={question.placeholder || "自訂預算，例如：每人 25000，或總預算 80000"}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                  />
+                ) : null}
               </div>
             ) : question.type === "multi_choice" ? (
               <div className="flex flex-wrap gap-2">
@@ -332,13 +352,22 @@ export default function QuestionCard({
                 className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
               />
             )}
+            {submitAttempted && REQUIRED_SLOTS.has(question.slot) && !isAnswered(question, answers[question.slot]) ? (
+              <p className="text-xs text-rose-600">此欄位為必填，請先完成。</p>
+            ) : null}
           </div>
         ))}
       </div>
       <button
         type="button"
         disabled={disabled || !canSubmit}
-        onClick={() => onSubmit(normalizedAnswers, formatQuestionAnswerSummary(card, normalizedAnswers))}
+        onClick={() => {
+          setSubmitAttempted(true);
+          if (!canSubmit) {
+            return;
+          }
+          onSubmit(normalizedAnswers, formatQuestionAnswerSummary(card, normalizedAnswers));
+        }}
         className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {disabled ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}

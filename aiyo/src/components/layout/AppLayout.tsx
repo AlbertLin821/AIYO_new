@@ -7,7 +7,7 @@ import CursorSparkle from "@/components/effects/CursorSparkle";
 import LoginModal from "@/components/auth/LoginModal";
 import SettingsModal from "@/components/settings/SettingsModal";
 import OnboardingModal from "@/components/onboarding/OnboardingModal";
-import ToastViewport from "@/components/system/ToastViewport";
+import { Toaster } from "@/components/ui/sonner";
 import MobileBottomNav from "@/components/layout/MobileBottomNav";
 import Sidebar, { EXPANDED_W, COLLAPSED_W } from "@/components/layout/Sidebar";
 import { cn } from "@/lib/utils";
@@ -33,7 +33,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background">
       <CursorSparkle />
-      <ToastViewport />
+      <Toaster />
       <Sidebar />
       <MobileBottomNav />
       <LoginModal />

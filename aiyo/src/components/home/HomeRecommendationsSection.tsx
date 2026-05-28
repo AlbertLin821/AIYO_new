@@ -6,6 +6,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, Loader2, Map, TrendingUp, Video } from "lucide-react";
 import VideoCard from "@/components/home/VideoCard";
 import RecommendedItineraryCard from "@/components/home/RecommendedItineraryCard";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { listPublicItineraries } from "@/services/publicItineraryClient";
 import { zhTW as t } from "@/locales/zh-TW";
 import type { PublicItinerarySummary, VideoRecommendation } from "@/types";
@@ -32,6 +37,42 @@ type Props = {
   itineraryQuery: string;
   videoPanel: VideoPanelProps;
 };
+
+function sourceBadge(source: string | null) {
+  if (source === "default-taiwan-cities") {
+    return (
+      <Badge variant="secondary" className="bg-primary/15 text-[10px] uppercase tracking-wide text-foreground/80 hover:bg-primary/15">
+        {t.home.sourceDefault}
+      </Badge>
+    );
+  }
+  if (source === "mock-fallback") {
+    return (
+      <Badge variant="secondary" className="bg-secondary/15 text-[10px] uppercase tracking-wide text-foreground/80 hover:bg-secondary/15">
+        {t.home.sourceFallback}
+      </Badge>
+    );
+  }
+  if (source === "single-video-url") {
+    return (
+      <Badge variant="secondary" className="bg-lavender/20 text-[10px] uppercase tracking-wide text-foreground/80 hover:bg-lavender/20">
+        {t.home.sourceSingleVideo}
+      </Badge>
+    );
+  }
+  return null;
+}
+
+function EmptyStateCard({ title, hint }: { title: string; hint: string }) {
+  return (
+    <Card className="rounded-2xl border-dashed border-border-light bg-cream/40 py-0 shadow-none ring-0">
+      <CardContent className="px-6 py-16 text-center">
+        <p className="text-base font-medium text-foreground">{title}</p>
+        <p className="mt-2 text-sm text-muted">{hint}</p>
+      </CardContent>
+    </Card>
+  );
+}
 
 function HomeRecommendationsSection({
   activePanel,
@@ -84,60 +125,58 @@ function HomeRecommendationsSection({
   const PanelIcon = activePanel === "videos" ? Video : Map;
 
   return (
-    <div className="max-w-6xl mx-auto" data-testid="home-recommendations-section">
+    <div className="mx-auto max-w-6xl" data-testid="home-recommendations-section">
       <div className="group relative">
-        <button
+        <Button
           type="button"
-          aria-label={t.home.switchToVideos}
+          variant="outline"
+          size="icon"
           data-testid="home-recommend-prev"
           onClick={switchToVideos}
-          className="absolute -left-3 top-8 z-10 flex size-9 items-center justify-center rounded-full border border-border-light bg-white/90 text-foreground shadow-md backdrop-blur-sm transition-opacity hover:bg-white opacity-50 hover:opacity-100"
+          className="absolute -left-3 top-8 z-10 size-9 rounded-full border-border-light bg-white/90 text-foreground shadow-md backdrop-blur-sm hover:bg-white"
         >
           <ChevronLeft className="size-5" />
-        </button>
+        </Button>
 
-        <button
+        <Button
           type="button"
-          aria-label={t.home.switchToItineraries}
+          variant="outline"
+          size="icon"
           data-testid="home-recommend-next"
           onClick={switchToItineraries}
-          className="absolute -right-3 top-8 z-10 flex size-9 items-center justify-center rounded-full border border-border-light bg-white/90 text-foreground shadow-md backdrop-blur-sm transition-opacity hover:bg-white opacity-50 hover:opacity-100"
+          className="absolute -right-3 top-8 z-10 size-9 rounded-full border-border-light bg-white/90 text-foreground shadow-md backdrop-blur-sm hover:bg-white"
         >
           <ChevronRight className="size-5" />
-        </button>
+        </Button>
 
         <div className="mb-5 flex flex-wrap items-center gap-2 px-1">
           <PanelIcon className="size-4 text-secondary" />
           <h2 className="font-semibold text-foreground">{panelTitle}</h2>
-          <span className="rounded-full bg-border-light px-2 py-0.5 text-xs text-muted">
+          <Badge variant="secondary" className="bg-border-light text-muted hover:bg-border-light">
             {panelCount} {t.home.items}
-          </span>
-          <div className="ml-auto flex items-center gap-1 text-xs">
-            <button
-              type="button"
-              onClick={switchToVideos}
-              data-testid="home-recommend-tab-videos"
-              className={`rounded-full px-2.5 py-1 font-medium transition-colors ${
-                activePanel === "videos"
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted hover:bg-cream/60"
-              }`}
-            >
-              {t.home.recommended}
-            </button>
-            <button
-              type="button"
-              onClick={switchToItineraries}
-              data-testid="home-recommend-tab-itineraries"
-              className={`rounded-full px-2.5 py-1 font-medium transition-colors ${
-                activePanel === "itineraries"
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted hover:bg-cream/60"
-              }`}
-            >
-              {t.home.recommendedItineraries}
-            </button>
-          </div>
+          </Badge>
+          <Tabs
+            value={activePanel}
+            onValueChange={(value) => onPanelChange(value as HomeRecommendPanel)}
+            className="ml-auto w-auto gap-0"
+          >
+            <TabsList className="h-auto rounded-full bg-cream/80 p-1">
+              <TabsTrigger
+                value="videos"
+                data-testid="home-recommend-tab-videos"
+                className="rounded-full px-2.5 py-1 text-xs data-active:bg-primary/15 data-active:text-primary"
+              >
+                {t.home.recommended}
+              </TabsTrigger>
+              <TabsTrigger
+                value="itineraries"
+                data-testid="home-recommend-tab-itineraries"
+                className="rounded-full px-2.5 py-1 text-xs data-active:bg-primary/15 data-active:text-primary"
+              >
+                {t.home.recommendedItineraries}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
 
         <AnimatePresence mode="wait">
@@ -151,29 +190,17 @@ function HomeRecommendationsSection({
             >
               <div className="mb-5 flex flex-wrap items-center gap-2">
                 <TrendingUp className="size-4 text-secondary" />
-                {videoPanel.recommendationSource === "default-taiwan-cities" && (
-                  <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/80">
-                    {t.home.sourceDefault}
-                  </span>
-                )}
-                {videoPanel.recommendationSource === "mock-fallback" && (
-                  <span className="rounded-full bg-secondary/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/80">
-                    {t.home.sourceFallback}
-                  </span>
-                )}
-                {videoPanel.recommendationSource === "single-video-url" && (
-                  <span className="rounded-full bg-lavender/20 px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/80">
-                    {t.home.sourceSingleVideo}
-                  </span>
-                )}
+                {sourceBadge(videoPanel.recommendationSource)}
                 {videoPanel.videos.length > 0 &&
                   videoPanel.canLoadMoreVideos &&
                   !videoPanel.isSearching && (
-                    <button
+                    <Button
                       type="button"
+                      variant="outline"
+                      size="sm"
                       onClick={videoPanel.onLoadMoreVideos}
                       disabled={videoPanel.isLoadingMoreVideos}
-                      className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border-light bg-surface px-3 py-1 text-xs font-medium text-foreground shadow-soft transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="ml-auto rounded-full border-border-light bg-surface shadow-soft hover:bg-primary/10"
                     >
                       {videoPanel.isLoadingMoreVideos ? (
                         <Loader2 className="size-3.5 animate-spin" aria-hidden />
@@ -181,23 +208,21 @@ function HomeRecommendationsSection({
                       {videoPanel.isLoadingMoreVideos
                         ? t.home.loadingMoreVideos
                         : t.home.moreVideos}
-                    </button>
+                    </Button>
                   )}
               </div>
 
               {videoPanel.errorMessage && (
-                <div className="mb-4 rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">
-                  {videoPanel.errorMessage}
-                </div>
+                <Alert variant="destructive" className="mb-4 rounded-2xl border-danger/20 bg-danger/10">
+                  <AlertDescription className="text-danger">{videoPanel.errorMessage}</AlertDescription>
+                </Alert>
               )}
 
               {videoPanel.showEmptyGrid ? (
-                <div className="rounded-2xl border border-dashed border-border-light bg-cream/40 px-6 py-16 text-center">
-                  <p className="text-base font-medium text-foreground">
-                    {videoPanel.hasSearched ? t.home.noApiResults : t.home.emptyTitle}
-                  </p>
-                  <p className="mt-2 text-sm text-muted">{t.home.emptyHint}</p>
-                </div>
+                <EmptyStateCard
+                  title={videoPanel.hasSearched ? t.home.noApiResults : t.home.emptyTitle}
+                  hint={t.home.emptyHint}
+                />
               ) : (
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
                   {videoPanel.videos.map((video, index) => (
@@ -220,39 +245,39 @@ function HomeRecommendationsSection({
               transition={{ duration: 0.2 }}
             >
               {!isAuthenticated ? (
-                <div
-                  className="rounded-2xl border border-dashed border-border-light bg-cream/40 px-6 py-16 text-center"
+                <Card
+                  className="rounded-2xl border-dashed border-border-light bg-cream/40 py-0 shadow-none ring-0"
                   data-testid="public-itinerary-login-cta"
                 >
-                  <TrendingUp className="mx-auto mb-3 size-8 text-primary/50" />
-                  <p className="text-base font-medium text-foreground">
-                    {t.home.publicItineraryLoginTitle}
-                  </p>
-                  <p className="mt-2 text-sm text-muted">{t.home.publicItineraryLoginHint}</p>
-                  <button
-                    type="button"
-                    onClick={() => router.push(`/login?callbackUrl=${encodeURIComponent("/")}`)}
-                    className="mt-6 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white hover:bg-primary-dark"
-                  >
-                    {t.sidebar.signIn}
-                  </button>
-                </div>
+                  <CardContent className="px-6 py-16 text-center">
+                    <TrendingUp className="mx-auto mb-3 size-8 text-primary/50" />
+                    <p className="text-base font-medium text-foreground">
+                      {t.home.publicItineraryLoginTitle}
+                    </p>
+                    <p className="mt-2 text-sm text-muted">{t.home.publicItineraryLoginHint}</p>
+                    <Button
+                      type="button"
+                      onClick={() => router.push(`/login?callbackUrl=${encodeURIComponent("/")}`)}
+                      className="mt-6 rounded-xl bg-primary hover:bg-primary-dark"
+                    >
+                      {t.sidebar.signIn}
+                    </Button>
+                  </CardContent>
+                </Card>
               ) : isLoadingItineraries ? (
                 <div className="flex items-center justify-center gap-2 py-16 text-muted">
                   <Loader2 className="size-5 animate-spin" />
                   <span className="text-sm">{t.publicItinerary.loading}</span>
                 </div>
               ) : itineraryError ? (
-                <div className="rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">
-                  {itineraryError}
-                </div>
+                <Alert variant="destructive" className="rounded-2xl border-danger/20 bg-danger/10">
+                  <AlertDescription className="text-danger">{itineraryError}</AlertDescription>
+                </Alert>
               ) : itineraries.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-border-light bg-cream/40 px-6 py-16 text-center">
-                  <p className="text-base font-medium text-foreground">
-                    {t.home.publicItineraryEmptyTitle}
-                  </p>
-                  <p className="mt-2 text-sm text-muted">{t.home.publicItineraryEmptyHint}</p>
-                </div>
+                <EmptyStateCard
+                  title={t.home.publicItineraryEmptyTitle}
+                  hint={t.home.publicItineraryEmptyHint}
+                />
               ) : (
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
                   {itineraries.map((item, index) => (

@@ -107,12 +107,20 @@ export async function runStructuredTripWorkflow(
     status: "completed",
   });
 
+  const buildQuestionCardLead = () => {
+    const destination = profile.destination?.trim() || "這趟旅程";
+    if (!profile.duration_days) {
+      return `了解，你想去 ${destination}。我先確認幾個核心條件，等你補完後就會自動開始規劃。`;
+    }
+    return `收到，我已整理好目前條件。再補充下面幾個重點，我就會接著安排行程。`;
+  };
+
   if (card) {
     return {
       reply: {
         id: `assistant_${Date.now()}`,
         role: "assistant",
-        content: card.title,
+        content: buildQuestionCardLead(),
         timestamp: deps.now(),
         responseType: "question_card",
         statusSteps: deps.buildWaitingForInputStatusSteps(),

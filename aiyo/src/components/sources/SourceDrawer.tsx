@@ -1,7 +1,11 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
 import { ExternalLink, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+} from "@/components/ui/sheet";
 import { buildSourceExternalUrl } from "@/lib/sources/externalUrl";
 import type { SourceReference } from "@/lib/types/sources";
 import { YouTubeSourceCard } from "@/components/sources/YouTubeSourceCard";
@@ -40,34 +44,27 @@ function GenericSourcePanel({ source }: { source: SourceReference }) {
 
 export function SourceDrawer({ source, open, onClose, className }: SourceDrawerProps) {
   const href = source ? buildSourceExternalUrl(source) : undefined;
+  const sheetOpen = open && Boolean(source);
 
   return (
-    <AnimatePresence>
-      {open && source ? (
-        <>
-          <motion.button
-            type="button"
-            aria-label="關閉來源詳情"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="fixed inset-0 z-[60] bg-black/35 backdrop-blur-[2px]"
-            onClick={onClose}
-          />
-          <motion.aside
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="source-drawer-title"
-            initial={{ x: "100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "100%" }}
-            transition={{ type: "tween", ease: "easeOut", duration: 0.28 }}
-            className={cn(
-              "fixed right-0 top-0 z-[70] flex h-full w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl",
-              className,
-            )}
-          >
+    <Sheet
+      open={sheetOpen}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          onClose();
+        }
+      }}
+    >
+      <SheetContent
+        side="right"
+        showCloseButton={false}
+        className={cn(
+          "flex h-full w-full max-w-md flex-col gap-0 border-slate-200 bg-white p-0 sm:max-w-md",
+          className,
+        )}
+      >
+        {source ? (
+          <>
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
               <div className="min-w-0">
                 <p id="source-drawer-title" className="text-sm font-semibold leading-snug text-slate-900">
@@ -75,13 +72,15 @@ export function SourceDrawer({ source, open, onClose, className }: SourceDrawerP
                 </p>
                 <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{source.title}</p>
               </div>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon-sm"
                 onClick={onClose}
-                className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition-colors hover:bg-slate-50"
+                className="size-9 shrink-0 rounded-full border border-slate-200"
               >
                 <X className="size-4" aria-hidden />
-              </button>
+              </Button>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
@@ -109,9 +108,9 @@ export function SourceDrawer({ source, open, onClose, className }: SourceDrawerP
                 </a>
               </div>
             ) : null}
-          </motion.aside>
-        </>
-      ) : null}
-    </AnimatePresence>
+          </>
+        ) : null}
+      </SheetContent>
+    </Sheet>
   );
 }
