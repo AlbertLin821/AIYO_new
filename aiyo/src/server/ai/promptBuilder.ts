@@ -1,5 +1,9 @@
 import type { ChatContext, TripPlanRequest, VideoRecommendation, VideoSummarySegment } from "@/types";
 import { poiSynonymGroupsForPrompt } from "@/server/video/segmentPlaceDedupe";
+import {
+  buildItineraryPolicyBlock,
+  buildTravelResearchSystemPrompt,
+} from "@/server/ai/policies/travelPlanningPolicy";
 
 export function detectResponseLanguage(
   message: string,
@@ -85,7 +89,7 @@ export function buildChatResearchPlanningPrompt(input: {
 }): { system: string; user: string } {
   return {
     system: [
-      "You are AIYO travel research planner. Output JSON only (no markdown fences).",
+      buildTravelResearchSystemPrompt(),
       'Top-level shape: { "phase": "research", "toolRequests": array }.',
       "toolRequests may contain 0 to 6 objects. Each object must have a string field type.",
       'Allowed types: "search_place" with fields query (string), optional locationHint (string);',
@@ -255,6 +259,8 @@ export function buildItineraryPrompt(
   return [
     "Create a structured travel itinerary in JSON only.",
     "All user-facing string values must be written only in Traditional Chinese. Do not use Simplified Chinese.",
+    "",
+    buildItineraryPolicyBlock(),
     "",
     "HARD SCHEMA RULES:",
     '- Return one JSON object exactly in this shape: { "summary": string, "days": [{ "dayNumber": number, "theme": string, "summary": string, "items": [{ "id": string, "time": "HH:MM", "title": string, "type": "attraction|restaurant|transport|hotel|activity|shopping", "transport": string, "notes": string, "location": { "name": string, "lat": number, "lng": number, "description": string, "address": string }, "sourceTitle"?: string, "sourceUrl"?: string, "sourceSnippet"?: string, "confidence"?: "high"|"medium"|"low" }] }], "warnings": string[] }',

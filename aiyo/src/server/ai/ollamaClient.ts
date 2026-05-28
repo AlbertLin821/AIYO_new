@@ -8,10 +8,15 @@ export interface OllamaMessage {
 
 interface OllamaChatOptions {
   messages: OllamaMessage[];
-  format?: "json";
+  format?: "json" | Record<string, unknown>;
   model?: string;
   /** 覆寫預設逾時（例如多輪對話單輪較短）。 */
   timeoutMs?: number;
+  options?: {
+    temperature?: number;
+    top_p?: number;
+    num_ctx?: number;
+  };
   task?:
     | "default"
     | "trip-plan"
@@ -25,9 +30,17 @@ interface OllamaChatOptions {
 }
 
 export class OllamaRequestError extends Error {
-  constructor(message: string, readonly details?: unknown) {
+  constructor(
+    message: string,
+    readonly details?: unknown,
+    readonly code: "timeout" | "http_error" | "empty_response" | "network_error" = "network_error",
+  ) {
     super(message);
     this.name = "OllamaRequestError";
+  }
+
+  get isTimeout(): boolean {
+    return this.code === "timeout";
   }
 }
 
@@ -67,6 +80,7 @@ export async function chatWithOllama({
   format,
   model,
   timeoutMs,
+  options,
   task = "default",
 }: OllamaChatOptions): Promise<string> {
   const controller = new AbortController();
@@ -87,6 +101,10 @@ export async function chatWithOllama({
         model: resolveModelForTask(task, model),
         stream: false,
         format,
+        options: {
+          ...(format ? { temperature: 0, top_p: 0.9 } : {}),
+          ...options,
+        },
         messages: [
           {
             role: "system",
@@ -105,6 +123,7 @@ export async function chatWithOllama({
       throw new OllamaRequestError(
         `Ollama request failed with status ${response.status}`,
         text,
+        "http_error",
       );
     }
 
@@ -113,7 +132,11 @@ export async function chatWithOllama({
     };
     const content = payload.message?.content?.trim();
     if (!content) {
-      throw new OllamaRequestError("Ollama response did not include message content");
+      throw new OllamaRequestError(
+        "Ollama response did not include message content",
+        undefined,
+        "empty_response",
+      );
     }
     return normalizeOllamaResponseContent(content, format);
   } catch (error) {
@@ -121,9 +144,9 @@ export async function chatWithOllama({
       throw error;
     }
     if (error instanceof Error && error.name === "AbortError") {
-      throw new OllamaRequestError("Ollama request timed out");
+      throw new OllamaRequestError("Ollama request timed out", undefined, "timeout");
     }
-    throw new OllamaRequestError("Failed to reach Ollama", error);
+    throw new OllamaRequestError("Failed to reach Ollama", error, "network_error");
   } finally {
     clearTimeout(timeout);
   }

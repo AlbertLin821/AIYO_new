@@ -50,6 +50,10 @@ export const serverConfig = {
   ollamaTimeoutMs: readNumber("OLLAMA_TIMEOUT_MS", 180000),
   /** 單次請求允許的上限（避免環境變數誤設過大）；預設 10 分鐘。 */
   ollamaTimeoutCapMs: readNumber("OLLAMA_TIMEOUT_CAP_MS", 600_000),
+  /** 逾時時的自動重試次數（僅 travel chat compose 流程使用）。 */
+  ollamaTimeoutRetryCount: Math.max(0, Math.floor(readNumber("OLLAMA_TIMEOUT_RETRY_COUNT", 1))),
+  /** 每次 timeout 重試前等待毫秒數。 */
+  ollamaTimeoutRetryDelayMs: Math.max(0, readNumber("OLLAMA_TIMEOUT_RETRY_DELAY_MS", 400)),
   videoExtractionChunkMaxChars: readNumber("VIDEO_EXTRACTION_CHUNK_MAX_CHARS", 12000),
   videoExtractionChunkOverlapChars: readNumber("VIDEO_EXTRACTION_CHUNK_OVERLAP_CHARS", 500),
   videoExtractionChunkMaxCount: readNumber("VIDEO_EXTRACTION_CHUNK_MAX_COUNT", 8),

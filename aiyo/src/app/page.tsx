@@ -10,6 +10,7 @@ import HomeHeroBanner from "@/components/home/HomeHeroBanner";
 import HomeRecommendationsSection, {
   type HomeRecommendPanel,
 } from "@/components/home/HomeRecommendationsSection";
+import PlanningWaitGame from "@/components/chat/PlanningWaitGame";
 import VideoSearchBar from "@/components/home/VideoSearchBar";
 import { getDefaultTaiwanCityVideos } from "@/data/defaultTaiwanCityVideos";
 import {
@@ -195,6 +196,10 @@ export default function HomePage() {
     Boolean(lastRecommendationRequest || hasSearched || hasTripSeed);
   const showEmptyGrid = videos.length === 0 && !errorMessage;
   const defaultVideos = useMemo(() => getDefaultTaiwanCityVideos(6), []);
+  const homeVideoProcessingActive = isSearching || isLoadingMoreVideos;
+  const homeVideoProcessingKey = homeVideoProcessingActive
+    ? `home-video-processing:${searchQuery.trim()}:${recommendationSource || "none"}`
+    : null;
 
   useEffect(() => {
     setRecommendPanel(readStoredRecommendPanel());
@@ -684,6 +689,17 @@ export default function HomePage() {
             ? () => refreshVideoSummary(selectedVideo)
             : undefined
         }
+      />
+
+      <PlanningWaitGame
+        isWaiting={homeVideoProcessingActive}
+        waitKey={homeVideoProcessingKey}
+        planningComplete={!homeVideoProcessingActive}
+        promptDelayMs={3000}
+        promptTitle="影片處理中，先玩個小遊戲吧！"
+        gameDescription="影片處理進行中，先玩小遊戲打發等待時間。"
+        completionTitle="影片處理完成！"
+        completionDescription="影片資料已更新，可以繼續瀏覽了。"
       />
 
       <section className="mt-12 mb-6 max-w-6xl mx-auto">

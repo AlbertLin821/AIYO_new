@@ -359,7 +359,7 @@ export const zhTW = {
     deleteDay: "刪除此天",
     deleteDayAria: "刪除第 {n} 天",
     deleteDayDialogTitle: "刪除此天",
-    deleteDayConfirm: "確定要刪除第 {n} 天嗎？該日所有活動將一併移除。",
+    deleteDayConfirm: "確定要刪除第 {n} 天嗎？",
     deleteDayCancel: "取消",
     deleteDayConfirmAction: "確認刪除",
     dayHeading: "第 {n} 天",

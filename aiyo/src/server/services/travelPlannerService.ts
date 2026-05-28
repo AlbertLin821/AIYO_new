@@ -2,6 +2,18 @@ import { filterProposedChangesByVerifiedPlaces } from "@/server/ai/placeNameMatc
 import { normalizeConversationHistory } from "@/server/services/travelPlanner/chatConversation";
 import { chatWithOllama, OllamaRequestError, type OllamaMessage } from "@/server/ai/ollamaClient";
 import {
+  questionCardJsonSchema,
+  structuredChatOutputJsonSchema,
+  travelResearchToolRequestJsonSchema,
+  tripPlanResultJsonSchema,
+} from "@/server/ai/schemas/travelPlanningSchemas";
+import { buildQuestionCardDesignerSystemPrompt } from "@/server/ai/policies/travelPlanningPolicy";
+import { sanitizeDynamicQuestionCard } from "@/server/ai/validators/questionCardValidator";
+import {
+  validateTravelPlanResponseQuality,
+  validateTripPlanQuality,
+} from "@/server/ai/validators/travelPlanValidator";
+import {
   buildChatPrompt,
   buildChatResearchPlanningPrompt,
   buildItineraryPatchIntentPrompt,
@@ -18,6 +30,7 @@ import { registerChatSources } from "@/server/chat/sourcePreviewStore";
 import { publishChatProgress } from "@/server/chat/chatProgressStore";
 import { applyRevisionInstructionToProfile } from "@/server/chat/tripRevision";
 import { enrichTripPlanWithRouteTravelTimes } from "@/server/geo/routeTravelTimeService";
+import { runStructuredTripWorkflow } from "@/server/services/travelPlanningWorkflowService";
 import {
   buildDefaultTravelToolRequests,
   buildTripPlanResearchRequests,
@@ -201,6 +214,8 @@ type WebSearchBundle = {
 
 const TRIP_PLAN_COMPOSE_TIMEOUT_MS = 90_000;
 const CHAT_COMPOSE_TIMEOUT_MS = 75_000;
+const TRAVEL_CHAT_TIMEOUT_FALLBACK =
+  "我先保留目前的行程脈絡；你可以再補充想調整的地點、天數或預算，我會用更精簡的查詢重新規劃。";
 
 type ProgressStepInput = Omit<StatusStepPayload, "type">;
 
@@ -218,6 +233,47 @@ function publishProgressStep(
     startedAt: step.startedAt || (step.status === "running" ? timestamp : undefined),
     completedAt: step.status === "completed" || step.status === "failed" ? step.completedAt || timestamp : undefined,
   });
+}
+
+function buildTravelChatTimeoutFallbackText(digestText: string): string {
+  const normalized = digestText.trim();
+  return normalized || TRAVEL_CHAT_TIMEOUT_FALLBACK;
+}
+
+function delay(ms: number): Promise<void> {
+  if (ms <= 0) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function chatWithOllamaTimeoutRetry(request: Parameters<typeof chatWithOllama>[0]): Promise<string> {
+  const retryCount = Math.max(0, serverConfig.ollamaTimeoutRetryCount);
+  const retryDelayMs = Math.max(0, serverConfig.ollamaTimeoutRetryDelayMs);
+  const maxAttempts = 1 + retryCount;
+  let lastTimeoutError: OllamaRequestError | null = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      return await chatWithOllama(request);
+    } catch (error) {
+      if (!(error instanceof OllamaRequestError)) {
+        throw error;
+      }
+      if (!error.isTimeout) {
+        throw error;
+      }
+      lastTimeoutError = error;
+      if (attempt >= maxAttempts - 1) {
+        break;
+      }
+      await delay(retryDelayMs);
+    }
+  }
+
+  throw lastTimeoutError ?? new OllamaRequestError("Ollama request timed out", undefined, "timeout");
 }
 
 function formatWebSearchDigest(results: WebSearchResult[]): string {
@@ -1059,174 +1115,6 @@ export function buildQuestionCard(profile: TripProfile, context?: ChatContext): 
 
 const DYNAMIC_QUESTION_CARD_TIMEOUT_MS = 8_000;
 
-const QUESTION_CARD_SLOTS = [
-  "destination",
-  "duration_days",
-  "duration_nights",
-  "departure_location",
-  "travel_dates",
-  "companions",
-  "traveler_count",
-  "budget",
-  "preferences",
-  "transportation",
-  "accommodation",
-  "visited_before",
-  "avoid_places",
-  "dietary_restrictions",
-  "disliked_activities",
-  "pace",
-  "plan_integration",
-  "special_needs",
-] as const satisfies ReadonlyArray<QuestionCardPayload["questions"][number]["slot"]>;
-
-const QUESTION_CARD_TYPES = [
-  "single_choice",
-  "multi_choice",
-  "text",
-  "number",
-  "date_range",
-  "budget",
-] as const satisfies ReadonlyArray<QuestionCardPayload["questions"][number]["type"]>;
-
-const CANONICAL_OPTION_VALUES: Partial<
-  Record<QuestionCardPayload["questions"][number]["slot"], ReadonlySet<string>>
-> = {
-  companions: new Set(["solo", "couple_or_friend", "small_group", "family_group"]),
-  pace: new Set(["relaxed", "normal", "moderate", "intensive"]),
-  plan_integration: new Set(["direct_merge", "self_merge"]),
-  transportation: new Set(["public_transport", "self_drive", "charter_or_tour", "ai_recommend"]),
-  special_needs: new Set(["elderly", "children", "mobility_issue", "dietary_restriction", "none"]),
-};
-
-function trimText(value: unknown, maxLength: number): string {
-  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
-}
-
-function isQuestionCardSlot(value: string): value is QuestionCardPayload["questions"][number]["slot"] {
-  return (QUESTION_CARD_SLOTS as readonly string[]).includes(value);
-}
-
-function isQuestionCardType(value: string): value is QuestionCardPayload["questions"][number]["type"] {
-  return (QUESTION_CARD_TYPES as readonly string[]).includes(value);
-}
-
-function normalizeDynamicOptions(input: {
-  value: unknown;
-  slot: QuestionCardPayload["questions"][number]["slot"];
-  fallbackQuestion?: QuestionCardPayload["questions"][number];
-}): QuestionCardPayload["questions"][number]["options"] {
-  const allowlist = CANONICAL_OPTION_VALUES[input.slot];
-  const records = Array.isArray(input.value) ? input.value : [];
-  const normalized = records
-    .map((item) => {
-      if (!item || typeof item !== "object") {
-        return null;
-      }
-      const record = item as Record<string, unknown>;
-      const label = trimText(record.label, 80);
-      const rawValue = trimText(record.value, 80);
-      if (!label || !rawValue) {
-        return null;
-      }
-      if (allowlist && !allowlist.has(rawValue)) {
-        return null;
-      }
-      return {
-        label,
-        value: rawValue,
-        recommended: record.recommended === true ? true : undefined,
-      };
-    })
-    .filter((item): item is NonNullable<typeof item> => Boolean(item));
-
-  const seen = new Set<string>();
-  const unique = normalized.filter((option) => {
-    if (seen.has(option.value)) {
-      return false;
-    }
-    seen.add(option.value);
-    return true;
-  });
-
-  if (unique.length) {
-    return unique.slice(0, 8);
-  }
-  return input.fallbackQuestion?.options?.slice(0, 8);
-}
-
-export function sanitizeDynamicQuestionCard(
-  value: unknown,
-  fallbackCard: QuestionCardPayload,
-): QuestionCardPayload | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-  const record = value as Record<string, unknown>;
-  const fallbackBySlot = new Map(fallbackCard.questions.map((question) => [question.slot, question]));
-  const fallbackSlots = new Set(fallbackBySlot.keys());
-  const rawQuestions = Array.isArray(record.questions) ? record.questions : [];
-  const questions: QuestionCardPayload["questions"] = rawQuestions
-    .map((item): QuestionCardPayload["questions"][number] | null => {
-      if (!item || typeof item !== "object") {
-        return null;
-      }
-      const questionRecord = item as Record<string, unknown>;
-      const rawSlot = trimText(questionRecord.slot, 40);
-      if (!isQuestionCardSlot(rawSlot) || !fallbackSlots.has(rawSlot)) {
-        return null;
-      }
-      const fallbackQuestion = fallbackBySlot.get(rawSlot);
-      const rawType = trimText(questionRecord.type, 40);
-      const type = isQuestionCardType(rawType) ? rawType : fallbackQuestion?.type;
-      const question = trimText(questionRecord.question, 160);
-      if (!type || !question) {
-        return null;
-      }
-      const options = normalizeDynamicOptions({
-        value: questionRecord.options,
-        slot: rawSlot,
-        fallbackQuestion,
-      });
-      if ((type === "single_choice" || type === "multi_choice") && !options?.length) {
-        return null;
-      }
-      return {
-        slot: rawSlot,
-        question,
-        type,
-        options: type === "text" || type === "number" || type === "date_range" ? undefined : options,
-        placeholder: trimText(questionRecord.placeholder, 100) || fallbackQuestion?.placeholder,
-        helperText: trimText(questionRecord.helperText, 140) || undefined,
-        startLabel: trimText(questionRecord.startLabel, 40) || fallbackQuestion?.startLabel,
-        endLabel: trimText(questionRecord.endLabel, 40) || fallbackQuestion?.endLabel,
-      };
-    })
-    .filter((question): question is QuestionCardPayload["questions"][number] => Boolean(question))
-    .slice(0, 4);
-
-  if (!questions.length) {
-    return null;
-  }
-
-  return {
-    response_type: "question_card",
-    title: trimText(record.title, 120) || fallbackCard.title,
-    eyebrow: trimText(record.eyebrow, 40) || undefined,
-    description: trimText(record.description, 180) || undefined,
-    questions,
-    action: {
-      label:
-        trimText((record.action as Record<string, unknown> | undefined)?.label, 40) ||
-        fallbackCard.action?.label ||
-        "繼續",
-      shortcut:
-        trimText((record.action as Record<string, unknown> | undefined)?.shortcut, 20) ||
-        fallbackCard.action?.shortcut,
-    },
-  };
-}
-
 function summarizeItineraryForQuestionCard(context?: ChatContext): string {
   const days = context?.itinerary || [];
   if (!days.length) {
@@ -1263,14 +1151,11 @@ function buildDynamicQuestionCardPrompt(input: {
   }));
   return {
     system: [
-      "You are AIYO's adaptive travel intake designer.",
-      "Return JSON only. Generate the next question_card from the current conversation, profile, and itinerary context.",
+      buildQuestionCardDesignerSystemPrompt(),
+      "Generate the next question_card from the current conversation, profile, and itinerary context.",
       "Every visible Traditional Chinese title, question, option label, helper text, placeholder, and action label must be natural and context-specific.",
       "Do not reuse generic template wording unless it is genuinely the best wording for this user.",
       "Use only the target slots listed by the user prompt. Keep slot and type values exactly as provided.",
-      "For canonical slots, option values must stay canonical: companions solo/couple_or_friend/small_group/family_group; pace relaxed/normal/moderate/intensive; transportation public_transport/self_drive/charter_or_tour/ai_recommend; plan_integration direct_merge/self_merge; special_needs elderly/children/mobility_issue/dietary_restriction/none.",
-      "Ask at most 4 questions. Prefer fewer, high-signal questions when the user's intent is already clear.",
-      "Schema: {\"response_type\":\"question_card\",\"eyebrow\":\"...\",\"title\":\"...\",\"description\":\"...\",\"questions\":[{\"slot\":\"...\",\"question\":\"...\",\"type\":\"...\",\"placeholder\":\"...\",\"helperText\":\"...\",\"startLabel\":\"...\",\"endLabel\":\"...\",\"options\":[{\"label\":\"...\",\"value\":\"...\",\"recommended\":true}]}],\"action\":{\"label\":\"...\",\"shortcut\":\"Enter\"}}",
     ].join("\n"),
     user: JSON.stringify({
       currentUserMessage: input.message,
@@ -1304,8 +1189,9 @@ async function buildDynamicQuestionCard(input: {
   try {
     const raw = await chatWithOllama({
       task: "travel-chat",
-      format: "json",
+      format: questionCardJsonSchema,
       timeoutMs: DYNAMIC_QUESTION_CARD_TIMEOUT_MS,
+      options: { temperature: 0, top_p: 0.9, num_ctx: 16_384 },
       messages: [
         { role: "system", content: prompt.system },
         { role: "user", content: prompt.user },
@@ -2167,6 +2053,26 @@ function assertTripPlanQualityWarnings(warnings?: string[]): void {
   }
 }
 
+function assertTripPlanValidatorQuality(plan: TripPlanResult, request: TripPlanRequest): void {
+  const issues = validateTripPlanQuality(plan, request);
+  if (!issues.length) {
+    return;
+  }
+  const issueSummary = issues.slice(0, 4).map((issue) => `${issue.path}:${issue.message}`).join("; ");
+  console.warn(`[trip-plan] validator_quality_issue=${issueSummary}`);
+  throw new StructuredOutputError("MODEL_OUTPUT_VALIDATION_FAILED");
+}
+
+function assertTravelPlanResponseValidatorQuality(plan: TravelPlanResponse): void {
+  const issues = validateTravelPlanResponseQuality(plan);
+  if (!issues.length) {
+    return;
+  }
+  const issueSummary = issues.slice(0, 4).map((issue) => `${issue.path}:${issue.message}`).join("; ");
+  console.warn(`[travel-plan-response] validator_quality_issue=${issueSummary}`);
+  throw new StructuredOutputError("TRAVEL_PLAN_RESPONSE_VALIDATION_FAILED");
+}
+
 function buildWeatherAlertsFromSources(
   profile: TripProfile,
   sources: Record<string, ChatSource>,
@@ -2411,118 +2317,37 @@ async function handleStructuredTripWorkflow(input: {
   memoryContext?: string;
   forceStructuredRevision?: boolean;
 }): Promise<ChatResponsePayload | null> {
-  if (!input.forceStructuredRevision && !isTripWorkflowMessage(input)) {
-    return null;
-  }
-
-  publishProgressStep(input.progressSessionId, {
-    phase: "understand",
-    label: "理解旅遊需求",
-    detail: "正在整理目的地、天數、旅伴與偏好條件。",
-    status: "running",
-  });
-  const seeded = mergeTripProfile(input.tripProfile, input.context);
-  const withText = updateTripProfileFromText(seeded, input.message);
-  const profile = applyQuestionAnswers(withText, input.questionAnswers);
-  if (input.forceStructuredRevision && input.context?.itinerary?.length) {
-    profile.plan_integration = "direct_merge";
-  }
-  const fallbackCard = buildQuestionCard(profile, input.context);
-  const card = fallbackCard
-    ? await buildDynamicQuestionCard({
-        message: input.message,
-        profile,
-        context: input.context,
-        fallbackCard,
-        memoryContext: input.memoryContext,
-      })
-    : null;
-  publishProgressStep(input.progressSessionId, {
-    phase: "understand",
-    label: "理解旅遊需求",
-    detail: "已整理目前已知的旅遊條件。",
-    status: "completed",
-  });
-
-  if (card) {
-    return {
-      reply: {
-        id: `assistant_${Date.now()}`,
-        role: "assistant",
-        content: card.title,
-        timestamp: nowChatTimestamp(),
-        responseType: "question_card",
-        statusSteps: buildWaitingForInputStatusSteps(),
-        questionCard: card,
-        tripProfile: profile,
-      },
-      tripProfile: profile,
-    };
-  }
-
-  publishProgressStep(input.progressSessionId, {
-    phase: "plan",
-    label: "規劃查詢範圍",
-    detail: "判斷是否需要查詢天氣、景點、活動與交通資料。",
-    status: "running",
-  });
-  const request = profileToTripPlanRequest(profile, input.context);
-  publishProgressStep(input.progressSessionId, {
-    phase: "plan",
-    label: "規劃查詢範圍",
-    detail: "已決定查詢範圍，準備開始蒐集外部資料。",
-    status: "completed",
-  });
-  const generated = await generateTripPlan(request, input.memoryContext, input.progressSessionId);
-  const supplementaryWebBundle = await runWebSearch(
-    [profile.destination || "", profile.preferences.join(" "), "行程 交通 美食"].filter(Boolean).join(" ").trim(),
-    4,
-    input.progressSessionId,
-  );
-  const webSources = normalizeWebSearchSources(supplementaryWebBundle.results);
-  const sourceDictionary = mergeChatSources(generated.sources, webSources);
-  if (Object.keys(sourceDictionary).length > 0) {
-    registerChatSources(sourceDictionary);
-  }
-  publishProgressStep(input.progressSessionId, {
-    phase: "compose",
-    label: "生成完整行程",
-    detail: "正在整理總覽、每日路線與提醒資訊。",
-    status: "running",
-    provider: "ollama",
-  });
-  const travelPlan = convertTripPlanToTravelPlanWithSources(
-    generated.plan,
-    profile,
-    sourceDictionary,
-    buildTravelPlanRevisionMeta({
-      previousDays: input.context?.itinerary,
-      nextDays: generated.plan.days,
-      profile,
-    }),
-  );
-  publishProgressStep(input.progressSessionId, {
-    phase: "compose",
-    label: "生成完整行程",
-    detail: "最終行程已完成。",
-    status: "completed",
-    provider: "ollama",
-  });
-  const statusSteps = buildPlanningStatusSteps();
-  return {
-    reply: {
-      id: `assistant_${Date.now()}`,
-      role: "assistant",
-      content: travelPlan.title,
-      timestamp: nowChatTimestamp(),
-      responseType: "travel_plan",
-      statusSteps,
-      travelPlan,
-      tripProfile: profile,
+  return runStructuredTripWorkflow(input, {
+    shouldHandle: (workflowInput) =>
+      Boolean(workflowInput.forceStructuredRevision) || isTripWorkflowMessage(workflowInput),
+    publishProgress: publishProgressStep,
+    mergeTripProfile,
+    updateTripProfileFromText,
+    applyQuestionAnswers,
+    buildFallbackQuestionCard: buildQuestionCard,
+    buildDynamicQuestionCard,
+    buildWaitingForInputStatusSteps,
+    buildPlanningStatusSteps,
+    profileToTripPlanRequest,
+    generateTripPlan,
+    loadSupplementarySources: async (profile, progressSessionId) => {
+      const supplementaryWebBundle = await runWebSearch(
+        [profile.destination || "", profile.preferences.join(" "), "行程 交通 美食"].filter(Boolean).join(" ").trim(),
+        4,
+        progressSessionId,
+      );
+      return normalizeWebSearchSources(supplementaryWebBundle.results);
     },
-    itinerarySuggestion: generated.plan,
-    tripProfile: profile,
-  };
+    mergeSources: mergeChatSources,
+    registerSources: registerChatSources,
+    buildRevisionMeta: buildTravelPlanRevisionMeta,
+    toTravelPlan: (plan, profile, sources, revision) => {
+      const travelPlan = convertTripPlanToTravelPlanWithSources(plan, profile, sources, revision);
+      assertTravelPlanResponseValidatorQuality(travelPlan);
+      return travelPlan;
+    },
+    now: nowChatTimestamp,
+  });
 }
 
 function webSearchBackendToProgressProvider(backend: WebSearchBackend): StatusStepProvider {
@@ -2667,7 +2492,8 @@ async function buildExistingItineraryPatchResponse(input: {
       });
       const raw = await chatWithOllama({
         task: "travel-chat",
-        format: "json",
+        format: structuredChatOutputJsonSchema,
+        options: { temperature: 0, top_p: 0.9, num_ctx: 16_384 },
         messages: [
           { role: "system", content: intentPrompt.system },
           ...normalizeHistory(input.context, detectResponseLanguage(input.message)),
@@ -3079,9 +2905,10 @@ export async function generateTripPlan(
   });
   try {
     raw = await chatWithOllama({
-      format: "json",
+      format: tripPlanResultJsonSchema,
       task: "trip-plan",
       timeoutMs: TRIP_PLAN_COMPOSE_TIMEOUT_MS,
+      options: { temperature: 0, top_p: 0.9, num_ctx: 32_768 },
       messages: requestMessages,
     });
   } catch (error) {
@@ -3102,6 +2929,7 @@ export async function generateTripPlan(
   try {
     const parsed = parseTripPlanResponse(raw, request);
     assertTripPlanQualityWarnings(parsed.result.warnings);
+    assertTripPlanValidatorQuality(parsed.result, request);
     console.info(`[trip-plan] parse_mode=${parsed.diagnostics.parseMode} retry_count=${retryCount}`);
     publishProgressStep(progressSessionId, {
       phase: "compose",
@@ -3133,9 +2961,10 @@ export async function generateTripPlan(
     retryCount += 1;
     try {
       retriedRaw = await chatWithOllama({
-        format: "json",
+        format: tripPlanResultJsonSchema,
         task: "trip-plan",
         timeoutMs: TRIP_PLAN_COMPOSE_TIMEOUT_MS,
+        options: { temperature: 0, top_p: 0.9, num_ctx: 32_768 },
         messages: [
           requestMessages[0],
           {
@@ -3166,6 +2995,7 @@ export async function generateTripPlan(
     try {
       const parsed = parseTripPlanResponse(retriedRaw, request);
       assertTripPlanQualityWarnings(parsed.result.warnings);
+      assertTripPlanValidatorQuality(parsed.result, request);
       if (parsed.diagnostics.parseMode === "normalized") {
         console.info("[trip-plan] normalized");
       }
@@ -3326,8 +3156,9 @@ export async function chatWithTravelAssistant(input: {
     try {
       rawResearch = await chatWithOllama({
         task: "travel-chat",
-        format: "json",
+        format: travelResearchToolRequestJsonSchema,
         timeoutMs: perRoundTimeout,
+        options: { temperature: 0, top_p: 0.9, num_ctx: 16_384 },
         messages: [
           { role: "system", content: researchPrompt.system },
           ...normalizeHistory(input.context, language),
@@ -3385,10 +3216,11 @@ export async function chatWithTravelAssistant(input: {
   });
   let raw: string;
   try {
-    raw = await chatWithOllama({
+    raw = await chatWithOllamaTimeoutRetry({
       task: "travel-chat",
-      format: "json",
+      format: structuredChatOutputJsonSchema,
       timeoutMs: perRoundTimeout,
+      options: { temperature: 0, top_p: 0.9, num_ctx: 16_384 },
       messages: [
         { role: "system", content: prompt.system },
         ...normalizeHistory(input.context, language),
@@ -3400,9 +3232,10 @@ export async function chatWithTravelAssistant(input: {
     if (!(error instanceof OllamaRequestError)) {
       throw error;
     }
-    const fallbackText =
-      digestText ||
-      "AI 回應逾時，我先用目前已知的行程脈絡整理：可以先保留現有安排，並把想調整的地點、天數或預算補充得更明確，我會用較短的查詢重新規劃。";
+    if (!error.isTimeout) {
+      throw error;
+    }
+    const fallbackText = buildTravelChatTimeoutFallbackText(digestText);
     publishProgressStep(input.progressSessionId, {
       phase: "compose",
       label: "生成回覆",

@@ -15,8 +15,8 @@ import {
   isTripWorkflowMessage,
   needsTravelResearch,
   resolveProposedChangesFromContext,
-  sanitizeDynamicQuestionCard,
 } from "@/server/services/travelPlannerService";
+import { sanitizeDynamicQuestionCard } from "@/server/ai/validators/questionCardValidator";
 import type { ChatSource, TripPlanDay, TripPlanResult, TripProfile } from "@/types";
 
 function makeStructuredProfile(): TripProfile {
@@ -58,6 +58,87 @@ test("structured chat asks for travel_dates before itinerary generation when dat
   assert.ok(response.reply.questionCard?.questions.some((question) => question.slot === "travel_dates"));
   assert.equal(response.reply.statusSteps?.[1]?.phase, "waiting_user");
   assert.equal(response.reply.statusSteps?.[1]?.status, "waiting_input");
+});
+
+test("travel chat retries once when the first compose request times out", async () => {
+  const originalFetch = globalThis.fetch;
+  let callCount = 0;
+
+  globalThis.fetch = async () => {
+    callCount += 1;
+    if (callCount === 1) {
+      const abortError = new Error("aborted");
+      abortError.name = "AbortError";
+      throw abortError;
+    }
+    return new Response(
+      JSON.stringify({
+        message: {
+          content: JSON.stringify({
+            replyText: "已完成重試回覆",
+            proposedChanges: [],
+          }),
+        },
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  };
+
+  try {
+    const response = await chatWithTravelAssistant({ message: "你好" });
+    assert.equal(callCount, 2);
+    assert.equal(response.reply.responseType, "text_message");
+    assert.equal(response.reply.content, "已完成重試回覆");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("travel chat returns timeout fallback text after retry exhaustion", async () => {
+  const originalFetch = globalThis.fetch;
+  let callCount = 0;
+
+  globalThis.fetch = async () => {
+    callCount += 1;
+    const abortError = new Error("aborted");
+    abortError.name = "AbortError";
+    throw abortError;
+  };
+
+  try {
+    const response = await chatWithTravelAssistant({ message: "你好" });
+    assert.equal(callCount, 2);
+    assert.equal(response.reply.responseType, "text_message");
+    assert.equal(
+      response.reply.content,
+      "我先保留目前的行程脈絡；你可以再補充想調整的地點、天數或預算，我會用更精簡的查詢重新規劃。",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("travel chat does not retry non-timeout ollama errors", async () => {
+  const originalFetch = globalThis.fetch;
+  let callCount = 0;
+
+  globalThis.fetch = async () => {
+    callCount += 1;
+    return new Response("server error", {
+      status: 500,
+      headers: { "Content-Type": "text/plain" },
+    });
+  };
+
+  try {
+    await assert.rejects(() => chatWithTravelAssistant({ message: "你好" }));
+    assert.equal(callCount, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("date range derives inclusive trip days without adding extra days", () => {

@@ -17,9 +17,18 @@ const WAIT_GAME_PHASES = new Set(["research", "compose"]);
 const PROMPT_DELAY_MS = 5000;
 
 type PlanningWaitGameProps = {
-  steps: StatusStepPayload[];
-  isPlanning: boolean;
-  planningComplete: boolean;
+  steps?: StatusStepPayload[];
+  isPlanning?: boolean;
+  planningComplete?: boolean;
+  isWaiting?: boolean;
+  waitKey?: string | null;
+  promptDelayMs?: number;
+  promptTitle?: string;
+  promptDescription?: string;
+  gameTitle?: string;
+  gameDescription?: string;
+  completionTitle?: string;
+  completionDescription?: string;
 };
 
 function isWaitGamePhase(step: WorkflowStepView | null): boolean {
@@ -27,13 +36,25 @@ function isWaitGamePhase(step: WorkflowStepView | null): boolean {
 }
 
 export default function PlanningWaitGame({
-  steps,
-  isPlanning,
-  planningComplete,
+  steps = [],
+  isPlanning = false,
+  planningComplete = false,
+  isWaiting,
+  waitKey,
+  promptDelayMs = PROMPT_DELAY_MS,
+  promptTitle = "等太久了嗎？玩一下小遊戲等待完成規劃吧！",
+  promptDescription,
+  gameTitle = "Sky Dash",
+  gameDescription = "規劃進行中，先玩小遊戲打發時間。",
+  completionTitle = "旅遊規劃完成囉！",
+  completionDescription,
 }: PlanningWaitGameProps) {
   const workflowSteps = buildWorkflowSteps(steps);
   const activeStep = getActiveWorkflowStep(workflowSteps);
   const shouldOfferGame = isPlanning && isWaitGamePhase(activeStep);
+  const waitingActive = isWaiting ?? shouldOfferGame;
+  const waitingDone = planningComplete;
+  const activeWaitKey = waitKey ?? activeStep?.key ?? (waitingActive ? "default-wait" : null);
 
   const [promptVisible, setPromptVisible] = useState(false);
   const [gameOpen, setGameOpen] = useState(false);
@@ -45,6 +66,7 @@ export default function PlanningWaitGame({
   const lastPhaseKeyRef = useRef<string | null>(null);
   const promptTimerRef = useRef<number | null>(null);
   const completionNotifiedRef = useRef(false);
+  const hadWaitingSessionRef = useRef(false);
   const latestScoreRef = useRef(0);
   const escSavedOnceRef = useRef(false);
 
@@ -64,17 +86,18 @@ export default function PlanningWaitGame({
     setCompletionToastVisible(false);
     setEscHint(null);
     completionNotifiedRef.current = false;
+    hadWaitingSessionRef.current = false;
     escSavedOnceRef.current = false;
   }, [clearPromptTimer]);
 
   useEffect(() => {
-    if (planningComplete) {
+    if (waitingDone) {
       clearPromptTimer();
       queueMicrotask(() => setPromptVisible(false));
       return;
     }
 
-    if (!shouldOfferGame) {
+    if (!waitingActive) {
       if (!gameOpen) {
         queueMicrotask(() => resetSession());
       } else {
@@ -84,7 +107,8 @@ export default function PlanningWaitGame({
       return;
     }
 
-    const phaseKey = activeStep?.key || null;
+    hadWaitingSessionRef.current = true;
+    const phaseKey = activeWaitKey || null;
     if (phaseKey !== lastPhaseKeyRef.current) {
       lastPhaseKeyRef.current = phaseKey;
       phaseStartedAtRef.current = Date.now();
@@ -95,12 +119,12 @@ export default function PlanningWaitGame({
 
       promptTimerRef.current = window.setTimeout(() => {
         setPromptVisible(true);
-      }, PROMPT_DELAY_MS);
+      }, promptDelayMs);
     }
-  }, [activeStep?.key, shouldOfferGame, clearPromptTimer, resetSession, gameOpen, planningComplete]);
+  }, [activeWaitKey, waitingActive, clearPromptTimer, resetSession, gameOpen, waitingDone, promptDelayMs]);
 
   useEffect(() => {
-    if (!planningComplete || completionNotifiedRef.current) {
+    if (!waitingDone || completionNotifiedRef.current || !hadWaitingSessionRef.current) {
       return;
     }
     completionNotifiedRef.current = true;
@@ -109,7 +133,7 @@ export default function PlanningWaitGame({
       setCompletionToastVisible(false);
     }, 6000);
     return () => window.clearTimeout(timer);
-  }, [planningComplete]);
+  }, [waitingDone]);
 
   useEffect(() => {
     if (!gameOpen) {
@@ -125,7 +149,7 @@ export default function PlanningWaitGame({
       const saved = saveSkyDashHighScore(latestScoreRef.current);
       setSavedHighScore(saved);
 
-      if (planningComplete || escSavedOnceRef.current) {
+      if (waitingDone || escSavedOnceRef.current) {
         setGameOpen(false);
         setPromptVisible(false);
         setEscHint(null);
@@ -139,13 +163,13 @@ export default function PlanningWaitGame({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [gameOpen, planningComplete]);
+  }, [gameOpen, waitingDone]);
 
   useEffect(() => {
-    if (planningComplete && escHint) {
+    if (waitingDone && escHint) {
       queueMicrotask(() => setEscHint("旅遊規劃已完成，現在可以按 ESC 關閉遊戲。"));
     }
-  }, [planningComplete, escHint]);
+  }, [waitingDone, escHint]);
 
   const openGame = () => {
     setSavedHighScore(getSkyDashHighScore());
@@ -155,7 +179,7 @@ export default function PlanningWaitGame({
     escSavedOnceRef.current = false;
   };
 
-  if (!shouldOfferGame && !gameOpen && !completionToastVisible) {
+  if (!waitingActive && !gameOpen && !completionToastVisible) {
     return null;
   }
 
@@ -171,9 +195,9 @@ export default function PlanningWaitGame({
             className="fixed bottom-24 left-1/2 z-[85] w-[min(92vw,420px)] -translate-x-1/2"
           >
             <div className="rounded-2xl border border-primary/20 bg-white px-4 py-4 shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
-              <p className="text-sm font-medium text-slate-900">等太久了嗎？玩一下小遊戲等待完成規劃吧！</p>
+              <p className="text-sm font-medium text-slate-900">{promptTitle}</p>
               <div className="mt-3 flex items-center justify-between gap-3">
-                <p className="text-xs text-slate-500">上次最高分：{savedHighScore}</p>
+                <p className="text-xs text-slate-500">{promptDescription || `上次最高分：${savedHighScore}`}</p>
                 <button
                   type="button"
                   onClick={openGame}
@@ -217,24 +241,24 @@ export default function PlanningWaitGame({
             >
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">Sky Dash</p>
+                  <p className="text-sm font-semibold text-slate-900">{gameTitle}</p>
                   <p className="mt-1 text-xs leading-5 text-slate-500">
-                    規劃進行中，先玩小遊戲打發時間。
+                    {gameDescription}
                     <br />
-                    按 ESC 保存分數{planningComplete ? "並關閉遊戲" : "，規劃完成後即可關閉"}。
+                    按 ESC 保存分數{waitingDone ? "並關閉遊戲" : "，規劃完成後即可關閉"}。
                   </p>
                 </div>
                 <button
                   type="button"
                   aria-label="關閉遊戲"
-                  disabled={!planningComplete}
+                  disabled={!waitingDone}
                   onClick={() => {
                     saveSkyDashHighScore(latestScoreRef.current);
                     setGameOpen(false);
                   }}
                   className={cn(
                     "rounded-full border p-1.5 transition-colors",
-                    planningComplete
+                    waitingDone
                       ? "border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-900"
                       : "cursor-not-allowed border-slate-100 text-slate-300",
                   )}
@@ -271,9 +295,9 @@ export default function PlanningWaitGame({
             className="pointer-events-none fixed right-4 top-4 z-[100] w-full max-w-sm"
           >
             <div className="pointer-events-auto rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 shadow-soft-lg">
-              <p className="text-sm font-semibold text-emerald-900">旅遊規劃完成囉！</p>
+              <p className="text-sm font-semibold text-emerald-900">{completionTitle}</p>
               <p className="mt-1 text-xs text-emerald-800">
-                行程已整理完成{gameOpen ? "，現在可以按 ESC 關閉小遊戲。" : "。"}
+                {completionDescription || `行程已整理完成${gameOpen ? "，現在可以按 ESC 關閉小遊戲。" : "。"}`}
               </p>
             </div>
           </motion.div>

@@ -37,6 +37,7 @@ import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
 import { useVideoStore, type SummaryDiagnostics } from "@/stores/useVideoStore";
 import YoutubeIframePlayer from "@/components/home/YoutubeIframePlayer";
+import PlanningWaitGame from "@/components/chat/PlanningWaitGame";
 
 interface VideoSummaryDrawerProps {
   video: Video | null;
@@ -291,6 +292,7 @@ export default function VideoSummaryDrawer({
     isSummarizing &&
     !summaryDiagnostics?.summaryUnavailable &&
     ((activeVideo.summarySegments || []).length === 0 || activeVideo.extractedLocations.length === 0);
+  const drawerProcessingWaitKey = isProcessingVideo ? `drawer-processing:${videoId || activeVideo.id}` : null;
   const verifiedLocations = activeVideo.extractedLocations;
 
   function bumpSeek(seconds: number) {
@@ -973,6 +975,17 @@ export default function VideoSummaryDrawer({
           </motion.div>
         )}
       </AnimatePresence>
+
+      <PlanningWaitGame
+        isWaiting={open && isProcessingVideo}
+        waitKey={drawerProcessingWaitKey}
+        planningComplete={open ? !isProcessingVideo : false}
+        promptDelayMs={3000}
+        promptTitle="影片摘要處理中，先玩個小遊戲吧！"
+        gameDescription="正在整理影片重點與地點資訊，先玩小遊戲打發等待時間。"
+        completionTitle="影片摘要處理完成！"
+        completionDescription="重點片段與地點資訊已更新。"
+      />
     </>
   );
 }
