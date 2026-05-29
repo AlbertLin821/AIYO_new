@@ -38,7 +38,7 @@ export default function SkyDashGame({ onPersistScore }: SkyDashGameProps) {
 
   useEffect(() => {
     onPersistScore?.(score, highScore);
-  }, [score, highScore, onPersistScore]);
+  }, [highScore, onPersistScore, score]);
 
   return (
     <div className="flex cursor-pointer select-none justify-center" onClick={jump}>

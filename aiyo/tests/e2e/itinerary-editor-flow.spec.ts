@@ -81,6 +81,7 @@ test.describe("嘉義情境行程編輯器", () => {
       .filter({ hasText: "E2E排序乙" });
     await deleteCandidate.hover();
     await deleteCandidate.getByTestId("activity-delete-button").click();
+    await page.getByRole("button", { name: "確認刪除" }).click();
 
     await expect(deleteCandidate).toHaveCount(0);
 

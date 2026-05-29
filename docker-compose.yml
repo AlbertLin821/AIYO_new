@@ -49,7 +49,7 @@ services:
       WATCHPACK_POLLING: "true"
     ports:
       - "3000:3000"
-    command: sh -c "npx prisma generate && npx prisma migrate deploy && npm run dev"
+    command: sh -c "npm install && npx prisma generate && npx prisma migrate deploy && npm run dev"
     volumes:
       - ./aiyo:/app
       - /app/node_modules

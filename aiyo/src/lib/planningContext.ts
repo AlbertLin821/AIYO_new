@@ -168,7 +168,7 @@ export function applyPlanningUpdateToStores(update: PlanningUpdate): void {
     tripStore.setDestination(update.destination);
   }
   if (typeof update.days === "number") {
-    tripStore.setDays(update.days);
+    tripStore.resizeItineraryToDayCount(update.days);
   }
   if (typeof update.budget === "number") {
     tripStore.setBudget(update.budget);

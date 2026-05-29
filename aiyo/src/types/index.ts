@@ -532,7 +532,11 @@ export interface VideoRecommendation {
   extractedFoods?: string[];
   summarySegments?: VideoSummarySegment[];
   /** Batch search: whether results came from YouTube Data API or mock fallback */
-  listProvenance?: "youtube-data-api" | "mock-fallback" | "default-taiwan-cities";
+  listProvenance?:
+    | "youtube-data-api"
+    | "mock-fallback"
+    | "default-taiwan-cities"
+    | "preloaded-destination-seed";
 }
 
 export interface VideoSummaryResult {

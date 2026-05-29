@@ -30,6 +30,11 @@ if (enableMockMaps) {
 }
 
 const nextConfig: NextConfig = {
+  // Enable after removing route-level `export const dynamic = "force-dynamic"` conflicts (see docs/PERFORMANCE_BASELINE.md).
+  // cacheComponents: true,
+  reactCompiler: {
+    compilationMode: "annotation",
+  },
   env: injectedEnv,
   async redirects() {
     return [
@@ -49,6 +54,10 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: "img.youtube.com",
+      },
+      {
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com",
       },
     ],
   },

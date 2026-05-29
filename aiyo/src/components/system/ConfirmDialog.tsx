@@ -51,9 +51,9 @@ function ConfirmDialog({
     >
       <DialogContent
         showCloseButton={!pending}
-        className="rounded-2xl border-border-light shadow-soft-lg sm:max-w-md"
+        className="overflow-hidden rounded-2xl border-border-light bg-surface p-5 shadow-soft-lg sm:max-w-md"
       >
-        <DialogHeader className="gap-3">
+        <DialogHeader className="gap-3 pr-10">
           <div className="flex items-start gap-3">
             <span
               className={cn(
@@ -69,13 +69,13 @@ function ConfirmDialog({
             </div>
           </div>
         </DialogHeader>
-        <DialogFooter className="mt-2 gap-2 border-0 bg-transparent p-0 sm:justify-end">
+        <DialogFooter className="mt-2 flex flex-col-reverse gap-2 border-0 bg-transparent p-0 sm:flex-row sm:flex-wrap sm:justify-end">
           <Button
             type="button"
             variant="outline"
             disabled={pending}
             onClick={onCancel}
-            className="rounded-xl border-border-light"
+            className="w-full min-w-0 rounded-xl border-border-light sm:w-auto"
           >
             {cancelLabel}
           </Button>
@@ -84,7 +84,7 @@ function ConfirmDialog({
             disabled={pending}
             onClick={onConfirm}
             className={cn(
-              "rounded-xl",
+              "w-full min-w-0 rounded-xl sm:w-auto",
               isDanger
                 ? "bg-danger text-white hover:bg-danger/90"
                 : "bg-primary text-primary-foreground hover:bg-primary-dark",

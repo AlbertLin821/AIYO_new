@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "@/lib/motion";
 import {
   ArrowRightToLine,
   CalendarDays,
@@ -43,7 +43,7 @@ export default function Sidebar() {
   const width = collapsed ? COLLAPSED_W : EXPANDED_W;
 
   return (
-    <motion.aside
+    <m.aside
       initial={false}
       animate={{ width }}
       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
@@ -60,7 +60,7 @@ export default function Sidebar() {
         </button>
         <AnimatePresence>
           {!collapsed && (
-            <motion.div
+            <m.div
               initial={{ opacity: 0, width: 0 }}
               animate={{ opacity: 1, width: "auto" }}
               exit={{ opacity: 0, width: 0 }}
@@ -74,7 +74,7 @@ export default function Sidebar() {
                 <h1 className="font-bold text-lg text-foreground tracking-tight whitespace-nowrap">AIYO</h1>
                 <p className="text-[11px] text-muted leading-none whitespace-nowrap">{t.nav.brandSubtitle}</p>
               </div>
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
       </div>
@@ -107,7 +107,7 @@ export default function Sidebar() {
               />
               <AnimatePresence>
                 {!collapsed && (
-                  <motion.span
+                  <m.span
                     initial={{ opacity: 0, width: 0 }}
                     animate={{ opacity: 1, width: "auto" }}
                     exit={{ opacity: 0, width: 0 }}
@@ -115,11 +115,11 @@ export default function Sidebar() {
                     className="whitespace-nowrap overflow-hidden"
                   >
                     {t.nav[item.labelKey]}
-                  </motion.span>
+                  </m.span>
                 )}
               </AnimatePresence>
               {isActive && !collapsed && (
-                <motion.div
+                <m.div
                   layoutId="activeNav"
                   className="ml-auto size-1.5 rounded-full bg-primary"
                   transition={{ type: "spring", stiffness: 300, damping: 30 }}
@@ -141,7 +141,7 @@ export default function Sidebar() {
             </div>
             <AnimatePresence>
               {!collapsed && (
-                <motion.div
+                <m.div
                   initial={{ opacity: 0, width: 0 }}
                   animate={{ opacity: 1, width: "auto" }}
                   exit={{ opacity: 0, width: 0 }}
@@ -162,7 +162,7 @@ export default function Sidebar() {
                         ? session?.user?.email || ""
                         : t.sidebar.signInHint}
                   </p>
-                </motion.div>
+                </m.div>
               )}
             </AnimatePresence>
           </div>
@@ -181,7 +181,7 @@ export default function Sidebar() {
                 <Settings className="size-4" />
                 <AnimatePresence>
                   {!collapsed && (
-                    <motion.span
+                    <m.span
                       initial={{ opacity: 0, width: 0 }}
                       animate={{ opacity: 1, width: "auto" }}
                       exit={{ opacity: 0, width: 0 }}
@@ -189,7 +189,7 @@ export default function Sidebar() {
                       className="whitespace-nowrap overflow-hidden"
                     >
                       設定
-                    </motion.span>
+                    </m.span>
                   )}
                 </AnimatePresence>
               </button>
@@ -229,7 +229,7 @@ export default function Sidebar() {
               )}
               <AnimatePresence>
                 {!collapsed && (
-                  <motion.span
+                  <m.span
                     initial={{ opacity: 0, width: 0 }}
                     animate={{ opacity: 1, width: "auto" }}
                     exit={{ opacity: 0, width: 0 }}
@@ -241,14 +241,14 @@ export default function Sidebar() {
                       : status === "authenticated"
                         ? t.sidebar.signOut
                         : t.sidebar.signIn}
-                  </motion.span>
+                  </m.span>
                 )}
               </AnimatePresence>
             </button>
           </div>
         </div>
       </div>
-    </motion.aside>
+    </m.aside>
   );
 }
 

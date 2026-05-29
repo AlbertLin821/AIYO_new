@@ -2,7 +2,7 @@
 
 import { memo, type KeyboardEvent } from "react";
 import Image from "next/image";
-import { motion } from "framer-motion";
+import { m } from "@/lib/motion";
 import { CalendarDays, MapPin } from "lucide-react";
 import type { PublicItinerarySummary } from "@/types";
 import { zhTW as t } from "@/locales/zh-TW";
@@ -34,7 +34,7 @@ function RecommendedItineraryCard({ itinerary, index, onClick }: Props) {
   }
 
   return (
-    <motion.div
+    <m.div
       role="button"
       tabIndex={0}
       data-testid="recommended-itinerary-card"
@@ -63,14 +63,14 @@ function RecommendedItineraryCard({ itinerary, index, onClick }: Props) {
         )}
 
         {itinerary.publisherImage ? (
-          // eslint-disable-next-line @next/next/no-img-element -- OAuth avatar URL
-          <img
+          <Image
             src={itinerary.publisherImage}
             alt=""
             width={32}
             height={32}
-            className="absolute right-2 top-2 size-8 rounded-full border-2 border-white object-cover shadow-md"
+            unoptimized
             referrerPolicy="no-referrer"
+            className="absolute right-2 top-2 size-8 rounded-full border-2 border-white object-cover shadow-md"
             aria-label={t.publicItinerary.authorAvatarAria}
           />
         ) : (
@@ -103,7 +103,7 @@ function RecommendedItineraryCard({ itinerary, index, onClick }: Props) {
           <span>{formatPublishedAt(itinerary.publishedAt)}</span>
         </div>
       </div>
-    </motion.div>
+    </m.div>
   );
 }
 

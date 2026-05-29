@@ -130,7 +130,7 @@ export default function TripByIdPage() {
         <MapView />
       </div>
 
-      <ItineraryPanel />
+      <ItineraryPanel enablePoiAdd={false} />
 
       {!panelOpen && (
         <button

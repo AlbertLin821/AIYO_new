@@ -1,0 +1,461 @@
+{
+  "completed": [
+    {
+      "destId": "tokyo",
+      "videoId": "BAyQ10iPK4M"
+    },
+    {
+      "destId": "tokyo",
+      "videoId": "eVxccHTaK48"
+    },
+    {
+      "destId": "tokyo",
+      "videoId": "lU8_4kSdkpI"
+    },
+    {
+      "destId": "tokyo",
+      "videoId": "41hcd2TUaEY"
+    },
+    {
+      "destId": "tokyo",
+      "videoId": "U0cFN0WJfwc"
+    },
+    {
+      "destId": "tokyo",
+      "videoId": "3KMSR0F_iVY"
+    },
+    {
+      "destId": "osaka",
+      "videoId": "-0pR0qCetLo"
+    },
+    {
+      "destId": "osaka",
+      "videoId": "csVGL-XeB8s"
+    },
+    {
+      "destId": "osaka",
+      "videoId": "igEWpadlN2w"
+    },
+    {
+      "destId": "osaka",
+      "videoId": "12Jsogs2Zbs"
+    },
+    {
+      "destId": "osaka",
+      "videoId": "HNXC5kswe6Y"
+    },
+    {
+      "destId": "osaka",
+      "videoId": "2P7MFYy-43A"
+    },
+    {
+      "destId": "kyoto",
+      "videoId": "oMVNAWOQJhU"
+    },
+    {
+      "destId": "kyoto",
+      "videoId": "igEWpadlN2w"
+    },
+    {
+      "destId": "kyoto",
+      "videoId": "X_SpsfNuqjk"
+    },
+    {
+      "destId": "kyoto",
+      "videoId": "BFRbrp2CNVI"
+    },
+    {
+      "destId": "kyoto",
+      "videoId": "2uNZ3jGsQyk"
+    },
+    {
+      "destId": "kyoto",
+      "videoId": "QaoBLbzdz-4"
+    },
+    {
+      "destId": "seoul",
+      "videoId": "exlSFOHArfY"
+    },
+    {
+      "destId": "seoul",
+      "videoId": "zsKM1rZsi5c"
+    },
+    {
+      "destId": "seoul",
+      "videoId": "ut8wgvX68ko"
+    },
+    {
+      "destId": "seoul",
+      "videoId": "14vKae1UWYA"
+    },
+    {
+      "destId": "seoul",
+      "videoId": "NaroRH1cYOQ"
+    },
+    {
+      "destId": "seoul",
+      "videoId": "3cTMIwTTG3I"
+    },
+    {
+      "destId": "bangkok",
+      "videoId": "BK9mbzPH924"
+    },
+    {
+      "destId": "bangkok",
+      "videoId": "9jP5TRvEa1o"
+    },
+    {
+      "destId": "bangkok",
+      "videoId": "WdOqdqafuiM"
+    },
+    {
+      "destId": "bangkok",
+      "videoId": "gkKLIKzorf8"
+    },
+    {
+      "destId": "bangkok",
+      "videoId": "asGPXcgUzyw"
+    },
+    {
+      "destId": "bangkok",
+      "videoId": "U6pbUmhEMn4"
+    },
+    {
+      "destId": "singapore",
+      "videoId": "ScdzcbQ_GJE"
+    },
+    {
+      "destId": "singapore",
+      "videoId": "H-6rYvcJ-h0"
+    },
+    {
+      "destId": "singapore",
+      "videoId": "LjBa0KGFyig"
+    },
+    {
+      "destId": "singapore",
+      "videoId": "E4kZoGxgda0"
+    },
+    {
+      "destId": "singapore",
+      "videoId": "A9pWlLdRExg"
+    },
+    {
+      "destId": "singapore",
+      "videoId": "HER4lxUHJHo"
+    },
+    {
+      "destId": "hanoi",
+      "videoId": "BUSxgzqqJVk"
+    },
+    {
+      "destId": "hanoi",
+      "videoId": "daUmbLSVfU0"
+    },
+    {
+      "destId": "hanoi",
+      "videoId": "7Z4jfWqlEyg"
+    },
+    {
+      "destId": "hanoi",
+      "videoId": "rtZwghbC91E"
+    },
+    {
+      "destId": "hanoi",
+      "videoId": "iFaOusVrl3Q"
+    },
+    {
+      "destId": "hanoi",
+      "videoId": "GBMjTMX-FcE"
+    },
+    {
+      "destId": "ho-chi-minh",
+      "videoId": "o0KAHXgyd7o"
+    },
+    {
+      "destId": "ho-chi-minh",
+      "videoId": "qjkUHiMfEAw"
+    },
+    {
+      "destId": "ho-chi-minh",
+      "videoId": "aiBh9leoo3c"
+    },
+    {
+      "destId": "ho-chi-minh",
+      "videoId": "cB4ZgR2pjxw"
+    },
+    {
+      "destId": "ho-chi-minh",
+      "videoId": "m3tXIr6TBGY"
+    },
+    {
+      "destId": "ho-chi-minh",
+      "videoId": "kasYoUTEeb0"
+    },
+    {
+      "destId": "kuala-lumpur",
+      "videoId": "EupfmUItcQo"
+    },
+    {
+      "destId": "kuala-lumpur",
+      "videoId": "EUrR4fp09E8"
+    },
+    {
+      "destId": "kuala-lumpur",
+      "videoId": "1ImgyOoSGsw"
+    },
+    {
+      "destId": "kuala-lumpur",
+      "videoId": "s3KRRtegOis"
+    },
+    {
+      "destId": "kuala-lumpur",
+      "videoId": "AD2y3iNfX0E"
+    },
+    {
+      "destId": "kuala-lumpur",
+      "videoId": "PhLcuM9AJOk"
+    },
+    {
+      "destId": "bali",
+      "videoId": "oriMeUcco_8"
+    },
+    {
+      "destId": "bali",
+      "videoId": "Plbt2hGN1IY"
+    },
+    {
+      "destId": "bali",
+      "videoId": "QDLVQna2-7Q"
+    },
+    {
+      "destId": "bali",
+      "videoId": "zQOHuJnnzbM"
+    },
+    {
+      "destId": "bali",
+      "videoId": "1uxdRZjqAk4"
+    },
+    {
+      "destId": "bali",
+      "videoId": "E5Ip-QDRu2E"
+    },
+    {
+      "destId": "taipei",
+      "videoId": "yIob8Z8ZADM"
+    },
+    {
+      "destId": "taipei",
+      "videoId": "yONFCGQmKfU"
+    },
+    {
+      "destId": "taipei",
+      "videoId": "2WMegkMUOTs"
+    },
+    {
+      "destId": "taipei",
+      "videoId": "ykSHce1y3xQ"
+    },
+    {
+      "destId": "taipei",
+      "videoId": "hYtDUQYhL8o"
+    },
+    {
+      "destId": "taipei",
+      "videoId": "JjxRp7q-Woc"
+    },
+    {
+      "destId": "hong-kong",
+      "videoId": "6p0BVjnqVm0"
+    },
+    {
+      "destId": "hong-kong",
+      "videoId": "SAg-2vw8t54"
+    },
+    {
+      "destId": "hong-kong",
+      "videoId": "EKLsirzNv_w"
+    },
+    {
+      "destId": "hong-kong",
+      "videoId": "Mune7GTOYPI"
+    },
+    {
+      "destId": "hong-kong",
+      "videoId": "3IS7gSzPjPg"
+    },
+    {
+      "destId": "hong-kong",
+      "videoId": "GVp3jxS6LsU"
+    },
+    {
+      "destId": "macau",
+      "videoId": "nFQvMtYp7hA"
+    },
+    {
+      "destId": "macau",
+      "videoId": "H17n2owGfnc"
+    },
+    {
+      "destId": "macau",
+      "videoId": "Sp6wOHUysFM"
+    },
+    {
+      "destId": "macau",
+      "videoId": "yYRElamSMb0"
+    },
+    {
+      "destId": "macau",
+      "videoId": "3xTfSvakHUM"
+    },
+    {
+      "destId": "macau",
+      "videoId": "BuKf0CwoyNM"
+    },
+    {
+      "destId": "paris",
+      "videoId": "qfjyQVebJYU"
+    },
+    {
+      "destId": "paris",
+      "videoId": "-qj3fqTXgXU"
+    },
+    {
+      "destId": "paris",
+      "videoId": "9jlakHHb8IY"
+    },
+    {
+      "destId": "paris",
+      "videoId": "FOC18E4F2mI"
+    },
+    {
+      "destId": "paris",
+      "videoId": "CqqCjRBme6I"
+    },
+    {
+      "destId": "paris",
+      "videoId": "_kY_ixDe-3k"
+    },
+    {
+      "destId": "rome",
+      "videoId": "MKtFmJrA1FI"
+    },
+    {
+      "destId": "rome",
+      "videoId": "KwUClzEhpXE"
+    },
+    {
+      "destId": "rome",
+      "videoId": "KwPqZQ8N7wQ"
+    },
+    {
+      "destId": "rome",
+      "videoId": "MTM_RsvY514"
+    },
+    {
+      "destId": "rome",
+      "videoId": "JRmuT-rPFlw"
+    },
+    {
+      "destId": "rome",
+      "videoId": "occfXt60uww"
+    },
+    {
+      "destId": "london",
+      "videoId": "NwutTdBi-ic"
+    },
+    {
+      "destId": "london",
+      "videoId": "ipGgSl709FE"
+    },
+    {
+      "destId": "london",
+      "videoId": "DVBIczEgSos"
+    },
+    {
+      "destId": "london",
+      "videoId": "ALQBkHsmudM"
+    },
+    {
+      "destId": "london",
+      "videoId": "EM7-hVvNR8w"
+    },
+    {
+      "destId": "london",
+      "videoId": "trIzQW1UFsQ"
+    },
+    {
+      "destId": "barcelona",
+      "videoId": "CkVNaQVCRWI"
+    },
+    {
+      "destId": "barcelona",
+      "videoId": "ZIDi8Azuwns"
+    },
+    {
+      "destId": "barcelona",
+      "videoId": "DPKCV8n6oNM"
+    },
+    {
+      "destId": "barcelona",
+      "videoId": "XmpXZcecNNg"
+    },
+    {
+      "destId": "barcelona",
+      "videoId": "M4EnW3aPT-I"
+    },
+    {
+      "destId": "barcelona",
+      "videoId": "-vBCqV_YgC0"
+    },
+    {
+      "destId": "new-york",
+      "videoId": "ddj-DZb-Ijw"
+    },
+    {
+      "destId": "new-york",
+      "videoId": "QvGHroQ5nGI"
+    },
+    {
+      "destId": "new-york",
+      "videoId": "_2lTq7ejdWs"
+    },
+    {
+      "destId": "new-york",
+      "videoId": "ImRyk-4SwXE"
+    },
+    {
+      "destId": "new-york",
+      "videoId": "8uxygqXQyqk"
+    },
+    {
+      "destId": "new-york",
+      "videoId": "y5YhTDZg1hA"
+    },
+    {
+      "destId": "sydney",
+      "videoId": "_z_UUU0dzdE"
+    },
+    {
+      "destId": "sydney",
+      "videoId": "FTnYisA3I6g"
+    },
+    {
+      "destId": "sydney",
+      "videoId": "a9DkBdSpHWY"
+    },
+    {
+      "destId": "sydney",
+      "videoId": "lyVZuNqufY8"
+    },
+    {
+      "destId": "sydney",
+      "videoId": "jJNd9lRoWr4"
+    },
+    {
+      "destId": "sydney",
+      "videoId": "t8QyyBSM3pI"
+    }
+  ],
+  "updatedAt": "2026-05-29T04:09:51.154Z"
+}

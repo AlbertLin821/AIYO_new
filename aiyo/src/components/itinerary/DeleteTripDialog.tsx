@@ -35,9 +35,9 @@ function DeleteTripDialog({ target, deleting, onCancel, onConfirm }: Props) {
       <DialogContent
         data-testid="library-delete-trip-dialog"
         showCloseButton={!deleting}
-        className="rounded-2xl border-border-light bg-surface shadow-soft-lg sm:max-w-md"
+        className="overflow-hidden rounded-2xl border-border-light bg-surface p-5 shadow-soft-lg sm:max-w-md"
       >
-        <DialogHeader className="gap-3">
+        <DialogHeader className="gap-3 pr-10">
           <div className="flex items-start gap-3">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-danger/10 text-danger">
               <Trash2 className="size-5" aria-hidden />
@@ -57,13 +57,13 @@ function DeleteTripDialog({ target, deleting, onCancel, onConfirm }: Props) {
             </DialogDescription>
           ) : null}
         </DialogHeader>
-        <DialogFooter className="gap-2 border-0 bg-transparent p-0 sm:justify-end">
+        <DialogFooter className="flex flex-col-reverse gap-2 border-0 bg-transparent p-0 sm:flex-row sm:flex-wrap sm:justify-end">
           <Button
             type="button"
             variant="outline"
             disabled={deleting}
             onClick={onCancel}
-            className="rounded-xl border-border-light"
+            className="w-full min-w-0 rounded-xl border-border-light sm:w-auto"
           >
             {t.itineraryPage.deleteTripCancel}
           </Button>
@@ -71,7 +71,7 @@ function DeleteTripDialog({ target, deleting, onCancel, onConfirm }: Props) {
             type="button"
             disabled={deleting}
             onClick={onConfirm}
-            className={cn("rounded-xl bg-danger text-white hover:bg-danger/90")}
+            className={cn("w-full min-w-0 rounded-xl bg-danger text-white hover:bg-danger/90 sm:w-auto")}
           >
             {deleting ? t.itineraryPage.deleteTripDeleting : t.itineraryPage.deleteTripConfirmAction}
           </Button>

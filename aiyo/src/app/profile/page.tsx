@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { m } from "@/lib/motion";
 import { Check, Mail, Pencil, RefreshCcw, Save, Trash2, User as UserIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -145,16 +145,16 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen max-w-3xl mx-auto p-6 lg:p-8">
-      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+      <m.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
           <UserIcon className="size-6 text-primary" />
           {t.profile.title}
         </h1>
         <p className="mt-1 text-sm text-muted">{t.profile.subtitle}</p>
-      </motion.div>
+      </m.div>
 
       <div className="flex flex-col gap-6">
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="rounded-2xl border border-border-light bg-surface p-6 shadow-soft">
+        <m.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="rounded-2xl border border-border-light bg-surface p-6 shadow-soft">
           <h2 className="mb-4 font-semibold text-foreground">{t.profile.basicDetails}</h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
@@ -172,9 +172,9 @@ export default function ProfilePage() {
               <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-xl border border-border bg-cream/50 px-4 py-2.5 text-sm text-foreground transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30" />
             </div>
           </div>
-        </motion.div>
+        </m.div>
 
-        <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="rounded-2xl border border-border-light bg-surface p-6 shadow-soft">
+        <m.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="rounded-2xl border border-border-light bg-surface p-6 shadow-soft">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
               <h2 className="font-semibold text-foreground">{t.profile.memoryTitle}</h2>
@@ -278,9 +278,9 @@ export default function ProfilePage() {
               })}
             </div>
           )}
-        </motion.section>
+        </m.section>
 
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="flex justify-end pb-8">
+        <m.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="flex justify-end pb-8">
           <button
             onClick={handleSave}
             disabled={isSaving}
@@ -303,7 +303,7 @@ export default function ProfilePage() {
               </>
             )}
           </button>
-        </motion.div>
+        </m.div>
       </div>
     </div>
   );

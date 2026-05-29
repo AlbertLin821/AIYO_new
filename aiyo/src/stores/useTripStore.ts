@@ -29,6 +29,7 @@ interface TripState {
   setDestination: (destination: string) => void;
   setDays: (days: number) => void;
   setBudget: (budget: number) => void;
+  resizeItineraryToDayCount: (targetDayCount: number) => void;
   setCoverImageUrl: (url: string | null) => void;
   setItinerary: (itinerary: TripPlanDay[]) => void;
   setRemoteTrip: (trip: PersistedTripPayload, budget?: number, source?: SyncMutationSource) => void;
@@ -60,6 +61,47 @@ export const useTripStore = create<TripState>((set) => ({
   setBudget: (budget) =>
     withSyncMutationSource("local-user-edit", () => {
       set({ budget: Math.max(0, budget) });
+    }),
+  resizeItineraryToDayCount: (targetDayCount) =>
+    withSyncMutationSource("local-user-edit", () => {
+      set((state) => {
+        const target = Math.max(1, Math.min(30, Math.floor(targetDayCount)));
+        let itinerary = [...state.itinerary];
+
+        if (itinerary.length === 0) {
+          itinerary = Array.from({ length: target }, (_, index) => ({
+            dayNumber: index + 1,
+            theme: `Day ${index + 1}`,
+            summary: "尚未安排內容",
+            items: [],
+          }));
+        } else {
+          while (itinerary.length < target) {
+            const nextDay = itinerary.length + 1;
+            itinerary.push({
+              dayNumber: nextDay,
+              theme: `Day ${nextDay}`,
+              summary: "尚未安排內容",
+              items: [],
+            });
+          }
+          while (itinerary.length > target) {
+            itinerary.pop();
+          }
+          itinerary = itinerary.map((day, index) => ({
+            ...day,
+            dayNumber: index + 1,
+            theme: day.theme?.trim() ? day.theme : `Day ${index + 1}`,
+            items: day.items.map((item) => ({ ...item, dayNumber: index + 1 })),
+          }));
+        }
+
+        return {
+          itinerary,
+          days: target,
+          lastUpdatedAt: new Date().toISOString(),
+        };
+      });
     }),
   setCoverImageUrl: (url) =>
     withSyncMutationSource("local-user-edit", () => {

@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Loader2, Map, TrendingUp, Video } from "lucide-react";
+import { AnimatePresence, m } from "@/lib/motion";
+import { Loader2, Map, TrendingUp, Video } from "lucide-react";
 import VideoCard from "@/components/home/VideoCard";
 import RecommendedItineraryCard from "@/components/home/RecommendedItineraryCard";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -26,8 +26,10 @@ type VideoPanelProps = {
   isSearching: boolean;
   canLoadMoreVideos: boolean;
   isLoadingMoreVideos: boolean;
+  replacingVideoIndex: number | null;
   onVideoClick: (video: VideoRecommendation) => void;
   onLoadMoreVideos: () => void;
+  onDismissVideo: (video: VideoRecommendation, index: number) => void;
 };
 
 type Props = {
@@ -110,14 +112,6 @@ function HomeRecommendationsSection({
     void loadItineraries(itineraryQuery);
   }, [activePanel, isAuthenticated, itineraryQuery, loadItineraries]);
 
-  function switchToVideos() {
-    onPanelChange("videos");
-  }
-
-  function switchToItineraries() {
-    onPanelChange("itineraries");
-  }
-
   const panelTitle =
     activePanel === "videos" ? t.home.recommended : t.home.recommendedItineraries;
   const panelCount =
@@ -126,29 +120,7 @@ function HomeRecommendationsSection({
 
   return (
     <div className="mx-auto max-w-6xl" data-testid="home-recommendations-section">
-      <div className="group relative">
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          data-testid="home-recommend-prev"
-          onClick={switchToVideos}
-          className="absolute -left-3 top-8 z-10 size-9 rounded-full border-border-light bg-white/90 text-foreground shadow-md backdrop-blur-sm hover:bg-white"
-        >
-          <ChevronLeft className="size-5" />
-        </Button>
-
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          data-testid="home-recommend-next"
-          onClick={switchToItineraries}
-          className="absolute -right-3 top-8 z-10 size-9 rounded-full border-border-light bg-white/90 text-foreground shadow-md backdrop-blur-sm hover:bg-white"
-        >
-          <ChevronRight className="size-5" />
-        </Button>
-
+      <div>
         <div className="mb-5 flex flex-wrap items-center gap-2 px-1">
           <PanelIcon className="size-4 text-secondary" />
           <h2 className="font-semibold text-foreground">{panelTitle}</h2>
@@ -181,7 +153,7 @@ function HomeRecommendationsSection({
 
         <AnimatePresence mode="wait">
           {activePanel === "videos" ? (
-            <motion.div
+            <m.div
               key="videos-panel"
               initial={{ opacity: 0, x: -12 }}
               animate={{ opacity: 1, x: 0 }}
@@ -225,19 +197,36 @@ function HomeRecommendationsSection({
                 />
               ) : (
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                  {videoPanel.videos.map((video, index) => (
-                    <VideoCard
-                      key={video.id}
-                      video={video}
-                      index={index}
-                      onClick={() => videoPanel.onVideoClick(video)}
-                    />
-                  ))}
+                  {videoPanel.videos.map((video, index) =>
+                    videoPanel.replacingVideoIndex === index ? (
+                      <Card
+                        key={`replacing-${index}`}
+                        className="overflow-hidden rounded-2xl border-0 bg-surface py-0 shadow-soft ring-0"
+                        data-testid="video-card-replacing"
+                      >
+                        <div className="relative flex aspect-video items-center justify-center bg-gradient-to-br from-foreground/5 to-foreground/10">
+                          <Loader2 className="size-8 animate-spin text-primary" aria-hidden />
+                          <span className="sr-only">{t.videoCard.replacingVideo}</span>
+                        </div>
+                        <CardContent className="p-4">
+                          <p className="text-sm text-muted">{t.videoCard.replacingVideo}</p>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <VideoCard
+                        key={video.id}
+                        video={video}
+                        index={index}
+                        onClick={() => videoPanel.onVideoClick(video)}
+                        onDismiss={() => videoPanel.onDismissVideo(video, index)}
+                      />
+                    ),
+                  )}
                 </div>
               )}
-            </motion.div>
+            </m.div>
           ) : (
-            <motion.div
+            <m.div
               key="itineraries-panel"
               initial={{ opacity: 0, x: 12 }}
               animate={{ opacity: 1, x: 0 }}
@@ -290,7 +279,7 @@ function HomeRecommendationsSection({
                   ))}
                 </div>
               )}
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
       </div>

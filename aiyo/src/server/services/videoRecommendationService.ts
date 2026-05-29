@@ -9,6 +9,7 @@ import {
   buildVideoRecommendationSearchQuery,
   isTravelRelatedVideo,
 } from "@/server/providers/travelVideoFilter";
+import { getPreloadedDestinationVideos } from "@/server/data/preloadedDestinations";
 import { searchYouTubeVideos, type VideoSearchDebugInfo } from "@/server/providers/youtubeProvider";
 import type { VideoRecommendation } from "@/types";
 
@@ -27,7 +28,7 @@ interface RecommendationInput {
 
 export type VideoRecommendationOutcome = {
   videos: VideoRecommendation[];
-  source: "youtube-data-api" | "mock-fallback";
+  source: "youtube-data-api" | "mock-fallback" | "preloaded-destination-seed";
   fallbackReason?: string;
   debug?: VideoSearchDebugInfo;
 };
@@ -654,6 +655,39 @@ function getRelevantFallbackVideos(input: RecommendationInput): VideoRecommendat
 export async function getVideoRecommendations(
   input: RecommendationInput,
 ): Promise<VideoRecommendationOutcome> {
+  if (process.env.DISABLE_PRELOADED_DESTINATION_VIDEOS !== "true") {
+    const preloaded = await getPreloadedDestinationVideos({
+      destination: input.destination,
+      keyword: input.keyword,
+      limit: input.limit,
+      offset: input.offset,
+      excludeVideoIds: input.excludeVideoIds,
+    });
+    if (preloaded && preloaded.length > 0) {
+      return {
+        videos: preloaded.map((video) => ({
+          ...video,
+          listProvenance: "preloaded-destination-seed",
+        })),
+        source: "preloaded-destination-seed",
+        debug: {
+          rawInput:
+            buildVideoRecommendationSearchQuery({
+              keyword: input.keyword,
+              destination: input.destination,
+            }) || "",
+          searchQueries: [],
+          executedQueries: [],
+          regionCode: "TW",
+          relevanceLanguage: "zh-Hant",
+          selectedStrategy: "preloaded-seed",
+          fallbackReasons: [],
+          cacheStatus: "preloaded-hit",
+        },
+      };
+    }
+  }
+
   if (serverConfig.enableMockVideoProvider) {
     const reason = "ENABLE_MOCK_VIDEO_PROVIDER is true; using local catalog.";
     console.warn(`[videoRecommendationService] ${reason}`);

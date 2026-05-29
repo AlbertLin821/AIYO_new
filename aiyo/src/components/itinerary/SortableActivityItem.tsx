@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useMemo, useState } from "react";
-import { GripVertical, MapPin, PencilLine, Save, Train, Trash2, X } from "lucide-react";
+import { MapPin, PencilLine, Save, Train, Trash2, X } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
@@ -121,7 +121,7 @@ function SortableActivityItem({
       style={style}
       className={cn(
         "group rounded-xl border border-border-light bg-surface transition-colors",
-        "border-l-4",
+        "border-l-4 touch-none cursor-grab active:cursor-grabbing",
         colorClass,
         isDark && "border-zinc-800 bg-zinc-900/90 text-zinc-100",
         isDragging &&
@@ -129,20 +129,11 @@ function SortableActivityItem({
             ? "border-primary/30 bg-zinc-800 opacity-90"
             : "border-primary/20 bg-cream/70 shadow-soft-lg opacity-90"),
       )}
+      {...attributes}
+      {...listeners}
+      title="拖曳排序"
     >
       <div className="flex items-start gap-3 px-4 py-3">
-        <div
-          {...attributes}
-          {...listeners}
-          className={cn(
-            "mt-1 rounded-lg p-1 opacity-55 transition-opacity cursor-grab focus:outline-none touch-none group-hover:opacity-100",
-            isDark ? "hover:text-zinc-100" : "hover:bg-primary/5 hover:text-primary",
-          )}
-          title="拖曳排序"
-        >
-          <GripVertical className={cn("size-4", isDark ? "text-zinc-500" : "text-muted")} />
-        </div>
-
         <div className="flex min-w-[56px] flex-col items-center gap-1">
           <span
             className={cn(
@@ -191,6 +182,7 @@ function SortableActivityItem({
                   href={item.sourceUrl}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onPointerDown={(event) => event.stopPropagation()}
                   className={cn("ml-1 hover:underline", isDark ? "text-orange-300" : "text-primary")}
                 >
                   {item.sourceTitle || "連結"}
@@ -201,7 +193,10 @@ function SortableActivityItem({
         </button>
 
         {canEdit && (
-          <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          <div
+            className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
             <button
               type="button"
               data-testid="activity-toolbar-edit"
@@ -225,7 +220,10 @@ function SortableActivityItem({
       </div>
 
       {isEditing && canEdit && (
-        <div className="border-t border-border-light bg-cream/30 px-4 py-4">
+        <div
+          className="border-t border-border-light bg-cream/30 px-4 py-4"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="sm:col-span-2 text-xs font-medium text-muted">
               {t.itineraryPage.activityTitle}

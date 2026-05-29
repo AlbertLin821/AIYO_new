@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { motion } from "framer-motion";
+import { m } from "@/lib/motion";
 import {
   ArrowUp,
   CalendarDays,
@@ -26,7 +26,17 @@ import TravelPlanCard from "@/components/chat/TravelPlanCard";
 import { CitationList } from "@/components/sources/CitationList";
 import { SourceDrawer } from "@/components/sources/SourceDrawer";
 import VideoCard from "@/components/home/VideoCard";
+import { Card, CardContent } from "@/components/ui/card";
 import { zhTW as t } from "@/locales/zh-TW";
+import {
+  collectVideoIdentityIds,
+  fetchReplacementVideo,
+} from "@/lib/replaceDismissedVideo";
+import {
+  dedupeVideoRecommendations,
+  INITIAL_VIDEO_RECOMMENDATIONS_LIMIT,
+  limitInitialVideoRecommendations,
+} from "@/lib/videoListLimits";
 import {
   applyPlanningUpdateToStores,
   derivePlanningSnapshot,
@@ -78,6 +88,9 @@ const VideoSummaryDrawer = dynamic(
 );
 const ChatContextMapView = dynamic(() => import("@/components/map/MapView"), { ssr: false });
 const ChatContextItineraryPanel = dynamic(() => import("@/components/map/ItineraryPanel"), {
+  ssr: false,
+});
+const ChatContextMapPoiAddSheet = dynamic(() => import("@/components/map/MapPoiAddSheet"), {
   ssr: false,
 });
 
@@ -163,23 +176,6 @@ function shouldRecommendVideos(message: string): boolean {
 
 function getVideoIdentity(video: VideoRecommendation): string {
   return (video.videoId || video.id || "").trim();
-}
-
-function mergeRecommendedVideos(
-  existing: VideoRecommendation[],
-  incoming: VideoRecommendation[],
-): VideoRecommendation[] {
-  const seen = new Set(existing.map(getVideoIdentity).filter(Boolean));
-  const merged = [...existing];
-  for (const video of incoming) {
-    const key = getVideoIdentity(video);
-    if (!key || seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    merged.push(video);
-  }
-  return merged;
 }
 
 function shouldFetchVideoRecommendations(input: {
@@ -327,6 +323,7 @@ export default function ChatPage() {
   const { data: session, status } = useSession();
   const [input, setInput] = useState("");
   const [recommendedVideos, setRecommendedVideos] = useState<VideoRecommendation[]>([]);
+  const [replacingVideoIndex, setReplacingVideoIndex] = useState<number | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<VideoRecommendation | null>(null);
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
@@ -364,6 +361,7 @@ export default function ChatPage() {
   const videoSummaryInflightRef = useRef(new Map<string, Promise<VideoSummaryResult>>());
   const autoSummaryActiveRef = useRef(false);
   const conversationVideosRef = useRef<Map<string, VideoRecommendation[]>>(new Map());
+  const conversationVideosLoadedMoreRef = useRef<Map<string, boolean>>(new Map());
   const hydratedConversationTripRef = useRef<string | null>(null);
   const contextTripResyncAttemptRef = useRef<string | null>(null);
   const [videosPanelExpanded, setVideosPanelExpanded] = useState(true);
@@ -383,6 +381,7 @@ export default function ChatPage() {
     clearProposedChangesForMessage,
   } = useChatStore();
   const tripStore = useTripStore();
+  const preferredPoiDay = useMapStore((state) => state.preferredPoiDay);
   const userStore = useUserStore();
   const pushToast = useToastStore((state) => state.pushToast);
   const setSummaryDiagnostics = useVideoStore((state) => state.setSummaryDiagnostics);
@@ -714,7 +713,16 @@ export default function ChatPage() {
     const stored = activeConversationId
       ? conversationVideosRef.current.get(activeConversationId) ?? []
       : [];
-    setRecommendedVideos(stored);
+    const hasLoadedMore =
+      activeConversationId != null &&
+      (conversationVideosLoadedMoreRef.current.get(activeConversationId) ??
+        stored.length > INITIAL_VIDEO_RECOMMENDATIONS_LIMIT);
+    if (activeConversationId) {
+      conversationVideosLoadedMoreRef.current.set(activeConversationId, hasLoadedMore);
+    }
+    setRecommendedVideos(
+      hasLoadedMore ? stored : limitInitialVideoRecommendations(stored),
+    );
     setVideoError(null);
     setVideosPanelExpanded(stored.length > 0);
   }, [activeConversationId]);
@@ -1090,6 +1098,7 @@ export default function ChatPage() {
     userMessage: string;
     planningSnapshot: ReturnType<typeof derivePlanningSnapshot>;
     chatProcessId?: string;
+    append?: boolean;
   }) {
     const conversationId = useChatStore.getState().activeConversationId;
     const existingVideos = getStoredConversationVideos(conversationId);
@@ -1121,12 +1130,18 @@ export default function ChatPage() {
         limit: 6,
         excludeVideoIds: existingVideos.map(getVideoIdentity).filter(Boolean),
       });
+      const append = input.append === true;
+      if (conversationId) {
+        conversationVideosLoadedMoreRef.current.set(conversationId, append);
+      }
       const previousIds = new Set(existingVideos.map(getVideoIdentity).filter(Boolean));
-      const newlyAdded = outcome.videos.filter((video) => {
+      const mergedVideos = append
+        ? dedupeVideoRecommendations(existingVideos, outcome.videos)
+        : limitInitialVideoRecommendations(outcome.videos);
+      const newlyAdded = mergedVideos.filter((video) => {
         const key = getVideoIdentity(video);
         return key && !previousIds.has(key);
       });
-      const mergedVideos = mergeRecommendedVideos(existingVideos, outcome.videos);
       updateRecommendedVideos(mergedVideos);
       autoSummaryStarted = newlyAdded
         .slice(0, 6)
@@ -1190,7 +1205,99 @@ export default function ChatPage() {
     await fetchChatVideoRecommendations({
       userMessage: lastUserMessage,
       planningSnapshot,
+      append: true,
     });
+  }
+
+  async function handleDismissVideo(video: VideoRecommendation, index: number) {
+    const dismissedId = getVideoIdentity(video);
+    if (!dismissedId || replacingVideoIndex !== null || isLoadingVideos) {
+      return;
+    }
+
+    if (videoMatches(selectedVideo, video)) {
+      setSelectedVideo(null);
+      setSummaryDiagnostics(null);
+    }
+
+    const lastUserMessage =
+      [...messages].reverse().find((item) => item.role === "user")?.content?.trim() || "";
+    const videoKeyword = buildChatVideoSearchKeyword(
+      lastUserMessage,
+      useTripStore.getState().itinerary,
+    );
+    const baseRequest = {
+      destination: planningSnapshot.destination,
+      keyword: videoKeyword,
+      days: planningSnapshot.days,
+      preferences: useUserStore.getState().interests,
+      limit: 1,
+    };
+
+    setReplacingVideoIndex(index);
+    setVideoError(null);
+    const processId = startFrontendDebugProcess("chat-video-dismiss-replace", "移除影片並補上一支推薦", {
+      dismissedId,
+      index,
+    });
+
+    try {
+      const excludeVideoIds = collectVideoIdentityIds(recommendedVideos, [dismissedId]);
+      const replacement = await fetchReplacementVideo({
+        baseRequest,
+        excludeVideoIds,
+        mergeFromVideos: recommendedVideos,
+      });
+
+      if (replacement) {
+        updateRecommendedVideos((current) => {
+          if (index < 0 || index >= current.length) {
+            return current;
+          }
+          const next = [...current];
+          next[index] = replacement;
+          const conversationId = useChatStore.getState().activeConversationId;
+          const hasLoadedMore =
+            conversationId != null &&
+            (conversationVideosLoadedMoreRef.current.get(conversationId) ?? false);
+          return hasLoadedMore ? next : limitInitialVideoRecommendations(next);
+        });
+      }
+
+      if (replacement) {
+        finishFrontendDebugProcess(processId, {
+          replacementId: getVideoIdentity(replacement),
+          title: replacement.title,
+        });
+        if (!shouldSkipClientVideoSummarize(replacement)) {
+          const queueToken = videoSummaryQueueTokenRef.current + 1;
+          videoSummaryQueueTokenRef.current = queueToken;
+          void processRecommendedVideoSummaries(
+            [replacement],
+            planningSnapshot.destination,
+            queueToken,
+          );
+        }
+      } else {
+        finishFrontendDebugProcess(processId, { replacementId: null });
+        pushToast({
+          variant: "info",
+          title: t.videoCard.replaceVideoUnavailableTitle,
+          description: t.videoCard.replaceVideoUnavailableDesc,
+        });
+      }
+    } catch (error) {
+      failFrontendDebugProcess(processId, error, { dismissedId, index });
+      const description = error instanceof Error ? error.message : t.video.requestFailedGeneric;
+      setVideoError(description);
+      pushToast({
+        variant: "error",
+        title: t.video.requestFailed,
+        description,
+      });
+    } finally {
+      setReplacingVideoIndex(null);
+    }
   }
 
   async function handleSend(
@@ -2108,7 +2215,7 @@ export default function ChatPage() {
           )}
 
           {messages.map((message, index) => (
-            <motion.div
+            <m.div
               key={message.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -2224,11 +2331,11 @@ export default function ChatPage() {
                   )}
                 </div>
               </div>
-            </motion.div>
+            </m.div>
           ))}
 
           {isSending && !hasWorkflowRail ? (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2">
+            <m.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2">
               <div className="flex size-8 items-center justify-center rounded-full bg-slate-700 text-xs text-white">
                 {t.chat.aiShort}
               </div>
@@ -2236,7 +2343,7 @@ export default function ChatPage() {
                 <Loader2 className="size-4 animate-spin text-slate-700" aria-hidden />
                 {t.chat.workflowProcessing}
               </div>
-            </motion.div>
+            </m.div>
           ) : null}
 
           {errorMessage && (
@@ -2300,14 +2407,31 @@ export default function ChatPage() {
                   {recommendedVideos.length > 0 && (
                     <>
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                        {recommendedVideos.map((video, index) => (
-                          <VideoCard
-                            key={video.id}
-                            video={video}
-                            index={index}
-                            onClick={() => void openVideoSummary(video)}
-                          />
-                        ))}
+                        {recommendedVideos.map((video, index) =>
+                          replacingVideoIndex === index ? (
+                            <Card
+                              key={`replacing-${index}`}
+                              className="overflow-hidden rounded-2xl border-0 bg-surface py-0 shadow-soft ring-0"
+                              data-testid="video-card-replacing"
+                            >
+                              <div className="relative flex aspect-video items-center justify-center bg-gradient-to-br from-foreground/5 to-foreground/10">
+                                <Loader2 className="size-8 animate-spin text-primary" aria-hidden />
+                                <span className="sr-only">{t.videoCard.replacingVideo}</span>
+                              </div>
+                              <CardContent className="p-4">
+                                <p className="text-sm text-muted">{t.videoCard.replacingVideo}</p>
+                              </CardContent>
+                            </Card>
+                          ) : (
+                            <VideoCard
+                              key={video.id}
+                              video={video}
+                              index={index}
+                              onClick={() => void openVideoSummary(video)}
+                              onDismiss={() => void handleDismissVideo(video, index)}
+                            />
+                          ),
+                        )}
                       </div>
                       <div className="mt-4 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <p className="text-xs text-chat-muted">{t.chat.loadMoreVideosHint}</p>
@@ -2411,8 +2535,12 @@ export default function ChatPage() {
 
         {hasContextPanel ? (
           <div className="flex flex-col gap-2">
-            <div className="h-72 overflow-hidden rounded-3xl border border-slate-200 bg-white">
-              <ChatContextMapView embedded />
+            <div className="relative h-72 overflow-hidden rounded-3xl border border-slate-200 bg-white">
+              <ChatContextMapView embedded allowPoiAdd />
+              <ChatContextMapPoiAddSheet
+                defaultDayNumber={preferredPoiDay}
+                tripDestination={tripStore.destination}
+              />
             </div>
             {tripStore.tripId && tripStore.itinerary.length === 0 ? (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">

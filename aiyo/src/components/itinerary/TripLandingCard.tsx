@@ -3,8 +3,8 @@
 import { memo } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { CalendarDays, Copy, MapPinned, MapPin, Folder, PencilLine, Trash2, Users } from "lucide-react";
+import { m } from "@/lib/motion";
+import { CalendarDays, Copy, MapPinned, MapPin, PencilLine, Trash2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { zhTW as t } from "@/locales/zh-TW";
 import type { ItineraryListItem } from "@/lib/itinerary-sort";
@@ -33,7 +33,7 @@ function TripLandingCard({
   onDelete,
 }: Props) {
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05, duration: 0.3 }}
@@ -62,10 +62,10 @@ function TripLandingCard({
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             />
           ) : (
-            <div className="flex h-full items-center justify-center bg-gradient-to-br from-primary/5 to-lavender/10">
-              <Folder
-                className="size-16 text-border-strong transition-colors group-hover:text-primary"
-                strokeWidth={1}
+            <div className="flex h-full items-center justify-center bg-gradient-to-br from-primary/8 via-lavender/10 to-cream/40">
+              <CalendarDays
+                className="size-16 text-primary/35 transition-colors group-hover:text-primary/55"
+                strokeWidth={1.2}
               />
             </div>
           )}
@@ -92,7 +92,6 @@ function TripLandingCard({
             </span>
           </div>
           <p className="mt-auto truncate text-[11px] text-muted">
-            {item.folderName || t.itineraryPage.unfiledFolder} ·{" "}
             {t.itineraryPage.folderMetaUpdated}{" "}
             {new Date(item.updatedAt).toLocaleDateString("zh-TW")}
           </p>
@@ -100,7 +99,10 @@ function TripLandingCard({
       </button>
 
       {(tripMapHref || onEdit || onDuplicate || onDelete) && (
-        <div className="absolute right-2 top-2 z-20 flex gap-1 rounded-lg bg-surface/95 p-1 opacity-0 shadow-soft transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        <div
+          className="absolute right-2 top-2 z-20 flex gap-1 rounded-lg bg-surface/95 p-1 opacity-0 shadow-soft transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
           {tripMapHref && (
             <Link
               href={tripMapHref}
@@ -168,7 +170,7 @@ function TripLandingCard({
           )}
         </div>
       )}
-    </motion.div>
+    </m.div>
   );
 }
 

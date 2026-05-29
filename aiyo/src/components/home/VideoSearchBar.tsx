@@ -10,6 +10,7 @@ import {
   startFrontendDebugProcess,
   updateFrontendDebugProcess,
 } from "@/lib/frontendDebug";
+import { mergeVideosWithStoredSummaries } from "@/lib/mergeVideoSummaries";
 import { enqueueVideoSummaries } from "@/lib/videoSummaryQueue";
 import { cn } from "@/lib/utils";
 import { zhTW as t } from "@/locales/zh-TW";
@@ -42,7 +43,7 @@ const VideoSearchBar = forwardRef<HTMLInputElement, VideoSearchBarProps>(functio
     isSummarizing,
     setIsSearching,
     setIsSummarizing,
-    setVideos,
+    setInitialVideoList,
     upsertVideo,
     setSelectedVideo,
     setErrorMessage,
@@ -94,7 +95,7 @@ const VideoSearchBar = forwardRef<HTMLInputElement, VideoSearchBarProps>(functio
           url: trimmed,
           destination: tripDestination,
         });
-        setVideos([result.video]);
+        setInitialVideoList([result.video]);
         setRecommendationSource("single-video-url");
         upsertVideo(result.video);
         setSelectedVideo(result.video);
@@ -147,10 +148,14 @@ const VideoSearchBar = forwardRef<HTMLInputElement, VideoSearchBarProps>(functio
           limit: 6,
         };
         const outcome = await fetchVideoRecommendations(request);
-        setVideos(outcome.videos);
+        const nextVideos = mergeVideosWithStoredSummaries(
+          outcome.videos,
+          useVideoStore.getState().videos,
+        );
+        setInitialVideoList(nextVideos);
         setRecommendationSource(outcome.source);
         setLastRecommendationRequest(request);
-        enqueueVideoSummaries(outcome.videos, {
+        enqueueVideoSummaries(nextVideos, {
           destination: tripDestination,
         });
         if (outcome.source === "mock-fallback") {

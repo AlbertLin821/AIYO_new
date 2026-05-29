@@ -1,7 +1,8 @@
 "use client";
+"use memo";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { m } from "@/lib/motion";
 import { AlertCircle, Layers, MapPin, Navigation, RefreshCcw, ZoomIn, ZoomOut } from "lucide-react";
 import type {
   GoogleInfoWindowInstance,
@@ -585,7 +586,7 @@ function MockMapFallback({
             const pos = getPos(pin.lat, pin.lng);
             const isSelected = pin.id === selectedPinId;
             return (
-              <motion.button
+              <m.button
                 key={pin.id}
                 initial={{ scale: 0, y: 10 }}
                 animate={{ scale: 1, y: 0 }}
@@ -612,7 +613,7 @@ function MockMapFallback({
                     </div>
                   )}
                 </div>
-              </motion.button>
+              </m.button>
             );
           })}
 
@@ -633,13 +634,15 @@ function MockMapFallback({
 
 type MapViewProps = {
   embedded?: boolean;
+  allowPoiAdd?: boolean;
 };
 
-export default function MapView({ embedded = false }: MapViewProps) {
+export default function MapView({ embedded = false, allowPoiAdd = false }: MapViewProps) {
   const tripStore = useTripStore();
   const itinerary = tripStore.itinerary;
   const tripDestination = tripStore.destination;
-  const { pins, selectedPinId, setSelectedPinId, clearPins } = useMapStore();
+  const { pins, selectedPinId, setSelectedPinId, setPendingPoi, setPanelOpen, clearPins } =
+    useMapStore();
   const pushToast = useToastStore((state) => state.pushToast);
   const [runtimeMapsConfig, setRuntimeMapsConfig] = useState<RuntimeMapsConfig>({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
@@ -820,6 +823,30 @@ export default function MapView({ embedded = false }: MapViewProps) {
     window.addEventListener(AIYO_MAPS_AUTH_FAILURE_EVENT, onAuthFailure);
     return () => window.removeEventListener(AIYO_MAPS_AUTH_FAILURE_EVENT, onAuthFailure);
   }, [pushToast, useGoogleSdk]);
+
+  useEffect(() => {
+    if (!allowPoiAdd || sdkState !== "ready" || !mapInstanceRef.current || !useGoogleSdk) {
+      return;
+    }
+    const map = mapInstanceRef.current;
+    const listener = map.addListener?.("click", (event: { placeId?: string; stop?: () => void; latLng?: { lat: () => number; lng: () => number } }) => {
+      const placeId = event.placeId?.trim();
+      if (!placeId) {
+        return;
+      }
+      event.stop?.();
+      setSelectedPinId(null);
+      setPendingPoi({
+        placeId,
+        lat: event.latLng?.lat(),
+        lng: event.latLng?.lng(),
+      });
+      setPanelOpen(true);
+    });
+    return () => {
+      listener?.remove?.();
+    };
+  }, [allowPoiAdd, sdkState, setPanelOpen, setPendingPoi, setSelectedPinId, useGoogleSdk]);
 
   useEffect(() => {
     if (sdkState !== "ready" || !mapInstanceRef.current) {

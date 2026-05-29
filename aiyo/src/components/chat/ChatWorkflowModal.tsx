@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "@/lib/motion";
 import { Loader2, X } from "lucide-react";
 import {
   Dialog,
@@ -86,7 +86,7 @@ export default function ChatWorkflowModal({
         showCloseButton={false}
         className="flex max-h-[min(90vh,860px)] w-full max-w-xl flex-col gap-0 overflow-hidden rounded-[28px] border border-primary/10 bg-white p-0 shadow-[0_28px_80px_rgba(15,23,42,0.18)] sm:max-w-xl"
       >
-        <motion.div
+        <m.div
           key={contentKey}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -115,7 +115,7 @@ export default function ChatWorkflowModal({
             resolvedSteps={resolvedSteps}
             progressPercent={progressPercent}
           />
-        </motion.div>
+        </m.div>
       </DialogContent>
     </Dialog>
   );
@@ -148,7 +148,7 @@ function WorkflowModalBody({
     <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 sm:px-6 sm:pb-6">
       <AnimatePresence mode="wait">
         {showQuestionForm && questionCard ? (
-          <motion.div
+          <m.div
             key="question-form"
             initial={{ opacity: 0, x: 12 }}
             animate={{ opacity: 1, x: 0 }}
@@ -158,9 +158,9 @@ function WorkflowModalBody({
           >
             <WorkflowActiveStep activeStep={questionStep || activeStep} progressPercent={progressPercent} />
             <QuestionCard card={questionCard} disabled={disabled} onSubmit={onSubmitQuestion} />
-          </motion.div>
+          </m.div>
         ) : (
-          <motion.div
+          <m.div
             key={contentKey}
             initial={{ opacity: 0, x: 12 }}
             animate={{ opacity: 1, x: 0 }}
@@ -170,7 +170,7 @@ function WorkflowModalBody({
           >
             <WorkflowActiveStep activeStep={activeStep} progressPercent={progressPercent} />
             {showResearchFeed ? <ResearchActivityFeed steps={resolvedSteps} /> : null}
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>
@@ -223,7 +223,7 @@ function WorkflowProgressBar({ progressPercent }: { progressPercent: number }) {
       aria-label="行程規劃進度"
       className="mt-4 h-2 w-full overflow-hidden rounded-full bg-slate-200"
     >
-      <motion.div
+      <m.div
         className="h-full rounded-full bg-gradient-to-r from-primary/80 to-primary"
         initial={{ width: 0 }}
         animate={{ width: `${progressPercent}%` }}

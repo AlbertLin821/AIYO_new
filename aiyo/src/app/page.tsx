@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "@/lib/motion";
 import dynamic from "next/dynamic";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -14,6 +14,7 @@ import HomeRecommendationsSection, {
 import PlanningWaitGame from "@/components/chat/PlanningWaitGame";
 import VideoSearchBar from "@/components/home/VideoSearchBar";
 import { getDefaultTaiwanCityVideos } from "@/data/defaultTaiwanCityVideos";
+import { INITIAL_VIDEO_RECOMMENDATIONS_LIMIT } from "@/lib/videoListLimits";
 import {
   failFrontendDebugProcess,
   finishFrontendDebugProcess,
@@ -21,7 +22,13 @@ import {
   startFrontendDebugProcess,
   updateFrontendDebugProcess,
 } from "@/lib/frontendDebug";
+import { mergeVideosWithStoredSummaries } from "@/lib/mergeVideoSummaries";
 import { readPendingVideoImport } from "@/lib/pendingVideoImport";
+import {
+  collectVideoIdentityIds,
+  fetchReplacementVideo,
+  type VideoRecommendationRequest,
+} from "@/lib/replaceDismissedVideo";
 import { enqueueVideoSummaries, enqueueVideoSummary } from "@/lib/videoSummaryQueue";
 import { zhTW as t } from "@/locales/zh-TW";
 import { fetchVideoRecommendations, shouldSkipClientVideoSummarize, summarizeVideo } from "@/services/videoClient";
@@ -164,6 +171,7 @@ export default function HomePage() {
   const adScrollRef = useRef<HTMLDivElement | null>(null);
 
   const [isLoadingMoreVideos, setIsLoadingMoreVideos] = useState(false);
+  const [replacingVideoIndex, setReplacingVideoIndex] = useState<number | null>(null);
   const [recommendPanel, setRecommendPanel] = useState<HomeRecommendPanel>("videos");
   const [itinerarySearchQuery, setItinerarySearchQuery] = useState("");
   const {
@@ -178,7 +186,9 @@ export default function HomePage() {
     searchQuery,
     upsertVideo,
     setIsSummarizing,
-    setVideos,
+    setInitialVideoList,
+    appendToVideoList,
+    replaceVideoAtIndex,
     setRecommendationSource,
     setLastRecommendationRequest,
     setIsSearching,
@@ -220,10 +230,10 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!hasSearched && !hasTripSeed && videos.length === 0) {
-      setVideos(defaultVideos);
+      setInitialVideoList(defaultVideos);
       setRecommendationSource("default-taiwan-cities");
     }
-  }, [defaultVideos, hasSearched, hasTripSeed, setRecommendationSource, setVideos, videos.length]);
+  }, [defaultVideos, hasSearched, hasTripSeed, setInitialVideoList, setRecommendationSource, videos.length]);
 
   useEffect(() => {
     if (!tripDestination.trim() || hasSearched) {
@@ -250,10 +260,14 @@ export default function HomePage() {
         if (cancelled) {
           return;
         }
-        setVideos(outcome.videos.length ? outcome.videos : defaultVideos);
+        const nextVideos = mergeVideosWithStoredSummaries(
+          outcome.videos.length ? outcome.videos : defaultVideos,
+          useVideoStore.getState().videos,
+        );
+        setInitialVideoList(nextVideos);
         setRecommendationSource(outcome.videos.length ? outcome.source : "default-taiwan-cities");
         setLastRecommendationRequest(outcome.videos.length ? request : null);
-        enqueueVideoSummaries(outcome.videos, {
+        enqueueVideoSummaries(nextVideos, {
           destination: tripDestination.trim(),
         });
         finishFrontendDebugProcess(processId, {
@@ -269,7 +283,7 @@ export default function HomePage() {
           destination: tripDestination.trim(),
         });
         setErrorMessage(error instanceof Error ? error.message : t.video.requestFailedGeneric);
-        setVideos(defaultVideos);
+        setInitialVideoList(defaultVideos);
         setRecommendationSource("default-taiwan-cities");
       })
       .finally(() => {
@@ -286,8 +300,8 @@ export default function HomePage() {
     setErrorMessage,
     setIsSearching,
     setLastRecommendationRequest,
+    setInitialVideoList,
     setRecommendationSource,
-    setVideos,
     tripDays,
     tripDestination,
     videos.length,
@@ -366,7 +380,7 @@ export default function HomePage() {
     });
   }, [videos]);
 
-  const handleLoadMoreVideos = useCallback(async () => {
+  const resolveVideoRecommendationRequest = useCallback((): VideoRecommendationRequest | null => {
     const fallbackRequest = hasSearched
       ? { keyword: searchQuery.trim(), limit: 6 }
       : hasTripSeed
@@ -378,6 +392,131 @@ export default function HomePage() {
           }
         : null;
     const baseRequest = lastRecommendationRequest || fallbackRequest;
+    if (!baseRequest) {
+      return null;
+    }
+    return {
+      destination: baseRequest.destination,
+      keyword: baseRequest.keyword,
+      days: baseRequest.days,
+      preferences: baseRequest.preferences,
+      limit: 1,
+    };
+  }, [
+    hasSearched,
+    hasTripSeed,
+    lastRecommendationRequest,
+    searchQuery,
+    tripDays,
+    tripDestination,
+  ]);
+
+  const handleDismissVideo = useCallback(
+    async (video: VideoRecommendation, index: number) => {
+      const dismissedId = (video.videoId || video.id || "").trim();
+      if (!dismissedId || replacingVideoIndex !== null || isSearching || isLoadingMoreVideos) {
+        return;
+      }
+
+      if (selectedVideo?.videoId === video.videoId || selectedVideo?.id === video.id) {
+        setSelectedVideo(null);
+        setSummaryDiagnostics(null);
+      }
+
+      const baseRequest = resolveVideoRecommendationRequest();
+
+      if (!baseRequest) {
+        const filtered = videos.filter((_, slotIndex) => slotIndex !== index);
+        if (recommendationSource === "default-taiwan-cities") {
+          const seen = new Set(
+            filtered.map((item) => (item.videoId || item.id || "").trim()).filter(Boolean),
+          );
+          for (const candidate of getDefaultTaiwanCityVideos(12)) {
+            if (filtered.length >= INITIAL_VIDEO_RECOMMENDATIONS_LIMIT) {
+              break;
+            }
+            const key = (candidate.videoId || candidate.id || "").trim();
+            if (key && !seen.has(key)) {
+              seen.add(key);
+              filtered.push(candidate);
+            }
+          }
+        }
+        setInitialVideoList(filtered);
+        return;
+      }
+
+      setReplacingVideoIndex(index);
+      setErrorMessage(null);
+      const processId = startFrontendDebugProcess("video-dismiss-replace", "移除影片並補上一支推薦", {
+        dismissedId,
+        index,
+        request: baseRequest,
+      });
+
+      try {
+        const excludeVideoIds = collectVideoIdentityIds(videos, [dismissedId]);
+        const replacement = await fetchReplacementVideo({
+          baseRequest,
+          excludeVideoIds,
+          mergeFromVideos: videos,
+        });
+
+        if (replacement) {
+          replaceVideoAtIndex(index, replacement);
+        }
+
+        if (replacement) {
+          enqueueVideoSummaries([replacement], {
+            destination: baseRequest.destination || tripDestination,
+          });
+          finishFrontendDebugProcess(processId, {
+            replacementId: replacement.videoId || replacement.id,
+            title: replacement.title,
+          });
+        } else {
+          finishFrontendDebugProcess(processId, {
+            replacementId: null,
+          });
+          pushToast({
+            variant: "info",
+            title: t.videoCard.replaceVideoUnavailableTitle,
+            description: t.videoCard.replaceVideoUnavailableDesc,
+          });
+        }
+      } catch (error) {
+        failFrontendDebugProcess(processId, error, { dismissedId, index });
+        const description = error instanceof Error ? error.message : t.video.requestFailedGeneric;
+        pushToast({
+          variant: "error",
+          title: t.video.requestFailed,
+          description,
+        });
+      } finally {
+        setReplacingVideoIndex(null);
+      }
+    },
+    [
+      pushToast,
+      isLoadingMoreVideos,
+      isSearching,
+      recommendationSource,
+      replacingVideoIndex,
+      replaceVideoAtIndex,
+      resolveVideoRecommendationRequest,
+      selectedVideo?.id,
+      selectedVideo?.videoId,
+      setErrorMessage,
+      setInitialVideoList,
+      setSelectedVideo,
+      setSummaryDiagnostics,
+      tripDestination,
+      videos,
+    ],
+  );
+
+  const handleLoadMoreVideos = useCallback(async () => {
+    const baseRequest = resolveVideoRecommendationRequest();
     if (!baseRequest) {
       return;
     }
@@ -394,10 +533,13 @@ export default function HomePage() {
         ...baseRequest,
         limit: 6,
         excludeVideoIds,
-      };
+      } satisfies VideoRecommendationRequest & { excludeVideoIds: string[] };
       const outcome = await fetchVideoRecommendations(request);
-      const newVideos = appendUniqueVideos(outcome.videos);
-      setVideos([...videos, ...newVideos]);
+      const newVideos = mergeVideosWithStoredSummaries(
+        appendUniqueVideos(outcome.videos),
+        videos,
+      );
+      appendToVideoList(newVideos);
       setRecommendationSource(outcome.source);
       setLastRecommendationRequest({
         destination: baseRequest.destination,
@@ -405,7 +547,7 @@ export default function HomePage() {
         days: baseRequest.days,
         preferences: baseRequest.preferences,
         limit: 6,
-      });
+      } as VideoRecommendationRequest);
       enqueueVideoSummaries(newVideos, {
         destination: baseRequest.destination || tripDestination,
       });
@@ -436,17 +578,13 @@ export default function HomePage() {
       setIsLoadingMoreVideos(false);
     }
   }, [
+    appendToVideoList,
     appendUniqueVideos,
-    hasSearched,
-    hasTripSeed,
-    lastRecommendationRequest,
     pushToast,
-    searchQuery,
+    resolveVideoRecommendationRequest,
     setErrorMessage,
     setLastRecommendationRequest,
     setRecommendationSource,
-    setVideos,
-    tripDays,
     tripDestination,
     videos,
   ]);
@@ -651,7 +789,7 @@ export default function HomePage() {
 
       <div className="p-6 lg:p-8">
 
-      <motion.div
+      <m.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
@@ -662,7 +800,7 @@ export default function HomePage() {
           mode={recommendPanel === "itineraries" ? "itinerary" : "video"}
           onItinerarySearch={setItinerarySearchQuery}
         />
-      </motion.div>
+      </m.div>
 
       <HomeRecommendationsSection
         activePanel={recommendPanel}
@@ -678,8 +816,10 @@ export default function HomePage() {
           isSearching,
           canLoadMoreVideos,
           isLoadingMoreVideos,
+          replacingVideoIndex,
           onVideoClick: (video) => void openVideoSummary(video),
           onLoadMoreVideos: () => void handleLoadMoreVideos(),
+          onDismissVideo: (video, index) => void handleDismissVideo(video, index),
         }}
       />
 

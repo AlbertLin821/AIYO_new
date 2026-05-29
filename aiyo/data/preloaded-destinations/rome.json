@@ -1,0 +1,1260 @@
+{
+  "id": "rome",
+  "destinationHint": "羅馬",
+  "searchKeyword": "羅馬自由行 競技場 許願池",
+  "aliases": [
+    "羅馬",
+    "rome",
+    "歐洲"
+  ],
+  "preferences": [
+    "美食",
+    "景點",
+    "懶人包"
+  ],
+  "generatedAt": "2026-05-29T04:05:01.665Z",
+  "pipelineVersion": "preloaded-seed-v1",
+  "videos": [
+    {
+      "id": "youtube_MKtFmJrA1FI",
+      "videoId": "MKtFmJrA1FI",
+      "title": "義大利自由行 Ep.3 | 每月第一週日免費參觀、羅馬競技場＋古羅馬廣場一日全攻略｜特雷維噴泉許願池、提拉米蘇、生乳包、超市省錢餐 |  Italy Rome Travel Guide Day 3",
+      "thumbnail": "https://i.ytimg.com/vi/MKtFmJrA1FI/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=MKtFmJrA1FI",
+      "duration": "15:57",
+      "summary": "影片提到羅馬競技場、君士坦丁凱旋門、提圖斯凱旋門等地點，以及提拉米蘇、生乳包等食物。",
+      "description": "一次走訪古羅馬最經典的歷史地標，從羅馬競技場 (Colosseum) 開始，接著參觀君士坦丁凱旋門、提圖斯凱旋門與帕拉丁山，把古羅馬帝國的核心區域走透透。\n下午再前往羅馬最經典的地標之 - 特雷維噴泉 (許願池)，感受觀光客與在地人的羅馬日常，記得要來許願就能再次重返羅馬遊玩喔~\n\n甜點安排羅馬知名甜點店 Regoli Pasticceria，就在特雷維噴泉附近，可以品嚐人氣提拉米蘇與香濃的生乳包，另外還有買酸酸甜甜的檸檬冰淇淋來吃。晚餐則選擇到超市購買現成料理，分享在羅馬用「省錢方式吃一餐」的實際體驗，想要省點旅費是一個不錯的選擇。\n\n📍 本日行程地點 (Locations Visited)：羅馬競技場(Colosseo)、君士坦丁凱旋門(Arco di Costantino)、提圖斯凱旋門(Arco di Tito)、帕拉丁山(Colle Palatino)、古羅馬廣場(Foro Romano)、特雷維噴泉(Fontana di Trevi)、提拉米蘇專賣店(Pompi Trevi)\n\n✈ 章節 (Chapters)\n00:46 羅馬競技場\n04:57 君士坦軍凱旋門\n05:07 提圖斯凱旋門\n06:57 帕拉丁山\n08:53 古羅馬廣場\n10:55 萬神殿(人太多進不去)\n11:03 特雷維噴泉\n11:51 檸檬冰淇淋\n12:59 提拉米蘇+生乳包(Pompi Trevi)\n14:45 超市晚餐\n\n#義大利自由行 #羅馬 #Rome #RomeDay3 #Colosseum\n#羅馬競技場 #古羅馬 #特雷維噴泉 #許願池\n#RegoliPasticceria #提拉米蘇 #羅馬美食\n#羅馬自由行 #義大利旅遊 #TravelVlog #ItalyTravel\n-------------------------------------------------------------------------------\n訂閱 : https://www.youtube.com/@tylinnetravel\nFacebook : https://www.facebook.com/tylinnetravel/\n追蹤IG : https://www.instagram.com/tylinnetravel/\n部落格 : https://www.tylinnetravel.tw/\n\n【台灣旅遊】影片 : https://reurl.cc/W42MgL\n【航空體驗】影片 : https://reurl.cc/M7lLo3\n【住宿小棧】影片 : https://reurl.cc/L1kLo7\n【出國旅遊】影片 : https://reurl.cc/V8aQzY\n【日本旅遊】影片 : https://reurl.cc/Dm1Lqj\n【日本畢旅】影片 : https://reurl.cc/zyd4k7\n【韓國旅遊】影片 : https://reurl.cc/oDj61V\n【新加坡遊】影片 : https://reurl.cc/EGKLGk\n【好物開箱】影片 : https://reurl.cc/qDl42p\n【生活日常】影片 : https://reurl.cc/8lgLRR\n【新事分享】影片 : https://reurl.cc/yy3408\n========================================\n拍攝工具 : Osmo Action 5 Pro、ROG Phone 8 Pro\n收音設備 : DJI Mic Mini\n========================================\n剪輯工具 : Adobe Premiere Pro 2025\n========================================",
+      "source": "youtube-data-api",
+      "channelTitle": "踢賴旅遊 / Tylinne Travel",
+      "publishedAt": "2025-12-30T12:00:06Z",
+      "timestamps": [
+        {
+          "time": "1:00",
+          "label": "羅馬競技場"
+        },
+        {
+          "time": "2:00",
+          "label": "君士坦丁凱旋門"
+        },
+        {
+          "time": "2:00",
+          "label": "提圖斯凱旋門"
+        },
+        {
+          "time": "2:00",
+          "label": "帕拉丁山"
+        },
+        {
+          "time": "2:00",
+          "label": "古羅馬廣場"
+        },
+        {
+          "time": "3:00",
+          "label": "特雷維噴泉"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 41.8902102,
+          "lng": 12.4922309,
+          "raw": "羅馬競技場",
+          "name": "羅馬競技場",
+          "address": "P.za del Colosseo, 1, 00184 Roma RM, Italy",
+          "placeId": "ChIJrRMgU7ZhLxMRxAOFkC7I8Sg",
+          "rawQuery": "羅馬競技場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "羅馬競技場",
+          "rawMention": "羅馬競技場",
+          "cleanedName": "羅馬競技場",
+          "description": "從羅馬競技場 (Colosseum) 開始",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "羅馬競技場",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.8898113,
+          "lng": 12.4906782,
+          "raw": "君士坦丁凱旋門",
+          "name": "君士坦丁凱旋門",
+          "address": "P.za del Colosseo, 00184 Roma RM, Italy",
+          "placeId": "ChIJn8yMY7ZhLxMRoGckLEOtWZU",
+          "rawQuery": "君士坦丁凱旋門",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "君士坦丁凱旋門",
+          "rawMention": "君士坦丁凱旋門",
+          "cleanedName": "君士坦丁凱旋門",
+          "description": "接著參觀君士坦丁凱旋門",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "君士坦丁凱旋門",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.8907044,
+          "lng": 12.4885842,
+          "raw": "提圖斯凱旋門",
+          "name": "提圖斯凱旋門",
+          "address": "Via Sacra, 00186 Roma RM, Italy",
+          "placeId": "ChIJX9gmMbRhLxMRc_L8Li9bAhk",
+          "rawQuery": "提圖斯凱旋門",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "提圖斯凱旋門",
+          "rawMention": "提圖斯凱旋門",
+          "cleanedName": "提圖斯凱旋門",
+          "description": "接著參觀...與帕拉丁山，把古羅馬帝國的核心區域走透透。",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "提圖斯凱旋門",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.8886559,
+          "lng": 12.4875481,
+          "raw": "帕拉丁山",
+          "name": "帕拉丁山",
+          "address": "Via di S. Gregorio, 30, 00186 Roma RM, Italy",
+          "placeId": "ChIJowJff7VhLxMRLmHQKoSniFE",
+          "rawQuery": "帕拉丁山",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "帕拉丁山",
+          "rawMention": "帕拉丁山",
+          "cleanedName": "帕拉丁山",
+          "description": "...與帕拉丁山，把古羅馬帝國的核心區域走透透。",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "帕拉丁山",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.8920906,
+          "lng": 12.4864378,
+          "raw": "古羅馬廣場",
+          "name": "古羅馬廣場",
+          "address": "00186 Rome, Metropolitan City of Rome Capital, Italy",
+          "placeId": "ChIJ782pg7NhLxMR5n3swAdAkfo",
+          "rawQuery": "古羅馬廣場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "古羅馬廣場",
+          "rawMention": "古羅馬廣場",
+          "cleanedName": "古羅馬廣場",
+          "description": "...把古羅馬帝國的核心區域走透透。",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "古羅馬廣場",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.9009325,
+          "lng": 12.483313,
+          "raw": "特雷維噴泉",
+          "name": "特雷維噴泉",
+          "address": "Piazza di Trevi, 00187 Roma RM, Italy",
+          "placeId": "ChIJ1UCDJ1NgLxMRtrsCzOHxdvY",
+          "rawQuery": "特雷維噴泉",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "特雷維噴泉",
+          "rawMention": "特雷維噴泉",
+          "cleanedName": "特雷維噴泉",
+          "description": "再前往羅馬最經典的地標之 - 特雷維噴泉 (許願池",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "特雷維噴泉",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [
+        "提拉米蘇",
+        "生乳包"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "從羅馬競技場 (Colosseum) 開始",
+          "foods": [],
+          "title": "羅馬競技場",
+          "summary": "從羅馬競技場 (Colosseum) 開始",
+          "timestamp": "1:00",
+          "endSeconds": 90,
+          "startLabel": "1:00",
+          "startSeconds": 60,
+          "locationHints": [
+            "羅馬競技場"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "接著參觀君士坦丁凱旋門",
+          "foods": [
+            "提拉米蘇",
+            "生乳包"
+          ],
+          "title": "君士坦丁凱旋門",
+          "summary": "接著參觀君士坦丁凱旋門",
+          "timestamp": "2:00",
+          "endSeconds": 150,
+          "startLabel": "2:00",
+          "startSeconds": 120,
+          "locationHints": [
+            "君士坦丁凱旋門"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "接著參觀...與帕拉丁山，把古羅馬帝國的核心區域走透透。",
+          "foods": [
+            "提拉米蘇",
+            "生乳包"
+          ],
+          "title": "提圖斯凱旋門",
+          "summary": "接著參觀...與帕拉丁山，把古羅馬帝國的核心區域走透透。",
+          "timestamp": "2:00",
+          "endSeconds": 150,
+          "startLabel": "2:00",
+          "startSeconds": 120,
+          "locationHints": [
+            "提圖斯凱旋門"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_4",
+          "text": "...與帕拉丁山，把古羅馬帝國的核心區域走透透。",
+          "foods": [
+            "提拉米蘇",
+            "生乳包"
+          ],
+          "title": "帕拉丁山",
+          "summary": "...與帕拉丁山，把古羅馬帝國的核心區域走透透。",
+          "timestamp": "2:00",
+          "endSeconds": 150,
+          "startLabel": "2:00",
+          "startSeconds": 120,
+          "locationHints": [
+            "帕拉丁山"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_5",
+          "text": "...把古羅馬帝國的核心區域走透透。",
+          "foods": [
+            "提拉米蘇",
+            "生乳包"
+          ],
+          "title": "古羅馬廣場",
+          "summary": "...把古羅馬帝國的核心區域走透透。",
+          "timestamp": "2:00",
+          "endSeconds": 150,
+          "startLabel": "2:00",
+          "startSeconds": 120,
+          "locationHints": [
+            "古羅馬廣場"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_6",
+          "text": "再前往羅馬最經典的地標之 - 特雷維噴泉 (許願池",
+          "foods": [
+            "提拉米蘇",
+            "生乳包"
+          ],
+          "title": "特雷維噴泉",
+          "summary": "再前往羅馬最經典的地標之 - 特雷維噴泉 (許願池",
+          "timestamp": "3:00",
+          "endSeconds": 210,
+          "startLabel": "3:00",
+          "startSeconds": 180,
+          "locationHints": [
+            "特雷維噴泉"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的羅馬旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_KwUClzEhpXE",
+      "videoId": "KwUClzEhpXE",
+      "title": "50+ 也能優雅玩羅馬：不換飯店的慢旅攻略，交通/住宿/行程/美食懶人包",
+      "thumbnail": "https://i.ytimg.com/vi/KwUClzEhpXE/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=KwUClzEhpXE",
+      "duration": "20:03",
+      "summary": "此影片未擷取到明確地點或食物名稱。",
+      "description": "第一次去羅馬自由行，不想每天搬行李、趕車、走到腿痠嗎？這支影片分享我最推薦的 羅馬 7 天不換飯店攻略，特別適合 50+ 熟齡族、第一次去義大利、想輕鬆又有質感旅行的人。\n\n這次我選擇住在羅馬普拉蒂區 (Prati)，避開特米尼車站 (Termini )周邊的吵雜與混亂，用更輕鬆的「輻射狀玩法」，慢慢玩遍羅馬經典景點。不需要天天換飯店，也能舒服安排梵蒂岡博物館、聖彼得大教堂、羅馬競技場、萬神殿、特雷維噴泉、西班牙廣場、納沃納廣場，還能加上一趟優雅的蒂沃利 (Tivoli ) 一日遊。\n\n🏨 影片中提到的住宿清單\n1. 求穩定首選： NH Collection Roma Giustiniano (標準四星、大電梯)\nhttps://www.booking.com/Share-BEhyEC6\n\n2. 優雅在地感： Relais Vittoria Colonna (古建築魅力、生活機能強)\nhttps://www.booking.com/Share-wJnYubT\n\n3. 小資高 CP 值： PapavistaRelais (近梵蒂岡、三星級寶藏)\nhttps://www.booking.com/Share-Nlv8Gr\n\n🎫 實用旅遊資訊連結\n羅馬競技場官方購票： https://ticketing.colosseo.it \n\n💡美食地圖清單\n📍Trattoria Luzzi: https://maps.app.goo.gl/hLySDH1VRzJQqAph6\n📍Alice Pizza: https://maps.app.goo.gl/HANf7TWUnhxf2vHz7\n📍Armando al Pantheon: https://maps.app.goo.gl/MdhCVoJhEL58snM86\n📍Gelateria del Teatro: https://maps.app.goo.gl/GJb5pL2VMCbNESQ27\n📍Colline Emiliane: https://maps.app.goo.gl/NkpJ1vVKH5hp5FUb6\n📍Antico Caffè Greco: https://maps.app.goo.gl/kgZYuskx8iod9w9u7\n\n影片章節:\n00:00 開場\n00:29 羅馬住宿推薦\n02:18 羅馬省力交通\n04:10 行程安排 Day 1 抵達與休息\n04:38 Day 2 羅馬競技場\n08:06 Day 3 梵蒂岡\n10:50 Day 4 萬神殿、許願池、西班牙廣場\n14:46 Day 5 蒂沃利Tivoli 一日遊\n16:54 Day 6 採買與美食\n18:19 Day 7 留白日\n\n#羅馬自由行 #羅馬住宿推薦 #義大利自由行 #熟齡慢旅 #不換飯店 #羅馬旅遊攻略 #Prati區 #梵蒂岡 #羅馬競技場 #歐洲自由行",
+      "source": "youtube-data-api",
+      "channelTitle": "我的任意門 Jane Travel",
+      "publishedAt": "2026-03-13T23:39:01Z",
+      "timestamps": [],
+      "extractedLocations": [],
+      "extractedFoods": [],
+      "summarySegments": [],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的羅馬旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_KwPqZQ8N7wQ",
+      "videoId": "KwPqZQ8N7wQ",
+      "title": "義大利旅遊vlog🇮🇹必看攻略 跟著玩不踩雷❗️羅馬競技場.古羅馬遺址 超美citywalk路線🗺️跟著電影玩 真理之口.萬神殿🏛️必吃美食 百年金杯咖啡館☕️義大利自由行13天12夜vlog",
+      "thumbnail": "https://i.ytimg.com/vi/KwPqZQ8N7wQ/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=KwPqZQ8N7wQ",
+      "duration": "16:31",
+      "summary": "影片提到羅馬競技場、真理之口、萬神殿等地點，以及gelato、pizza等食物。",
+      "description": "可開啟cc字幕窩！\n如果喜歡我的影片 請幫我按讚熱推呦~\n\n2026義大利羅馬自由行🇮🇹 超級必看攻略 跟著玩不踩雷❗️羅馬競技場.古羅馬遺址 世界七大奇蹟 超悶超美citywalk⚡️跟著電影玩 羅馬假期真理之口.天使與魔鬼萬神殿🏛️必吃美食推薦 百年金杯咖啡館☕️義大利自由行13天12夜vlog\n\n有任何問題歡迎底下留言或私訊我IG～～\nIG  @flowei_94 \nhttps://instagram.com/flowei_94?igshid=OGQ5ZDc2ODk2ZA==\n——————————章節——————————\n0:00 開箱羅馬民宿\n2:31 羅馬競技場/古羅馬遺址 超讚gelato🍧\n7:48 真理之口/威尼斯廣場 citywalk\n11:10 超好吃pizza🍕萬神殿&百年咖啡館\n13:45 特雷維噴泉/西班牙廣場 天使與魔鬼踩點👼\n15:22 羅馬超美日落觀賞點 蘋丘\n—————————旅遊資訊—————————\n羅馬美食\nFlor Gelato\nhttps://maps.app.goo.gl/m1vFgGAd4EDibtf17\n千層麵\nhttps://maps.app.goo.gl/CkNT4ZvnpkfMbXoh8\nPizza\nhttps://maps.app.goo.gl/tCBwGcHdM7pmhUmM8\n金杯咖啡\nhttps://maps.app.goo.gl/xbc7J4Jk95MMsX8SA\n\n羅馬競技場購票官網\nhttps://ticketing.colosseo.it/eventi/24h-colosseo-foro-romano-palatino/\n\n\n#義大利 #義大利旅遊 #義大利自由行 #義大利vlog  #羅馬 #羅馬自由行 #羅馬旅遊 #italy #italianfood #rome #italytravel #italyvlog #rometravel #jubilee #jubileeyear2025 #羅馬競技場 #萬神殿 #特雷維噴泉",
+      "source": "youtube-data-api",
+      "channelTitle": "Flora Ho",
+      "publishedAt": "2025-09-20T09:00:06Z",
+      "timestamps": [
+        {
+          "time": "0:02",
+          "label": "羅馬競技場"
+        },
+        {
+          "time": "0:07",
+          "label": "真理之口"
+        },
+        {
+          "time": "0:11",
+          "label": "萬神殿"
+        },
+        {
+          "time": "0:15",
+          "label": "特雷維噴泉"
+        },
+        {
+          "time": "0:15",
+          "label": "西班牙廣場"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 41.8902102,
+          "lng": 12.4922309,
+          "raw": "羅馬競技場",
+          "name": "羅馬競技場",
+          "address": "P.za del Colosseo, 1, 00184 Roma RM, Italy",
+          "placeId": "ChIJrRMgU7ZhLxMRxAOFkC7I8Sg",
+          "rawQuery": "羅馬競技場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "羅馬競技場",
+          "rawMention": "羅馬競技場",
+          "cleanedName": "羅馬競技場",
+          "description": "羅馬競技場/古羅馬遺址",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "羅馬競技場",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.8882378,
+          "lng": 12.4814441,
+          "raw": "真理之口",
+          "name": "真理之口",
+          "address": "Piazza della Bocca della Verità, 00186 Roma RM, Italy",
+          "placeId": "ChIJm1_ZezVgLxMR57Hw653cZoI",
+          "rawQuery": "真理之口",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "真理之口",
+          "rawMention": "真理之口",
+          "cleanedName": "真理之口",
+          "description": "真理之口/威尼斯廣場 citywalk",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "真理之口",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.8986108,
+          "lng": 12.4768729,
+          "raw": "萬神殿",
+          "name": "萬神殿",
+          "address": "Piazza della Rotonda, 00186 Roma RM, Italy",
+          "placeId": "ChIJqUCGZ09gLxMRLM42IPpl0co",
+          "rawQuery": "萬神殿",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "萬神殿",
+          "rawMention": "萬神殿",
+          "cleanedName": "萬神殿",
+          "description": "pizza🍕萬神殿&百年咖啡館",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "萬神殿",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.9009325,
+          "lng": 12.483313,
+          "raw": "特雷維噴泉",
+          "name": "特雷維噴泉",
+          "address": "Piazza di Trevi, 00187 Roma RM, Italy",
+          "placeId": "ChIJ1UCDJ1NgLxMRtrsCzOHxdvY",
+          "rawQuery": "特雷維噴泉",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "特雷維噴泉",
+          "rawMention": "特雷維噴泉",
+          "cleanedName": "特雷維噴泉",
+          "description": "天使與魔鬼踩點👼",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "特雷維噴泉",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.9056798,
+          "lng": 12.4822062,
+          "raw": "西班牙廣場",
+          "name": "西班牙廣場",
+          "address": "Piazza di Spagna, 00187 Roma RM, Italy",
+          "placeId": "ChIJkcBLHlVgLxMRFktkECcyn-k",
+          "rawQuery": "西班牙廣場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "西班牙廣場",
+          "rawMention": "西班牙廣場",
+          "cleanedName": "西班牙廣場",
+          "description": "天使與魔鬼踩點👼",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "西班牙廣場",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [
+        "gelato",
+        "pizza"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "羅馬競技場/古羅馬遺址",
+          "foods": [
+            "gelato",
+            "pizza"
+          ],
+          "title": "羅馬競技場",
+          "summary": "羅馬競技場/古羅馬遺址",
+          "timestamp": "0:02",
+          "endSeconds": 32,
+          "startLabel": "0:02",
+          "startSeconds": 2,
+          "locationHints": [
+            "羅馬競技場"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "真理之口/威尼斯廣場 citywalk",
+          "foods": [
+            "gelato",
+            "pizza"
+          ],
+          "title": "真理之口",
+          "summary": "真理之口/威尼斯廣場 citywalk",
+          "timestamp": "0:07",
+          "endSeconds": 37,
+          "startLabel": "0:07",
+          "startSeconds": 7,
+          "locationHints": [
+            "真理之口"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "pizza🍕萬神殿&百年咖啡館",
+          "foods": [
+            "gelato",
+            "pizza"
+          ],
+          "title": "萬神殿",
+          "summary": "pizza🍕萬神殿&百年咖啡館",
+          "timestamp": "0:11",
+          "endSeconds": 41,
+          "startLabel": "0:11",
+          "startSeconds": 11,
+          "locationHints": [
+            "萬神殿"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_4",
+          "text": "天使與魔鬼踩點👼",
+          "foods": [
+            "gelato",
+            "pizza"
+          ],
+          "title": "特雷維噴泉",
+          "summary": "天使與魔鬼踩點👼",
+          "timestamp": "0:15",
+          "endSeconds": 45,
+          "startLabel": "0:15",
+          "startSeconds": 15,
+          "locationHints": [
+            "特雷維噴泉"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_5",
+          "text": "天使與魔鬼踩點👼",
+          "foods": [
+            "gelato",
+            "pizza"
+          ],
+          "title": "西班牙廣場",
+          "summary": "天使與魔鬼踩點👼",
+          "timestamp": "0:15",
+          "endSeconds": 45,
+          "startLabel": "0:15",
+          "startSeconds": 15,
+          "locationHints": [
+            "西班牙廣場"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的羅馬旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_MTM_RsvY514",
+      "videoId": "MTM_RsvY514",
+      "title": "義大利羅馬競技場｜真的值得買票進去嗎？野獸通道＋完整內部大公開！旅遊攻略一次看！",
+      "thumbnail": "https://i.ytimg.com/vi/MTM_RsvY514/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=MTM_RsvY514",
+      "duration": "23:06",
+      "summary": "影片提到羅馬競技場、羅馬許願池、羅馬市區 精品街等地點。",
+      "description": "#羅馬競技場 #colosseum #羅馬旅遊 #義大利自由行 #世界遺產\n#romevlog #義大利景點 #古羅馬建築 #義大利旅遊 #羅馬自由行 #歐洲必去景點\n\n義大利必去景點「羅馬競技場」真的值得花錢買票進去嗎？\n這支影片帶你完整走一遍：野獸通道、地下結構、內部看台，還有遊客常忽略的重點！\n如果你只打算在外面拍照 vs 付費進場，這部影片會給你最真實的參考。\n\n00:00 義大利 羅馬鬥獸場旅遊 預告\n01:56 羅馬競技場 2樓\n05:18 羅馬競技場 柱子建造介紹\n08:39 羅馬競技場 內部外觀\n13:27 午餐時間\n15:41 羅馬許願池\n18:32 羅馬市區 精品街",
+      "source": "youtube-data-api",
+      "channelTitle": "玩咖痞痞",
+      "publishedAt": "2024-06-22T11:00:30Z",
+      "timestamps": [
+        {
+          "time": "3:00",
+          "label": "羅馬競技場"
+        },
+        {
+          "time": "15:41",
+          "label": "羅馬許願池"
+        },
+        {
+          "time": "18:40",
+          "label": "羅馬市區 精品街"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 41.8902102,
+          "lng": 12.4922309,
+          "raw": "羅馬競技場",
+          "name": "羅馬競技場",
+          "address": "P.za del Colosseo, 1, 00184 Roma RM, Italy",
+          "placeId": "ChIJrRMgU7ZhLxMRxAOFkC7I8Sg",
+          "rawQuery": "羅馬競技場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "羅馬競技場",
+          "rawMention": "羅馬競技場",
+          "cleanedName": "羅馬競技場",
+          "description": "義大利必去景點「羅馬競技場」真的值得花錢買票進去嗎？",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "羅馬競技場",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.8967068,
+          "lng": 12.4822025,
+          "raw": "羅馬許願池",
+          "name": "羅馬許願池",
+          "address": "Rome, Metropolitan City of Rome Capital, Italy",
+          "placeId": "ChIJu46S-ZZhLxMROG5lkwZ3D7k",
+          "rawQuery": "羅馬許願池",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "羅馬許願池",
+          "rawMention": "羅馬許願池",
+          "cleanedName": "羅馬許願池",
+          "description": "15:41 羅馬許願池",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "羅馬許願池",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.8967068,
+          "lng": 12.4822025,
+          "raw": "羅馬市區 精品街",
+          "name": "羅馬市區 精品街",
+          "address": "Rome, Metropolitan City of Rome Capital, Italy",
+          "placeId": "ChIJu46S-ZZhLxMROG5lkwZ3D7k",
+          "rawQuery": "羅馬市區 精品街",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "羅馬市區 精品街",
+          "rawMention": "羅馬市區 精品街",
+          "cleanedName": "羅馬市區 精品街",
+          "description": "18:32 羅馬市區 精品街",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "羅馬市區 精品街",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "義大利必去景點「羅馬競技場」真的值得花錢買票進去嗎？",
+          "foods": [],
+          "title": "羅馬競技場",
+          "summary": "義大利必去景點「羅馬競技場」真的值得花錢買票進去嗎？",
+          "timestamp": "3:00",
+          "endSeconds": 210,
+          "startLabel": "3:00",
+          "startSeconds": 180,
+          "locationHints": [
+            "羅馬競技場"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "15:41 羅馬許願池",
+          "foods": [],
+          "title": "羅馬許願池",
+          "summary": "15:41 羅馬許願池",
+          "timestamp": "15:41",
+          "endSeconds": 971,
+          "startLabel": "15:41",
+          "startSeconds": 941,
+          "locationHints": [
+            "羅馬許願池"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "18:32 羅馬市區 精品街",
+          "foods": [],
+          "title": "羅馬市區 精品街",
+          "summary": "18:32 羅馬市區 精品街",
+          "timestamp": "18:40",
+          "endSeconds": 1150,
+          "startLabel": "18:40",
+          "startSeconds": 1120,
+          "locationHints": [
+            "羅馬市區 精品街"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的羅馬旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_JRmuT-rPFlw",
+      "videoId": "JRmuT-rPFlw",
+      "title": "義大利VLOG🇮🇹羅馬三天自由行🫶🏻羅馬競技場/萬神殿/卡拉卡拉浴場/食物也太好吃了吧🤤 | heyitsmindy",
+      "thumbnail": "https://i.ytimg.com/vi/JRmuT-rPFlw/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=JRmuT-rPFlw",
+      "duration": "38:09",
+      "summary": "影片提到納沃納廣場、萬神殿、西班牙廣場等地點，以及炸洋薊、菠菜＆佛卡夏、提拉米蘇等食物。",
+      "description": "記得打開CC字幕！Please turn on cc subtitles!\n(For other language users, you can click \"translate\" to translate subs☺)\n\ninstagram: https://www.instagram.com/heyitsmindyy/\n—————————————\n\n00:00 羅馬VLOG\n00:21 𝐝𝐚𝐲 𝟏 \n📍羅馬\n02:19 飯店🏠 / Sonder Testaccio\nhttps://maps.app.goo.gl/HhNVkEf2yi5wALSA6\n推薦指數 4.5⭐️（除了很吵之外沒有缺點！房間又大又舒服）\n\n04:00 市場 / Testaccio Market\nMercato di Testaccio\n\n04:20 午餐🍝 / Cantina e Cucina\nhttps://maps.app.goo.gl/SZkCQi6yiC1csFVi7\n推薦指數 4⭐️（推薦點炸洋薊）\n\n05:27 ⛲️納沃納廣場\nPiazza Navona\nhttps://maps.app.goo.gl/6zTintP7dBpipyGK8\n\n06:04 🏛️萬神殿\nPantheon\nhttps://maps.app.goo.gl/oHuBtZdpbbo4Pm3i6\n\n07:36 🇪🇸西班牙廣場\nPiazza di Spagna\nhttps://maps.app.goo.gl/s6GPfn1bkzmyDEip6\n\n07:57 ⛪️人骨教堂\nMuseo e Cripta dei Cappuccini\nhttps://maps.app.goo.gl/HR59n8dKhb2j4Zox6\n\n\n08:27 𝐝𝐚𝐲 𝟐 \n📍羅馬\n\n10:06 ⛪️聖伯多祿大殿（聖彼得大教堂）\nBasilica di San Pietro\nhttps://maps.app.goo.gl/rVu7sZsjPYAL9A9x6\n（建議早上七點去排隊～）\n\n16:27 午餐🍝 / Vinsanto Vino & Cucina\nhttps://maps.app.goo.gl/1GsLeGauyEFiw3Dd9\n推薦指數 4.5⭐️（隨便點都好吃！推薦點菠菜＆佛卡夏）\n\n17:06 冰淇淋🍦 / Old Bridge\nhttps://maps.app.goo.gl/CJTVQDsoWv52RVuT7\n推薦指數 3.5⭐️（吃不出有啥特別 但價格便宜）\n\n17:57 ⚰️梵蒂岡博物館\nMusei Vaticani\nhttps://maps.app.goo.gl/j68NVRKFojvuQjiZ7\n\n20:52 提拉米蘇 / Pompi\nhttps://maps.app.goo.gl/XQmmSgc7vuUNBGxC6\n推薦指數 3.5⭐️（太濕軟了沒有口感上的層次 我不愛）\n\n\n21:38 𝐝𝐚𝐲 𝟑\n📍羅馬\n\n22:11 早餐🥪 / Saba Caffè & Cucina\nhttps://maps.app.goo.gl/uZQQ3wEe22YYAseT8\n推薦指數 3⭐️（隨便找的沒有特別推）\n\n22:29 🐎馬克西穆斯競技場\nCirco Massimo\nhttps://maps.app.goo.gl/5L5mDegPK3Et4WUm8\n\n23:36 🛀卡拉卡拉浴場\nTerme di Caracalla\nhttps://maps.app.goo.gl/jZjTkwDa5CxaHzrU7\n\n29:04 午餐🍝 / Pasqualino Al Colosseo\nhttps://maps.app.goo.gl/h8SYcJCio9T57h8H8\n推薦指數 4⭐️（義大利麵有點鹹 但味道還不錯）\n\n30:29 羅馬競技場\nColosseo\nhttps://maps.app.goo.gl/ZBaqVk7bYAB7bWnX8\n\n35:49 帕拉丁山\nPalatino\nhttps://maps.app.goo.gl/z4TVADoSopRATrL87\n\n36:10 古羅馬廣場\nForo Romano\nhttps://maps.app.goo.gl/FjEofXnpeEDNFiVs6\n\n37:47 晚餐🍣 / Saki Sushi\nhttps://maps.app.goo.gl/Jc4LykqVf1uuruFM9\n推薦指數 4⭐️（CP值超高 滿足亞洲胃）",
+      "source": "youtube-data-api",
+      "channelTitle": "heyitsmindy",
+      "publishedAt": "2025-01-20T12:00:19Z",
+      "timestamps": [
+        {
+          "time": "3:49",
+          "label": "馬克西穆斯競技場"
+        },
+        {
+          "time": "5:36",
+          "label": "卡拉卡拉浴場"
+        },
+        {
+          "time": "9:00",
+          "label": "納沃納廣場"
+        },
+        {
+          "time": "10:00",
+          "label": "萬神殿"
+        },
+        {
+          "time": "12:16",
+          "label": "西班牙廣場"
+        },
+        {
+          "time": "12:37",
+          "label": "人骨教堂"
+        },
+        {
+          "time": "15:06",
+          "label": "聖伯多祿大殿（聖彼得大教堂"
+        },
+        {
+          "time": "50:29",
+          "label": "羅馬競技場"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 41.8991633,
+          "lng": 12.4730742,
+          "raw": "納沃納廣場",
+          "name": "納沃納廣場",
+          "address": "Piazza Navona, 00186 Roma RM, Italy",
+          "placeId": "ChIJPRydwYNgLxMRSjOCLlYkV6M",
+          "rawQuery": "納沃納廣場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "納沃納廣場",
+          "rawMention": "納沃納廣場",
+          "cleanedName": "納沃納廣場",
+          "description": "⛲️納沃納廣場 Piazza Navona",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "納沃納廣場",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.8986108,
+          "lng": 12.4768729,
+          "raw": "萬神殿",
+          "name": "萬神殿",
+          "address": "Piazza della Rotonda, 00186 Roma RM, Italy",
+          "placeId": "ChIJqUCGZ09gLxMRLM42IPpl0co",
+          "rawQuery": "萬神殿",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "萬神殿",
+          "rawMention": "萬神殿",
+          "cleanedName": "萬神殿",
+          "description": "🏛️萬神殿 Pantheon",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "萬神殿",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.9056798,
+          "lng": 12.4822062,
+          "raw": "西班牙廣場",
+          "name": "西班牙廣場",
+          "address": "Piazza di Spagna, 00187 Roma RM, Italy",
+          "placeId": "ChIJkcBLHlVgLxMRFktkECcyn-k",
+          "rawQuery": "西班牙廣場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "西班牙廣場",
+          "rawMention": "西班牙廣場",
+          "cleanedName": "西班牙廣場",
+          "description": "🇪🇸西班牙廣場 Piazza di Spagna",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "西班牙廣場",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.905024,
+          "lng": 12.4885678,
+          "raw": "人骨教堂",
+          "name": "人骨教堂",
+          "address": "00187, Via Vittorio Veneto, 27, 00187 Roma RM, Italy",
+          "placeId": "ChIJ--D7yqthLxMRDofqCFYgAMo",
+          "rawQuery": "人骨教堂",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "人骨教堂",
+          "rawMention": "人骨教堂",
+          "cleanedName": "人骨教堂",
+          "description": "⛪️人骨教堂 Museo e Cripta dei Cappuccini",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "人骨教堂",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.9021667,
+          "lng": 12.4539367,
+          "raw": "聖伯多祿大殿（聖彼得大教堂",
+          "name": "聖伯多祿大殿（聖彼得大教堂",
+          "address": "Piazza San Pietro, 00120 Città del Vaticano, Vatican City",
+          "placeId": "ChIJWZsUt2FgLxMRg1KHzXfwS3I",
+          "rawQuery": "聖伯多祿大殿（聖彼得大教堂",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "聖伯多祿大殿（聖彼得大教堂",
+          "rawMention": "聖伯多祿大殿（聖彼得大教堂",
+          "cleanedName": "聖伯多祿大殿（聖彼得大教堂",
+          "description": "⛪️聖伯多祿大殿（聖彼得大教堂） Basilica di San Pietro",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "聖伯多祿大殿（聖彼得大教堂",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.8858762,
+          "lng": 12.4857578,
+          "raw": "馬克西穆斯競技場",
+          "name": "馬克西穆斯競技場",
+          "address": "00186 Rome, Metropolitan City of Rome Capital, Italy",
+          "placeId": "ChIJxcVH3MphLxMRbNmoLfoNEWg",
+          "rawQuery": "馬克西穆斯競技場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "馬克西穆斯競技場",
+          "rawMention": "馬克西穆斯競技場",
+          "cleanedName": "馬克西穆斯競技場",
+          "description": "🐎馬克西穆斯競技場 Circo Massimo",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "馬克西穆斯競技場",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.8790382,
+          "lng": 12.4924394,
+          "raw": "卡拉卡拉浴場",
+          "name": "卡拉卡拉浴場",
+          "address": "Viale delle Terme di Caracalla, 00153 Roma RM, Italy",
+          "placeId": "ChIJ1YU-M85hLxMR3Jhb6gZAK2o",
+          "rawQuery": "卡拉卡拉浴場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "卡拉卡拉浴場",
+          "rawMention": "卡拉卡拉浴場",
+          "cleanedName": "卡拉卡拉浴場",
+          "description": "🛀卡拉卡拉浴場 Terme di Caracalla",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "卡拉卡拉浴場",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.8902102,
+          "lng": 12.4922309,
+          "raw": "羅馬競技場",
+          "name": "羅馬競技場",
+          "address": "P.za del Colosseo, 1, 00184 Roma RM, Italy",
+          "placeId": "ChIJrRMgU7ZhLxMRxAOFkC7I8Sg",
+          "rawQuery": "羅馬競技場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "羅馬競技場",
+          "rawMention": "羅馬競技場",
+          "cleanedName": "羅馬競技場",
+          "description": "🏟️羅馬競技場 Colosseo",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "羅馬競技場",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.8886559,
+          "lng": 12.4875481,
+          "raw": "帕拉丁山",
+          "name": "帕拉丁山",
+          "address": "Via di S. Gregorio, 30, 00186 Roma RM, Italy",
+          "placeId": "ChIJowJff7VhLxMRLmHQKoSniFE",
+          "rawQuery": "帕拉丁山",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "帕拉丁山",
+          "rawMention": "帕拉丁山",
+          "cleanedName": "帕拉丁山",
+          "description": "傑拉丁山 Palatino",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "帕拉丁山",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.8920906,
+          "lng": 12.4864378,
+          "raw": "古羅馬廣場",
+          "name": "古羅馬廣場",
+          "address": "00186 Rome, Metropolitan City of Rome Capital, Italy",
+          "placeId": "ChIJ782pg7NhLxMR5n3swAdAkfo",
+          "rawQuery": "古羅馬廣場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "古羅馬廣場",
+          "rawMention": "古羅馬廣場",
+          "cleanedName": "古羅馬廣場",
+          "description": "古羅馬廣場 Foro Romano",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "古羅馬廣場",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [
+        "炸洋薊",
+        "菠菜＆佛卡夏",
+        "提拉米蘇"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "🐎馬克西穆斯競技場 Circo Massimo",
+          "foods": [],
+          "title": "馬克西穆斯競技場",
+          "summary": "🐎馬克西穆斯競技場 Circo Massimo",
+          "timestamp": "3:49",
+          "endSeconds": 259,
+          "startLabel": "3:49",
+          "startSeconds": 229,
+          "locationHints": [
+            "馬克西穆斯競技場"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "🛀卡拉卡拉浴場 Terme di Caracalla",
+          "foods": [],
+          "title": "卡拉卡拉浴場",
+          "summary": "🛀卡拉卡拉浴場 Terme di Caracalla",
+          "timestamp": "5:36",
+          "endSeconds": 366,
+          "startLabel": "5:36",
+          "startSeconds": 336,
+          "locationHints": [
+            "卡拉卡拉浴場"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "⛲️納沃納廣場 Piazza Navona",
+          "foods": [
+            "炸洋薊"
+          ],
+          "title": "納沃納廣場",
+          "summary": "⛲️納沃納廣場 Piazza Navona",
+          "timestamp": "9:00",
+          "endSeconds": 570,
+          "startLabel": "9:00",
+          "startSeconds": 540,
+          "locationHints": [
+            "納沃納廣場"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_4",
+          "text": "🏛️萬神殿 Pantheon",
+          "foods": [],
+          "title": "萬神殿",
+          "summary": "🏛️萬神殿 Pantheon",
+          "timestamp": "10:00",
+          "endSeconds": 630,
+          "startLabel": "10:00",
+          "startSeconds": 600,
+          "locationHints": [
+            "萬神殿"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_5",
+          "text": "🇪🇸西班牙廣場 Piazza di Spagna",
+          "foods": [],
+          "title": "西班牙廣場",
+          "summary": "🇪🇸西班牙廣場 Piazza di Spagna",
+          "timestamp": "12:16",
+          "endSeconds": 766,
+          "startLabel": "12:16",
+          "startSeconds": 736,
+          "locationHints": [
+            "西班牙廣場"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_6",
+          "text": "⛪️人骨教堂 Museo e Cripta dei Cappuccini",
+          "foods": [],
+          "title": "人骨教堂",
+          "summary": "⛪️人骨教堂 Museo e Cripta dei Cappuccini",
+          "timestamp": "12:37",
+          "endSeconds": 787,
+          "startLabel": "12:37",
+          "startSeconds": 757,
+          "locationHints": [
+            "人骨教堂"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_7",
+          "text": "⛪️聖伯多祿大殿（聖彼得大教堂） Basilica di San Pietro",
+          "foods": [
+            "菠菜＆佛卡夏"
+          ],
+          "title": "聖伯多祿大殿（聖彼得大教堂",
+          "summary": "⛪️聖伯多祿大殿（聖彼得大教堂） Basilica di San Pietro",
+          "timestamp": "15:06",
+          "endSeconds": 936,
+          "startLabel": "15:06",
+          "startSeconds": 906,
+          "locationHints": [
+            "聖伯多祿大殿（聖彼得大教堂"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_8",
+          "text": "🏟️羅馬競技場 Colosseo",
+          "foods": [],
+          "title": "羅馬競技場",
+          "summary": "🏟️羅馬競技場 Colosseo",
+          "timestamp": "50:29",
+          "endSeconds": 3059,
+          "startLabel": "50:29",
+          "startSeconds": 3029,
+          "locationHints": [
+            "羅馬競技場"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的羅馬旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_occfXt60uww",
+      "videoId": "occfXt60uww",
+      "title": "【羅馬自由行 4 天】｜ 必去古蹟、景點、美食、交通全攻略｜永恆之城深度旅遊",
+      "thumbnail": "https://i.ytimg.com/vi/occfXt60uww/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=occfXt60uww",
+      "duration": "11:55",
+      "summary": "影片提到古羅馬廣場、梵蒂岡、聖彼得大教堂等地點，以及義大利咖啡館、在地美食等食物。",
+      "description": "https://youtu.be/LV6NBjYaCno#歐洲旅遊 #自由行#羅馬  #義大利美食 #城市導覽 #永恆之城 #慢旅行 #Rome #ItalyTravel \n\n跟著我們一起走訪羅馬四天！\n從鬥獸場、古羅馬廣場、梵蒂岡，到街角的義大利咖啡館與在地美食，\n帶您感受「永恆之城」的文化底蘊與現代生活。\nDay 1｜古羅馬與市中心探索\nDay 2｜梵蒂岡、聖彼得大教堂\nDay 3｜街頭美食與在地市集\nDay 4｜漫步廣場與城市日常\n\n🚇 交通方式建議\n🍝 必吃美食推薦\n📷 旅遊小提醒\n\n👉 如果您喜歡這支影片，請記得【訂閱＋開啟小鈴鐺】，\nhttps://www.youtube.com/@lonewolflingers\n獲取更多歐洲旅遊導覽影片！\n\n00:00 開場｜歡迎來到羅馬\n00:30 第一天｜古羅馬遺跡\n02:50 第二天｜梵蒂岡與聖彼得大教堂\n05:10 第三天｜在地美食與市集\n08:20 第四天｜廣場與城市日常\n11:30 結尾｜再會羅馬\n\n👉🗺 Google 羅馬導覽地圖（完全免費使用）\n👉https://www.google.com/maps/d/edit?mid=1VAQNoASxU0NlwZSHbVGn26BefMDWHXo&usp=sharing\n\n這份地圖是老郎自己實際走過、踩點整理出來的，\n希望能幫你少走一點冤枉路，多走幾步好風景。\n\n✅ 使用方式（電腦／手機都可以）\n1. 點開上面的地圖連結。\n2. 點選想去的景點 → 按「路線」，即可開始導航。\n3. 在每個 標示點 說明欄的最下方，都附有該標示點的網路連結，方便大家做預訂。\n4. 也可以把地圖複製到自己的 Google 帳號裡，加入自己的私房景點。\n\n歡迎自由轉傳給需要的朋友，一起好好享用這張地圖。\n如果大家也覺得這份整理有用，願意的話，再「順手」請老郎喝杯咖啡就好 ☕🙂\n\n☕ 買杯咖啡請老郎（有餘力再點就好）\n👉https://buymeacoffee.com/lonewolflingers/e/444662\n\n如何使用 Google 地圖導覽 ：\n   • [威尼斯] - 怎麼使用 Google 地圖導覽 (請開啟 CC 字幕)\nhttps://youtu.be/LV6NBjYaCno",
+      "source": "youtube-data-api",
+      "channelTitle": "老郎漫遊       LONEWOLF LINGERS",
+      "publishedAt": "2025-10-01T04:48:48Z",
+      "timestamps": [
+        {
+          "time": "2:00",
+          "label": "古羅馬廣場"
+        },
+        {
+          "time": "2:00",
+          "label": "梵蒂岡"
+        },
+        {
+          "time": "3:00",
+          "label": "聖彼得大教堂"
+        },
+        {
+          "time": "3:00",
+          "label": "羅馬市中心"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 41.8920906,
+          "lng": 12.4864378,
+          "raw": "古羅馬廣場",
+          "name": "古羅馬廣場",
+          "address": "00186 Rome, Metropolitan City of Rome Capital, Italy",
+          "placeId": "ChIJ782pg7NhLxMR5n3swAdAkfo",
+          "rawQuery": "古羅馬廣場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "古羅馬廣場",
+          "rawMention": "古羅馬廣場",
+          "cleanedName": "古羅馬廣場",
+          "description": "從鬥獸場、古羅馬廣場、梵蒂岡，到街角的義大利咖啡館與在地美食",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "古羅馬廣場",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.9021788,
+          "lng": 12.4536007,
+          "raw": "梵蒂岡",
+          "name": "梵蒂岡",
+          "address": "00120 Vatican City",
+          "placeId": "ChIJJTk-DGZgLxMRPGxQNTiMSQA",
+          "rawQuery": "梵蒂岡",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "梵蒂岡",
+          "rawMention": "梵蒂岡",
+          "cleanedName": "梵蒂岡",
+          "description": "從鬥獸場、古羅馬廣場、梵蒂岡，到街角的義大利咖啡館與在地美食",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "梵蒂岡",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.9021667,
+          "lng": 12.4539367,
+          "raw": "聖彼得大教堂",
+          "name": "聖彼得大教堂",
+          "address": "Piazza San Pietro, 00120 Città del Vaticano, Vatican City",
+          "placeId": "ChIJWZsUt2FgLxMRg1KHzXfwS3I",
+          "rawQuery": "聖彼得大教堂",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "聖彼得大教堂",
+          "rawMention": "聖彼得大教堂",
+          "cleanedName": "聖彼得大教堂",
+          "description": "第二天｜梵蒂岡、聖彼得大教堂",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "聖彼得大教堂",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 41.8967068,
+          "lng": 12.4822025,
+          "raw": "羅馬市中心",
+          "name": "羅馬市中心",
+          "address": "Rome, Metropolitan City of Rome Capital, Italy",
+          "placeId": "ChIJu46S-ZZhLxMROG5lkwZ3D7k",
+          "rawQuery": "羅馬市中心",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "羅馬市中心",
+          "rawMention": "羅馬市中心",
+          "cleanedName": "羅馬市中心",
+          "description": "Day 1｜古羅馬與市中心探索",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "羅馬市中心",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [
+        "義大利咖啡館",
+        "在地美食"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "從鬥獸場、古羅馬廣場、梵蒂岡，到街角的義大利咖啡館與在地美食",
+          "foods": [
+            "義大利咖啡館"
+          ],
+          "title": "古羅馬廣場",
+          "summary": "從鬥獸場、古羅馬廣場、梵蒂岡，到街角的義大利咖啡館與在地美食",
+          "timestamp": "2:00",
+          "endSeconds": 150,
+          "startLabel": "2:00",
+          "startSeconds": 120,
+          "locationHints": [
+            "古羅馬廣場"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "從鬥獸場、古羅馬廣場、梵蒂岡，到街角的義大利咖啡館與在地美食",
+          "foods": [
+            "義大利咖啡館"
+          ],
+          "title": "梵蒂岡",
+          "summary": "從鬥獸場、古羅馬廣場、梵蒂岡，到街角的義大利咖啡館與在地美食",
+          "timestamp": "2:00",
+          "endSeconds": 150,
+          "startLabel": "2:00",
+          "startSeconds": 120,
+          "locationHints": [
+            "梵蒂岡"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "第二天｜梵蒂岡、聖彼得大教堂",
+          "foods": [
+            "義大利咖啡館"
+          ],
+          "title": "聖彼得大教堂",
+          "summary": "第二天｜梵蒂岡、聖彼得大教堂",
+          "timestamp": "3:00",
+          "endSeconds": 210,
+          "startLabel": "3:00",
+          "startSeconds": 180,
+          "locationHints": [
+            "聖彼得大教堂"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_4",
+          "text": "Day 1｜古羅馬與市中心探索",
+          "foods": [
+            "義大利咖啡館"
+          ],
+          "title": "羅馬市中心",
+          "summary": "Day 1｜古羅馬與市中心探索",
+          "timestamp": "3:00",
+          "endSeconds": 210,
+          "startLabel": "3:00",
+          "startSeconds": 180,
+          "locationHints": [
+            "羅馬市中心"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的羅馬旅遊影片，含重點片段與地圖標點。"
+    }
+  ],
+  "validation": {
+    "requestedCount": 6,
+    "exportedCount": 6,
+    "passCount": 6,
+    "failCount": 0,
+    "errorCount": 0
+  }
+}

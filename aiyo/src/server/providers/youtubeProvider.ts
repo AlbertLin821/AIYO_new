@@ -306,6 +306,8 @@ async function fetchMappedVideosForQuery(
     regionCode: opts?.regionCode ?? "TW",
     relevanceLanguage: opts?.relevanceLanguage ?? "zh-Hant",
     videoCaption: opts?.videoCaption === "closedCaption" ? "closedCaption" : undefined,
+    /** 僅搜尋允許嵌入的影片，避免推薦無法在站內 iframe 播放的結果 */
+    videoEmbeddable: "true",
   })}`;
 
   const searchResult = await fetchGoogleJson<{
@@ -334,7 +336,7 @@ async function fetchMappedVideosForQuery(
   }
 
   const detailsUrl = `https://www.googleapis.com/youtube/v3/videos?${toQuery({
-    part: "snippet,contentDetails",
+    part: "snippet,contentDetails,status",
     id: videoIds.join(","),
     key: serverConfig.youtubeApiKey,
   })}`;
@@ -342,6 +344,7 @@ async function fetchMappedVideosForQuery(
   const detailsResult = await fetchGoogleJson<{
     items?: Array<{
       id: string;
+      status?: { embeddable?: boolean };
       contentDetails?: { duration?: string };
       snippet?: {
         title?: string;
@@ -357,7 +360,9 @@ async function fetchMappedVideosForQuery(
     return { ok: false, message: detailsResult.message };
   }
 
-  const videos: VideoRecommendation[] = (detailsResult.data.items || []).map((item) => ({
+  const videos: VideoRecommendation[] = (detailsResult.data.items || [])
+    .filter((item) => item.status?.embeddable !== false)
+    .map((item) => ({
     id: `youtube_${item.id}`,
     videoId: item.id,
     title: item.snippet?.title || "YouTube video",
@@ -379,6 +384,10 @@ async function fetchMappedVideosForQuery(
     summarySegments: [],
     listProvenance: "youtube-data-api",
   }));
+
+  if (videos.length === 0) {
+    return { ok: false, message: "YouTube search returned no embeddable videos." };
+  }
 
   return { ok: true, videos };
 }

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -935,14 +935,14 @@ export default function VideoSummaryDrawer({
       </Dialog>
 
       {open && toast && (
-        <motion.div
+        <m.div
           initial={{ opacity: 0, y: 20, x: "-50%" }}
           animate={{ opacity: 1, y: 0, x: "-50%" }}
           className="fixed bottom-8 left-1/2 z-[60] flex items-center gap-2 rounded-2xl bg-foreground px-5 py-3 text-sm font-medium text-white shadow-lg"
         >
           <Check className="size-4 text-tertiary" />
           {toast}
-        </motion.div>
+        </m.div>
       )}
 
       <Dialog

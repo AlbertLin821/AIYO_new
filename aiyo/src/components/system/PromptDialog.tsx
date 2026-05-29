@@ -50,9 +50,9 @@ function PromptDialog({
     >
       <DialogContent
         showCloseButton={!pending}
-        className="rounded-2xl border-border-light bg-surface shadow-soft-lg sm:max-w-md"
+        className="overflow-hidden rounded-2xl border-border-light bg-surface p-5 shadow-soft-lg sm:max-w-md"
       >
-        <DialogHeader>
+        <DialogHeader className="pr-10">
           <DialogTitle id="site-prompt-heading" className="font-semibold">
             {title}
           </DialogTitle>
@@ -79,20 +79,20 @@ function PromptDialog({
               className="rounded-xl border-border-light bg-cream/40"
             />
           </div>
-          <DialogFooter className="gap-2 border-0 bg-transparent p-0 sm:justify-end">
+          <DialogFooter className="flex flex-col-reverse gap-2 border-0 bg-transparent p-0 sm:flex-row sm:flex-wrap sm:justify-end">
             <Button
               type="button"
               variant="outline"
               disabled={pending}
               onClick={onCancel}
-              className="rounded-xl border-border-light"
+              className="w-full min-w-0 rounded-xl border-border-light sm:w-auto"
             >
               {cancelLabel}
             </Button>
             <Button
               type="submit"
               disabled={pending || !value.trim()}
-              className="rounded-xl bg-primary text-primary-foreground hover:bg-primary-dark"
+              className="w-full min-w-0 rounded-xl bg-primary text-primary-foreground hover:bg-primary-dark sm:w-auto"
             >
               {confirmLabel}
             </Button>

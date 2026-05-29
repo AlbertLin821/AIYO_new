@@ -1,10 +1,11 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { CalendarDays, Globe, MapPin, Share2 } from "lucide-react";
 import type { Session } from "next-auth";
 import { zhTW as t } from "@/locales/zh-TW";
+import { normalizeTripBudget, normalizeTripDayCount } from "@/lib/tripMetaEdit";
 
 type Props = {
   title: string;
@@ -12,13 +13,15 @@ type Props = {
   days: number;
   budget: number;
   coverImageUrl: string | null;
-  lastUpdatedAt: string | null;
   session: Session | null;
   isInteractive: boolean;
+  metaEditable?: boolean;
   /** 尚無目的地、天數、預算與行程內容時不顯示摘要格 */
   showTripSummaryRow: boolean;
   onShare: () => void;
   onOpenMap: () => void;
+  onDaysCommit?: (days: number) => void | Promise<void>;
+  onBudgetCommit?: (budget: number) => void | Promise<void>;
   onPublish?: () => void;
   isPublished?: boolean;
   isPublishing?: boolean;
@@ -26,29 +29,114 @@ type Props = {
   onUnpublish?: () => void;
 };
 
+function formatBudgetLabel(budget: number): string {
+  return budget > 0 ? `NT$${budget.toLocaleString("zh-TW")}` : t.common.notSet;
+}
+
 function ItineraryPageHeader({
   title,
   destination,
   days,
   budget,
   coverImageUrl,
-  lastUpdatedAt,
   session,
   isInteractive,
+  metaEditable = false,
   showTripSummaryRow,
   onShare,
   onOpenMap,
+  onDaysCommit,
+  onBudgetCommit,
   onPublish,
   isPublished = false,
   isPublishing = false,
   canPublish = true,
   onUnpublish,
 }: Props) {
+  const [editingDays, setEditingDays] = useState(false);
+  const [editingBudget, setEditingBudget] = useState(false);
+  const [daysDraft, setDaysDraft] = useState(String(days));
+  const [budgetDraft, setBudgetDraft] = useState(budget > 0 ? String(budget) : "");
+  const daysInputRef = useRef<HTMLInputElement>(null);
+  const budgetInputRef = useRef<HTMLInputElement>(null);
+
   const displayTitle = title.trim() || t.itineraryPage.title;
   const displayDestination = destination.trim() || t.common.notSet;
-  const updatedLabel = lastUpdatedAt
-    ? `${t.itineraryPage.updatedPrefix} ${new Date(lastUpdatedAt).toLocaleString("zh-TW")}`
-    : t.itineraryPage.updatedPrefix;
+  const canEditDays = metaEditable && Boolean(onDaysCommit);
+  const canEditBudget = metaEditable && Boolean(onBudgetCommit);
+
+  useEffect(() => {
+    if (!editingDays) {
+      setDaysDraft(String(days));
+    }
+  }, [days, editingDays]);
+
+  useEffect(() => {
+    if (!editingBudget) {
+      setBudgetDraft(budget > 0 ? String(budget) : "");
+    }
+  }, [budget, editingBudget]);
+
+  useEffect(() => {
+    if (editingDays) {
+      daysInputRef.current?.focus();
+      daysInputRef.current?.select();
+    }
+  }, [editingDays]);
+
+  useEffect(() => {
+    if (editingBudget) {
+      budgetInputRef.current?.focus();
+      budgetInputRef.current?.select();
+    }
+  }, [editingBudget]);
+
+  const commitDays = useCallback(async () => {
+    setEditingDays(false);
+    if (!onDaysCommit) {
+      return;
+    }
+    const parsed = Number(daysDraft.trim());
+    if (!Number.isFinite(parsed)) {
+      setDaysDraft(String(days));
+      return;
+    }
+    const nextDays = normalizeTripDayCount(parsed);
+    if (nextDays === normalizeTripDayCount(days)) {
+      setDaysDraft(String(days));
+      return;
+    }
+    await onDaysCommit(nextDays);
+  }, [days, daysDraft, onDaysCommit]);
+
+  const commitBudget = useCallback(async () => {
+    setEditingBudget(false);
+    if (!onBudgetCommit) {
+      return;
+    }
+    const trimmed = budgetDraft.trim();
+    const parsed = trimmed.length === 0 ? 0 : Number(trimmed.replace(/,/g, ""));
+    if (!Number.isFinite(parsed)) {
+      setBudgetDraft(budget > 0 ? String(budget) : "");
+      return;
+    }
+    const nextBudget = normalizeTripBudget(parsed);
+    if (nextBudget === normalizeTripBudget(budget)) {
+      setBudgetDraft(budget > 0 ? String(budget) : "");
+      return;
+    }
+    await onBudgetCommit(nextBudget);
+  }, [budget, budgetDraft, onBudgetCommit]);
+
+  const cancelDays = useCallback(() => {
+    setEditingDays(false);
+    setDaysDraft(String(days));
+  }, [days]);
+
+  const cancelBudget = useCallback(() => {
+    setEditingBudget(false);
+    setBudgetDraft(budget > 0 ? String(budget) : "");
+  }, [budget]);
 
   return (
     <section className="overflow-hidden rounded-2xl border border-border-light bg-surface shadow-soft">
@@ -105,24 +193,90 @@ function ItineraryPageHeader({
           </div>
 
           {showTripSummaryRow && (
-            <div className="grid gap-3 sm:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-xl bg-cream/45 px-3 py-2">
                 <p className="text-[11px] text-muted">目的地</p>
                 <p className="truncate text-sm font-semibold text-foreground">{displayDestination}</p>
               </div>
               <div className="rounded-xl bg-cream/45 px-3 py-2">
                 <p className="text-[11px] text-muted">{t.itineraryPage.metaDays}</p>
-                <p className="text-sm font-semibold text-foreground">{days}</p>
+                {editingDays ? (
+                  <input
+                    ref={daysInputRef}
+                    type="number"
+                    min={1}
+                    max={30}
+                    inputMode="numeric"
+                    value={daysDraft}
+                    data-testid="itinerary-meta-days-input"
+                    onChange={(event) => setDaysDraft(event.target.value)}
+                    onBlur={() => void commitDays()}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void commitDays();
+                      }
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        cancelDays();
+                      }
+                    }}
+                    className="mt-0.5 w-full rounded-lg border border-primary/30 bg-surface px-2 py-1 text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/25"
+                  />
+                ) : canEditDays ? (
+                  <button
+                    type="button"
+                    data-testid="itinerary-meta-days-button"
+                    title={t.itineraryPage.metaDaysEditHint}
+                    onClick={() => setEditingDays(true)}
+                    className="mt-0.5 text-left text-sm font-semibold text-foreground underline decoration-dotted underline-offset-4 transition-colors hover:text-primary"
+                  >
+                    {days}
+                  </button>
+                ) : (
+                  <p className="text-sm font-semibold text-foreground">{days}</p>
+                )}
               </div>
               <div className="rounded-xl bg-cream/45 px-3 py-2">
                 <p className="text-[11px] text-muted">預算</p>
-                <p className="truncate text-sm font-semibold text-foreground">
-                  {budget > 0 ? `NT$${budget.toLocaleString("zh-TW")}` : t.common.notSet}
-                </p>
-              </div>
-              <div className="rounded-xl bg-cream/45 px-3 py-2">
-                <p className="text-[11px] text-muted">狀態</p>
-                <p className="truncate text-sm font-semibold text-foreground">{updatedLabel}</p>
+                {editingBudget ? (
+                  <input
+                    ref={budgetInputRef}
+                    type="number"
+                    min={0}
+                    inputMode="numeric"
+                    value={budgetDraft}
+                    placeholder={t.itineraryPage.metaBudgetPlaceholder}
+                    data-testid="itinerary-meta-budget-input"
+                    onChange={(event) => setBudgetDraft(event.target.value)}
+                    onBlur={() => void commitBudget()}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void commitBudget();
+                      }
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        cancelBudget();
+                      }
+                    }}
+                    className="mt-0.5 w-full rounded-lg border border-primary/30 bg-surface px-2 py-1 text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/25"
+                  />
+                ) : canEditBudget ? (
+                  <button
+                    type="button"
+                    data-testid="itinerary-meta-budget-button"
+                    title={t.itineraryPage.metaBudgetEditHint}
+                    onClick={() => setEditingBudget(true)}
+                    className="mt-0.5 truncate text-left text-sm font-semibold text-foreground underline decoration-dotted underline-offset-4 transition-colors hover:text-primary"
+                  >
+                    {formatBudgetLabel(budget)}
+                  </button>
+                ) : (
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    {formatBudgetLabel(budget)}
+                  </p>
+                )}
               </div>
             </div>
           )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "@/lib/motion";
 import { Gamepad2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -194,6 +194,11 @@ export default function PlanningWaitGame({
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
+  const handlePersistScore = useCallback((score: number, highScore: number) => {
+    latestScoreRef.current = score;
+    setSavedHighScore((current) => Math.max(current, highScore));
+  }, []);
+
   const openGame = () => {
     setSavedHighScore(getSkyDashHighScore());
     setPromptVisible(false);
@@ -210,7 +215,7 @@ export default function PlanningWaitGame({
     <>
       <AnimatePresence>
         {promptVisible && !gameOpen ? (
-          <motion.div
+          <m.div
             key="planning-wait-prompt"
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -231,7 +236,7 @@ export default function PlanningWaitGame({
                 </button>
               </div>
             </div>
-          </motion.div>
+          </m.div>
         ) : null}
       </AnimatePresence>
 
@@ -283,10 +288,7 @@ export default function PlanningWaitGame({
               </p>
             ) : null}
             <SkyDashGame
-              onPersistScore={(score, highScore) => {
-                latestScoreRef.current = score;
-                setSavedHighScore(highScore);
-              }}
+              onPersistScore={handlePersistScore}
             />
           </div>
         </DialogContent>
@@ -294,7 +296,7 @@ export default function PlanningWaitGame({
 
       <AnimatePresence>
         {completionToastVisible ? (
-          <motion.div
+          <m.div
             key="planning-complete-toast"
             initial={{ opacity: 0, y: -12, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -307,7 +309,7 @@ export default function PlanningWaitGame({
                 {completionDescription || `行程已整理完成${gameOpen ? "，現在可以按 ESC 關閉小遊戲。" : "。"}`}
               </p>
             </div>
-          </motion.div>
+          </m.div>
         ) : null}
       </AnimatePresence>
     </>

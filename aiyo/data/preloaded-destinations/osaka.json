@@ -1,0 +1,1930 @@
+{
+  "id": "osaka",
+  "destinationHint": "大阪",
+  "searchKeyword": "大阪自由行 道頓堀 大阪城 美食",
+  "aliases": [
+    "大阪",
+    "osaka",
+    "東北亞"
+  ],
+  "preferences": [
+    "美食",
+    "景點",
+    "懶人包"
+  ],
+  "generatedAt": "2026-05-29T03:49:05.534Z",
+  "pipelineVersion": "preloaded-seed-v1",
+  "videos": [
+    {
+      "id": "youtube_-0pR0qCetLo",
+      "videoId": "-0pR0qCetLo",
+      "title": "【窮遊大阪5000円一日挑戰!】吃足3餐平價美食🍜｜省錢行程🏯｜暢遊展館🪅｜ 大阪城坐觀光車🚌｜大阪自由行｜日本自由行2025",
+      "thumbnail": "https://i.ytimg.com/vi/-0pR0qCetLo/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=-0pR0qCetLo",
+      "duration": "35:25",
+      "summary": "影片提到道頓堀、神座拉麵、大阪生活今昔館等地點，以及拉麵、CanDo等食物。",
+      "description": "行程參考:5000円一日, 吃爆三餐, 三個景點!\n🌟想睇更多我哋嘅有趣日常，Follow埋IG啦 🌟\nhttps://instagram.com/kfuncouple\n---------------------------------------------------\n00:00 影片開始 \n00:31 尋找道頓堀早餐\n01:39 神座拉麵\n03:24 大阪生活今昔館\n12:15 天神橋筋商店街\n14:40 玉出超市\n16:30 CanDo\n19:21 天神橋中村屋\n20:35 宇奈とと南森町店\n22:33 前往大阪城\n28:13  回到難波\n28:28 丸井百貨0101\n30:15 kiefel cafe\n32:31 心齋橘和道頓堀\n---------------------------------------------------\n#大阪自由行 #道頓堀 #窮遊挑戰 #旅行 #日本必去 #日本必吃\n#美食 #vlog #香港人 #tokyo #Osaka vlog #打卡 #網紅  #vlog #美食 #遊客 #必去  #打卡 #網紅 #必食 #必試  #廣東話 #Japan vlog #osaka \n#心齋橋 #日本之旅 #日本旅遊 #神座拉麵",
+      "source": "youtube-data-api",
+      "channelTitle": "KFunCouple",
+      "publishedAt": "2025-11-08T12:00:00Z",
+      "timestamps": [
+        {
+          "time": "0:00",
+          "label": "道頓堀"
+        },
+        {
+          "time": "20:40",
+          "label": "大阪生活今昔館"
+        },
+        {
+          "time": "23:19",
+          "label": "神座拉麵"
+        },
+        {
+          "time": "23:44",
+          "label": "天神橋筋商店街"
+        },
+        {
+          "time": "32:00",
+          "label": "大阪城"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 34.6687234,
+          "lng": 135.5012971,
+          "raw": "道頓堀",
+          "name": "道頓堀",
+          "address": "1 Chome-9 Dotonbori, Chuo Ward, Osaka, 542-0071, Japan",
+          "placeId": "ChIJ_fmKgRPnAGARkKWLtCYTu7g",
+          "rawQuery": "道頓堀",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "道頓堀",
+          "rawMention": "道頓堀",
+          "cleanedName": "道頓堀",
+          "description": "尋找道頓堀早餐",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "道頓堀",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6684294,
+          "lng": 135.5030213,
+          "raw": "神座拉麵",
+          "name": "神座拉麵",
+          "address": "1-chōme-7-3 Dōtonbori, Chuo Ward, Osaka, 542-0071, Japan",
+          "placeId": "ChIJ5Z1H6hTnAGAR6MIF1wLjD5c",
+          "rawQuery": "神座拉麵",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "神座拉麵",
+          "rawMention": "神座拉麵",
+          "cleanedName": "神座拉麵",
+          "description": "神座拉麵",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "神座拉麵",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.71034059999999,
+          "lng": 135.5113276,
+          "raw": "大阪生活今昔館",
+          "name": "大阪生活今昔館",
+          "address": "Japan, 〒530-0041 Osaka, Kita Ward, Tenjinbashi, 6-chōme−4−２０ 大阪市立住まい情報センタービル 8F",
+          "placeId": "ChIJ7xEdT7nmAGARYQc8ZWRPI5Q",
+          "rawQuery": "大阪生活今昔館",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "大阪生活今昔館",
+          "rawMention": "大阪生活今昔館",
+          "cleanedName": "大阪生活今昔館",
+          "description": "大阪生活今昔館",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "大阪生活今昔館",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.7025467,
+          "lng": 135.5114541,
+          "raw": "天神橋筋商店街",
+          "name": "天神橋筋商店街",
+          "address": "三丁目, 2-chōme-3 Tenjinbashi, Kita Ward, Osaka, 530-0041, Japan",
+          "placeId": "ChIJTW9DUrnmAGARVwa3Ga1U-JI",
+          "rawQuery": "天神橋筋商店街",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "天神橋筋商店街",
+          "rawMention": "天神橋筋商店街",
+          "cleanedName": "天神橋筋商店街",
+          "description": "天神橋筋商店街",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "天神橋筋商店街",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6868225,
+          "lng": 135.5287352,
+          "raw": "大阪城",
+          "name": "大阪城",
+          "address": "Osakajo, Chuo Ward, Osaka, 540-0002, Japan",
+          "placeId": "ChIJRT-9d83gAGARuRrljPIlhVg",
+          "rawQuery": "大阪城",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "大阪城",
+          "rawMention": "大阪城",
+          "cleanedName": "大阪城",
+          "description": "前往大阪城",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "大阪城",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [
+        "拉麵",
+        "CanDo"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "尋找道頓堀早餐",
+          "foods": [],
+          "title": "道頓堀",
+          "summary": "尋找道頓堀早餐",
+          "timestamp": "0:00",
+          "endSeconds": 30,
+          "startLabel": "0:00",
+          "startSeconds": 0,
+          "locationHints": [
+            "道頓堀"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "大阪生活今昔館",
+          "foods": [],
+          "title": "大阪生活今昔館",
+          "summary": "大阪生活今昔館",
+          "timestamp": "20:40",
+          "endSeconds": 1270,
+          "startLabel": "20:40",
+          "startSeconds": 1240,
+          "locationHints": [
+            "大阪生活今昔館"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "神座拉麵",
+          "foods": [
+            "拉麵"
+          ],
+          "title": "神座拉麵",
+          "summary": "神座拉麵",
+          "timestamp": "23:19",
+          "endSeconds": 1429,
+          "startLabel": "23:19",
+          "startSeconds": 1399,
+          "locationHints": [
+            "神座拉麵"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_4",
+          "text": "天神橋筋商店街",
+          "foods": [
+            "拉麵"
+          ],
+          "title": "天神橋筋商店街",
+          "summary": "天神橋筋商店街",
+          "timestamp": "23:44",
+          "endSeconds": 1454,
+          "startLabel": "23:44",
+          "startSeconds": 1424,
+          "locationHints": [
+            "天神橋筋商店街"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_5",
+          "text": "前往大阪城",
+          "foods": [],
+          "title": "大阪城",
+          "summary": "前往大阪城",
+          "timestamp": "32:00",
+          "endSeconds": 1950,
+          "startLabel": "32:00",
+          "startSeconds": 1920,
+          "locationHints": [
+            "大阪城"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的大阪旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_csVGL-XeB8s",
+      "videoId": "csVGL-XeB8s",
+      "title": "2025大阪自由行必看！周遊卡必玩景點！大阪城天守閣詳細攻略！黑門市場必吃美食！和牛燒肉吃到飽推薦！天神橋筋、千日前道具屋筋商店街！大阪生活今昔館！難波八阪神社！梅田必玩！壽司推薦！景點美食交通攻略",
+      "thumbnail": "https://i.ytimg.com/vi/csVGL-XeB8s/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=csVGL-XeB8s",
+      "duration": "29:45",
+      "summary": "影片提到大阪城、天守閣、大阪生活今昔館等地點，以及和牛燒肉、壽司等食物。",
+      "description": "下集要帶大家更深入玩大阪，感受大阪多層次魅力！從大阪城必看必玩、黑門市場必吃、必逛的幾條商店街到厲害的和牛吃到飽、必吃特色燒肉和好吃的壽司...等等，周遊卡還有什麼必玩景點看這集！\n\n接下來京都、神戶、奈良也會陸續上片喔！\n\n#大阪 #大阪旅遊 #大阪景點 #2025大阪 #大阪美食 #大阪必去 #大阪周遊卡 #大阪周遊卷 #Osaka #大阪燒肉吃到飽 #和牛吃到飽 #大阪燒肉 #大阪吃到飽 \n\n🔵 下方有幫大家整理此次的景點、票卷，下單時記得輸入折扣碼比較便宜\n🔴 KKday折扣碼：CGGC92\n(滿 2500 享 92 折，最高折抵 300，使用期限2026/12/31，旅遊期限：2027/03/31)\n以下結帳記得用折扣碼更便宜(每會員可使用2次)\n\n▶️本集票卷、交通優惠整理：\n⭐️大阪周遊卡(1日/2日): https://www.kkday.com/zh-tw/product/12156-osaka-amazing-pass-e-ticket-japan?cid=9797\n⭐️HARUKA關西機場特快: https://www.kkday.com/zh-tw/product/18940-kansai-airport-haruka-ticket-japan?cid=9797\n⭐️日本環球影城: https://www.kkday.com/zh-tw/product/2247-universal-studios-japan-ticket-osaka?cid=9797 \n\n▶️本集景點美食行程\n\n🔴Day4\n0:00 大阪2025自由行\n0:25 日本環球影城: https://youtu.be/snNWUi0ybj4\n✅環球影城購票、快速通關: https://www.kkday.com/zh-tw/product/2247-universal-studios-japan-ticket-osaka?cid=9797  \n✅環球影城旁住宿推薦: 森格拉爾天空水療酒店 (The Singulari Hotel)\n👉Agoda: https://www.agoda.com/partners/partnersearch.aspx?pcs=1&cid=1837600&hid=1994597\n\n🔴Day5\n0:32 奈良一日遊(之後會上片)\n0:42 大阪必吃和牛吃到飽/烤肉力丸難波湊町店\n✅難波住宿推薦: NEST＆RISE大阪難波酒店\n👉Agoda: https://www.agoda.com/partners/partnersearch.aspx?pcs=1&cid=1837600&hid=44241642\n\n🔴Day6-7\n2:28 京都二日遊 https://youtu.be/TTqh9daICQA \n2:32 大阪路邊販賣機價差?\n2:49 大阪壽司推薦 /鮨ひろ\n4:13 大阪住宿通天閣附近/Tanimachikun Star Hotel Ebisunishi 48\n👉Agoda: https://www.agoda.com/partners/partnersearch.aspx?pcs=1&cid=1837600&hid=37873343\n(抱歉這間影片幣別上錯，是一天4000台幣，有洗衣機可下廚，適合長天期)\n🔴Day8\n5:53 神戶一日遊 https://youtu.be/AjsYVZxHzXc\n6:03 唐吉軻德買到大半夜...\n\n✅Day5-8 大阪美食住宿連結：\n▶️Tanimachikun Star Hotel Ebisunishi 48/通天閣附近，有洗衣機、可下廚\n👉Agoda: https://www.agoda.com/partners/partnersearch.aspx?pcs=1&cid=1837600&hid=37873343\n▶️森格拉爾天空水療酒店/ 環球影城旁住宿推薦\n👉Agoda: https://www.agoda.com/partners/partnersearch.aspx?pcs=1&cid=1837600&hid=1994597\n▶️NEST＆RISE大阪難波酒店 /難波住宿推薦\n👉Agoda: https://www.agoda.com/partners/partnersearch.aspx?pcs=1&cid=1837600&hid=44241642\n\n▶️大阪必吃和牛吃到飽/烤肉力丸難波湊町店: https://maps.app.goo.gl/musN5mcBtvz4LxL28 \n▶️大阪壽司推薦 /鮨ひろ鮨ひろ: https://maps.app.goo.gl/BRKmnw2iZYKkPFiE8 \n\n\n🔴Day9\n6:28 推行李坐地鐵/JR怎麼找電梯\n6:41 大阪城\n7:22 天守閣\n9:10 大阪城御座船\n10:56 深度大阪城還可以玩什麼\n11:11 大阪水上巴士\n11:18 大阪生活今昔館\n14:10 天神橋筋商店街\n14:41 大阪特色燒肉推薦/ 焼肉うちだ天満店\n17:29 天神橋筋商店街心得\n17:40 梅田HEP FIVE 摩天輪\n19:12 梅田藍天大樓\n19:25 光芒飯店 大阪難波/ CANDEO HOTEL\n\n✅Day9行程購票連結：\n▶️大阪周遊卡(1日/2日): https://www.kkday.com/zh-tw/product/12156-osaka-amazing-pass-e-ticket-japan?cid=9797\n(以下有買周遊卡就不用買)\n▶️大阪城天守閣: https://www.kkday.com/zh-tw/product/155057-osaka-castle-ticket?cid=9797 \n▶️大阪水上巴士: https://www.kkday.com/zh-tw/product/282470?cid=9797 \n▶️大阪生活今昔館: https://www.kkday.com/zh-tw/product/135885-osaka-museum-of-housing-and-living-admission-ticket-japan?cid=9797 \n▶️梅田HEP FIVE 摩天輪: https://www.kkday.com/zh-tw/product/20178-osaka-umeda-hep-five-ferris-wheel-ticket-japan?cid=9797 \n▶️梅田藍天大樓: https://www.kkday.com/zh-tw/product/22352-night-views-at-umeda-sky-building-kuchu-teien-observatory-osaka?cid=9797 \n(藍天大樓：大阪周遊卡15點前免費入場，15點後，出示周遊卡票價9折)\n\n✅住宿美食連結\n▶️焼肉うちだ天満店/ 大阪特色燒肉推薦:\n\n🔴Day10\n20:28 今天的行程都用走的就可以到\n20:36 寄明信片回台灣/ 大阪千日前郵便局\n20:49 黑門市場必吃/ 5家推薦\n27:44 千日前道具屋筋商店街\n28:11 難波八阪神社\n29:09 HARUKA關西機場特快\n29:30 大阪周遊卡費用對比\n\n✅Day10行程購票連結：\n▶️HARUKA關西機場特快: https://www.kkday.com/zh-tw/product/18940-kansai-airport-haruka-ticket-japan?cid=9797\n▶️黑門市場地圖: https://kuromon.com/zh/official-store-map/  (拉到最下面可載)\n\n⭐️大阪自由行其他行程看這邊：\nhttps://youtu.be/HNXC5kswe6Y\nhttps://youtu.be/csVGL-XeB8s \nhttps://youtu.be/snNWUi0ybj4\n\n⭐️京都行程看這邊\nhttps://youtu.be/TTqh9daICQA\n\n⭐️神戶行程看這邊\nhttps://youtu.be/AjsYVZxHzXc\n\n► 訂閱瑄瑄&G先生：https://pse.is/celiamrg-subscribe\n追蹤瑄瑄&G先生即時動態：\n► Instagram：https://www.instagram.com/celiahsuan_mr.g/\n► FaceBook：https://www.facebook.com/celia.hsuan/\n► BLOG：http://celiamrg.com/\n► 合作邀約EMAIL：cggc1101@gmail.com",
+      "source": "youtube-data-api",
+      "channelTitle": "瑄瑄 & G先生 · 美食夫妻的100次旅行",
+      "publishedAt": "2025-07-24T12:30:45Z",
+      "timestamps": [
+        {
+          "time": "10:28",
+          "label": "大阪城"
+        },
+        {
+          "time": "11:58",
+          "label": "大阪生活今昔館"
+        },
+        {
+          "time": "12:08",
+          "label": "黑門市場"
+        },
+        {
+          "time": "12:10",
+          "label": "天神橋筋商店街"
+        },
+        {
+          "time": "12:11",
+          "label": "難波八阪神社"
+        },
+        {
+          "time": "12:14",
+          "label": "千日前道具屋筋商店街"
+        },
+        {
+          "time": "12:22",
+          "label": "天守閣"
+        },
+        {
+          "time": "12:40",
+          "label": "梅田HEP FIVE 摩天輪"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 34.6868225,
+          "lng": 135.5287352,
+          "raw": "大阪城",
+          "name": "大阪城",
+          "address": "Osakajo, Chuo Ward, Osaka, 540-0002, Japan",
+          "placeId": "ChIJRT-9d83gAGARuRrljPIlhVg",
+          "rawQuery": "大阪城",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "大阪城",
+          "rawMention": "大阪城",
+          "cleanedName": "大阪城",
+          "description": "6:28 推行李坐地鐵/JR怎麼找電梯 6:41 大阪城",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "大阪城",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6872962,
+          "lng": 135.5258605,
+          "raw": "天守閣",
+          "name": "天守閣",
+          "address": "1-1 Ōsakajō, Chuo Ward, Osaka, 540-0002, Japan",
+          "placeId": "ChIJJ_AZutLgAGARwYqBzSs8DkM",
+          "rawQuery": "天守閣",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "天守閣",
+          "rawMention": "天守閣",
+          "cleanedName": "天守閣",
+          "description": "7:22 天守閣",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "天守閣",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.71034059999999,
+          "lng": 135.5113276,
+          "raw": "大阪生活今昔館",
+          "name": "大阪生活今昔館",
+          "address": "Japan, 〒530-0041 Osaka, Kita Ward, Tenjinbashi, 6-chōme−4−２０ 大阪市立住まい情報センタービル 8F",
+          "placeId": "ChIJ7xEdT7nmAGARYQc8ZWRPI5Q",
+          "rawQuery": "大阪生活今昔館",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "大阪生活今昔館",
+          "rawMention": "大阪生活今昔館",
+          "cleanedName": "大阪生活今昔館",
+          "description": "11:18 大阪生活今昔館",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "大阪生活今昔館",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.7025467,
+          "lng": 135.5114541,
+          "raw": "天神橋筋商店街",
+          "name": "天神橋筋商店街",
+          "address": "三丁目, 2-chōme-3 Tenjinbashi, Kita Ward, Osaka, 530-0041, Japan",
+          "placeId": "ChIJTW9DUrnmAGARVwa3Ga1U-JI",
+          "rawQuery": "天神橋筋商店街",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "天神橋筋商店街",
+          "rawMention": "天神橋筋商店街",
+          "cleanedName": "天神橋筋商店街",
+          "description": "14:10 天神橋筋商店街",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "天神橋筋商店街",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.66155920000001,
+          "lng": 135.4967039,
+          "raw": "難波八阪神社",
+          "name": "難波八阪神社",
+          "address": "2-chōme-9-19 Motomachi, Naniwa Ward, Osaka, 556-0016, Japan",
+          "placeId": "ChIJQVW9eXLnAGARn-pUdRl0w4A",
+          "rawQuery": "難波八阪神社",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "難波八阪神社",
+          "rawMention": "難波八阪神社",
+          "cleanedName": "難波八阪神社",
+          "description": "28:11 難波八阪神社",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "難波八阪神社",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.7038153,
+          "lng": 135.499969,
+          "raw": "梅田HEP FIVE 摩天輪",
+          "name": "梅田HEP FIVE 摩天輪",
+          "address": "Japan, 〒530-0017 Osaka, Kita Ward, Kakudachō, 5−１５ HEP FIVE 7F",
+          "placeId": "ChIJAQDAo5PmAGARcMqvnh2Reqs",
+          "rawQuery": "梅田HEP FIVE 摩天輪",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "梅田HEP FIVE 摩天輪",
+          "rawMention": "梅田HEP FIVE 摩天輪",
+          "cleanedName": "梅田HEP FIVE 摩天輪",
+          "description": "17:40 梅田HEP FIVE 摩天輪",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "梅田HEP FIVE 摩天輪",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.7052872,
+          "lng": 135.4896527,
+          "raw": "梅田藍天大樓",
+          "name": "梅田藍天大樓",
+          "address": "1-chōme-1-88 Ōyodonaka, Kita Ward, Osaka, 531-6023, Japan",
+          "placeId": "ChIJbyd0kIjmAGAR_crecCbjwlc",
+          "rawQuery": "梅田藍天大樓",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "梅田藍天大樓",
+          "rawMention": "梅田藍天大樓",
+          "cleanedName": "梅田藍天大樓",
+          "description": "19:12 梅田藍天大樓",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "梅田藍天大樓",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6653529,
+          "lng": 135.5062406,
+          "raw": "黑門市場",
+          "name": "黑門市場",
+          "address": "2 Chome-21 Nipponbashi, Chuo Ward, Osaka, 542-0073, Japan",
+          "placeId": "ChIJXSJB5UHnAGARQcEjvngsHaw",
+          "rawQuery": "黑門市場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "黑門市場",
+          "rawMention": "黑門市場",
+          "cleanedName": "黑門市場",
+          "description": "20:28 黑門市場必吃/ 5家推薦",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "黑門市場",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6640177,
+          "lng": 135.5035033,
+          "raw": "千日前道具屋筋商店街",
+          "name": "千日前道具屋筋商店街",
+          "address": "Kitchenware St, Nanbasennichimae, Chuo Ward, Osaka, 542-0075, Japan",
+          "placeId": "ChIJYaEgzmvnAGARceBQY8fxeVY",
+          "rawQuery": "千日前道具屋筋商店街",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "千日前道具屋筋商店街",
+          "rawMention": "千日前道具屋筋商店街",
+          "cleanedName": "千日前道具屋筋商店街",
+          "description": "27:44 千日前道具屋筋商店街",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "千日前道具屋筋商店街",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [
+        "和牛燒肉",
+        "壽司"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "6:28 推行李坐地鐵/JR怎麼找電梯 6:41 大阪城",
+          "foods": [
+            "和牛燒肉",
+            "壽司"
+          ],
+          "title": "大阪城",
+          "summary": "6:28 推行李坐地鐵/JR怎麼找電梯 6:41 大阪城",
+          "timestamp": "10:28",
+          "endSeconds": 658,
+          "startLabel": "10:28",
+          "startSeconds": 628,
+          "locationHints": [
+            "大阪城"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "11:18 大阪生活今昔館",
+          "foods": [
+            "和牛燒肉"
+          ],
+          "title": "大阪生活今昔館",
+          "summary": "11:18 大阪生活今昔館",
+          "timestamp": "11:58",
+          "endSeconds": 748,
+          "startLabel": "11:58",
+          "startSeconds": 718,
+          "locationHints": [
+            "大阪生活今昔館"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "20:28 黑門市場必吃/ 5家推薦",
+          "foods": [],
+          "title": "黑門市場",
+          "summary": "20:28 黑門市場必吃/ 5家推薦",
+          "timestamp": "12:08",
+          "endSeconds": 758,
+          "startLabel": "12:08",
+          "startSeconds": 728,
+          "locationHints": [
+            "黑門市場"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_4",
+          "text": "14:10 天神橋筋商店街",
+          "foods": [],
+          "title": "天神橋筋商店街",
+          "summary": "14:10 天神橋筋商店街",
+          "timestamp": "12:10",
+          "endSeconds": 760,
+          "startLabel": "12:10",
+          "startSeconds": 730,
+          "locationHints": [
+            "天神橋筋商店街"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_5",
+          "text": "28:11 難波八阪神社",
+          "foods": [],
+          "title": "難波八阪神社",
+          "summary": "28:11 難波八阪神社",
+          "timestamp": "12:11",
+          "endSeconds": 761,
+          "startLabel": "12:11",
+          "startSeconds": 731,
+          "locationHints": [
+            "難波八阪神社"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_6",
+          "text": "27:44 千日前道具屋筋商店街",
+          "foods": [],
+          "title": "千日前道具屋筋商店街",
+          "summary": "27:44 千日前道具屋筋商店街",
+          "timestamp": "12:14",
+          "endSeconds": 764,
+          "startLabel": "12:14",
+          "startSeconds": 734,
+          "locationHints": [
+            "千日前道具屋筋商店街"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_7",
+          "text": "7:22 天守閣",
+          "foods": [],
+          "title": "天守閣",
+          "summary": "7:22 天守閣",
+          "timestamp": "12:22",
+          "endSeconds": 772,
+          "startLabel": "12:22",
+          "startSeconds": 742,
+          "locationHints": [
+            "天守閣"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_8",
+          "text": "17:40 梅田HEP FIVE 摩天輪",
+          "foods": [],
+          "title": "梅田HEP FIVE 摩天輪",
+          "summary": "17:40 梅田HEP FIVE 摩天輪",
+          "timestamp": "12:40",
+          "endSeconds": 790,
+          "startLabel": "12:40",
+          "startSeconds": 760,
+          "locationHints": [
+            "梅田HEP FIVE 摩天輪"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的大阪旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_igEWpadlN2w",
+      "videoId": "igEWpadlN2w",
+      "title": "【大阪京都10個必玩旅遊景點 🇯🇵】第一次去大阪京都自由行怎麼玩？花多少？｜日本必吃美食｜日本自由行｜日本住宿",
+      "thumbnail": "https://i.ytimg.com/vi/igEWpadlN2w/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=igEWpadlN2w",
+      "duration": "20:47",
+      "summary": "影片提到道頓堀、心齋橋、大阪城天守閣等地點，以及壽喜燒、豬排、麵屋優光等食物。",
+      "description": "#日本自由行 #京都 #大阪 #美食\n\n🚁日本京都大阪必玩旅遊景點：\n📍道頓堀心齋橋📍大阪城天守閣 📍梅田藍天大廈📍阪急百貨店📍HEP FIVE\n📍清水寺📍八坂神社 📍鴨川📍伏見稻荷大社📍錦市場&寺町京極商店街\n————————————————————\n🏡日本住宿推薦優惠訂房連結： \n📍 麗嘉Rihga Gran Kyoto(京都車站5分鐘、有湯屋)：https://reurl.cc/Wv9dRx\n📍 Daiwa Roynet Hotel(便宜、京都車站旁）: https://reurl.cc/bl0RYd\n📍  東急STAY京都三條烏丸(高CP值、房間有洗衣機)：https://reurl.cc/y6VZvy\n📍  京都千酒店(頂級五星、市中心)：https://reurl.cc/dmZ08D\n📍  VIA INN(高CP值、樓下捷運超市)：https://reurl.cc/8X92Vg\n📍  大阪南海瑞士酒店(頂級五星、難波市中心)：https://reurl.cc/Xmn6N0\n📍  阪急大阪龍仕柏酒店(高評價、梅田市中心)：https://reurl.cc/3eVDql\n————————————————————\n🚁日本必玩旅遊景點優惠門票：\n-KLOOK\n📍大阪周遊卡：https://lurl.cc/7xVnMI\n📍關西周遊卡：https://lurl.cc/4XGJeU\n📍關西 ICOCA 卡（補周遊卡不含的交通）：https://lurl.cc/Nutzoa\n📍關西機場到大阪市區交通：https://lurl.cc/XWPRF1\n📍日本環球影城門票 ：https://lurl.cc/XTh4Tx\n📍日本環球影城快速通關券 ：https://lurl.cc/dwpQxx\n📍免規劃跟團一日遊：\n-京都＆奈良一日遊：https://lurl.cc/aYsAw8\n-伏見稻荷大社 & 嵐山 & 清水寺一日遊：https://lurl.cc/wUIjUr\n-嵐山 & 鹿苑寺 & 奈良公園一日遊：https://lurl.cc/kremOg\n-京都北郊美山茅草屋之里＆伊根灣＆天橋立：https://lurl.cc/VZJfay\n📍全球租車(可異地還車)：https://reurl.cc/nDQbZ2\n📍首次購票透過我的連結註冊，可獲得NT$100優惠回饋\n👉https://reurl.cc/QX0zDZ\n✨里歐專屬折扣碼：LEO6666 (全站商品95折)\n\n-KKDAY\n📍大阪周遊卡：https://reurl.cc/Ry3Ajr\n📍關西周遊卡：https://reurl.cc/WvKjNk\n📍關西機場到大阪市區交通：https://reurl.cc/3eqGKX\n📍日本環球影城門票 ：https://reurl.cc/a4K657\n📍日本環球影城快速通關券 ：https://reurl.cc/dm4KGM\n📍大阪、京都、奈良10小時來回包車：https://reurl.cc/Ry3a66\n📍免規劃跟團一日遊：\n-伏見稻荷大社＆嵐山＆金閣寺＆奈良公園：https://reurl.cc/K31V69\n-嵐山小火車、保津川遊船、嵐山一日遊：https://reurl.cc/GK27zp\n-京都北郊美山茅草屋之里＆伊根灣＆天橋立：https://reurl.cc/y6922q\n📍首次購票透過我的連結註冊，可獲得NT$100優惠回饋\n👉https://reurl.cc/nLj8kn\n✨里歐專屬折扣碼：KKLEO66 (滿NT$1,500享94折)\n————————————————————\n✈日本機票比價： https://skyscanner.pxf.io/rQJBNG\n📱日本網路SIM卡：\n📍日本吃到飽SIM卡（台灣郵寄到府）：https://lurl.cc/d9lKv3\n📍日本4G虛擬 eSIM 卡：https://lurl.cc/Jxcfbx\n\n【河口湖自由行怎麼玩?怎麼吃?花多少?】https://youtu.be/FJ83KwZUBMk\n【日本旅遊攻略】10個日本旅遊注意事項：https://reurl.cc/L46Eae\n———————————————————— \n日本花費兩人$20050=$10025/人\n【伙食】兩人$6436=$3218/人\n- Day1 晚壽喜燒993 宵夜182\n- Day2 豬排677晚345\n- Day3 午440晚koko877超商279\n- Day4 敘敘苑1281 麵屋優光470超商241\n- Day5 麵屋豬一651\n【住宿】 大阪一日$2361+京都3日$8309=兩人$10670=$5335/人\n【門票+交通】兩人$2944=$1472/人\n-大阪周遊卡$1570\n-Uber& ICOCA卡$864\n-清水寺$174\n-Esim$336、另一人使用信用卡免費SIM卡\n【備註】不含伴手禮(看個人消費力，我自己買8000左右、不含來回機票(時間地點影響很大，特價廉航機票最低約4~5000，一般航空約1~20000)、不含第六天名古屋花費\n———————————————————— \n🔗里歐愛旅遊部落格詳細圖文：https://leolovetravel.com\n✨ IG：leolovetravel FB：里歐愛旅遊\n————————————————————\nSong: Markvard - Rewind\nMusic provided by Vlog No Copyright Music.\nCreative Commons - Attribution 3.0 Unported\nVideo Link: https://youtu.be/UXdoLv_32i0",
+      "source": "youtube-data-api",
+      "channelTitle": "里歐愛旅遊 leolovetravel",
+      "publishedAt": "2023-11-25T12:30:09Z",
+      "timestamps": [
+        {
+          "time": "4:00",
+          "label": "道頓堀"
+        },
+        {
+          "time": "4:00",
+          "label": "心齋橋"
+        },
+        {
+          "time": "5:00",
+          "label": "大阪城天守閣"
+        },
+        {
+          "time": "6:00",
+          "label": "梅田藍天大廈"
+        },
+        {
+          "time": "7:00",
+          "label": "阪急百貨店"
+        },
+        {
+          "time": "8:00",
+          "label": "HEP FIVE"
+        },
+        {
+          "time": "9:00",
+          "label": "八坂神社"
+        },
+        {
+          "time": "10:00",
+          "label": "伏見稻荷大社"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 34.6687234,
+          "lng": 135.5012971,
+          "raw": "道頓堀",
+          "name": "道頓堀",
+          "address": "1 Chome-9 Dotonbori, Chuo Ward, Osaka, 542-0071, Japan",
+          "placeId": "ChIJ_fmKgRPnAGARkKWLtCYTu7g",
+          "rawQuery": "道頓堀",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "道頓堀",
+          "rawMention": "道頓堀",
+          "cleanedName": "道頓堀",
+          "description": "📍道頓堀心齋橋",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "道頓堀",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6724248,
+          "lng": 135.5010362,
+          "raw": "心齋橋",
+          "name": "心齋橋",
+          "address": "Shinsaibashisuji, Chuo Ward, Osaka, 542-0085, Japan",
+          "placeId": "ChIJcxIbNhHnAGARl8cKu_vPFMA",
+          "rawQuery": "心齋橋",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "心齋橋",
+          "rawMention": "心齋橋",
+          "cleanedName": "心齋橋",
+          "description": "📍道頓堀心齋橋",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "心齋橋",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6872962,
+          "lng": 135.5258605,
+          "raw": "大阪城天守閣",
+          "name": "大阪城天守閣",
+          "address": "1-1 Ōsakajō, Chuo Ward, Osaka, 540-0002, Japan",
+          "placeId": "ChIJJ_AZutLgAGARwYqBzSs8DkM",
+          "rawQuery": "大阪城天守閣",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "大阪城天守閣",
+          "rawMention": "大阪城天守閣",
+          "cleanedName": "大阪城天守閣",
+          "description": "📍大阪城天守閣",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "大阪城天守閣",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.7052872,
+          "lng": 135.4896527,
+          "raw": "梅田藍天大廈",
+          "name": "梅田藍天大廈",
+          "address": "1-chōme-1-88 Ōyodonaka, Kita Ward, Osaka, 531-6023, Japan",
+          "placeId": "ChIJbyd0kIjmAGAR_crecCbjwlc",
+          "rawQuery": "梅田藍天大廈",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "梅田藍天大廈",
+          "rawMention": "梅田藍天大廈",
+          "cleanedName": "梅田藍天大廈",
+          "description": "📍梅田藍天大廈",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "梅田藍天大廈",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6937249,
+          "lng": 135.5022535,
+          "raw": "阪急百貨店",
+          "name": "阪急百貨店",
+          "address": "Osaka, Japan",
+          "placeId": "ChIJ4eIGNFXmAGAR5y9q5G7BW8U",
+          "rawQuery": "阪急百貨店",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "阪急百貨店",
+          "rawMention": "阪急百貨店",
+          "cleanedName": "阪急百貨店",
+          "description": "📍阪急百貨店",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "阪急百貨店",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.7040897,
+          "lng": 135.5004632,
+          "raw": "HEP FIVE",
+          "name": "HEP FIVE",
+          "address": "5-15 Kakudachō, Kita Ward, Osaka, 530-0017, Japan",
+          "placeId": "ChIJkfagoZPmAGARIcaEGF7Vd2U",
+          "rawQuery": "HEP FIVE",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "HEP FIVE",
+          "rawMention": "HEP FIVE",
+          "cleanedName": "HEP FIVE",
+          "description": "📍HEP FIVE",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "HEP FIVE",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6987997,
+          "lng": 135.4709364,
+          "raw": "八坂神社",
+          "name": "八坂神社",
+          "address": "6-chōme-4-2 Ebie, Fukushima Ward, Osaka, 553-0001, Japan",
+          "placeId": "ChIJUdHp-HLmAGARKDiCgL7LINo",
+          "rawQuery": "八坂神社",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "八坂神社",
+          "rawMention": "八坂神社",
+          "cleanedName": "八坂神社",
+          "description": "📍八坂神社",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "八坂神社",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6937249,
+          "lng": 135.5022535,
+          "raw": "伏見稻荷大社",
+          "name": "伏見稻荷大社",
+          "address": "Osaka, Japan",
+          "placeId": "ChIJ4eIGNFXmAGAR5y9q5G7BW8U",
+          "rawQuery": "伏見稻荷大社",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "伏見稻荷大社",
+          "rawMention": "伏見稻荷大社",
+          "cleanedName": "伏見稻荷大社",
+          "description": "📍伏見稻荷大社",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "伏見稻荷大社",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6843232,
+          "lng": 135.4795403,
+          "raw": "錦市場",
+          "name": "錦市場",
+          "address": "1-chōme-1-86 Noda, Fukushima Ward, Osaka, 553-0005, Japan",
+          "placeId": "ChIJ66TgJUXmAGARVUnAUVrgLb4",
+          "rawQuery": "錦市場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "錦市場",
+          "rawMention": "錦市場",
+          "cleanedName": "錦市場",
+          "description": "📍錦市場&寺甌京極商店街",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "錦市場",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6937249,
+          "lng": 135.5022535,
+          "raw": "寺甌京極商店街",
+          "name": "寺甌京極商店街",
+          "address": "Osaka, Japan",
+          "placeId": "ChIJ4eIGNFXmAGAR5y9q5G7BW8U",
+          "rawQuery": "寺甌京極商店街",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "寺甌京極商店街",
+          "rawMention": "寺甌京極商店街",
+          "cleanedName": "寺甌京極商店街",
+          "description": "📍錦市場&寺甌京極商店街",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "寺甌京極商店街",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [
+        "壽喜燒",
+        "豬排",
+        "麵屋優光",
+        "麵屋豬一"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "📍道頓堀心齋橋",
+          "foods": [],
+          "title": "道頓堀",
+          "summary": "📍道頓堀心齋橋",
+          "timestamp": "4:00",
+          "endSeconds": 270,
+          "startLabel": "4:00",
+          "startSeconds": 240,
+          "locationHints": [
+            "道頓堀"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "📍道頓堀心齋橋",
+          "foods": [],
+          "title": "心齋橋",
+          "summary": "📍道頓堀心齋橋",
+          "timestamp": "4:00",
+          "endSeconds": 270,
+          "startLabel": "4:00",
+          "startSeconds": 240,
+          "locationHints": [
+            "心齋橋"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "📍大阪城天守閣",
+          "foods": [],
+          "title": "大阪城天守閣",
+          "summary": "📍大阪城天守閣",
+          "timestamp": "5:00",
+          "endSeconds": 330,
+          "startLabel": "5:00",
+          "startSeconds": 300,
+          "locationHints": [
+            "大阪城天守閣"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_4",
+          "text": "📍梅田藍天大廈",
+          "foods": [],
+          "title": "梅田藍天大廈",
+          "summary": "📍梅田藍天大廈",
+          "timestamp": "6:00",
+          "endSeconds": 390,
+          "startLabel": "6:00",
+          "startSeconds": 360,
+          "locationHints": [
+            "梅田藍天大廈"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_5",
+          "text": "📍阪急百貨店",
+          "foods": [],
+          "title": "阪急百貨店",
+          "summary": "📍阪急百貨店",
+          "timestamp": "7:00",
+          "endSeconds": 450,
+          "startLabel": "7:00",
+          "startSeconds": 420,
+          "locationHints": [
+            "阪急百貨店"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_6",
+          "text": "📍HEP FIVE",
+          "foods": [],
+          "title": "HEP FIVE",
+          "summary": "📍HEP FIVE",
+          "timestamp": "8:00",
+          "endSeconds": 510,
+          "startLabel": "8:00",
+          "startSeconds": 480,
+          "locationHints": [
+            "HEP FIVE"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_7",
+          "text": "📍八坂神社",
+          "foods": [],
+          "title": "八坂神社",
+          "summary": "📍八坂神社",
+          "timestamp": "9:00",
+          "endSeconds": 570,
+          "startLabel": "9:00",
+          "startSeconds": 540,
+          "locationHints": [
+            "八坂神社"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_8",
+          "text": "📍伏見稻荷大社",
+          "foods": [],
+          "title": "伏見稻荷大社",
+          "summary": "📍伏見稻荷大社",
+          "timestamp": "10:00",
+          "endSeconds": 630,
+          "startLabel": "10:00",
+          "startSeconds": 600,
+          "locationHints": [
+            "伏見稻荷大社"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的大阪旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_12Jsogs2Zbs",
+      "videoId": "12Jsogs2Zbs",
+      "title": "【2026大阪自由行】新手必看！第一次來玩大阪！關西機場到難波交通＋大阪周遊卡一日券攻略 🎫",
+      "thumbnail": "https://i.ytimg.com/vi/12Jsogs2Zbs/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=12Jsogs2Zbs",
+      "duration": "28:21",
+      "summary": "影片提到關西機場、南海電鐵、難波站等地點，以及金龍拉麵、敘敘苑燒肉等食物。",
+      "description": "【2026大阪自由行】新手必看！第一次來玩大阪！關西機場到難波交通＋大阪周遊卡一日券攻略 🎫\n\n第一次真真正正來玩大阪！🇯🇵\n這次的行程超級豐富，從關西機場到難波的交通教學，到開箱交通超方便的 萬楓酒店，還有使用 大阪周遊卡 一日券玩爆大阪！\n\n我們去了梅田藍天大廈（迷路迷到崩潰🤯）、大阪城搭御座船，還挑戰了通天閣最新的溜滑梯！當然也少不了金龍拉麵、敘敘苑燒肉...🤤\n\n\n\n🔥 出國上網必備神隊友：特旅發（trifa）eSIM 🔥\n\n\n這次在日本上網、查地圖、發限動都超級順，全靠它！\n來自日本的 eSIM 品牌，不用換卡、不用租 WIFI 機，設定簡單到連科技麻瓜都能上手！👍\n\n✨ 丹牛專屬粉絲優惠 ✨ 下載 APP 輸入折扣碼：DAN  即可享有專屬優惠喔！\n\n\n\n為什麼我推薦 特旅發（trifa）？\n\n✅ 不用換卡超方便：透過 APP 一鍵安裝，省去保管實體卡的麻煩。\n\n\n✅ 流量隨時掌握：APP 內有流量倒數功能，不怕突然斷網！\n\n\n✅ 網路穩定快速：🇯🇵日本方案使用當地原生網卡，追劇、導航都不卡頓。 \n\n✅ 彈性高：支援全球 200 多個國家，吃到飽開熱點也不降速！\n\n👇 趕快下載準備出國吧！\n\n\n📥 特旅發（trifa）APP下載連結：https://trifa.go.link/aIP74\n\n\n🌐 特旅發（trifa）中文官方網站：https://trifa.go.link/bvW1H\n\n\n📸 特旅發（trifa）台灣官方IG帳號：https://www.instagram.com/trifa.tw/\n\n大阪周遊卡 Amazing Pass購買連結:\nhttps://affiliate.klook.com/redirect?aid=103884&aff_adid=1172418&k_site=https%3A%2F%2Fwww.klook.com%2Fzh-TW%2Factivity%2F82312-amazing-pass-osaka%2F\n\nUSJ門票 🎫\nhttps://affiliate.klook.com/redirect?aid=103884&aff_adid=1158452&k_site=https%3A%2F%2Fwww.klook.com%2Fzh-TW%2Factivity%2F46604-universal-studios-japan-e-ticket-osaka-qr-code-direct-entry%2F%3Fspm%3DSearchResult.SearchResult_LIST%26clickId%3D8090a0d76d\n\n空庭溫泉♨️\n\nhttps://affiliate.klook.com/redirect?aid=103884&aff_adid=1212495&k_site=https%3A%2F%2Fs.klook.com%2Fc%2FgXBBm4V7X8\n\n✨ 時間軸 TIMELINE ✨\n\n00:00 Intro：第一次認真玩大阪！\n\n00:30 機場交通：關西機場到難波 (南海電鐵購票教學)\n\n04:17 住宿開箱：難波萬楓酒店 (Fairfield by Marriott Osaka Namba)\n\n06:12 交通票券：大阪周遊卡 (Osaka Amazing Pass) 划算嗎？\n\n07:08 梅田迷宮：尋找藍天大廈 (空中庭園展望台)\n\n10:58 大阪城公園 & 大阪城御座船\n\n12:10 出國上網推薦：trifa eSIM 實測 (日本原生線路超穩！)\n\n15:40 道頓堀逛街 & 晚餐：金龍拉麵\n\n18:40 Day 2& Day 3：去伊勢志摩和 往環球影城 (USJ)\n\n19:40 通天閣：TOWER SLIDER 巨型溜滑梯，Dive & Walk 高空漫步\n\n24:24 梅田逛街 & 退稅心得\n\n26:06 必吃美食：敘敘苑燒肉 (JoJoen) 商業午餐\n\n28:07 結尾\n\n📍 本集重點資訊 & 交通攻略\n\n1. 南海電鐵 特急 Rapi:t\n\n路線：關西機場 ⇄ 南海難波站\n\n時間：約 38 分鐘\n\n票價：單程約 1,490 日圓 (包含乘車券+特急券)\n\n2. 大阪周遊卡 (Osaka Amazing Pass)\n\n特色：包含電車/巴士無限搭乘 + 超過 40 個免費景點。\n\n推薦景點：梅田藍天大廈、大阪城御座船、通天閣 TOWER SLIDER。\n\n3. 難波萬楓酒店 (Fairfield by Marriott Osaka Namba)\n\n位置：難波站步行可達，交通非常方便。\n\n4. 通天閣 (Tsutenkaku)\n\n必玩：TOWER SLIDER (巨型溜滑梯)、Dive & Walk (高空漫步)。\n\n5. 美食推薦\n\n金龍拉麵：道頓堀必吃，豚骨湯頭濃郁。\n\n敘敘苑燒肉 (JoJoen)：午間套餐 CP 值超高，肉質超讚！\n\n如果喜歡這支影片，別忘了按讚、訂閱，開啟小鈴鐺🔔\n你覺得這次去的哪些景點最有趣😆歡迎在留言區跟我說喔～\n\n#特旅發 #トリファ #trifa #esim #海外旅行 #日本旅遊 #日本網路 #出國網路 #出國旅遊 #出國必備 #網路 #旅遊網卡 #大阪自由行 #大阪旅遊 #關西機場 #南海電鐵 #大阪周遊卡 #難波住宿 #萬楓酒店 #通天閣 #梅田藍天大廈 #大阪城 #敘敘苑 #金龍拉麵 #丹牛出來玩 #Vlog #新手攻略 #marriott \n\n🎉 成為「丹牛出來玩」頻道會員，解鎖更多小福利！\n👉 https://www.youtube.com/channel/UCKWaowJ112Z4zSQ8EuW9DRw/join🙏 支持我一下！\n\n這些影片是我用生命和肝指數換來的（笑）\n覺得不錯的話，請幫我點個喜歡 👍\n也別忘了訂閱我的頻道 🔔，才不會錯過更多（可能一樣ㄎㄧㄤ）但誠意滿滿的影片！\n📣 也請分享給你那個也一樣愛挑戰極限、說走就走的朋友吧！\n\n🔗 找到我更多旅遊日常：\n✦ Instagram｜https://www.instagram.com/im_dannew\n✦ Facebook｜https://www.facebook.com/share/16mMTgYF9h/",
+      "source": "youtube-data-api",
+      "channelTitle": "丹牛出來玩",
+      "publishedAt": "2026-01-17T13:00:06Z",
+      "timestamps": [
+        {
+          "time": "0:00",
+          "label": "關西機場"
+        },
+        {
+          "time": "0:30",
+          "label": "南海電鐵"
+        },
+        {
+          "time": "0:30",
+          "label": "難波站"
+        },
+        {
+          "time": "1:57",
+          "label": "萬楓酒店"
+        },
+        {
+          "time": "8:00",
+          "label": "梅田藍天大廈"
+        },
+        {
+          "time": "8:00",
+          "label": "大阪城"
+        },
+        {
+          "time": "8:00",
+          "label": "通天閣"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 34.4319994,
+          "lng": 135.2366019,
+          "raw": "關西機場",
+          "name": "關西機場",
+          "address": "Kansai International Airport (KIX), 1番地 Senshūkūkōkita, Izumisano, Osaka 549-0001, Japan",
+          "placeId": "ChIJ9_rNIxO5AGARiI-QjZ-ncfE",
+          "rawQuery": "關西機場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "關西機場",
+          "rawMention": "關西機場",
+          "cleanedName": "關西機場",
+          "description": "關西機場到難波交通",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "關西機場",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6937249,
+          "lng": 135.5022535,
+          "raw": "南海電鐵",
+          "name": "南海電鐵",
+          "address": "Osaka, Japan",
+          "placeId": "ChIJ4eIGNFXmAGAR5y9q5G7BW8U",
+          "rawQuery": "南海電鐵",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "南海電鐵",
+          "rawMention": "南海電鐵",
+          "cleanedName": "南海電鐵",
+          "description": "南海電鐵購票教學",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "南海電鐵",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6671816,
+          "lng": 135.4988966,
+          "raw": "難波站",
+          "name": "難波站",
+          "address": "Japan, 〒542-0076 Osaka, Chuo Ward, Namba, 2-chōme−3 難波駅",
+          "placeId": "ChIJE-m9-xLnAGARp0yALPMPGaA",
+          "rawQuery": "難波站",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "難波站",
+          "rawMention": "難波站",
+          "cleanedName": "難波站",
+          "description": "關西機場到難波站",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "難波站",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6626471,
+          "lng": 135.4964682,
+          "raw": "萬楓酒店",
+          "name": "萬楓酒店",
+          "address": "2-chōme-3-25 Motomachi, Naniwa Ward, Osaka, 556-0016, Japan",
+          "placeId": "ChIJe-E5I7fnAGARfJ9WUQTxkxo",
+          "rawQuery": "萬楓酒店",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "萬楓酒店",
+          "rawMention": "萬楓酒店",
+          "cleanedName": "萬楓酒店",
+          "description": "開箱交通超方便的 萬楓酒店",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "萬楓酒店",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.7052872,
+          "lng": 135.4896527,
+          "raw": "梅田藍天大廈",
+          "name": "梅田藍天大廈",
+          "address": "1-chōme-1-88 Ōyodonaka, Kita Ward, Osaka, 531-6023, Japan",
+          "placeId": "ChIJbyd0kIjmAGAR_crecCbjwlc",
+          "rawQuery": "梅田藍天大廈",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "梅田藍天大廈",
+          "rawMention": "梅田藍天大廈",
+          "cleanedName": "梅田藍天大廈",
+          "description": "我們去了梅田藍天大廈（迷路迷到崩潰🤯",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "梅田藍天大廈",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6868225,
+          "lng": 135.5287352,
+          "raw": "大阪城",
+          "name": "大阪城",
+          "address": "Osakajo, Chuo Ward, Osaka, 540-0002, Japan",
+          "placeId": "ChIJRT-9d83gAGARuRrljPIlhVg",
+          "rawQuery": "大阪城",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "大阪城",
+          "rawMention": "大阪城",
+          "cleanedName": "大阪城",
+          "description": "我們去了…大阪城搭御座船",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "大阪城",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6524992,
+          "lng": 135.5063058,
+          "raw": "通天閣",
+          "name": "通天閣",
+          "address": "1-chōme-18-6 Ebisuhigashi, Naniwa Ward, Osaka, 556-0002, Japan",
+          "placeId": "ChIJ_0Lgd2DnAGARV0X03lbPy-U",
+          "rawQuery": "通天閣",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "通天閣",
+          "rawMention": "通天閣",
+          "cleanedName": "通天閣",
+          "description": "還挑戰了通天閣最新的溜滑梯！",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "通天閣",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [
+        "金龍拉麵",
+        "敘敘苑燒肉"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "關西機場到難波交通",
+          "foods": [],
+          "title": "關西機場",
+          "summary": "關西機場到難波交通",
+          "timestamp": "0:00",
+          "endSeconds": 30,
+          "startLabel": "0:00",
+          "startSeconds": 0,
+          "locationHints": [
+            "關西機場"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "南海電鐵購票教學",
+          "foods": [],
+          "title": "南海電鐵",
+          "summary": "南海電鐵購票教學",
+          "timestamp": "0:30",
+          "endSeconds": 60,
+          "startLabel": "0:30",
+          "startSeconds": 30,
+          "locationHints": [
+            "南海電鐵"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "關西機場到難波站",
+          "foods": [],
+          "title": "難波站",
+          "summary": "關西機場到難波站",
+          "timestamp": "0:30",
+          "endSeconds": 60,
+          "startLabel": "0:30",
+          "startSeconds": 30,
+          "locationHints": [
+            "難波站"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_4",
+          "text": "開箱交通超方便的 萬楓酒店",
+          "foods": [],
+          "title": "萬楓酒店",
+          "summary": "開箱交通超方便的 萬楓酒店",
+          "timestamp": "1:57",
+          "endSeconds": 147,
+          "startLabel": "1:57",
+          "startSeconds": 117,
+          "locationHints": [
+            "萬楓酒店"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_5",
+          "text": "我們去了梅田藍天大廈（迷路迷到崩潰🤯",
+          "foods": [
+            "金龍拉麵",
+            "敘敘苑燒肉"
+          ],
+          "title": "梅田藍天大廈",
+          "summary": "我們去了梅田藍天大廈（迷路迷到崩潰🤯",
+          "timestamp": "8:00",
+          "endSeconds": 510,
+          "startLabel": "8:00",
+          "startSeconds": 480,
+          "locationHints": [
+            "梅田藍天大廈"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_6",
+          "text": "我們去了…大阪城搭御座船",
+          "foods": [
+            "金龍拉麵",
+            "敘敘苑燒肉"
+          ],
+          "title": "大阪城",
+          "summary": "我們去了…大阪城搭御座船",
+          "timestamp": "8:00",
+          "endSeconds": 510,
+          "startLabel": "8:00",
+          "startSeconds": 480,
+          "locationHints": [
+            "大阪城"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_7",
+          "text": "還挑戰了通天閣最新的溜滑梯！",
+          "foods": [
+            "金龍拉麵",
+            "敘敘苑燒肉"
+          ],
+          "title": "通天閣",
+          "summary": "還挑戰了通天閣最新的溜滑梯！",
+          "timestamp": "8:00",
+          "endSeconds": 510,
+          "startLabel": "8:00",
+          "startSeconds": 480,
+          "locationHints": [
+            "通天閣"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的大阪旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_HNXC5kswe6Y",
+      "videoId": "HNXC5kswe6Y",
+      "title": "2025大阪自由行必看！景點美食交通！周遊卡必玩景點！通天閣詳細攻略！阿倍野展望台出大景，大阪港景點串連，樂高樂園，海遊館，聖瑪麗亞號！大阪美食必吃炸串、串燒！新今宮車站美食、住宿！2天省12000¥",
+      "thumbnail": "https://i.ytimg.com/vi/HNXC5kswe6Y/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=HNXC5kswe6Y",
+      "duration": "26:22",
+      "summary": "影片提到通天閣、阿倍野展望台、大阪港等地點，以及炸串、串燒、新世界串かつ 弁慶等食物。",
+      "description": "這趟去了日本關西10天，總共在大阪玩了6天，除了去大阪自由行必去的景點、利用周遊卡好好玩了大阪，\n還吃了很多值得推薦的美食！目前剪到大阪自由行的1-3天！\n\n👉第二集在這邊\nhttps://youtu.be/csVGL-XeB8s \n👉環球影城\nhttps://youtu.be/snNWUi0ybj4\n\n#大阪 #大阪旅遊 #大阪景點 #2025大阪 #大阪美食 #大阪必去 #大阪周遊卡 #大阪周遊卷\n\n📱我們這次來日本使用的網卡\n👉揚奇科技\nCP值非常的高，價格很優，而且在日本這10天的使用都很順暢，客服回應也快\n\n▶️我用的是「揚奇日韓多日5G吃到飽不降速」：\nhttps://www.yanci.com.tw/product744607489\n如果像我有社群、網路的工作可以用這張\n▶️瑄用的是「揚奇日本多日吃到飽」：\nhttps://www.yanci.com.tw/product697966611\n單純一般旅遊這張就夠\n✅結帳輸入折扣碼「celiamrg95」，再享95折優惠喔(數量有限、贈完為止)\n\n-\n🔵 下方有幫大家整理此次的景點、票卷，下單時記得輸入折扣碼比較便宜\n🔴 KKday折扣碼：CGGC92\n(滿 2500 享 92 折，最高折抵 300，使用期限2026/12/31，旅遊期限：2027/03/31)\n以下結帳記得用折扣碼更便宜(每會員可使用2次)\n\n▶️本集票卷、交通優惠整理：\n⭐️大阪周遊卡(1日/2日): https://www.kkday.com/zh-tw/product/12156-osaka-amazing-pass-e-ticket-japan?cid=9797\n⭐️HARUKA關西機場特快: https://www.kkday.com/zh-tw/product/18940-kansai-airport-haruka-ticket-japan?cid=9797\n⭐️阿倍野展望台: https://www.kkday.com/zh-tw/product/19513-osaka-abeno-harukas-300-observatory-tickets-japan?cid=9797\n⭐️海遊館: https://www.kkday.com/zh-tw/product/4849-osaka-aquarium-kaiyukan-ticket?cid=9797\n\n\n▶️本集景點美食行程\n🔴Day1\n0:00 大阪2025自由行\n0:21 關西機場到市區/HARUKA\n0:56 新今宮車站美食/天龍拉麵八仙樓\n1:34 新今宮車站住宿/大阪新今宮知鄉標準酒店\n👉Agoda: https://www.agoda.com/partners/partnersearch.aspx?pcs=1&cid=1837600&hid=29408596\n2:04 通天閣詳細攻略\n👉資訊更正：通天閣溜滑梯，7/5開始周遊卡不分平假日都可以使用喔\n6:04 通天閣Dive&walk\n8:04 大阪美食/新世界串かつ 弁慶 /新世界商店街\n9:08 阿倍野展望台\n12:14 前往道頓堀/難波車站扭蛋\n12:29 道頓堀\n13:00 這次來日本用的網卡\n\n✅Day1行程購票連結：\n▶️大阪周遊卡(1日/2日): https://www.kkday.com/zh-tw/product/12156-osaka-amazing-pass-e-ticket-japan?cid=9797\n▶️HARUKA關西機場特快: https://www.kkday.com/zh-tw/product/18940-kansai-airport-haruka-ticket-japan?cid=9797\n▶️阿倍野展望台: https://www.kkday.com/zh-tw/product/19513-osaka-abeno-harukas-300-observatory-tickets-japan?cid=9797\n(以下有買周遊卡就不用買)\n▶️通天閣門票: https://www.kkday.com/zh-tw/product/174504?cid=9797\n\n✅住宿美食連結\n▶️大阪新今宮知鄉標準酒店\n👉Agoda: https://www.agoda.com/partners/partnersearch.aspx?pcs=1&cid=1837600&hid=29408596\n▶️新世界串かつ 弁慶: https://maps.app.goo.gl/S2jRD4xs14t79iQg9\n\n🔴Day2\n14:44 前往大阪港/大阪港景點串連\n15:05 聖瑪麗亞號\n16:24 大阪樂高樂園/Legoland Discovery Center\n20:31 海遊館\n21:25 天保山大摩天輪\n23:35 嬰兒車上地鐵注意事項\n23:44 新今宮車站美食/ 博多串焼新今宮店\n25:52 大阪周遊卡費用對比\n\n✅Day2行程購票連結：\n▶️大阪周遊卡(1日/2日): https://www.kkday.com/zh-tw/product/12156-osaka-amazing-pass-e-ticket-japan?cid=9797\n▶️海遊館: https://www.kkday.com/zh-tw/product/4849-osaka-aquarium-kaiyukan-ticket?cid=9797\n(以下有買周遊卡就不用買)\n▶️聖瑪麗亞號: https://www.kkday.com/zh-tw/product/130919-osaka-bay-cruise-santa-maria-boarding-pass-japan?cid=9797\n▶️大阪樂高樂園: https://www.kkday.com/zh-tw/product/22162-legoland-discovery-center-osaka-admission-ticket-japan?cid=9797\n▶️天保山大摩天輪: https://www.kkday.com/zh-tw/product/128651-tempozan-giant-ferris-wheel-osaka?cid=9797\n\n✅住宿美食連結\n▶️博多串焼新今宮店: https://maps.app.goo.gl/v5RFCPUWwXrSvQjL6\n\n👉京都二日游\nhttps://youtu.be/TTqh9daICQA \n👉神戶一日游\nhttps://youtu.be/AjsYVZxHzXc\n\n► 訂閱瑄瑄&G先生： https://pse.is/celiamrg-subscribe\n追蹤瑄瑄&G先生即時動態：\n► Instagram： https://www.instagram.com/celiahsuan_mr.g/\n► FaceBook： https://www.facebook.com/celia.hsuan/\n► BLOG： http://celiamrg.com/\n► 合作邀約EMAIL： cggc1101@gmail.com",
+      "source": "youtube-data-api",
+      "channelTitle": "瑄瑄 & G先生 · 美食夫妻的100次旅行",
+      "publishedAt": "2025-07-17T12:30:28Z",
+      "timestamps": [
+        {
+          "time": "3:00",
+          "label": "通天閣"
+        },
+        {
+          "time": "4:00",
+          "label": "阿倍野展望台"
+        },
+        {
+          "time": "4:44",
+          "label": "大阪港"
+        },
+        {
+          "time": "5:00",
+          "label": "樂高樂園"
+        },
+        {
+          "time": "5:00",
+          "label": "海遊館"
+        },
+        {
+          "time": "5:00",
+          "label": "新今宮車站"
+        },
+        {
+          "time": "5:16",
+          "label": "聖瑪麗亞號"
+        },
+        {
+          "time": "5:56",
+          "label": "天保山大摩天輪"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 34.6524992,
+          "lng": 135.5063058,
+          "raw": "通天閣",
+          "name": "通天閣",
+          "address": "1-chōme-18-6 Ebisuhigashi, Naniwa Ward, Osaka, 556-0002, Japan",
+          "placeId": "ChIJ_0Lgd2DnAGARV0X03lbPy-U",
+          "rawQuery": "通天閣",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "通天閣",
+          "rawMention": "通天閣",
+          "cleanedName": "通天閣",
+          "description": "通天閣詳細攻略",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "通天閣",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6463062,
+          "lng": 135.5133091,
+          "raw": "阿倍野展望台",
+          "name": "阿倍野展望台",
+          "address": "1-chōme-1-43 Abenosuji, Abeno Ward, Osaka, 545-6016, Japan",
+          "placeId": "ChIJ3eA7J_DdAGARil7_EwUaR_I",
+          "rawQuery": "阿倍野展望台",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "阿倍野展望台",
+          "rawMention": "阿倍野展望台",
+          "cleanedName": "阿倍野展望台",
+          "description": "阿倍野展望台出大景",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "阿倍野展望台",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6559093,
+          "lng": 135.4295655,
+          "raw": "大阪港",
+          "name": "大阪港",
+          "address": "1-chōme-1-1 Kaigandōri, Minato Ward, Osaka, 552-0022, Japan",
+          "placeId": "ChIJRzOIZQDpAGARdKATlUocEgY",
+          "rawQuery": "大阪港",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "大阪港",
+          "rawMention": "大阪港",
+          "cleanedName": "大阪港",
+          "description": "大阪港景點串連",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "大阪港",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.656179,
+          "lng": 135.4302448,
+          "raw": "樂高樂園",
+          "name": "樂高樂園",
+          "address": "Japan, 〒552-0022 Osaka, Minato Ward, Kaigandōri, 1-chōme−1−１０ 天保山マーケットプレース 3階",
+          "placeId": "ChIJU5PSWfPoAGAR1FoZsqOtuu0",
+          "rawQuery": "樂高樂園",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "樂高樂園",
+          "rawMention": "樂高樂園",
+          "cleanedName": "樂高樂園",
+          "description": "樂高樂園",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "樂高樂園",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6937249,
+          "lng": 135.5022535,
+          "raw": "海遊館",
+          "name": "海遊館",
+          "address": "Osaka, Japan",
+          "placeId": "ChIJ4eIGNFXmAGAR5y9q5G7BW8U",
+          "rawQuery": "海遊館",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "海遊館",
+          "rawMention": "海遊館",
+          "cleanedName": "海遊館",
+          "description": "海遊館",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "海遊館",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6549492,
+          "lng": 135.4284378,
+          "raw": "聖瑪麗亞號",
+          "name": "聖瑪麗亞號",
+          "address": "1-chōme-1-10 Kaigandōri, Minato Ward, Osaka, 552-0022, Japan",
+          "placeId": "ChIJz9jJqvToAGARL5QBJbkhTWA",
+          "rawQuery": "聖瑪麗亞號",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "聖瑪麗亞號",
+          "rawMention": "聖瑪麗亞號",
+          "cleanedName": "聖瑪麗亞號",
+          "description": "聖瑪麗亞號！",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "聖瑪麗亞號",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6562686,
+          "lng": 135.4309659,
+          "raw": "天保山大摩天輪",
+          "name": "天保山大摩天輪",
+          "address": "1-chōme-1-10 Kaigandōri, Minato Ward, Osaka, 552-0022, Japan",
+          "placeId": "ChIJQ-VhVYvoAGARJsKgJKTie_4",
+          "rawQuery": "天保山大摩天輪",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "天保山大摩天輪",
+          "rawMention": "天保山大摩天輪",
+          "cleanedName": "天保山大摩天輪",
+          "description": "天保山大摩天輪",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "天保山大摩天輪",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6497931,
+          "lng": 135.5015478,
+          "raw": "新今宮車站",
+          "name": "新今宮車站",
+          "address": "Shin-Imamiya Station, Osaka, Japan",
+          "placeId": "ChIJT5CUH2LnAGARQfCNGTArgcg",
+          "rawQuery": "新今宮車站",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "新今宮車站",
+          "rawMention": "新今宮車站",
+          "cleanedName": "新今宮車站",
+          "description": "新今宮車站美食、住宿！",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "新今宮車站",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [
+        "炸串",
+        "串燒",
+        "新世界串かつ 弁慶",
+        "博多串焼新今宮店"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "通天閣詳細攻略",
+          "foods": [
+            "新世界串かつ 弁慶",
+            "博多串焼新今宮店"
+          ],
+          "title": "通天閣",
+          "summary": "通天閣詳細攻略",
+          "timestamp": "3:00",
+          "endSeconds": 210,
+          "startLabel": "3:00",
+          "startSeconds": 180,
+          "locationHints": [
+            "通天閣"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "阿倍野展望台出大景",
+          "foods": [
+            "炸串",
+            "串燒",
+            "博多串焼新今宮店"
+          ],
+          "title": "阿倍野展望台",
+          "summary": "阿倍野展望台出大景",
+          "timestamp": "4:00",
+          "endSeconds": 270,
+          "startLabel": "4:00",
+          "startSeconds": 240,
+          "locationHints": [
+            "阿倍野展望台"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "大阪港景點串連",
+          "foods": [
+            "炸串",
+            "串燒",
+            "博多串焼新今宮店"
+          ],
+          "title": "大阪港",
+          "summary": "大阪港景點串連",
+          "timestamp": "4:44",
+          "endSeconds": 314,
+          "startLabel": "4:44",
+          "startSeconds": 284,
+          "locationHints": [
+            "大阪港"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_4",
+          "text": "樂高樂園",
+          "foods": [
+            "炸串",
+            "串燒",
+            "博多串焼新今宮店"
+          ],
+          "title": "樂高樂園",
+          "summary": "樂高樂園",
+          "timestamp": "5:00",
+          "endSeconds": 330,
+          "startLabel": "5:00",
+          "startSeconds": 300,
+          "locationHints": [
+            "樂高樂園"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_5",
+          "text": "海遊館",
+          "foods": [
+            "炸串",
+            "串燒",
+            "博多串焼新今宮店"
+          ],
+          "title": "海遊館",
+          "summary": "海遊館",
+          "timestamp": "5:00",
+          "endSeconds": 330,
+          "startLabel": "5:00",
+          "startSeconds": 300,
+          "locationHints": [
+            "海遊館"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_6",
+          "text": "新今宮車站美食、住宿！",
+          "foods": [
+            "炸串",
+            "串燒",
+            "博多串焼新今宮店"
+          ],
+          "title": "新今宮車站",
+          "summary": "新今宮車站美食、住宿！",
+          "timestamp": "5:00",
+          "endSeconds": 330,
+          "startLabel": "5:00",
+          "startSeconds": 300,
+          "locationHints": [
+            "新今宮車站"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_7",
+          "text": "聖瑪麗亞號！",
+          "foods": [
+            "炸串",
+            "串燒",
+            "博多串焼新今宮店"
+          ],
+          "title": "聖瑪麗亞號",
+          "summary": "聖瑪麗亞號！",
+          "timestamp": "5:16",
+          "endSeconds": 346,
+          "startLabel": "5:16",
+          "startSeconds": 316,
+          "locationHints": [
+            "聖瑪麗亞號"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_8",
+          "text": "天保山大摩天輪",
+          "foods": [
+            "炸串",
+            "串燒"
+          ],
+          "title": "天保山大摩天輪",
+          "summary": "天保山大摩天輪",
+          "timestamp": "5:56",
+          "endSeconds": 386,
+          "startLabel": "5:56",
+          "startSeconds": 356,
+          "locationHints": [
+            "天保山大摩天輪"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的大阪旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_2P7MFYy-43A",
+      "videoId": "2P7MFYy-43A",
+      "title": "【大阪自由行】心齋橋、道頓堀の隱藏小店！固力果跑跑人，免P圖無人拍照點大公開✨流心蛋黃章魚燒、福八鯛魚燒、美國村玩具店、心齋橋藥妝店、麻婆豆腐拉麵｜日本旅遊・Japan 4K Vlog",
+      "thumbnail": "https://i.ytimg.com/vi/2P7MFYy-43A/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=2P7MFYy-43A",
+      "duration": "25:19",
+      "summary": "影片提到心齋橋、道頓堀、唐吉訶德 道頓堀店等地點，以及流心蛋黃章魚燒、福八鯛魚燒、たこ焼き道楽 わなか 道頓堀店等食物。",
+      "description": "00:00 請開啟CC字幕\n00:05 精彩畫面\n00:25 影片開場 \n01:16 交通說明\n01:51 心齋橋筋商店街\n02:36 戎橋\n03:00 nanohana 戎橋店\n03:24 固力果跑跑人最佳拍照點\n05:39 くれおーる 道頓堀本店\n07:28 たこ焼き道楽 わなか 道頓堀店\n09:41唐吉訶德 道頓堀店\n10:18 GREEN BAR 心斎橋店\n12:04 心齋橋商店街藥妝\n12:49 心齋橋焙煎所\n16:17 美國村\n18:32 UNIQLO SHINSAIBASHI\n20:09 すするか、すすらんか。心斎橋店\n23:15 結尾\n＿＿＿\n \n🔔 訂閱「吉田社長 Japan TV」YouTube\nhttps://www.youtube.com/channel/UCzfNj5-UEvxOBErW2S3_bSg\n👉 最新旅遊情報 FB 粉專「日本人の日本旅遊指南」\nhttps://www.facebook.com/letsgojp/\n🛍️ MiCHi SHOP 日本選物社團\nhttps://www.facebook.com/groups/339425473734121\n👉 我的日常 IG「@yoshidagakusei」\nhttps://www.instagram.com/yoshidagakusei/\n👉 我的個人 FB 粉專「吉田皓一」\nhttps://www.facebook.com/jitianhaoyi/\n✍️ 我的部落格「吉田皓一的一體兩面，不搞笑搞什麼」\nhttps://yoshidakoichi.letsgojp.com/\n \n \n#日本旅遊 #日本旅行 #日本生活 #日本自由行 #日本美食 #日本必吃 #日本必去 #關西 #大阪",
+      "source": "youtube-data-api",
+      "channelTitle": "吉田社長 Japan TV",
+      "publishedAt": "2024-06-15T13:00:12Z",
+      "timestamps": [
+        {
+          "time": "1:00",
+          "label": "心齋橋"
+        },
+        {
+          "time": "1:00",
+          "label": "道頓堀"
+        },
+        {
+          "time": "9:41",
+          "label": "唐吉訶德 道頓堀店"
+        },
+        {
+          "time": "12:04",
+          "label": "GREEN BAR 心斎橋店"
+        },
+        {
+          "time": "13:17",
+          "label": "美國村"
+        },
+        {
+          "time": "18:20",
+          "label": "UNIQLO SHINSAIBASHI"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 34.6724248,
+          "lng": 135.5010362,
+          "raw": "心齋橋",
+          "name": "心齋橋",
+          "address": "Shinsaibashisuji, Chuo Ward, Osaka, 542-0085, Japan",
+          "placeId": "ChIJcxIbNhHnAGARl8cKu_vPFMA",
+          "rawQuery": "心齋橋",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "心齋橋",
+          "rawMention": "心齋橋",
+          "cleanedName": "心齋橋",
+          "description": "60s] 心齋橋、道頓堀の隱藏小店！",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "心齋橋",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6687234,
+          "lng": 135.5012971,
+          "raw": "道頓堀",
+          "name": "道頓堀",
+          "address": "1 Chome-9 Dotonbori, Chuo Ward, Osaka, 542-0071, Japan",
+          "placeId": "ChIJ_fmKgRPnAGARkKWLtCYTu7g",
+          "rawQuery": "道頓堀",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "道頓堀",
+          "rawMention": "道頓堀",
+          "cleanedName": "道頓堀",
+          "description": "60s] 心齋橋、道頓堀の隱藏小店！",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "道頓堀",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6692979,
+          "lng": 135.5026443,
+          "raw": "唐吉訶德 道頓堀店",
+          "name": "唐吉訶德 道頓堀店",
+          "address": "7-13 Souemonchō, Chuo Ward, Osaka, 542-0084, Japan",
+          "placeId": "ChIJzTcpYBTnAGARRj0CBKJJsSY",
+          "rawQuery": "唐吉訶德 道頓堀店",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "唐吉訶德 道頓堀店",
+          "rawMention": "唐吉訶德 道頓堀店",
+          "cleanedName": "唐吉訶德 道頓堀店",
+          "description": "9:41] 唐吉訶設 道頓堀店",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "唐吉訶德 道頓堀店",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6706881,
+          "lng": 135.5012459,
+          "raw": "GREEN BAR 心斎橋店",
+          "name": "GREEN BAR 心斎橋店",
+          "address": "2-chōme-7-4 Shinsaibashisuji, Chuo Ward, Osaka, 542-0085, Japan",
+          "placeId": "ChIJbSRZ_RPnAGAR63aCJLp1luY",
+          "rawQuery": "GREEN BAR 心斎橋店",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "GREEN BAR 心斎橋店",
+          "rawMention": "GREEN BAR 心斎橋店",
+          "cleanedName": "GREEN BAR 心斎橋店",
+          "description": "12:04] GREEN BAR 心斎橋店",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "GREEN BAR 心斎橋店",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6722072,
+          "lng": 135.4978861,
+          "raw": "美國村",
+          "name": "美國村",
+          "address": "2 Chome-11 Nishishinsaibashi, Chuo Ward, Osaka, 542-0086, Japan",
+          "placeId": "ChIJ7_ZM7hHnAGARvBkV-jqyz24",
+          "rawQuery": "美國村",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "美國村",
+          "rawMention": "美國村",
+          "cleanedName": "美國村",
+          "description": "16:17] 美國村",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "美國村",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6746723,
+          "lng": 135.5015977,
+          "raw": "UNIQLO SHINSAIBASHI",
+          "name": "UNIQLO SHINSAIBASHI",
+          "address": "1-chōme-2-17 Shinsaibashisuji, Chuo Ward, Osaka, 542-0085, Japan",
+          "placeId": "ChIJ1QKLShfnAGARndvaMj5fy6o",
+          "rawQuery": "UNIQLO SHINSAIBASHI",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "UNIQLO SHINSAIBASHI",
+          "rawMention": "UNIQLO SHINSAIBASHI",
+          "cleanedName": "UNIQLO SHINSAIBASHI",
+          "description": "18:32] UNIQLO SHINSAIBASHI",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "UNIQLO SHINSAIBASHI",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [
+        "流心蛋黃章魚燒",
+        "福八鯛魚燒",
+        "たこ焼き道楽 わなか 道頓堀店",
+        "麻婆豆腐拉麵"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "60s] 心齋橋、道頓堀の隱藏小店！",
+          "foods": [
+            "流心蛋黃章魚燒",
+            "福八鯛魚燒",
+            "麻婆豆腐拉麵"
+          ],
+          "title": "心齋橋",
+          "summary": "60s] 心齋橋、道頓堀の隱藏小店！",
+          "timestamp": "1:00",
+          "endSeconds": 90,
+          "startLabel": "1:00",
+          "startSeconds": 60,
+          "locationHints": [
+            "心齋橋"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "60s] 心齋橋、道頓堀の隱藏小店！",
+          "foods": [
+            "流心蛋黃章魚燒",
+            "福八鯛魚燒",
+            "麻婆豆腐拉麵"
+          ],
+          "title": "道頓堀",
+          "summary": "60s] 心齋橋、道頓堀の隱藏小店！",
+          "timestamp": "1:00",
+          "endSeconds": 90,
+          "startLabel": "1:00",
+          "startSeconds": 60,
+          "locationHints": [
+            "道頓堀"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "9:41] 唐吉訶設 道頓堀店",
+          "foods": [],
+          "title": "唐吉訶德 道頓堀店",
+          "summary": "9:41] 唐吉訶設 道頓堀店",
+          "timestamp": "9:41",
+          "endSeconds": 611,
+          "startLabel": "9:41",
+          "startSeconds": 581,
+          "locationHints": [
+            "唐吉訶德 道頓堀店"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_4",
+          "text": "12:04] GREEN BAR 心斎橋店",
+          "foods": [],
+          "title": "GREEN BAR 心斎橋店",
+          "summary": "12:04] GREEN BAR 心斎橋店",
+          "timestamp": "12:04",
+          "endSeconds": 754,
+          "startLabel": "12:04",
+          "startSeconds": 724,
+          "locationHints": [
+            "GREEN BAR 心斎橋店"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_5",
+          "text": "16:17] 美國村",
+          "foods": [],
+          "title": "美國村",
+          "summary": "16:17] 美國村",
+          "timestamp": "13:17",
+          "endSeconds": 827,
+          "startLabel": "13:17",
+          "startSeconds": 797,
+          "locationHints": [
+            "美國村"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_6",
+          "text": "18:32] UNIQLO SHINSAIBASHI",
+          "foods": [],
+          "title": "UNIQLO SHINSAIBASHI",
+          "summary": "18:32] UNIQLO SHINSAIBASHI",
+          "timestamp": "18:20",
+          "endSeconds": 1130,
+          "startLabel": "18:20",
+          "startSeconds": 1100,
+          "locationHints": [
+            "UNIQLO SHINSAIBASHI"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的大阪旅遊影片，含重點片段與地圖標點。"
+    }
+  ],
+  "validation": {
+    "requestedCount": 6,
+    "exportedCount": 6,
+    "passCount": 6,
+    "failCount": 0,
+    "errorCount": 0
+  }
+}

@@ -1,0 +1,875 @@
+{
+  "id": "hanoi",
+  "destinationHint": "河內",
+  "searchKeyword": "河內自由行 還劍湖 三十六古街",
+  "aliases": [
+    "河內",
+    "hanoi",
+    "東南亞"
+  ],
+  "preferences": [
+    "美食",
+    "景點",
+    "懶人包"
+  ],
+  "generatedAt": "2026-05-29T04:21:27.419Z",
+  "pipelineVersion": "preloaded-seed-v1",
+  "videos": [
+    {
+      "id": "youtube_7Z4jfWqlEyg",
+      "videoId": "7Z4jfWqlEyg",
+      "title": "越南河內自由行攻略｜下龍灣郵輪跳島｜五天四夜美食景點推薦｜東方小巴黎｜聖若瑟主教座堂、還劍湖、東京義孰廣場、火車街、河內龍邊鐵橋、B52勝利博物館、胡志明陵寢、昇龍皇城、下龍灣、樂天大樓",
+      "thumbnail": "https://i.ytimg.com/vi/7Z4jfWqlEyg/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=7Z4jfWqlEyg",
+      "duration": "43:02",
+      "summary": "影片提到聖若瑟主教座堂、還劍湖、東京義孰廣場等地點。",
+      "description": "Outo奧拓是您\"自助旅行的神隊友\"\n🔸現在提供專屬優惠碼 「JINGPLAYVN 」(\"已失效\")\n全越南旅程即可現折 $2,000 !\n🔹行程傳送門：https://bit.ly/3xQv13h\n------------------------------------\n【行程資訊】\n0:00 越南河內自由行攻略\n1:59 Day1【住河內】河內美食之旅 \n聖若瑟主教座堂→還劍湖→東京義孰廣場→啤酒街\n12:14 Day2【住河內】越共皮卡老城歷史導覽 \n皮卡導覽(火車街→B52勝利博物館→胡志明陵寢→主席府→西湖→河內歌劇院→河內龍邊鐵橋→午餐-Hidden Gem Coffee)→昇龍皇城→穿著奧黛還劍湖\n24:07 Day3【住郵輪】下龍灣郵輪之旅 \n河內→下龍灣→驚訝洞→藍洞(天井洞)\n34:30 Day4【住河內】下龍灣郵輪跳島之旅 \n英雄島→河內→樂天大樓\n------------------------------------\n【住宿】\nL'HÔTEL du LAC Hanoi\nhttps://maps.app.goo.gl/zBWEmyuLvwUes6fQ6\nGM Premium Hotel Hanoi\nhttps://maps.app.goo.gl/kr7KyNLkbK4jyA2V8\n-----------------------------------\n★喜歡我的影片可以訂閱，希望有朝一日可以達成十萬訂閱\n★看更多照片可以追蹤我的IG:jing.tv\n--------------------\n●阿里山四天自由行全攻略➢https://youtu.be/aV1bKY8cRkc\n●台東四天自由行全攻略➢https://youtu.be/0KpUj6E_IRk\n●花蓮私房景點大公開➢https://youtu.be/oegTYt1PWXw\n●郵輪環島全紀錄～台灣海洋公路之美➢https://youtu.be/NyLD1tJ3ems\n●入門小百岳推薦～東眼山國家森林遊樂區➢https://youtu.be/hbzoL5l9oX8\n●花蓮自駕怎麼玩?深入太魯閣峽谷➢https://youtu.be/ThnIw3QGfoM\n●親近梨山武嶺，前往台灣最美公路➢https://youtu.be/FJKy0iJh84Y\n●烏來最美~內洞林道➢https://youtu.be/a5JMatU-gzA\n●宜蘭抹茶山!苦行之路爬到膝蓋痛➢https://youtu.be/eLAYl0O-Buo\n●花蓮最美稻田腳印餐桌➢https://youtu.be/pM3AY5Aqqr8\n●觀霧園區享受一場森林浴➢https://youtu.be/Yc76P0wqQFY\n●北部夢幻大草原，貢寮桃源谷➢https://youtu.be/V9ZGSWqWB8k\n●澎湖海上花火節，東海跳島一日遊➢https://youtu.be/HJ7CojB2foM​​​​​​​​\n●桃園秘境小挪威➢https://youtu.be/MlRKU4nm2jc​​​​​​​​\n●泰國華欣慢步調之旅 ➢https://youtu.be/t4wcguF2TvY​​​​​​​​\n●韓國跟團好玩嘛? ➢https://youtu.be/2Ybf3mtZ5Xw​​​​​​​​\n● 沖繩自助攻略 ➢ https://youtu.be/2NUansDCho8​​​​​​​​\n● 東京自助超方便 ➢ https://youtu.be/eSKP-6mTWcY",
+      "source": "youtube-data-api",
+      "channelTitle": "Jing TV",
+      "publishedAt": "2024-01-27T00:00:03Z",
+      "timestamps": [
+        {
+          "time": "0:12",
+          "label": "聖若瑟主教座堂"
+        },
+        {
+          "time": "0:13",
+          "label": "還劍湖"
+        },
+        {
+          "time": "0:14",
+          "label": "東京義孰廣場"
+        },
+        {
+          "time": "0:25",
+          "label": "火車街"
+        },
+        {
+          "time": "0:26",
+          "label": "B52勝利博物館"
+        },
+        {
+          "time": "0:27",
+          "label": "胡志明陵寢"
+        },
+        {
+          "time": "0:28",
+          "label": "昇龍皇城"
+        },
+        {
+          "time": "0:29",
+          "label": "河內龍邊鐵橋"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 21.0277644,
+          "lng": 105.8341598,
+          "raw": "聖若瑟主教座堂",
+          "name": "聖若瑟主教座堂",
+          "address": "Hanoi, Ha Noi, Vietnam",
+          "placeId": "ChIJoRyG2ZurNTERqRfKcnt_iOc",
+          "rawQuery": "聖若瑟主教座堂",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "聖若瑟主教座堂",
+          "rawMention": "聖若瑟主教座堂",
+          "cleanedName": "聖若瑟主教座堂",
+          "description": "聖若瑟主教座堂",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "聖若瑟主教座堂",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.0286669,
+          "lng": 105.8521484,
+          "raw": "還劍湖",
+          "name": "還劍湖",
+          "address": "Hoàn Kiếm Lake, Hoan Kiem, Ha Noi, Vietnam",
+          "placeId": "ChIJlclXM5WrNTERDqL5tGu_ugE",
+          "rawQuery": "還劍湖",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "還劍湖",
+          "rawMention": "還劍湖",
+          "cleanedName": "還劍湖",
+          "description": "還劍湖",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "還劍湖",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.0277644,
+          "lng": 105.8341598,
+          "raw": "東京義孰廣場",
+          "name": "東京義孰廣場",
+          "address": "Hanoi, Ha Noi, Vietnam",
+          "placeId": "ChIJoRyG2ZurNTERqRfKcnt_iOc",
+          "rawQuery": "東京義孰廣場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "東京義孰廣場",
+          "rawMention": "東京義孰廣場",
+          "cleanedName": "東京義孰廣場",
+          "description": "東京義孰廣場",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "東京義孰廣場",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.0177521,
+          "lng": 105.8408822,
+          "raw": "火車街",
+          "name": "火車街",
+          "address": "Ng. 224 Lê Duẩn, Văn Miếu - Quốc Tử Giám, Hà Nội, Vietnam",
+          "placeId": "ChIJ437seY-rNTERCkf4Ffj7dWs",
+          "rawQuery": "火車街",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "火車街",
+          "rawMention": "火車街",
+          "cleanedName": "火車街",
+          "description": "火車街",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "火車街",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.0348432,
+          "lng": 105.8259807,
+          "raw": "B52勝利博物館",
+          "name": "B52勝利博物館",
+          "address": "157 Đội Cấn, Ngọc Hà, Hà Nội, Vietnam",
+          "placeId": "ChIJK111AwurNTERB8u6Ap8YDjg",
+          "rawQuery": "B52勝利博物館",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "B52勝利博物館",
+          "rawMention": "B52勝利博物館",
+          "cleanedName": "B52勝利博物館",
+          "description": "B52勝利博物館",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "B52勝利博物館",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.0368973,
+          "lng": 105.8346667,
+          "raw": "胡志明陵寢",
+          "name": "胡志明陵寢",
+          "address": "1 Hùng Vương, Điện Biên, Ba Đình, Hà Nội, Vietnam",
+          "placeId": "ChIJF13BXqGrNTERTE3hz8KFDmI",
+          "rawQuery": "胡志明陵寢",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "胡志明陵寢",
+          "rawMention": "胡志明陵寢",
+          "cleanedName": "胡志明陵寢",
+          "description": "胡志明陵寢",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "胡志明陵寢",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.0352231,
+          "lng": 105.8402594,
+          "raw": "昇龍皇城",
+          "name": "昇龍皇城",
+          "address": "19c Hoàng Diệu, Điện Biên, Ba Đình, Hà Nội 100000, Vietnam",
+          "placeId": "ChIJSXwdOKOrNTERNylYj9mnIbU",
+          "rawQuery": "昇龍皇城",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "昇龍皇城",
+          "rawMention": "昇龍皇城",
+          "cleanedName": "昇龍皇城",
+          "description": "昇龍皇城",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "昇龍皇城",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.0277644,
+          "lng": 105.8341598,
+          "raw": "下龍灣",
+          "name": "下龍灣",
+          "address": "Hanoi, Ha Noi, Vietnam",
+          "placeId": "ChIJoRyG2ZurNTERqRfKcnt_iOc",
+          "rawQuery": "下龍灣",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "下龍灣",
+          "rawMention": "下龍灣",
+          "cleanedName": "下龍灣",
+          "description": "下龍灣",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "下龍灣",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.0277644,
+          "lng": 105.8341598,
+          "raw": "河內龍邊鐵橋",
+          "name": "河內龍邊鐵橋",
+          "address": "Hanoi, Ha Noi, Vietnam",
+          "placeId": "ChIJoRyG2ZurNTERqRfKcnt_iOc",
+          "rawQuery": "河內龍邊鐵橋",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "河內龍邊鐵橋",
+          "rawMention": "河內龍邊鐵橋",
+          "cleanedName": "河內龍邊鐵橋",
+          "description": "河內龍邊鐵橋",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "河內龍邊鐵橋",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.0277644,
+          "lng": 105.8341598,
+          "raw": "樂天大樓",
+          "name": "樂天大樓",
+          "address": "Hanoi, Ha Noi, Vietnam",
+          "placeId": "ChIJoRyG2ZurNTERqRfKcnt_iOc",
+          "rawQuery": "樂天大樓",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "樂天大樓",
+          "rawMention": "樂天大樓",
+          "cleanedName": "樂天大樓",
+          "description": "樂天大樓",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "樂天大樓",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "聖若瑟主教座堂",
+          "foods": [],
+          "title": "聖若瑟主教座堂",
+          "summary": "聖若瑟主教座堂",
+          "timestamp": "0:12",
+          "endSeconds": 42,
+          "startLabel": "0:12",
+          "startSeconds": 12,
+          "locationHints": [
+            "聖若瑟主教座堂"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "還劍湖",
+          "foods": [],
+          "title": "還劍湖",
+          "summary": "還劍湖",
+          "timestamp": "0:13",
+          "endSeconds": 43,
+          "startLabel": "0:13",
+          "startSeconds": 13,
+          "locationHints": [
+            "還劍湖"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "東京義孰廣場",
+          "foods": [],
+          "title": "東京義孰廣場",
+          "summary": "東京義孰廣場",
+          "timestamp": "0:14",
+          "endSeconds": 44,
+          "startLabel": "0:14",
+          "startSeconds": 14,
+          "locationHints": [
+            "東京義孰廣場"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_4",
+          "text": "火車街",
+          "foods": [],
+          "title": "火車街",
+          "summary": "火車街",
+          "timestamp": "0:25",
+          "endSeconds": 55,
+          "startLabel": "0:25",
+          "startSeconds": 25,
+          "locationHints": [
+            "火車街"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_5",
+          "text": "B52勝利博物館",
+          "foods": [],
+          "title": "B52勝利博物館",
+          "summary": "B52勝利博物館",
+          "timestamp": "0:26",
+          "endSeconds": 56,
+          "startLabel": "0:26",
+          "startSeconds": 26,
+          "locationHints": [
+            "B52勝利博物館"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_6",
+          "text": "胡志明陵寢",
+          "foods": [],
+          "title": "胡志明陵寢",
+          "summary": "胡志明陵寢",
+          "timestamp": "0:27",
+          "endSeconds": 57,
+          "startLabel": "0:27",
+          "startSeconds": 27,
+          "locationHints": [
+            "胡志明陵寢"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_7",
+          "text": "昇龍皇城",
+          "foods": [],
+          "title": "昇龍皇城",
+          "summary": "昇龍皇城",
+          "timestamp": "0:28",
+          "endSeconds": 58,
+          "startLabel": "0:28",
+          "startSeconds": 28,
+          "locationHints": [
+            "昇龍皇城"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_8",
+          "text": "河內龍邊鐵橋",
+          "foods": [],
+          "title": "河內龍邊鐵橋",
+          "summary": "河內龍邊鐵橋",
+          "timestamp": "0:29",
+          "endSeconds": 59,
+          "startLabel": "0:29",
+          "startSeconds": 29,
+          "locationHints": [
+            "河內龍邊鐵橋"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的河內旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_rtZwghbC91E",
+      "videoId": "rtZwghbC91E",
+      "title": "越南河內 🇻🇳 交通攻略+住宿指南+12個必去的地方！Hanoi: Transportation Guide + Accommodation Guide + 12 Must-Visit Places",
+      "thumbnail": "https://i.ytimg.com/vi/rtZwghbC91E/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=rtZwghbC91E",
+      "duration": "25:22",
+      "summary": "影片提到河内、Noi Bai Airport、老城區等地點。",
+      "description": "这期「帆看世界」主要和大家分享越南河内旅游的行前攻略，内容涵盖三大重点：交通、住宿与必去的地方。视频中详细解析了如何从河内内排机场到市区的多种交通方式，包括86路机场大巴、17路普通公交以及越南航空的Minibus等，并推荐了实用的本地交通APP如Vbus和Busmap Hanoi。住宿方面，同时比较了Agoda、Booking、Airbnb三大平台的青旅和民宿价格，帮你找到性价比最高的住宿。最后，带你走进河内12大必去景点，包括老城区（三十六古街）、火车咖啡街、还剑湖、文庙、胡志明陵、一柱寺、升龙皇城、西湖（真武观+镇国寺）、火炉监狱博物馆、龙边桥、同春市场等，每个景点均附真实游客评价与实用贴士。无论你是第一次来越南，还是想深度探索河内，这期视频都能为你提供实用参考！🍀 This video shares a super detailed pre-trip guide to Hanoi, Vietnam, covering three key areas: transportation, accommodation, and must-see places. The video details various transportation options from Noi Bai Airport to the city center, including airport bus route 86, regular bus route 17, and Vietnam Airlines' minibus, and recommends useful local transportation apps such as Vbus and Busmap Hanoi. Regarding accommodation, it compares hostel and guesthouse prices on Agoda, Booking, and Airbnb to help you find the best value. Finally, it takes you through 12 must-see attractions in Hanoi, including the Old Quarter (36 Ancient Streets), Train Cafe Street, Hoan Kiem Lake, Temple of Literature, Ho Chi Minh Mausoleum, One Pillar Pagoda, Thang Long Imperial City, West Lake (Tran Vu Temple + Tran Quoc Pagoda), Hoa Lo Prison Museum, Long Bien Bridge, and Dong Xuan Market. Each attraction includes real tourist reviews and practical tips. Whether it's your first time in Vietnam or you want to explore Hanoi more deeply, this video will provide you with useful information!\n#帆看世界 #ivanstrips #小帆旅行记 #越南河内 #河內交通攻略 #河內住宿指南 #河內12个必去的地方 #河内机场大巴 #河内市区交通\n--- \n\n🌈 欢迎来交朋友 Welcome Come to Say Hello!\n———————————————\n ▹ YouTube: @ivanstrips\n ▹ Bilibili: 帆看世界\n ▹ 抖音TikTok: @ivanstrips\n ▹ 小红书/攜程/馬蜂窩: 帆看世界\n ▹ Instagram: @ivanstrips\n ▹ Facebook: @ivanstrips\n ▹ Telegram: @ivanstrips\n ▹ 微信WeChat: ivanstrips\n———————————————\n📅 創作日期 Creation Date：November 04, 2025",
+      "source": "youtube-data-api",
+      "channelTitle": "帆看世界 Ivan's Trips",
+      "publishedAt": "2025-11-06T08:01:10Z",
+      "timestamps": [
+        {
+          "time": "0:00",
+          "label": "河内"
+        },
+        {
+          "time": "2:00",
+          "label": "Noi Bai Airport"
+        },
+        {
+          "time": "4:00",
+          "label": "老城區"
+        },
+        {
+          "time": "4:00",
+          "label": "火车咖啡街"
+        },
+        {
+          "time": "4:00",
+          "label": "还剑湖"
+        },
+        {
+          "time": "4:00",
+          "label": "文庙"
+        },
+        {
+          "time": "4:00",
+          "label": "胡志明陵"
+        },
+        {
+          "time": "4:00",
+          "label": "一柱寺"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 21.0277644,
+          "lng": 105.8341598,
+          "raw": "河内",
+          "name": "河内",
+          "address": "Hanoi, Ha Noi, Vietnam",
+          "placeId": "ChIJoRyG2ZurNTERqRfKcnt_iOc",
+          "rawQuery": "河内",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "河内",
+          "rawMention": "河内",
+          "cleanedName": "河内",
+          "description": "越南河内",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "河内",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.2178001,
+          "lng": 105.8025514,
+          "raw": "Noi Bai Airport",
+          "name": "Noi Bai Airport",
+          "address": "Noi Bai International Airport (HAN), Nội Bài, Hà Nội, Vietnam",
+          "placeId": "ChIJU8SvORUCNTERtCYCUqP64OY",
+          "rawQuery": "Noi Bai Airport",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "Noi Bai Airport",
+          "rawMention": "Noi Bai Airport",
+          "cleanedName": "Noi Bai Airport",
+          "description": "从河内内排机场到市区",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "Noi Bai Airport",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.034059,
+          "lng": 105.8506368,
+          "raw": "老城區",
+          "name": "老城區",
+          "address": "P. Hàng Ngang, Hàng Đào, Hoàn Kiếm, Hà Nội 100000, Vietnam",
+          "placeId": "ChIJp0o4Er6rNTERjlTif_IXU1k",
+          "rawQuery": "老城區",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "老城區",
+          "rawMention": "老城區",
+          "cleanedName": "老城區",
+          "description": "老城區（三十六古街",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "老城區",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.0299218,
+          "lng": 105.8438593,
+          "raw": "火车咖啡街",
+          "name": "火车咖啡街",
+          "address": "3 Trần Phú, Hoàn Kiếm, Hà Nội 100000, Vietnam",
+          "placeId": "ChIJ19e0IACrNTERObsgxFSNCGI",
+          "rawQuery": "火车咖啡街",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "火车咖啡街",
+          "rawMention": "火车咖啡街",
+          "cleanedName": "火车咖啡街",
+          "description": "火车咖啡街",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "火车咖啡街",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.0286669,
+          "lng": 105.8521484,
+          "raw": "还剑湖",
+          "name": "还剑湖",
+          "address": "Hoàn Kiếm Lake, Hoan Kiem, Ha Noi, Vietnam",
+          "placeId": "ChIJlclXM5WrNTERDqL5tGu_ugE",
+          "rawQuery": "还剑湖",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "还剑湖",
+          "rawMention": "还剑湖",
+          "cleanedName": "还剑湖",
+          "description": "还剑湖",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "还剑湖",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.0281175,
+          "lng": 105.8356692,
+          "raw": "文庙",
+          "name": "文庙",
+          "address": "58 Quốc Tử Giám, Văn Miếu, Đống Đa, Hà Nội, Vietnam",
+          "placeId": "ChIJZ73nJpmrNTERHt_VdIgHDlg",
+          "rawQuery": "文庙",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "文庙",
+          "rawMention": "文庙",
+          "cleanedName": "文庙",
+          "description": "文庙",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "文庙",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.0368973,
+          "lng": 105.8346667,
+          "raw": "胡志明陵",
+          "name": "胡志明陵",
+          "address": "1 Hùng Vương, Điện Biên, Ba Đình, Hà Nội, Vietnam",
+          "placeId": "ChIJF13BXqGrNTERTE3hz8KFDmI",
+          "rawQuery": "胡志明陵",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "胡志明陵",
+          "rawMention": "胡志明陵",
+          "cleanedName": "胡志明陵",
+          "description": "胡志明陵",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "胡志明陵",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.0277644,
+          "lng": 105.8341598,
+          "raw": "一柱寺",
+          "name": "一柱寺",
+          "address": "Hanoi, Ha Noi, Vietnam",
+          "placeId": "ChIJoRyG2ZurNTERqRfKcnt_iOc",
+          "rawQuery": "一柱寺",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "一柱寺",
+          "rawMention": "一柱寺",
+          "cleanedName": "一柱寺",
+          "description": "一柱寺",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "一柱寺",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.0352231,
+          "lng": 105.8402594,
+          "raw": "升龍皇城",
+          "name": "升龍皇城",
+          "address": "19c Hoàng Diệu, Điện Biên, Ba Đình, Hà Nội 100000, Vietnam",
+          "placeId": "ChIJSXwdOKOrNTERNylYj9mnIbU",
+          "rawQuery": "升龍皇城",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "升龍皇城",
+          "rawMention": "升龍皇城",
+          "cleanedName": "升龍皇城",
+          "description": "升龍皇城",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "升龍皇城",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.053238,
+          "lng": 105.8260943,
+          "raw": "西湖",
+          "name": "西湖",
+          "address": "West Lake, Tay Ho, Ha Noi, Vietnam",
+          "placeId": "ChIJawZgcv6qNTER26OqCYOYLEw",
+          "rawQuery": "西湖",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "西湖",
+          "rawMention": "西湖",
+          "cleanedName": "西湖",
+          "description": "西湖（真武觀+镇国寺",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "西湖",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.0430155,
+          "lng": 105.8365426,
+          "raw": "真武观",
+          "name": "真武观",
+          "address": "190 P. Quán Thánh, Ba Đình, Hà Nội 118810, Vietnam",
+          "placeId": "ChIJwyFZi6WrNTER76sqY7OcMjE",
+          "rawQuery": "真武观",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "真武观",
+          "rawMention": "真武观",
+          "cleanedName": "真武观",
+          "description": "真武觀",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "真武观",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.047871,
+          "lng": 105.8368738,
+          "raw": "镇国寺",
+          "name": "镇国寺",
+          "address": "Thanh Niên, Tây Hồ, Hà Nội, Vietnam",
+          "placeId": "ChIJr7enHa-rNTERbivpCTqoenY",
+          "rawQuery": "镇国寺",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "镇国寺",
+          "rawMention": "镇国寺",
+          "cleanedName": "镇国寺",
+          "description": "镇国寺",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "镇国寺",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.0253297,
+          "lng": 105.8464781,
+          "raw": "火炉监狱博物馆",
+          "name": "火炉监狱博物馆",
+          "address": "1 P. Hoả Lò, Trần Hưng Đạo, Hoàn Kiếm, Hà Nội, Vietnam",
+          "placeId": "ChIJld5RqparNTERVK8x7gvhAZc",
+          "rawQuery": "火炉监狱博物馆",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "火炉监狱博物馆",
+          "rawMention": "火炉监狱博物馆",
+          "cleanedName": "火炉监狱博物馆",
+          "description": "火炉监狱博物馆",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "火炉监狱博物馆",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.0277644,
+          "lng": 105.8341598,
+          "raw": "龙边桥",
+          "name": "龙边桥",
+          "address": "Hanoi, Ha Noi, Vietnam",
+          "placeId": "ChIJoRyG2ZurNTERqRfKcnt_iOc",
+          "rawQuery": "龙边桥",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "龙边桥",
+          "rawMention": "龙边桥",
+          "cleanedName": "龙边桥",
+          "description": "龙边桥",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "龙边桥",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 21.0381434,
+          "lng": 105.8500387,
+          "raw": "同春市场",
+          "name": "同春市场",
+          "address": "Chợ Đồng Xuân, Phố cổ Hà Nội, Hoàn Kiếm, Hà Nội 100000, Vietnam",
+          "placeId": "ChIJh0TC5rirNTER5hfy54P03tk",
+          "rawQuery": "同春市场",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "同春市场",
+          "rawMention": "同春市场",
+          "cleanedName": "同春市场",
+          "description": "同春市场",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "同春市场",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "越南河内",
+          "foods": [],
+          "title": "河内",
+          "summary": "越南河内",
+          "timestamp": "0:00",
+          "endSeconds": 30,
+          "startLabel": "0:00",
+          "startSeconds": 0,
+          "locationHints": [
+            "河内"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "从河内内排机场到市区",
+          "foods": [],
+          "title": "Noi Bai Airport",
+          "summary": "从河内内排机场到市区",
+          "timestamp": "2:00",
+          "endSeconds": 150,
+          "startLabel": "2:00",
+          "startSeconds": 120,
+          "locationHints": [
+            "Noi Bai Airport"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "老城區（三十六古街",
+          "foods": [],
+          "title": "老城區",
+          "summary": "老城區（三十六古街",
+          "timestamp": "4:00",
+          "endSeconds": 270,
+          "startLabel": "4:00",
+          "startSeconds": 240,
+          "locationHints": [
+            "老城區"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_4",
+          "text": "火车咖啡街",
+          "foods": [],
+          "title": "火车咖啡街",
+          "summary": "火车咖啡街",
+          "timestamp": "4:00",
+          "endSeconds": 270,
+          "startLabel": "4:00",
+          "startSeconds": 240,
+          "locationHints": [
+            "火车咖啡街"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_5",
+          "text": "还剑湖",
+          "foods": [],
+          "title": "还剑湖",
+          "summary": "还剑湖",
+          "timestamp": "4:00",
+          "endSeconds": 270,
+          "startLabel": "4:00",
+          "startSeconds": 240,
+          "locationHints": [
+            "还剑湖"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_6",
+          "text": "文庙",
+          "foods": [],
+          "title": "文庙",
+          "summary": "文庙",
+          "timestamp": "4:00",
+          "endSeconds": 270,
+          "startLabel": "4:00",
+          "startSeconds": 240,
+          "locationHints": [
+            "文庙"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_7",
+          "text": "胡志明陵",
+          "foods": [],
+          "title": "胡志明陵",
+          "summary": "胡志明陵",
+          "timestamp": "4:00",
+          "endSeconds": 270,
+          "startLabel": "4:00",
+          "startSeconds": 240,
+          "locationHints": [
+            "胡志明陵"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_8",
+          "text": "一柱寺",
+          "foods": [],
+          "title": "一柱寺",
+          "summary": "一柱寺",
+          "timestamp": "4:00",
+          "endSeconds": 270,
+          "startLabel": "4:00",
+          "startSeconds": 240,
+          "locationHints": [
+            "一柱寺"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的河內旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_GBMjTMX-FcE",
+      "videoId": "GBMjTMX-FcE",
+      "title": "越南河內美食地圖｜爆吃16家在地人推薦美食｜行程、住宿、交通全搞定｜歐巴馬也愛？最強法式麵包｜無腦玩不踩雷｜超低物價😳｜河內自由行必看攻略｜越南自由行推薦｜簽證首選ft.@outojourneys",
+      "thumbnail": "https://i.ytimg.com/vi/GBMjTMX-FcE/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=GBMjTMX-FcE",
+      "duration": "25:31",
+      "summary": "此影片未擷取到明確地點或食物名稱。",
+      "description": "​\\ • • • /​\n越南河內最新『爆吃地圖』攻略 🇻🇳🎉\n16家在地人私藏美食：吃、逛、玩一次滿足✨\n\n✅ 隱藏版蛋咖啡：比提拉米蘇還驚艷口感🥚☕\n✅ 超強法式麵包：酥脆到掉渣～不輸巴黎🥖\n✅ 歐巴馬也愛的烤豬肉米線：和總統同款美食就是這麼簡單～😍\n✅ 火車街咖啡廳：邊喝咖啡邊看火車～超酷體驗🚂\n\n跟著Outo奧拓！無腦玩不踩雷！\n吃到撐、玩到爽、拍到手機沒電😝\n來！一起爆吃河內！🍜🍹\n\n🇻🇳 這次參加行程傳送門：https://bit.ly/3YgIris\n\n越南首選奧拓半自助旅行神隊友 🎉\n想去哪裡奧拓全部搞定～🥳✨\n\n✅  兩人就能成行  👫 機票自訂、天天出發\n✅  不拼團更自由！ 今天想吃河粉，明天想喝蛋咖啡，隨心安排 ☕🍜\n✅  機票自選！ 里程也能累積，爽翻了 🛫✨\n✅  一站式規劃，超無腦！ 行程、住宿、交通，輕輕鬆鬆玩翻越南 🇻🇳🎉\n\n🎁 獨家折扣來囉～（折扣碼已失效）\n輸入折扣碼「KIMMYPLAYVN」直接現折2000 💸\n快手刀預訂～不然就要自己寫行程表了XDD \n\n🌍 谷歌地圖在這邊：\n住宿 O'Gallery Premier Hotel & Spa：https://maps.app.goo.gl/5QuspLPkqp4yPQmU8\n\nEggyolk Coffee：https://maps.app.goo.gl/yzKcGR4ToTAzGdUNA \n\nMr Bảy Miền Tây - Bánh Xèo：https://maps.app.goo.gl/uVHyRFMdRvYmtX3S6 \n\nBánh cuốn nóng：https://maps.app.goo.gl/S2udvsZzMwCVpe6v8 \n\nBánh mì Phố：https://maps.app.goo.gl/54C6ribj3C1kGLeF9 \n\nLoc Tai House - Chè Lộc Tài：https://maps.app.goo.gl/ErAcu8ePbRS5W1Yo6 \n\nPhở Sướng：https://maps.app.goo.gl/mkRjdY6iy4RvdZVy8 \n\nBún Bò Nam Bộ Bách Phương：https://maps.app.goo.gl/sy5ugu6xQa58LrWX7 \n\nKing Roti - Hàng Gai：https://maps.app.goo.gl/Cc7EbLpAPiQx5Z2L6 \n \nHanoi Train Street：https://maps.app.goo.gl/Yn65brt8ke4duzhUA\n\nCha Ca Thang Long：https://maps.app.goo.gl/JsFfzwz4p292ntSB6 \n\nBia Hơi Ngọc Linh：https://maps.app.goo.gl/JkPsrK6souHXs9W36\n\nBún chả Hương Liên：https://maps.app.goo.gl/LPnmYmHqqYSpPf5N6 \n\nCafe Giảng：https://maps.app.goo.gl/am624WAfVi2rNqmP7 \n\nBanh mi Long Hoi：https://maps.app.goo.gl/SVkSqca8TDvmPurV9 \n\nCafe Sinh 183 Phùng Hưng：https://maps.app.goo.gl/SDYxXtRkiEPVnbjd8 \n\nBanh Mi 25：https://maps.app.goo.gl/Sqd4Y625BL446nHv6 \n\n🚩『還有更多精彩必看影片』👇🏻👇🏻​\n➡️  曼谷才有的10間百年老店：https://youtu.be/DQiEIdyBkGg\n​\n➡️  海鮮吃到痛風也甘願：https://youtu.be/R1RPFcRx0_4\n\n➡️ 曼谷老字號市場：https://youtu.be/6YBJ_ljwVOw\n\n➡️ 曼谷宵夜場美食：https://youtu.be/JiZwXzOM_4E\n\n➡️ 曼谷上班族路邊攤美食：https://youtu.be/ysCq5fOQxvI\n\n🎈想挖掘看多幕後花絮​\n訂閱：https://reurl.cc/R6d6aZ​\nIG：https://www.instagram.com/kmystagram_/​\nFB：https://www.facebook.com/kmystagram/​\n網站：https://kimmyworldwordsso.com/blog/\n合作邀約：kimmyworldwordsso@gmail.com​\n​\n► 越南河內美食地圖｜爆吃16家在地人推薦美食｜行程、住宿、交通全搞定｜歐巴馬也愛？最強法式麵包｜無腦玩不踩雷｜超低物價😳｜河內自由行必看攻略｜越南自由行推薦｜簽證首選ft. @outojourneys \n\n👇🏻 👇🏻👇🏻  影片章節👇🏻👇🏻👇🏻\n00:00  本集預告\n00:20 Kimmy越南河內之旅\n1:25 抵達河內：快速通關與機場服務/領取網卡與換錢攻略/包車接送到飯店\n2:30 飯店開箱：歐式古典風設計與實用設施\n3:23 越南雞蛋咖啡（熱／冷版本）：經典發源地的香滑體驗\n5:51 越式煎餅Bánh Xèo：脆皮煎餅與清爽配菜\n7:43 法式麵包Bánh Mì：河內特製肉燥風味\n8:33  綜合甜品：芋頭、蓮子與椰奶的多層次口感\n9:36  牛肉河粉：牛骨清湯與手工河粉的地道美味\n11:48 南部牛肉米粉：搭配沙拉的清爽口感/越式炸糯米飯\n13:15 King Roti麵包：咖啡香氣與酥脆口感的甜點\n14:07 火車街咖啡廳：觀賞火車經過的絕佳體驗\n14:25 越南炸魚片料理：靈魂蝦醬與香茅風味的完美融合\n15:15 啤酒街炒飯：普恩越南最美好回憶！酸菜風味與鍋巴的完美組合\n16:54 歐巴馬烤豬肉米線：酸甜醬汁與多汁豬肉的美味\n18:21 越南雞蛋咖啡創始店\n19:48 越南第二讚法棍 - 法式麵包\n21:08 雞蛋咖啡 - 在地人隱藏小店\n21:59 越南河內最強法棍 - 法式麵包\n23:25 總結美食、景點與旅遊規劃\n25:16 曼谷美食攻略/泰國在地美食攻略下載/曼谷100元在地美食大公開/在地老饕帶你遠離觀光客的美食清單/公開你以前不知道的泰國美食/泰國大快朵頤的經典小吃路線/泰國隱藏版無名美食/GOOGLE地圖上沒標的祕密店家/用不到100元的價錢吃爆曼谷/曼谷道地美食全都不超過100元/來到曼谷沒吃到正宗美食就白來了啦/要吃就是要吃最經典/千千進食中/吃爆泰國曼谷百年老店/TALAT PHLU噗市場美食一條街/移居曼谷推起來/ft.Kimmy握握手\n\n#越南河內在地人帶路  \n#越南河內美食推薦  \n#越南河內住宿推薦  \n#越南河內無腦玩  \n#越南河內超低物價  \n#越南河內蛋咖啡  \n#越南河內最強法式麵包  \n#越南自由行推薦  \n#越南河內自由行推薦  \n#河內自由行必看攻略  \n#越南河內美食地圖  \n#越南河內自由行  \n#河內美食推薦  \n#越南河內必玩景點  \n#河內旅遊攻略  \n#河內美食攻略  \n#越南雞蛋咖啡  \n#河內必玩  \n#河內必吃美食  \n#雞蛋咖啡推薦  \n#河內法式麵包  \n#北越旅遊行程  \n#河內隱藏美食地圖  \n#河內必吃炸魚片餐廳  \n#越南傳統法式麵包推薦  \n#河內隱藏景點  \n#越南快速通關  \n#半自助旅遊推薦  \n#越南自由行攻略  \n#蛋咖啡推薦  \n#歐巴馬餐廳越南  \n#越南法式麵包  \n#河內住宿推薦  \n#越南簽證攻略  \n#河內交通攻略  \n#越南必吃美食  \n#河內在地人帶路  \n#越南河粉推薦  \n#北越行程規劃  \n#河內火車街咖啡廳  \n#炸魚片料理越南  \n#越南超低物價  \n#越南半自助旅遊  \n#越南河內自由行行程規劃  \n#越南河內美食全攻略  \n#河內景點推薦  \n#越南河內餐廳推薦  \n#河內老城區美食  \n#河內米其林餐廳  \n#河內自由行花費  \n#河內自由行行程  \n#河內自由行交通  \n#河內自由行2024  \n#越南必吃餐廳  \n#河內越南餐廳  \n#河內法國餐廳2024  \n#奧拓越南自由行  \n#奧拓北越  \n#奧拓越南簽證  \n#河內自由行2025  \n#河內平價住宿推薦  \n#泰國旅遊攻略  \n#泰國自由行  \n#曼谷好逛百貨推薦  \n#曼谷免費拍貼  \n#曼谷伴手禮必買好物  \n#曼谷伴手禮必買好物分享  \n#曼谷伴手禮必買  \n#曼谷文青景點攻略  \n#曼谷美食  \n#曼谷市場美食地圖  \n#曼谷美食2024  \n#曼谷美食必吃  \n#曼谷美食米其林  \n#曼谷必吃美食  \n#曼谷泰國菜2024  \n#泰國路邊攤排隊美食  \n#泰國排隊美食  \n#泰國路邊攤排隊美食  \n#泰國曼谷餐廳推薦  \n#泰國上班族吃什麼  \n#泰國排隊美食  \n#觀光客不知道銅板美食  \n#曼谷平價美食  \n#曼谷上班族排隊美食  \n#曼谷上班族美食  \n#曼谷美食推薦2024  \n#泰國自由行2024  \n#曼谷平價美食推薦  \n#曼谷市集推薦  \n#曼谷銅板美食  \n#曼谷平價小吃  \n#曼谷平價美食  \n#曼谷海南雞飯推薦  \n#泰國平價美食  \n#曼谷隱藏美食  \n#曼谷午餐推薦  \n#泰國上班族美食  \n#曼谷隱藏版美食推薦  \n#kimmyworldwordsso握握手\n#跟kimmy走跳泰國\n#跟kimmy走跳泰國曼谷\n#kimmy握握手\n#曼谷二訪美食\n#曼谷美食推薦\n#曼谷米其林美食\n#曼谷人氣餐廳\n#曼谷必吃餐廳2024\n#曼谷美食街\n#泰國必吃美食\n#泰國必吃餐廳\n#泰國曼谷美食\n#曼谷美食2024\n#曼谷必吃餐廳\n#曼谷美食推薦\n#泰國自由行\n#曼谷自由行\n#泰國旅遊\n#泰國\n#泰國美食\n#泰國景點\n#泰國住宿\n#泰國vlog\n#曼谷景點\n#曼谷美食\n#泰國生活\n#泰國曼谷\n#曼谷生活\n#台灣人在泰國\n#泰國旅遊景點\n#台泰文化差異\n#泰國必吃\n#泰國自由行\n#泰國自由行2023\n#泰國自由行2024\n#泰國自由行攻略\n#泰國自由行規劃\n#泰國自由行交通\n#泰國自由行酒店\n#泰國自由行教學\n#泰國自由行推介\n#泰國自由行行程\n#泰國自由行心得\n#曼谷美食\n#曼谷美食攻略2024\n#曼谷美食2024\n#曼谷美食攻略\n#曼谷美食推薦\n#曼谷美食餐廳\n#曼谷美食街\n#曼谷美食一條街\n#曼谷自由行2024\n#曼谷自由行\n#泰國曼谷自由行\n#泰國曼谷\n#泰國曼谷自由行\n#泰國曼谷攻略\n#泰國曼谷旅遊\n#泰國曼谷美食\n#泰國曼谷夜市\n#泰國曼谷旅遊攻略\n#泰國曼谷必吃\n#泰國曼谷唐人街\n#泰國曼谷景點\n#泰國曼谷吃到飽\n#泰國曼谷美食\n#泰國海鮮吃到飽\n#泰國伴手禮\n#2024曼谷攻略\n#泰國曼谷行程推薦\n#泰國曼谷行程\n#泰國曼谷海鮮\n#泰國清邁\n#泰國清邁行程推薦\n#泰國清邁自由行\n#泰國清邁旅遊\n#泰國清邁市集\n#泰國旅遊2024\n#千千進食中泰國\n#千千進食中Kimmy\n#曼谷米其林\n#曼谷必去2024\n#曼谷自由行\n#泰國下午茶推薦  \n#網紅打卡美食  \n#曼谷最新美食  \n#泰國美食頻道  \n#曼谷美食探險  \n#Kimmy帶你玩泰國  \n#曼谷特色餐廳  \n#曼谷網美餐廳  \n#曼谷網紅景點  \n#曼谷最新流行  \n#曼谷新景點2024  \n#曼谷2024必買  \n#曼谷2024必吃  \n#泰國新景點2024  \n#曼谷新玩法",
+      "source": "youtube-data-api",
+      "channelTitle": "Kimmy World Words So 握握手-帶你玩泰國",
+      "publishedAt": "2024-11-30T12:15:02Z",
+      "timestamps": [],
+      "extractedLocations": [],
+      "extractedFoods": [],
+      "summarySegments": [],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的河內旅遊影片，含重點片段與地圖標點。"
+    }
+  ],
+  "validation": {
+    "requestedCount": 6,
+    "exportedCount": 3,
+    "passCount": 3,
+    "failCount": 3,
+    "errorCount": 0
+  }
+}

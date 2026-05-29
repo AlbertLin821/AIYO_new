@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "@/lib/motion";
 import { useCallback, useEffect, useState } from "react";
 import { HOME_HERO_IMAGES, HOME_HERO_ROTATE_MS } from "@/data/homeHeroImages";
 
@@ -39,7 +39,7 @@ export default function HomeHeroBanner({ children }: Props) {
 
       {currentSrc ? (
         <AnimatePresence mode="wait">
-          <motion.div
+          <m.div
             key={currentSrc}
             className="absolute inset-0"
             initial={{ opacity: 0 }}
@@ -55,7 +55,7 @@ export default function HomeHeroBanner({ children }: Props) {
               decoding="async"
               onError={() => handleImageError(currentSrc)}
             />
-          </motion.div>
+          </m.div>
         </AnimatePresence>
       ) : null}
 
@@ -64,13 +64,13 @@ export default function HomeHeroBanner({ children }: Props) {
         aria-hidden
       />
 
-      <motion.div
+      <m.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         className="relative z-10 flex h-full flex-col items-center justify-center px-6 text-center"
       >
         {children}
-      </motion.div>
+      </m.div>
     </div>
   );
 }

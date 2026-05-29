@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "@/lib/motion";
 import { ChevronDown } from "lucide-react";
 import { CitationGroup } from "@/components/chat/SourceTag";
 import { cn } from "@/lib/utils";
@@ -76,7 +76,7 @@ export default function TravelPlanDayAccordion({
       </div>
 
       {expanded ? (
-        <motion.div
+        <m.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
           transition={{ duration: 0.22, ease: "easeOut" }}
@@ -153,7 +153,7 @@ export default function TravelPlanDayAccordion({
               </div>
             )}
           </div>
-        </motion.div>
+        </m.div>
       ) : null}
     </section>
   );

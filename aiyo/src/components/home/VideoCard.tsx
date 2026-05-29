@@ -2,8 +2,8 @@
 
 import { memo, useState, type KeyboardEvent } from "react";
 import Image from "next/image";
-import { motion } from "framer-motion";
-import { AlertCircle, Clock, ExternalLink, Play } from "lucide-react";
+import { m } from "@/lib/motion";
+import { AlertCircle, Clock, ExternalLink, Play, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Video } from "@/types";
@@ -13,6 +13,7 @@ interface VideoCardProps {
   video: Video;
   index: number;
   onClick: () => void;
+  onDismiss?: () => void;
 }
 
 const gradients = [
@@ -37,7 +38,7 @@ function sourceLabel(source: string) {
   return source;
 }
 
-function VideoCard({ video, index, onClick }: VideoCardProps) {
+function VideoCard({ video, index, onClick, onDismiss }: VideoCardProps) {
   const thumbLabels = t.videoCard.thumbLabels;
   const [imageFailed, setImageFailed] = useState(false);
   const showThumbnail = Boolean(video.thumbnail) && !imageFailed;
@@ -53,7 +54,7 @@ function VideoCard({ video, index, onClick }: VideoCardProps) {
   }
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.08 }}
@@ -93,6 +94,21 @@ function VideoCard({ video, index, onClick }: VideoCardProps) {
           <Clock className="size-3" />
           {video.duration}
         </div>
+
+        {onDismiss ? (
+          <button
+            type="button"
+            aria-label={t.videoCard.removeVideo}
+            title={t.videoCard.removeVideo}
+            onClick={(event) => {
+              event.stopPropagation();
+              onDismiss();
+            }}
+            className="absolute right-2 top-2 z-10 flex size-7 cursor-pointer items-center justify-center rounded-full bg-foreground/75 text-white opacity-0 shadow-md transition-opacity duration-200 hover:bg-foreground/90 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 group-hover:opacity-100"
+          >
+            <X className="size-3.5" aria-hidden />
+          </button>
+        ) : null}
 
         <div className="absolute inset-0 flex items-center justify-center bg-foreground/0 transition-all duration-300 group-hover:bg-foreground/10 motion-reduce:group-hover:bg-foreground/0">
           <div className="flex size-12 scale-75 items-center justify-center rounded-full bg-white/90 opacity-0 shadow-lg transition-all duration-300 group-hover:scale-100 group-hover:opacity-100 group-focus-within:scale-100 group-focus-within:opacity-100 motion-reduce:group-hover:scale-75 motion-reduce:group-hover:opacity-0">
@@ -140,7 +156,7 @@ function VideoCard({ video, index, onClick }: VideoCardProps) {
         </div>
       </CardContent>
       </Card>
-    </motion.div>
+    </m.div>
   );
 }
 

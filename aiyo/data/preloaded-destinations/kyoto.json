@@ -1,0 +1,1586 @@
+{
+  "id": "kyoto",
+  "destinationHint": "京都",
+  "searchKeyword": "京都自由行 清水寺 伏見稻荷 嵐山",
+  "aliases": [
+    "京都",
+    "kyoto",
+    "東北亞"
+  ],
+  "preferences": [
+    "美食",
+    "景點",
+    "懶人包"
+  ],
+  "generatedAt": "2026-05-29T03:51:19.065Z",
+  "pipelineVersion": "preloaded-seed-v1",
+  "videos": [
+    {
+      "id": "youtube_oMVNAWOQJhU",
+      "videoId": "oMVNAWOQJhU",
+      "title": "京都大阪5天4夜行程全攻略 (🍁包含賞楓行程🍁) 5天交通怎麼安排？ 京都大阪景點 清水寺/伏見稻荷/錦市場/嵐山/金閣寺/天橋立/宇治/下鴨神社/永觀堂/二条城/難波八板神社/大阪城/黑門市場",
+      "thumbnail": "https://i.ytimg.com/vi/oMVNAWOQJhU/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=oMVNAWOQJhU",
+      "duration": "22:08",
+      "summary": "影片提到清水寺、伏見稻荷大社、錦市場等地點。",
+      "description": "成為這個頻道的會員並獲得福利：\nhttps://www.youtube.com/channel/UCm1L40jOZcSX58HcYz5IyTQ/join\n💖喜歡我們的影片請幫忙點讚、分享並按下小鈴鐺喔～!!!\n💌 合作可發信到 crazykyo2013@gmail.com\n\n📷 影片會詳細的介紹京都5天4夜要怎麼安排\nDAY1 京都車站附近逛逛\nDAY2 清水寺＋錦市場＋伏見稻荷大社\nDAY3 嵐山＋金閣寺＋北野天滿宮\nDAY4 南禪寺＋永觀堂＋一乘寺周圍＋下鴨神社＋京都御苑\nDAY5 大阪半日遊\n補充行程1 宇治奈良伏見稻荷大社\n補充行程2 天橋立一日遊\n\n京都賞楓地圖\nhttps://imahachi.com/wp-content/uploads/2020/09/KMD26001-aum.png\n京都 祇園・清水寺\nhttps://imahachi.com/24kinki/kiyomizudera/\n京都 嵯峨野・嵐山\nhttps://imahachi.com/24kinki/sagano/\n京都 銀閣寺・哲学の道・南禅寺\nhttps://imahachi.com/24kinki/ginkaku/\nきぬかけの路(金閣寺・龍安寺・仁和寺)\nhttps://imahachi.com/24kinki/kinukake/\n京都 北野天満宮・金閣寺・大徳寺\nhttps://imahachi.com/24kinki/kitanotenmangu/\n京都 宇治\nhttps://imahachi.com/24kinki/uji/\n京都 伏見稲荷大社周辺\nhttps://imahachi.com/24kinki/fushimiinari/\n京都 大原\nhttps://imahachi.com/24kinki/ohara/\n\n■ Camera | ZVE1、iPhone14Pro\n■ Lens | SONY FE 20mmF1.8 、 TAMRON 28-200mm\n\n章節說明：\n0:00 片頭\n0:10 京都賞楓景點\n1:09 安排行程前4個事項\n1:47 第一天行程 Haruka 京都車站\n2:10 第二天行程 清水寺 錦市場 伏見稻荷\n5:55 第三天行程 嵐山 金閣寺 北野天滿宮\n11:35 第四天行程 永觀堂 南禪寺 一乘寺周圍\n16:52 第五天行程 大阪\n19:27 補充行程 宇治奈良伏見稻荷 \n20:32 補充行程 天橋立一日遊 關西廣域周遊卷\n21:56 結尾\n#京都5天4夜 #京都景點 #京都楓葉",
+      "source": "youtube-data-api",
+      "channelTitle": "小黑的旅行誌",
+      "publishedAt": "2024-11-15T11:51:53Z",
+      "timestamps": [
+        {
+          "time": "0:02",
+          "label": "清水寺"
+        },
+        {
+          "time": "0:02",
+          "label": "伏見稻荷大社"
+        },
+        {
+          "time": "0:02",
+          "label": "錦市場"
+        },
+        {
+          "time": "0:05",
+          "label": "嵐山"
+        },
+        {
+          "time": "0:05",
+          "label": "金閣寺"
+        },
+        {
+          "time": "0:05",
+          "label": "北野天満宮"
+        },
+        {
+          "time": "0:11",
+          "label": "永觀堂"
+        },
+        {
+          "time": "0:11",
+          "label": "南禪寺"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 34.9946662,
+          "lng": 135.784661,
+          "raw": "清水寺",
+          "name": "清水寺",
+          "address": "1-chōme-294 Kiyomizu, Higashiyama Ward, Kyoto, 605-0862, Japan",
+          "placeId": "ChIJB_vchdMIAWARujTEUIZlr2I",
+          "rawQuery": "清水寺",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "清水寺",
+          "rawMention": "清水寺",
+          "cleanedName": "清水寺",
+          "description": "第二天行程 清水寺 錦市場 伏見稲荷",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "清水寺",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.9676945,
+          "lng": 135.7791876,
+          "raw": "伏見稻荷大社",
+          "name": "伏見稻荷大社",
+          "address": "68 Fukakusa Yabunouchichō, Fushimi Ward, Kyoto, 612-0882, Japan",
+          "placeId": "ChIJIW0uPRUPAWAR6eI6dRzKGns",
+          "rawQuery": "伏見稻荷大社",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "伏見稻荷大社",
+          "rawMention": "伏見稻荷大社",
+          "cleanedName": "伏見稻荷大社",
+          "description": "第二天行程 清水寺 錦市場 伏見稲荷",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "伏見稻荷大社",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.0050258,
+          "lng": 135.764723,
+          "raw": "錦市場",
+          "name": "錦市場",
+          "address": "Higashiuoyacho, Nakagyo Ward, Kyoto, 604-8055, Japan",
+          "placeId": "ChIJT8uMzZwIAWARnGzsARCjnrY",
+          "rawQuery": "錦市場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "錦市場",
+          "rawMention": "錦市場",
+          "cleanedName": "錦市場",
+          "description": "第二天行程 清水寺 錦市場 伏見稲荷",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "錦市場",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.009449,
+          "lng": 135.666773,
+          "raw": "嵐山",
+          "name": "嵐山",
+          "address": "Arashiyama Genrokuzancho, Ukyo Ward, Kyoto, 616-0007, Japan",
+          "placeId": "ChIJ49PvUVQHAWARTAF7WU_Wqqs",
+          "rawQuery": "嵐山",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "嵐山",
+          "rawMention": "嵐山",
+          "cleanedName": "嵐山",
+          "description": "第三天行程 嵐山 金閣寺 北野天滿宮",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "嵐山",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.03937,
+          "lng": 135.7292431,
+          "raw": "金閣寺",
+          "name": "金閣寺",
+          "address": "1 Kinkakujichō, Kita Ward, Kyoto, 603-8361, Japan",
+          "placeId": "ChIJvUbrwCCoAWARX2QiHCsn5A4",
+          "rawQuery": "金閣寺",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "金閣寺",
+          "rawMention": "金閣寺",
+          "cleanedName": "金閣寺",
+          "description": "第三天行程 嵐山 金閣寺 北野天滿宮",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "金閣寺",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.0311737,
+          "lng": 135.7351227,
+          "raw": "北野天満宮",
+          "name": "北野天満宮",
+          "address": "Bakurocho, Kamigyo Ward, Kyoto, 602-8386, Japan",
+          "placeId": "ChIJbeDwe-0HAWARGu4ubMH-Jls",
+          "rawQuery": "北野天満宮",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "北野天満宮",
+          "rawMention": "北野天満宮",
+          "cleanedName": "北野天満宮",
+          "description": "第三天行程 嵐山 金閣寺 北野天滿宮",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "北野天満宮",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.0148543,
+          "lng": 135.7941588,
+          "raw": "永觀堂",
+          "name": "永觀堂",
+          "address": "48 Eikandōchō, Sakyo Ward, Kyoto, 606-8445, Japan",
+          "placeId": "ChIJF42zshgJAWARVK2wk6AFlxw",
+          "rawQuery": "永觀堂",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "永觀堂",
+          "rawMention": "永觀堂",
+          "cleanedName": "永觀堂",
+          "description": "第四天行程 永觀堂 南禪寺 一乘寺周圍",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "永觀堂",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.0114138,
+          "lng": 135.7944841,
+          "raw": "南禪寺",
+          "name": "南禪寺",
+          "address": "86 Nanzenji Fukuchichō, Sakyo Ward, Kyoto, 606-8435, Japan",
+          "placeId": "ChIJ_fuXcyEJAWARTQDnx6Q5szg",
+          "rawQuery": "南禪寺",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "南禪寺",
+          "rawMention": "南禪寺",
+          "cleanedName": "南禪寺",
+          "description": "第四天行程 永觀堂 南禪寺 一乘寺周圍",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "南禪寺",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.0140901,
+          "lng": 135.7491371,
+          "raw": "二条城",
+          "name": "二条城",
+          "address": "Nijojocho, Nakagyo Ward, Kyoto, 604-8301, Japan",
+          "placeId": "ChIJcwBKXdQHAWARkeDeMolYT2k",
+          "rawQuery": "二条城",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "二条城",
+          "rawMention": "二条城",
+          "cleanedName": "二条城",
+          "description": "京都大阪景點 清水寺/伏見稲荷/錦市場/嵐山/金閣寺/天橋立/宇治/下鴨神社/永觀堂/二条城/難波八板神社/大阪城/黑門市場",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "二条城",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.0036559,
+          "lng": 135.7785534,
+          "raw": "難波八板神社",
+          "name": "難波八板神社",
+          "address": "625 Gionmachi Kitagawa, Higashiyama Ward, Kyoto, 605-0073, Japan",
+          "placeId": "ChIJqewQoHkIAWAR6RokWp3Iesc",
+          "rawQuery": "難波八板神社",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "難波八板神社",
+          "rawMention": "難波八板神社",
+          "cleanedName": "難波八板神社",
+          "description": "京都大阪景點 清水寺/伏見稲荷/錦市場/嵐山/金閣寺/天橋立/宇治/下鴨神社/永觀堂/二条城/難波八板神社/大阪城/黑門市場",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "難波八板神社",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6872571,
+          "lng": 135.5258546,
+          "raw": "大阪城",
+          "name": "大阪城",
+          "address": "1-1 Ōsakajō, Chuo Ward, Osaka, 540-0002, Japan",
+          "placeId": "ChIJ_TooXM3gAGARQR6hXH3QAQ8",
+          "rawQuery": "大阪城",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "大阪城",
+          "rawMention": "大阪城",
+          "cleanedName": "大阪城",
+          "description": "京都大阪景點 清水寺/伏見稲荷/錦市場/嵐山/金閣寺/天橋立/宇治/下鴨神社/永觀堂/二条城/難波八板神社/大阪城/黑門市場",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "大阪城",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.6653529,
+          "lng": 135.5062406,
+          "raw": "黑門市場",
+          "name": "黑門市場",
+          "address": "2 Chome-21 Nipponbashi, Chuo Ward, Osaka, 542-0073, Japan",
+          "placeId": "ChIJXSJB5UHnAGARQcEjvngsHaw",
+          "rawQuery": "黑門市場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "黑門市場",
+          "rawMention": "黑門市場",
+          "cleanedName": "黑門市場",
+          "description": "京都大阪景點 清水寺/伏見稲荷/錦市場/嵐山/金閣寺/天橋立/宇治/下鴨神社/永觀堂/二条城/難波八板神社/大阪城/黑門市場",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "黑門市場",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.5698022,
+          "lng": 135.1918204,
+          "raw": "天橋立",
+          "name": "天橋立",
+          "address": "Monju, Miyazu, Kyoto 626-0001, Japan",
+          "placeId": "ChIJl-LBxy2X_18RgWzksvPOYbo",
+          "rawQuery": "天橋立",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "天橋立",
+          "rawMention": "天橋立",
+          "cleanedName": "天橋立",
+          "description": "補充行程 天橋立一日遊",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "天橋立",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.8845134,
+          "lng": 135.7997037,
+          "raw": "宇治",
+          "name": "宇治",
+          "address": "Uji, Kyoto, Japan",
+          "placeId": "ChIJ7VMo54QRAWAR3t1BYKpGatY",
+          "rawQuery": "宇治",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "宇治",
+          "rawMention": "宇治",
+          "cleanedName": "宇治",
+          "description": "京都賞楓地圖 京都 宇治",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "宇治",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.0389778,
+          "lng": 135.7730068,
+          "raw": "下鴨神社",
+          "name": "下鴨神社",
+          "address": "Japan, 〒606-0807 京都府京都市左京区下鴨泉川町５９",
+          "placeId": "ChIJf438RkAIAWARzM3lfzI7uAM",
+          "rawQuery": "下鴨神社",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "下鴨神社",
+          "rawMention": "下鴨神社",
+          "cleanedName": "下鴨神社",
+          "description": "第四天行程 永觀堂 南禪寺 一乘寺周圍",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "下鴨神社",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.0230617,
+          "lng": 135.7634452,
+          "raw": "京都御苑",
+          "name": "京都御苑",
+          "address": "Kyoto Gyoen National Garden, 3 Kyōtogyoen, Kamigyo Ward, Kyoto, 602-0881, Japan",
+          "placeId": "ChIJHV-OFHsIAWARVQlhBBl6ix8",
+          "rawQuery": "京都御苑",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "京都御苑",
+          "rawMention": "京都御苑",
+          "cleanedName": "京都御苑",
+          "description": "第四天行程 DAY4 南禪寺＋永觀堂＋一乘寺周圍＋下鴨神社＋京都御苑",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "京都御苑",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "第二天行程 清水寺 錦市場 伏見稲荷",
+          "foods": [],
+          "title": "清水寺",
+          "summary": "第二天行程 清水寺 錦市場 伏見稲荷",
+          "timestamp": "0:02",
+          "endSeconds": 32,
+          "startLabel": "0:02",
+          "startSeconds": 2,
+          "locationHints": [
+            "清水寺"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "第二天行程 清水寺 錦市場 伏見稲荷",
+          "foods": [],
+          "title": "伏見稻荷大社",
+          "summary": "第二天行程 清水寺 錦市場 伏見稲荷",
+          "timestamp": "0:02",
+          "endSeconds": 32,
+          "startLabel": "0:02",
+          "startSeconds": 2,
+          "locationHints": [
+            "伏見稻荷大社"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "第二天行程 清水寺 錦市場 伏見稲荷",
+          "foods": [],
+          "title": "錦市場",
+          "summary": "第二天行程 清水寺 錦市場 伏見稲荷",
+          "timestamp": "0:02",
+          "endSeconds": 32,
+          "startLabel": "0:02",
+          "startSeconds": 2,
+          "locationHints": [
+            "錦市場"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_4",
+          "text": "第三天行程 嵐山 金閣寺 北野天滿宮",
+          "foods": [],
+          "title": "嵐山",
+          "summary": "第三天行程 嵐山 金閣寺 北野天滿宮",
+          "timestamp": "0:05",
+          "endSeconds": 35,
+          "startLabel": "0:05",
+          "startSeconds": 5,
+          "locationHints": [
+            "嵐山"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_5",
+          "text": "第三天行程 嵐山 金閣寺 北野天滿宮",
+          "foods": [],
+          "title": "金閣寺",
+          "summary": "第三天行程 嵐山 金閣寺 北野天滿宮",
+          "timestamp": "0:05",
+          "endSeconds": 35,
+          "startLabel": "0:05",
+          "startSeconds": 5,
+          "locationHints": [
+            "金閣寺"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_6",
+          "text": "第三天行程 嵐山 金閣寺 北野天滿宮",
+          "foods": [],
+          "title": "北野天満宮",
+          "summary": "第三天行程 嵐山 金閣寺 北野天滿宮",
+          "timestamp": "0:05",
+          "endSeconds": 35,
+          "startLabel": "0:05",
+          "startSeconds": 5,
+          "locationHints": [
+            "北野天満宮"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_7",
+          "text": "第四天行程 永觀堂 南禪寺 一乘寺周圍",
+          "foods": [],
+          "title": "永觀堂",
+          "summary": "第四天行程 永觀堂 南禪寺 一乘寺周圍",
+          "timestamp": "0:11",
+          "endSeconds": 41,
+          "startLabel": "0:11",
+          "startSeconds": 11,
+          "locationHints": [
+            "永觀堂"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_8",
+          "text": "第四天行程 永觀堂 南禪寺 一乘寺周圍",
+          "foods": [],
+          "title": "南禪寺",
+          "summary": "第四天行程 永觀堂 南禪寺 一乘寺周圍",
+          "timestamp": "0:11",
+          "endSeconds": 41,
+          "startLabel": "0:11",
+          "startSeconds": 11,
+          "locationHints": [
+            "南禪寺"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的京都旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_igEWpadlN2w",
+      "videoId": "igEWpadlN2w",
+      "title": "【大阪京都10個必玩旅遊景點 🇯🇵】第一次去大阪京都自由行怎麼玩？花多少？｜日本必吃美食｜日本自由行｜日本住宿",
+      "thumbnail": "https://i.ytimg.com/vi/igEWpadlN2w/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=igEWpadlN2w",
+      "duration": "20:47",
+      "summary": "影片提到道頓堀、心齋橋、大阪城天守閣等地點，以及壽喜燒、豬排、麵屋優光等食物。",
+      "description": "#日本自由行 #京都 #大阪 #美食\n\n🚁日本京都大阪必玩旅遊景點：\n📍道頓堀心齋橋📍大阪城天守閣 📍梅田藍天大廈📍阪急百貨店📍HEP FIVE\n📍清水寺📍八坂神社 📍鴨川📍伏見稻荷大社📍錦市場&寺町京極商店街\n————————————————————\n🏡日本住宿推薦優惠訂房連結： \n📍 麗嘉Rihga Gran Kyoto(京都車站5分鐘、有湯屋)：https://reurl.cc/Wv9dRx\n📍 Daiwa Roynet Hotel(便宜、京都車站旁）: https://reurl.cc/bl0RYd\n📍  東急STAY京都三條烏丸(高CP值、房間有洗衣機)：https://reurl.cc/y6VZvy\n📍  京都千酒店(頂級五星、市中心)：https://reurl.cc/dmZ08D\n📍  VIA INN(高CP值、樓下捷運超市)：https://reurl.cc/8X92Vg\n📍  大阪南海瑞士酒店(頂級五星、難波市中心)：https://reurl.cc/Xmn6N0\n📍  阪急大阪龍仕柏酒店(高評價、梅田市中心)：https://reurl.cc/3eVDql\n————————————————————\n🚁日本必玩旅遊景點優惠門票：\n-KLOOK\n📍大阪周遊卡：https://lurl.cc/7xVnMI\n📍關西周遊卡：https://lurl.cc/4XGJeU\n📍關西 ICOCA 卡（補周遊卡不含的交通）：https://lurl.cc/Nutzoa\n📍關西機場到大阪市區交通：https://lurl.cc/XWPRF1\n📍日本環球影城門票 ：https://lurl.cc/XTh4Tx\n📍日本環球影城快速通關券 ：https://lurl.cc/dwpQxx\n📍免規劃跟團一日遊：\n-京都＆奈良一日遊：https://lurl.cc/aYsAw8\n-伏見稻荷大社 & 嵐山 & 清水寺一日遊：https://lurl.cc/wUIjUr\n-嵐山 & 鹿苑寺 & 奈良公園一日遊：https://lurl.cc/kremOg\n-京都北郊美山茅草屋之里＆伊根灣＆天橋立：https://lurl.cc/VZJfay\n📍全球租車(可異地還車)：https://reurl.cc/nDQbZ2\n📍首次購票透過我的連結註冊，可獲得NT$100優惠回饋\n👉https://reurl.cc/QX0zDZ\n✨里歐專屬折扣碼：LEO6666 (全站商品95折)\n\n-KKDAY\n📍大阪周遊卡：https://reurl.cc/Ry3Ajr\n📍關西周遊卡：https://reurl.cc/WvKjNk\n📍關西機場到大阪市區交通：https://reurl.cc/3eqGKX\n📍日本環球影城門票 ：https://reurl.cc/a4K657\n📍日本環球影城快速通關券 ：https://reurl.cc/dm4KGM\n📍大阪、京都、奈良10小時來回包車：https://reurl.cc/Ry3a66\n📍免規劃跟團一日遊：\n-伏見稻荷大社＆嵐山＆金閣寺＆奈良公園：https://reurl.cc/K31V69\n-嵐山小火車、保津川遊船、嵐山一日遊：https://reurl.cc/GK27zp\n-京都北郊美山茅草屋之里＆伊根灣＆天橋立：https://reurl.cc/y6922q\n📍首次購票透過我的連結註冊，可獲得NT$100優惠回饋\n👉https://reurl.cc/nLj8kn\n✨里歐專屬折扣碼：KKLEO66 (滿NT$1,500享94折)\n————————————————————\n✈日本機票比價： https://skyscanner.pxf.io/rQJBNG\n📱日本網路SIM卡：\n📍日本吃到飽SIM卡（台灣郵寄到府）：https://lurl.cc/d9lKv3\n📍日本4G虛擬 eSIM 卡：https://lurl.cc/Jxcfbx\n\n【河口湖自由行怎麼玩?怎麼吃?花多少?】https://youtu.be/FJ83KwZUBMk\n【日本旅遊攻略】10個日本旅遊注意事項：https://reurl.cc/L46Eae\n———————————————————— \n日本花費兩人$20050=$10025/人\n【伙食】兩人$6436=$3218/人\n- Day1 晚壽喜燒993 宵夜182\n- Day2 豬排677晚345\n- Day3 午440晚koko877超商279\n- Day4 敘敘苑1281 麵屋優光470超商241\n- Day5 麵屋豬一651\n【住宿】 大阪一日$2361+京都3日$8309=兩人$10670=$5335/人\n【門票+交通】兩人$2944=$1472/人\n-大阪周遊卡$1570\n-Uber& ICOCA卡$864\n-清水寺$174\n-Esim$336、另一人使用信用卡免費SIM卡\n【備註】不含伴手禮(看個人消費力，我自己買8000左右、不含來回機票(時間地點影響很大，特價廉航機票最低約4~5000，一般航空約1~20000)、不含第六天名古屋花費\n———————————————————— \n🔗里歐愛旅遊部落格詳細圖文：https://leolovetravel.com\n✨ IG：leolovetravel FB：里歐愛旅遊\n————————————————————\nSong: Markvard - Rewind\nMusic provided by Vlog No Copyright Music.\nCreative Commons - Attribution 3.0 Unported\nVideo Link: https://youtu.be/UXdoLv_32i0",
+      "source": "youtube-data-api",
+      "channelTitle": "里歐愛旅遊 leolovetravel",
+      "publishedAt": "2023-11-25T12:30:09Z",
+      "timestamps": [
+        {
+          "time": "4:00",
+          "label": "道頓堀"
+        },
+        {
+          "time": "4:00",
+          "label": "心齋橋"
+        },
+        {
+          "time": "5:00",
+          "label": "大阪城天守閣"
+        },
+        {
+          "time": "6:00",
+          "label": "梅田藍天大廈"
+        },
+        {
+          "time": "7:00",
+          "label": "阪急百貨店"
+        },
+        {
+          "time": "8:00",
+          "label": "HEP FIVE"
+        },
+        {
+          "time": "9:00",
+          "label": "八坂神社"
+        },
+        {
+          "time": "10:00",
+          "label": "伏見稻荷大社"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 34.6687234,
+          "lng": 135.5012971,
+          "raw": "道頓堀",
+          "name": "道頓堀",
+          "address": "1 Chome-9 Dotonbori, Chuo Ward, Osaka, 542-0071, Japan",
+          "placeId": "ChIJ_fmKgRPnAGARkKWLtCYTu7g",
+          "rawQuery": "道頓堀",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "道頓堀",
+          "rawMention": "道頓堀",
+          "cleanedName": "道頓堀",
+          "description": "📍道頓堀心齋橋",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "道頓堀",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.011564,
+          "lng": 135.7681489,
+          "raw": "心齋橋",
+          "name": "心齋橋",
+          "address": "Kyoto, Japan",
+          "placeId": "ChIJ8cM8zdaoAWARPR27azYdlsA",
+          "rawQuery": "心齋橋",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "心齋橋",
+          "rawMention": "心齋橋",
+          "cleanedName": "心齋橋",
+          "description": "📍道頓堀心齋橋",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "心齋橋",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.011564,
+          "lng": 135.7681489,
+          "raw": "大阪城天守閣",
+          "name": "大阪城天守閣",
+          "address": "Kyoto, Japan",
+          "placeId": "ChIJ8cM8zdaoAWARPR27azYdlsA",
+          "rawQuery": "大阪城天守閣",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "大阪城天守閣",
+          "rawMention": "大阪城天守閣",
+          "cleanedName": "大阪城天守閣",
+          "description": "📍大阪城天守閣",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "大阪城天守閣",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.7052872,
+          "lng": 135.4896527,
+          "raw": "梅田藍天大廈",
+          "name": "梅田藍天大廈",
+          "address": "1-chōme-1-88 Ōyodonaka, Kita Ward, Osaka, 531-6023, Japan",
+          "placeId": "ChIJbyd0kIjmAGAR_crecCbjwlc",
+          "rawQuery": "梅田藍天大廈",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "梅田藍天大廈",
+          "rawMention": "梅田藍天大廈",
+          "cleanedName": "梅田藍天大廈",
+          "description": "📍梅田藍天大廈",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "梅田藍天大廈",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.011564,
+          "lng": 135.7681489,
+          "raw": "阪急百貨店",
+          "name": "阪急百貨店",
+          "address": "Kyoto, Japan",
+          "placeId": "ChIJ8cM8zdaoAWARPR27azYdlsA",
+          "rawQuery": "阪急百貨店",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "阪急百貨店",
+          "rawMention": "阪急百貨店",
+          "cleanedName": "阪急百貨店",
+          "description": "📍阪急百貨店",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "阪急百貨店",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.7040897,
+          "lng": 135.5004632,
+          "raw": "HEP FIVE",
+          "name": "HEP FIVE",
+          "address": "5-15 Kakudachō, Kita Ward, Osaka, 530-0017, Japan",
+          "placeId": "ChIJkfagoZPmAGARIcaEGF7Vd2U",
+          "rawQuery": "HEP FIVE",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "HEP FIVE",
+          "rawMention": "HEP FIVE",
+          "cleanedName": "HEP FIVE",
+          "description": "📍HEP FIVE",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "HEP FIVE",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.0036559,
+          "lng": 135.7785534,
+          "raw": "八坂神社",
+          "name": "八坂神社",
+          "address": "625 Gionmachi Kitagawa, Higashiyama Ward, Kyoto, 605-0073, Japan",
+          "placeId": "ChIJqewQoHkIAWAR6RokWp3Iesc",
+          "rawQuery": "八坂神社",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "八坂神社",
+          "rawMention": "八坂神社",
+          "cleanedName": "八坂神社",
+          "description": "📍八坂神社",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "八坂神社",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.9676945,
+          "lng": 135.7791876,
+          "raw": "伏見稻荷大社",
+          "name": "伏見稻荷大社",
+          "address": "68 Fukakusa Yabunouchichō, Fushimi Ward, Kyoto, 612-0882, Japan",
+          "placeId": "ChIJIW0uPRUPAWAR6eI6dRzKGns",
+          "rawQuery": "伏見稻荷大社",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "伏見稻荷大社",
+          "rawMention": "伏見稻荷大社",
+          "cleanedName": "伏見稻荷大社",
+          "description": "📍伏見稻荷大社",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "伏見稻荷大社",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.0050258,
+          "lng": 135.764723,
+          "raw": "錦市場",
+          "name": "錦市場",
+          "address": "Higashiuoyacho, Nakagyo Ward, Kyoto, 604-8055, Japan",
+          "placeId": "ChIJT8uMzZwIAWARnGzsARCjnrY",
+          "rawQuery": "錦市場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "錦市場",
+          "rawMention": "錦市場",
+          "cleanedName": "錦市場",
+          "description": "📍錦市場&寺甌京極商店街",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "錦市場",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.0061863,
+          "lng": 135.7668873,
+          "raw": "寺甌京極商店街",
+          "name": "寺甌京極商店街",
+          "address": "Compasso Teramachi, Kyoto, Japan",
+          "placeId": "ChIJ9-t60pUIAWARIlo7RBXzzOg",
+          "rawQuery": "寺甌京極商店街",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "寺甌京極商店街",
+          "rawMention": "寺甌京極商店街",
+          "cleanedName": "寺甌京極商店街",
+          "description": "📍錦市場&寺甌京極商店街",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "寺甌京極商店街",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [
+        "壽喜燒",
+        "豬排",
+        "麵屋優光",
+        "麵屋豬一"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "📍道頓堀心齋橋",
+          "foods": [],
+          "title": "道頓堀",
+          "summary": "📍道頓堀心齋橋",
+          "timestamp": "4:00",
+          "endSeconds": 270,
+          "startLabel": "4:00",
+          "startSeconds": 240,
+          "locationHints": [
+            "道頓堀"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "📍道頓堀心齋橋",
+          "foods": [],
+          "title": "心齋橋",
+          "summary": "📍道頓堀心齋橋",
+          "timestamp": "4:00",
+          "endSeconds": 270,
+          "startLabel": "4:00",
+          "startSeconds": 240,
+          "locationHints": [
+            "心齋橋"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "📍大阪城天守閣",
+          "foods": [],
+          "title": "大阪城天守閣",
+          "summary": "📍大阪城天守閣",
+          "timestamp": "5:00",
+          "endSeconds": 330,
+          "startLabel": "5:00",
+          "startSeconds": 300,
+          "locationHints": [
+            "大阪城天守閣"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_4",
+          "text": "📍梅田藍天大廈",
+          "foods": [],
+          "title": "梅田藍天大廈",
+          "summary": "📍梅田藍天大廈",
+          "timestamp": "6:00",
+          "endSeconds": 390,
+          "startLabel": "6:00",
+          "startSeconds": 360,
+          "locationHints": [
+            "梅田藍天大廈"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_5",
+          "text": "📍阪急百貨店",
+          "foods": [],
+          "title": "阪急百貨店",
+          "summary": "📍阪急百貨店",
+          "timestamp": "7:00",
+          "endSeconds": 450,
+          "startLabel": "7:00",
+          "startSeconds": 420,
+          "locationHints": [
+            "阪急百貨店"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_6",
+          "text": "📍HEP FIVE",
+          "foods": [],
+          "title": "HEP FIVE",
+          "summary": "📍HEP FIVE",
+          "timestamp": "8:00",
+          "endSeconds": 510,
+          "startLabel": "8:00",
+          "startSeconds": 480,
+          "locationHints": [
+            "HEP FIVE"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_7",
+          "text": "📍八坂神社",
+          "foods": [],
+          "title": "八坂神社",
+          "summary": "📍八坂神社",
+          "timestamp": "9:00",
+          "endSeconds": 570,
+          "startLabel": "9:00",
+          "startSeconds": 540,
+          "locationHints": [
+            "八坂神社"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_8",
+          "text": "📍伏見稻荷大社",
+          "foods": [],
+          "title": "伏見稻荷大社",
+          "summary": "📍伏見稻荷大社",
+          "timestamp": "10:00",
+          "endSeconds": 630,
+          "startLabel": "10:00",
+          "startSeconds": 600,
+          "locationHints": [
+            "伏見稻荷大社"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的京都旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_X_SpsfNuqjk",
+      "videoId": "X_SpsfNuqjk",
+      "title": "【京都自由行】4天3夜懶人包行程，不用做功課了！看完這支影片就出發",
+      "thumbnail": "https://i.ytimg.com/vi/X_SpsfNuqjk/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=X_SpsfNuqjk",
+      "duration": "1:14:31",
+      "summary": "影片提到京都站、清水寺、嵐山等地點，以及麺匠 たか松、抹茶麵包店-mogmog Bakery、中村藤吉 宇治本店等食物。",
+      "description": "喜歡這支影片的話，請按下「訂閱」支持我們😊以及按讚/分享給朋友喔👍\n✅免費訂閱：https://www.youtube.com/c/創世小夫妻\n➖➖➖➖➖\n【圖文懶人包】也幫你整理好囉👇前往粉絲團免費領取\nFacebook：https://www.facebook.com/rs23cp\nInstagram：https://www.instagram.com/rs23cp\n➖➖➖➖➖\n【日本自由行推薦票券】\n🔸HARUKA優惠車票(機場→京都)：https://rs23cp.pse.is/5lgca8\n🔸南海電鐵優惠車票(機場→難波)：https://rs23cp.pse.is/5mrtpe\n🔸關西機場行李寄送到飯店：https://rs23cp.pse.is/7b9kyd\n🔸京都天橋立一日遊(伊根灣遊船・天橋立・美山茅草屋)：https://rs23cp.pse.is/7b9kmp\n🔸大阪周遊卡(1~2日遊推薦)：https://rs23cp.pse.is/5lg8yy\n🔸日本環球影城(門票+任天堂入園)：https://rs23cp.pse.is/5natvw\n🔸日本環球影城(VIP包團體驗)：https://rs23cp.pse.is/8y5aku\n\n🎁KKday折扣碼(滿1,500享94 折)：FU7TRAVE94\n\n🛌住宿/機票比價 \n🏨SAKURA TERRACE THE ATELIER：https://rs23cp.pse.is/7jsw8t\n✈️京都機票(一鍵搜尋低價機票)：https://www.trip.com/t/2DsSOr1uOQ2\n\n【資料查詢】\n🔸京都站行李寄送的飯店查詢：https://kyoto.handsfree-japan.com/zh-hant/service/carry/list/\n🔸京都站置物櫃狀況：https://www.akilocker.biz/mobile/area.html?locationId=JR_KYOTO\n\n🌏更多旅遊靈感/票券搜尋\n(如果你正好要規劃其他旅行，點擊下方連結預訂，支持我們創作更多影片❤️) \n📍 KKday：https://rs23cp.pse.is/8gle49\n📍 Klook：https://rs23cp.pse.is/8gleps \n➖➖➖➖➖\nDay1\n00:00 精采預告\n00:30 第一天行程\n00:43 關西機場交通比較表\n02:25 JR/南海電鐵/人工購票處\n03:08 HARUKA取票方式(綠色機器)\n04:04 HARUKA指定席劃位(綠色機器)\n05:31 HARUKA白色機器取票\n06:24 綠色機器&白色機器差異\n06:51 HARUKA優惠票注意事項\n07:10 關西機場限定ICOCA卡-風神雷神\n07:48 進站方式\n08:40 介紹HARUKA車廂\n09:18 巴士搭乘方法\n09:54 京都車站\n10:13 京都車站-JR售票區\n10:55 京都巴士-搭乘教學\n11:51 京都巴士-付款方式\n13:07 清水寺交通方式\n13:35 京都觀光特急巴士\n14:04 地下鐵/巴士一日券\n14:40 京都車站-行李寄送\n15:38 京都車站-寄物櫃\n16:58 京都車站-拉麵小路\n17:32 京都車站-瀑布樓梯燈光秀\n18:45 拉麵小路-麺匠 たか松\n19:35 京都塔-最佳拍照點\n20:09 京都車站住宿-SAKURA TERRACE THE ATELIER\n21:52 超市-KOHYO京都店\n\nDay2\n22:31 第二天行程\n22:41 京都車站-JR交通方式\n23:09 伏見稻荷大社\n23:56 千本鳥居\n25:00 奧社奉拜所\n25:24 白狐繪馬\n26:52 輕重石\n27:16 伏見稻荷美食\n28:42 果菓 伊藤軒\n28:18 京都宇治\n28:34 抹茶麵包店-mogmog Bakery\n29:43 中村藤吉 宇治本店\n32:06 平等院\n32:44 心得分享\n34:29 宇治超市-Appro宇治店\n\nDay3\n35:21 第三天行程\n35:28 京都車站-JR交通方式\n36:33 嵐山天龍寺\n38:04 天龍寺平和觀音\n38:54 嵐山竹林小徑\n40:27 野宮神社\n40:59 こだわり卵専門店 たまごや\n42:20 YOJIYA CAFE\n43:23 中村屋\n44:15 パンとエスプレッソと嵐山庭園\n45:31 良彌 本通り店\n46:29 嵐山渡月橋\n\nDay4\n47:21 第四天行程\n47:32 和服換裝\n47:44 和服攝影聖地-白川筋\n48:19 大阪燒始祖-壹錢洋食\n49:53 良緣祈願石-安井金比羅宮\n51:36 抹茶蒙布朗-豆八茶屋\n51:56 網美必拍景點-八坂庚申堂\n52:32 五重塔絕佳拍照地\n52:51 清水寺商店街\n53:33 祇園祭起源地-八坂神社\n54:14 如何挑選和服店\n56:09 穿和服注意事項\n56:57 我的真實心得\n59:01 京都鴨川-四条大橋\n59:44 新京極商店街\n1:00:39 幸福鬆餅(京都店)\n1:02:52 京都車站伴手禮\n1:03:22 京都伴手禮-第5名\n1:05:32 京都伴手禮-第4名\n1:07:18 京都伴手禮-第3名\n1:09:41 京都伴手禮-第2名\n1:11:42 京都伴手禮-第1名\n1:13:45 最推薦的京都伴手禮\n➖➖➖➖➖\n【跟著創世小夫妻，體驗世界的美好🌎】\n🇯🇵〔日本/大阪〕：https://www.youtube.com/playlist?list=PLch1NDkEERau6gs8R1m9Ln8DMS0bk8MRZ\n🇯🇵〔日本/京都〕：https://youtube.com/playlist?list=PLch1NDkEERasuq4Gyvdp6sR_QD6AXJeHW\n🇯🇵〔日本/東京〕：https://www.youtube.com/playlist?list=PLch1NDkEERasM8m7si2NS5l5QU7wHoluD\n🇯🇵〔日本/東北.中部〕：https://www.youtube.com/playlist?list=PLch1NDkEERavq_IGrdNWovVoawGOCM3ve\n🇹🇭〔泰國/曼谷〕：https://www.youtube.com/playlist?list=PLch1NDkEERauCg7skRr1Dq3gR0inb7U8X\n🇻🇳〔越南/峴港〕：https://www.youtube.com/playlist?list=PLch1NDkEERav8O6xizTPDcLT-M7VIw36U\n🇳🇿〔紐西蘭〕：https://www.youtube.com/playlist?list=PLch1NDkEERasVVpaWW7NJGsGVIbEjK_jb\n🇵🇭〔宿霧/薄荷島/長灘島〕：https://www.youtube.com/playlist?list=PLch1NDkEERauCtluYW-5wVp7AnY9o5nI3\n➖➖➖➖➖\n\n#京都 #京都自由行 #京都車站 #清水寺 #嵐山 #稻荷 #宇治 #祇園 #京都美食 #京都景點 #京都一日遊 #京都伴手禮 #京都和服",
+      "source": "youtube-data-api",
+      "channelTitle": "創世小夫妻 / Fu7 Travel",
+      "publishedAt": "2024-09-26T10:00:38Z",
+      "timestamps": [
+        {
+          "time": "21:40",
+          "label": "清水寺"
+        },
+        {
+          "time": "23:00",
+          "label": "京都站"
+        },
+        {
+          "time": "38:10",
+          "label": "伏見稻荷大社"
+        },
+        {
+          "time": "53:26",
+          "label": "平等院"
+        },
+        {
+          "time": "58:50",
+          "label": "嵐山"
+        },
+        {
+          "time": "85:36",
+          "label": "豆八茶屋"
+        },
+        {
+          "time": "87:12",
+          "label": "八坂庚申堂"
+        },
+        {
+          "time": "87:31",
+          "label": "五重塔"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 34.985849,
+          "lng": 135.7587667,
+          "raw": "京都站",
+          "name": "京都站",
+          "address": "Kyoto Station, Higashishiokōji Kamadonochō, Shimogyo Ward, Kyoto, 600-8216, Japan",
+          "placeId": "ChIJ7wKLka4IAWARCByidG5EGrY",
+          "rawQuery": "京都站",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "京都站",
+          "rawMention": "京都站",
+          "cleanedName": "京都站",
+          "description": "京都車站",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "京都站",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.9946662,
+          "lng": 135.784661,
+          "raw": "清水寺",
+          "name": "清水寺",
+          "address": "1-chōme-294 Kiyomizu, Higashiyama Ward, Kyoto, 605-0862, Japan",
+          "placeId": "ChIJB_vchdMIAWARujTEUIZlr2I",
+          "rawQuery": "清水寺",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "清水寺",
+          "rawMention": "清水寺",
+          "cleanedName": "清水寺",
+          "description": "清水寺交通方式",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "清水寺",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.009449,
+          "lng": 135.666773,
+          "raw": "嵐山",
+          "name": "嵐山",
+          "address": "Arashiyama Genrokuzancho, Ukyo Ward, Kyoto, 616-0007, Japan",
+          "placeId": "ChIJ49PvUVQHAWARTAF7WU_Wqqs",
+          "rawQuery": "嵐山",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "嵐山",
+          "rawMention": "嵐山",
+          "cleanedName": "嵐山",
+          "description": "嵐山天龍寺",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "嵐山",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.9676945,
+          "lng": 135.7791876,
+          "raw": "伏見稻荷大社",
+          "name": "伏見稻荷大社",
+          "address": "68 Fukakusa Yabunouchichō, Fushimi Ward, Kyoto, 612-0882, Japan",
+          "placeId": "ChIJIW0uPRUPAWAR6eI6dRzKGns",
+          "rawQuery": "伏見稻荷大社",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "伏見稻荷大社",
+          "rawMention": "伏見稻荷大社",
+          "cleanedName": "伏見稻荷大社",
+          "description": "伏見稻荷大社",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "伏見稻荷大社",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.8892908,
+          "lng": 135.8076783,
+          "raw": "平等院",
+          "name": "平等院",
+          "address": "Renge-116 Uji, Kyoto 611-0021, Japan",
+          "placeId": "ChIJqyva4AwRAWARpAf6j5MUhGA",
+          "rawQuery": "平等院",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "平等院",
+          "rawMention": "平等院",
+          "cleanedName": "平等院",
+          "description": "平等院",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "平等院",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.0036559,
+          "lng": 135.7785534,
+          "raw": "八坂神社",
+          "name": "八坂神社",
+          "address": "625 Gionmachi Kitagawa, Higashiyama Ward, Kyoto, 605-0073, Japan",
+          "placeId": "ChIJqewQoHkIAWAR6RokWp3Iesc",
+          "rawQuery": "八坂神社",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "八坂神社",
+          "rawMention": "八坂神社",
+          "cleanedName": "八坂神社",
+          "description": "祇園祭起源地-八坂神社",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "八坂神社",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.9994181,
+          "lng": 135.7775187,
+          "raw": "豆八茶屋",
+          "name": "豆八茶屋",
+          "address": "49 Shimobentenchō, Higashiyama Ward, Kyoto, 605-0823, Japan",
+          "placeId": "ChIJ_Y4hvFAJAWAR2EF2dFJPpnc",
+          "rawQuery": "豆八茶屋",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "豆八茶屋",
+          "rawMention": "豆八茶屋",
+          "cleanedName": "豆八茶屋",
+          "description": "抹茶蒙布朗-豆八茶屋",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "豆八茶屋",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.9983244,
+          "lng": 135.7787304,
+          "raw": "八坂庚申堂",
+          "name": "八坂庚申堂",
+          "address": "390 Kinenchō, Higashiyama Ward, Kyoto, 605-0828, Japan",
+          "placeId": "ChIJ6fuSfMUIAWAR-kwXbOvpNZg",
+          "rawQuery": "八坂庚申堂",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "八坂庚申堂",
+          "rawMention": "八坂庚申堂",
+          "cleanedName": "八坂庚申堂",
+          "description": "網美必拍景點-八坂庚申堂",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "八坂庚申堂",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.9798927,
+          "lng": 135.7487126,
+          "raw": "五重塔",
+          "name": "五重塔",
+          "address": "1 Kujōchō, Minami Ward, Kyoto, 601-8473, Japan",
+          "placeId": "ChIJf4SuYQEGAWARC9WOJnjQe6c",
+          "rawQuery": "五重塔",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "五重塔",
+          "rawMention": "五重塔",
+          "cleanedName": "五重塔",
+          "description": "五重塔絕佳拍照地",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "五重塔",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.0037816,
+          "lng": 135.777245,
+          "raw": "祇園",
+          "name": "祇園",
+          "address": "Gion, Higashiyama Ward, Kyoto, Japan",
+          "placeId": "ChIJZ3vGwcMIAWARtO-YE6oEyw0",
+          "rawQuery": "祇園",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "祇園",
+          "rawMention": "祇園",
+          "cleanedName": "祇園",
+          "description": "祇園祭起源地-八坂神社",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "祇園",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [
+        "麺匠 たか松",
+        "抹茶麵包店-mogmog Bakery",
+        "中村藤吉 宇治本店",
+        "果菓 伊藤軒",
+        "こだわり卵専門店 たまごや",
+        "YOJIYA CAFE",
+        "中村屋",
+        "良彌 本通り店"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "清水寺交通方式",
+          "foods": [],
+          "title": "清水寺",
+          "summary": "清水寺交通方式",
+          "timestamp": "21:40",
+          "endSeconds": 1330,
+          "startLabel": "21:40",
+          "startSeconds": 1300,
+          "locationHints": [
+            "清水寺"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "京都車站",
+          "foods": [],
+          "title": "京都站",
+          "summary": "京都車站",
+          "timestamp": "23:00",
+          "endSeconds": 1410,
+          "startLabel": "23:00",
+          "startSeconds": 1380,
+          "locationHints": [
+            "京都站"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "伏見稻荷大社",
+          "foods": [],
+          "title": "伏見稻荷大社",
+          "summary": "伏見稻荷大社",
+          "timestamp": "38:10",
+          "endSeconds": 2320,
+          "startLabel": "38:10",
+          "startSeconds": 2290,
+          "locationHints": [
+            "伏見稻荷大社"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_4",
+          "text": "平等院",
+          "foods": [
+            "中村藤吉 宇治本店"
+          ],
+          "title": "平等院",
+          "summary": "平等院",
+          "timestamp": "53:26",
+          "endSeconds": 3236,
+          "startLabel": "53:26",
+          "startSeconds": 3206,
+          "locationHints": [
+            "平等院"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_5",
+          "text": "嵐山天龍寺",
+          "foods": [],
+          "title": "嵐山",
+          "summary": "嵐山天龍寺",
+          "timestamp": "58:50",
+          "endSeconds": 3560,
+          "startLabel": "58:50",
+          "startSeconds": 3530,
+          "locationHints": [
+            "嵐山"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_6",
+          "text": "抹茶蒙布朗-豆八茶屋",
+          "foods": [],
+          "title": "豆八茶屋",
+          "summary": "抹茶蒙布朗-豆八茶屋",
+          "timestamp": "85:36",
+          "endSeconds": 5166,
+          "startLabel": "85:36",
+          "startSeconds": 5136,
+          "locationHints": [
+            "豆八茶屋"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_7",
+          "text": "網美必拍景點-八坂庚申堂",
+          "foods": [],
+          "title": "八坂庚申堂",
+          "summary": "網美必拍景點-八坂庚申堂",
+          "timestamp": "87:12",
+          "endSeconds": 5262,
+          "startLabel": "87:12",
+          "startSeconds": 5232,
+          "locationHints": [
+            "八坂庚申堂"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_8",
+          "text": "五重塔絕佳拍照地",
+          "foods": [],
+          "title": "五重塔",
+          "summary": "五重塔絕佳拍照地",
+          "timestamp": "87:31",
+          "endSeconds": 5281,
+          "startLabel": "87:31",
+          "startSeconds": 5251,
+          "locationHints": [
+            "五重塔"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的京都旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_BFRbrp2CNVI",
+      "videoId": "BFRbrp2CNVI",
+      "title": "京都6日深度自由行｜交通攻略・錦市場美食・清水寺週邊散步・和服寫真＆攝影師預約｜上集 - 彭彭daily note",
+      "thumbnail": "https://i.ytimg.com/vi/BFRbrp2CNVI/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=BFRbrp2CNVI",
+      "duration": "16:20",
+      "summary": "影片提到錦市場、清水寺、京都車站等地點，以及抹茶、京都早餐等食物。",
+      "description": "Hi~~~大家好，我是彭彭\n這次的京都自由行玩了整整 6 天！\n全程都住在京都車站旁邊的飯店，走路 200 公尺就到了，超方便!!\n\n還有厲害的抹茶小店，跟高質感的京都早餐\n穿上美麗的和服，和攝影師約拍，在清水寺周邊好好走了一圈\n最後回到京都車站，逛旁邊百貨公司，一站式購物完全不用淋雨！\n雨天備案也能玩得開心❤️\n\n📍本集景點有：\n錦市場美食吃吃吃\n清水寺散步＋和服寫真\n京都車站＆百貨逛街攻略\n京都機場來回+當地公車分享！\n\n*感謝網友糾正*\n祇園白川口誤: \"春天\"才有櫻花\n清水寺逛街口誤: 不是\"八橋\"，正確的是\"生八橋\"\n\n📌 下集預告：嵐山半日遊(竹林之道/野宮神社/天龍寺/渡月橋)\n伏見稻何大社、京都拉麵小路一條街\n金閣寺、銀閣寺、二條城、北野天滿宮、平安神宮、三十三間堂通通來！\n\n✿ ✿  εїз ✿ ✿ ✿  εїз ✿ ✿ \n記得訂閱頻道: https://www.youtube.com/@tinaaa0903\n更多旅遊Vlog、生活分享都在這裡！\n✿ ✿  εїз ✿ ✿ ✿  εїз ✿ ✿ \n\n00:00 INTRO\n00:24 機場到京都的交通\n01:33 京都車站到飯店的交通(距離200公尺!!!)\n02:24 錦市場\n03:57 鴨川/祇園(厲害的抹茶小店)\n05:53 回飯店/便利商店購物\n06:20 京都車站(厲害的京都早餐)\n06:58 公車-清水寺穿和服(含浴衣/寫真價格)\n08:40 八坂之塔吃午餐+清水寺周邊逛街(二年坂三年坂)\n10:22 清水寺\n11:32 清水寺周邊逛街(二年坂三年坂)\n14:30 公車回京都車站逛百貨(有推薦的餐廳)\n15:45 下集內容預告\n\n🧡其它日本VLOG 🇯🇵\nhttps://youtu.be/ihuxLcL2VP0\nhttps://youtu.be/Rn16PrfHT0w\nhttps://youtu.be/1x9F4EsnF2o\nhttps://youtu.be/BvPUuGsTpHg\nhttps://youtu.be/VppU62HDrSY\n\n\n𝄢 ♫ ♪ ♬ ♯\nSingle Love Bombed - https://thmatc.co/?l=F7F1066E\nBitter Taste Of You - https://thmatc.co/?l=894DB3CF\neveryday with you - https://thmatc.co/?l=2B20F828\nCozy Snow - https://thmatc.co/?l=69AEC1B4\n\"Yoitrax - Ronin\" is under a Creative Commons (BY 3.0) license:\nhttps://creativecommons.org/licenses/...\n   / @yoitrax9012  \nMusic powered by BreakingCopyright:    • 'Ronin' by Jantrax | Japanese 🗾 Trap Music...  \n\n🔔 記得開啟小鈴鐺～下支影片見👋\n\n#京都#京都自由行#祇園#京都下午茶#京都抹茶#清水寺#八坂之塔#五重塔#法觀寺#京都和服#京都車站#yodobashi #京都塔#京都交通#親子旅行#和服寫真#京都必去景點 #旅遊Vlog#日本景點",
+      "source": "youtube-data-api",
+      "channelTitle": "彭彭daily note",
+      "publishedAt": "2025-07-22T11:15:06Z",
+      "timestamps": [
+        {
+          "time": "2:00",
+          "label": "京都車站"
+        },
+        {
+          "time": "3:00",
+          "label": "錦市場"
+        },
+        {
+          "time": "3:00",
+          "label": "祇園"
+        },
+        {
+          "time": "5:06",
+          "label": "清水寺"
+        },
+        {
+          "time": "5:32",
+          "label": "二年坂"
+        },
+        {
+          "time": "5:32",
+          "label": "三年坂"
+        },
+        {
+          "time": "5:40",
+          "label": "八坂之塔"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 35.0050258,
+          "lng": 135.764723,
+          "raw": "錦市場",
+          "name": "錦市場",
+          "address": "Higashiuoyacho, Nakagyo Ward, Kyoto, 604-8055, Japan",
+          "placeId": "ChIJT8uMzZwIAWARnGzsARCjnrY",
+          "rawQuery": "錦市場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "錦市場",
+          "rawMention": "錦市場",
+          "cleanedName": "錦市場",
+          "description": "這次的京都自由行玩了整整 6 天！還有厲害的抹茶小店，跟高質感的京都早餐 穿上美麗的和服，和攝影師約拍，在清水寺周邊好好走了一圈 最後回到京都車站，逛旁邊百貨公司，一站式購物完全不用淋雨！",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "錦市場",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.9946662,
+          "lng": 135.784661,
+          "raw": "清水寺",
+          "name": "清水寺",
+          "address": "1-chōme-294 Kiyomizu, Higashiyama Ward, Kyoto, 605-0862, Japan",
+          "placeId": "ChIJB_vchdMIAWARujTEUIZlr2I",
+          "rawQuery": "清水寺",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "清水寺",
+          "rawMention": "清水寺",
+          "cleanedName": "清水寺",
+          "description": "穿和服(含浴衣/寫真價格) 在清水寺周邊逛街(二年坂三年坂",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "清水寺",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.985849,
+          "lng": 135.7587667,
+          "raw": "京都車站",
+          "name": "京都車站",
+          "address": "Kyoto Station, Higashishiokōji Kamadonochō, Shimogyo Ward, Kyoto, 600-8216, Japan",
+          "placeId": "ChIJ7wKLka4IAWARCByidG5EGrY",
+          "rawQuery": "京都車站",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "京都車站",
+          "rawMention": "京都車站",
+          "cleanedName": "京都車站",
+          "description": "全程都住在京都車站旁邊的飯店，走路 200 公尺就到了，超方便!! 最後回到京都車站，逛旁邊百貨公司，一站式購物完全不用淋雨！",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "京都車站",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.0037816,
+          "lng": 135.777245,
+          "raw": "祇園",
+          "name": "祇園",
+          "address": "Gion, Higashiyama Ward, Kyoto, Japan",
+          "placeId": "ChIJZ3vGwcMIAWARtO-YE6oEyw0",
+          "rawQuery": "祇園",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "祇園",
+          "rawMention": "祇園",
+          "cleanedName": "祇園",
+          "description": "還有厲害的抹茶小店，跟高質感的京都早餐 穿上美麗的和服，和攝影師約拍，在清水寺周邊好好走了一圈",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "祇園",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.998558,
+          "lng": 135.7792358,
+          "raw": "八坂之塔",
+          "name": "八坂之塔",
+          "address": "Japan, 〒605-0862 Kyoto, Higashiyama Ward, 清水八坂上町３８８",
+          "placeId": "ChIJIcT4YMUIAWARSTUi4EEky7E",
+          "rawQuery": "八坂之塔",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "八坂之塔",
+          "rawMention": "八坂之塔",
+          "cleanedName": "八坂之塔",
+          "description": "吃午餐+清水寺周邊逛街(二年坂三年坂",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "八坂之塔",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.9986043,
+          "lng": 135.7808222,
+          "raw": "二年坂",
+          "name": "二年坂",
+          "address": "Ninen Zaka Path, Higashiyama Ward, Kyoto, Japan",
+          "placeId": "ChIJqZsSA9AIAWARewnW_cioTog",
+          "rawQuery": "二年坂",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "二年坂",
+          "rawMention": "二年坂",
+          "cleanedName": "二年坂",
+          "description": "清水寺周邊逛街(二年坂三年坂",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "二年坂",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 34.9986043,
+          "lng": 135.7808222,
+          "raw": "三年坂",
+          "name": "三年坂",
+          "address": "Ninen Zaka Path, Higashiyama Ward, Kyoto, Japan",
+          "placeId": "ChIJqZsSA9AIAWARewnW_cioTog",
+          "rawQuery": "三年坂",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "三年坂",
+          "rawMention": "三年坂",
+          "cleanedName": "三年坂",
+          "description": "清水寺周邊逛街(二年坂三年坂",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "三年坂",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [
+        "抹茶",
+        "京都早餐"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "全程都住在京都車站旁邊的飯店，走路 200 公尺就到了，超方便!! 最後回到京都車站，逛旁邊百貨公司，一站式購物完全不用淋雨！",
+          "foods": [
+            "抹茶",
+            "京都早餐"
+          ],
+          "title": "京都車站",
+          "summary": "全程都住在京都車站旁邊的飯店，走路 200 公尺就到了，超方便!! 最後回到京都車站，逛旁邊百貨公司，一站式購物完全不用淋雨！",
+          "timestamp": "2:00",
+          "endSeconds": 150,
+          "startLabel": "2:00",
+          "startSeconds": 120,
+          "locationHints": [
+            "京都車站"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "這次的京都自由行玩了整整 6 天！還有厲害的抹茶小店，跟高質感的京都早餐 穿上美麗的和服，和攝影師約拍，在清水寺周邊好好走了一圈 最後回到京都車站，逛旁邊百貨公司，一站式購物完全不用淋雨！",
+          "foods": [
+            "抹茶",
+            "京都早餐"
+          ],
+          "title": "錦市場",
+          "summary": "這次的京都自由行玩了整整 6 天！還有厲害的抹茶小店，跟高質感的京都早餐 穿上美麗的和服，和攝影師約拍，在清水寺周邊好好走了一圈 最後回到京都車站，逛旁邊百貨公司，一站式購物完全不用淋雨！",
+          "timestamp": "3:00",
+          "endSeconds": 210,
+          "startLabel": "3:00",
+          "startSeconds": 180,
+          "locationHints": [
+            "錦市場"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "還有厲害的抹茶小店，跟高質感的京都早餐 穿上美麗的和服，和攝影師約拍，在清水寺周邊好好走了一圈",
+          "foods": [
+            "抹茶",
+            "京都早餐"
+          ],
+          "title": "祇園",
+          "summary": "還有厲害的抹茶小店，跟高質感的京都早餐 穿上美麗的和服，和攝影師約拍，在清水寺周邊好好走了一圈",
+          "timestamp": "3:00",
+          "endSeconds": 210,
+          "startLabel": "3:00",
+          "startSeconds": 180,
+          "locationHints": [
+            "祇園"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_4",
+          "text": "穿和服(含浴衣/寫真價格) 在清水寺周邊逛街(二年坂三年坂",
+          "foods": [],
+          "title": "清水寺",
+          "summary": "穿和服(含浴衣/寫真價格) 在清水寺周邊逛街(二年坂三年坂",
+          "timestamp": "5:06",
+          "endSeconds": 336,
+          "startLabel": "5:06",
+          "startSeconds": 306,
+          "locationHints": [
+            "清水寺"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_5",
+          "text": "清水寺周邊逛街(二年坂三年坂",
+          "foods": [],
+          "title": "二年坂",
+          "summary": "清水寺周邊逛街(二年坂三年坂",
+          "timestamp": "5:32",
+          "endSeconds": 362,
+          "startLabel": "5:32",
+          "startSeconds": 332,
+          "locationHints": [
+            "二年坂"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_6",
+          "text": "清水寺周邊逛街(二年坂三年坂",
+          "foods": [],
+          "title": "三年坂",
+          "summary": "清水寺周邊逛街(二年坂三年坂",
+          "timestamp": "5:32",
+          "endSeconds": 362,
+          "startLabel": "5:32",
+          "startSeconds": 332,
+          "locationHints": [
+            "三年坂"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_7",
+          "text": "吃午餐+清水寺周邊逛街(二年坂三年坂",
+          "foods": [],
+          "title": "八坂之塔",
+          "summary": "吃午餐+清水寺周邊逛街(二年坂三年坂",
+          "timestamp": "5:40",
+          "endSeconds": 370,
+          "startLabel": "5:40",
+          "startSeconds": 340,
+          "locationHints": [
+            "八坂之塔"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的京都旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_QaoBLbzdz-4",
+      "videoId": "QaoBLbzdz-4",
+      "title": "日本京都三天兩夜自由行快閃！2025年9月新飯店開箱！到嵐山搭屋形船？百年懷舊壽喜燒名店？被幸運之神眷顧？比印度還道地的烤餅？超華麗浮誇的冰淇淋？好吃好玩的逛街美食攻略！｜波妞食境秀",
+      "thumbnail": "https://i.ytimg.com/vi/QaoBLbzdz-4/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=QaoBLbzdz-4",
+      "duration": "1:23:58",
+      "summary": "此影片未擷取到明確地點或食物名稱。",
+      "description": "快閃到京都\n沒什麼計劃就是想到這個地方走走\n反而因為這樣意外發掘了很多小店和美食！\n還有我最愛的高速婆婆～\n#日本 #美食推薦 #京都美食 #美食 #日本美食 #京都 #嵐山\n===========================\n▼合作邀約/歡迎來信\nbonnyeatshow@gmail.com\n===========================\n🫦KLOOK專屬95折優惠碼：BONNYEAT(eSIM也能用！)\n🫦KKDAY專屬94折優惠碼：KAO94\n\n🏨agoda住宿訂房：https://linkgo.one/s/TRhE3\n🏨Booking住宿訂房：https://afflink.one/s/zfeok\n🏨Trip住宿訂房：https://linkgo.one/s/YPQqp\n✈️Kkday購票連結：https://afflink.one/s/PhpoI\n🌍Klook購票連結：https://onelink.one/s/iJiYt\n===========================\n住宿飯店資訊\n📍京都四條烏丸萬怡酒店 \n🌍https://maps.app.goo.gl/t5iXWGKfqDYP34u67?g_st=ic\n🚇四条站4號出口有電梯🛗，附近超商、超市、星巴克皆步行5分鐘的距離，走到四条河原町鬧區大概10分鐘\n\n我們這裡訂的：https://tinyurl.com/27a4y46n\n===========================\n📍London-ya（迷你饅頭）\n🌍https://maps.app.goo.gl/J9WnxiJDQCQsvAJEA?g_st=ic\n\n📍Sukiyaki Kimura（壽喜燒）\n🌍https://maps.app.goo.gl/KUfjBBLTXecoG7Jh9?g_st=ic\n\n📍koé donuts kyoto 甜甜圈\n🌍https://maps.app.goo.gl/nVX6sCGLDpZxH6566?g_st=ic\n\n📍B-SIDE LABEL 京都店（貼紙店)\n🌍https://maps.app.goo.gl/iZaJrNtBmjcuXnDf9?g_st=ic\n\n📍niko and... 京都寺町\n🌍https://maps.app.goo.gl/KY2UjJQPKcFd8rZr6?g_st=ic\n\n📍人参倶楽部 寺町店（扭到高速婆婆的轉蛋）\n🌍https://maps.app.goo.gl/XL2XA9Tp41is763c6?g_st=ic\n\n📍3COINS 京都寺町店\n🌍https://maps.app.goo.gl/U2ZFhuTXGXmwofQt6?g_st=ic\n\n📍Spice Cafe&Bar スバビハニ烏丸御池店 ~SHUBHA BIHANI~（很推薦的印度烤餅！）\n🌍https://maps.app.goo.gl/As7JDS1ZDCKrGmAy7?g_st=ic\n\n📍新風館 (Beams在這裡面，適合拍照)\n🌍https://maps.app.goo.gl/xzHjp3vrK6WSoCGH8?g_st=ic\n\n📍(THISIS)SHIZEN (浮誇的花冰淇淋)\n🌍https://maps.app.goo.gl/C1oBqMyfMQBNbEXG9?g_st=ic\n\n📍老松 嵐山店\n🌍https://maps.app.goo.gl/pC7hcMq39wCFaG4FA?g_st=ic\n\n📍Arashiyama Tsusen North Boarding Area (Yakatabune, Rental Boat) 屋形船1人¥1500 (僅能現金支付)\n🌍https://maps.app.goo.gl/iQP7Aopd3ypLePcD9?g_st=ic\n\n📍車折神社\n🌍https://share.google/e2gqi6mzjrNmOdnTd\n\n📍Kyoraku Yakiniku Yabu（和牛燒肉）\n🌍https://maps.app.goo.gl/sBCMnhJw8dtqC7YM6?g_st=ic\n\n📍Lorimer Kyoto Jr. (日式早餐)\n🌍https://maps.app.goo.gl/csGZ59WUTagkDj4w9?g_st=ic\n\n📍清水寺 (建議先搭計程車到茶碗坂再走上去)\n🌍https://share.google/CFFWcSol22h5h1YFq\n\n📍茶碗坂\n🌍https://share.google/nrrZzWaKGRQlXEe7Z\n\n📍八坂庚申堂 (金剛寺，有彩球的地方)\n🌍https://share.google/NrskfG73Gu7ve6JZZ\n\n===========================\n►更多美食系列◀︎\n跟著波妞到各縣市吃美食：https://reurl.cc/5OQmyy\n波妞帶你一起迺夜市吃美食：https://reurl.cc/edgrYM\n全聯美食開箱系列：https://reurl.cc/RygNVz\n超商賣場開箱系列：https://reurl.cc/jv2AK1\n===========================\n☑︎訂閱☑︎愛心☑︎留言☑︎分享☑︎開啟小鈴鐺\n週二週五上新影片就能第一時間收到通知囉！\n☞這裡訂閱波妞的頻道：https://reurl.cc/edopOW\n===========================\n►更多的波妞生活日常◀︎\n▼波妞的Instagram\n https://www.instagram.com/bonnyyyyyya/\n▼法鬥Ptio的Instagram\n https://www.instagram.com/impito0908/\n▼臉書粉絲團\n https://www.facebook.com/profile.php?id=100064190497423",
+      "source": "youtube-data-api",
+      "channelTitle": "波妞食境秀",
+      "publishedAt": "2025-09-23T10:00:48Z",
+      "timestamps": [],
+      "extractedLocations": [],
+      "extractedFoods": [],
+      "summarySegments": [],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的京都旅遊影片，含重點片段與地圖標點。"
+    }
+  ],
+  "validation": {
+    "requestedCount": 6,
+    "exportedCount": 5,
+    "passCount": 5,
+    "failCount": 1,
+    "errorCount": 0
+  }
+}

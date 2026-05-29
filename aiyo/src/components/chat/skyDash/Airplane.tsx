@@ -1,4 +1,4 @@
-import type { FC } from "react";
+import { memo, type FC } from "react";
 import { AIRPLANE_SIZE } from "./useGameEngine";
 
 interface AirplaneProps {
@@ -10,11 +10,12 @@ const Airplane: FC<AirplaneProps> = ({ y }) => {
     <div
       style={{
         position: "absolute",
-        top: y,
         left: 50,
+        top: 0,
         width: AIRPLANE_SIZE,
         height: AIRPLANE_SIZE,
-        transition: "transform 0.1s ease-out",
+        transform: `translateY(${y}px)`,
+        willChange: "transform",
         zIndex: 10,
       }}
     >
@@ -38,4 +39,4 @@ const Airplane: FC<AirplaneProps> = ({ y }) => {
   );
 };
 
-export default Airplane;
+export default memo(Airplane);

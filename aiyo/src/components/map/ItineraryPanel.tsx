@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "@/lib/motion";
 import {
   closestCenter,
   DndContext,
@@ -14,14 +14,16 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDown, ChevronUp, GripVertical, Loader2, MapPin, Plus, Search, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, MapPin, Plus, Search, Trash2, X } from "lucide-react";
 import type { ItineraryListItem } from "@/lib/itinerary-sort";
 import { zhTW as t } from "@/locales/zh-TW";
 import { buildItineraryRouteSegments } from "@/lib/routeSegments";
 import { getRegionalTransitOptions } from "@/lib/tripTransportRegion";
 import { cn } from "@/lib/utils";
 import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
+import { addPlaceToItinerary } from "@/lib/addPlaceToItinerary";
 import { findLinkedPinForItem } from "@/lib/mapPinItineraryLink";
+import ConfirmDialog from "@/components/system/ConfirmDialog";
 import { listTripsForLibrary, setActiveTrip } from "@/services/itineraryClient";
 import { syncService } from "@/services/syncService";
 import { useMapStore } from "@/stores/useMapStore";
@@ -73,18 +75,6 @@ function transportDisplayLabel(value: string, options: TransportSelectOption[]):
     mixed: t.itineraryPanel.transportMixed,
   };
   return labelByValue[normalized.replace(/[\s-]+/g, "_")] ?? trimmed;
-}
-
-function nextActivityTime(items: TripPlanItem[]): string {
-  const lastTime = [...items]
-    .reverse()
-    .map((item) => item.time?.slice(0, 5))
-    .find((value) => value && /^\d{2}:\d{2}$/.test(value));
-  if (!lastTime) {
-    return "16:00";
-  }
-  const [hour, minute] = lastTime.split(":").map(Number);
-  return `${String(Math.min(23, hour + 1)).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
 function buildPinFromItineraryItem(item: TripPlanItem, dayNumber: number): TripMapPin | null {
@@ -169,9 +159,22 @@ function SortableMapStop({
   };
 
   return (
-    <div ref={setNodeRef} style={style} className={cn(isDragging && "opacity-90 shadow-md")}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "touch-none cursor-grab active:cursor-grabbing",
+        isDragging && "opacity-90 shadow-md",
+      )}
+      {...attributes}
+      {...listeners}
+      aria-label={t.itineraryPanel.dragReorderAria}
+    >
       {incomingRoute && (
-        <div className="ml-5 rounded-xl border border-border-light bg-surface-elevated/60 px-3 py-2">
+        <div
+          className="ml-5 rounded-xl border border-border-light bg-surface-elevated/60 px-3 py-2"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
           <div className="flex items-center">
             <label className="sr-only" htmlFor={`transport_${incomingRoute.id}`}>
               {t.itineraryPanel.segmentTransport}
@@ -195,15 +198,6 @@ function SortableMapStop({
         </div>
       )}
       <div className="flex items-start gap-2">
-        <button
-          type="button"
-          className="mt-2 shrink-0 cursor-grab touch-none rounded-md p-1 text-muted hover:bg-border-light hover:text-foreground active:cursor-grabbing"
-          aria-label={t.itineraryPanel.dragReorderAria}
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="size-4" aria-hidden />
-        </button>
         <div
           role="button"
           tabIndex={canSelectOnMap ? 0 : -1}
@@ -235,6 +229,7 @@ function SortableMapStop({
                 id={`time_${item.id}`}
                 type="time"
                 value={item.time?.slice(0, 5) || "09:00"}
+                onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => event.stopPropagation()}
                 onChange={(event) => onTimeChange(event.target.value)}
                 className="w-[6.75rem] rounded-md border border-border-light bg-surface px-1.5 py-0.5 font-mono text-xs text-primary focus:outline-none focus:ring-2 focus:ring-primary/25"
@@ -253,6 +248,7 @@ function SortableMapStop({
                 value={editingTitle}
                 autoFocus
                 data-testid="itinerary-panel-title-input"
+                onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => event.stopPropagation()}
                 onChange={(event) => onTitleChange(event.target.value)}
                 onBlur={onCommitTitle}
@@ -289,6 +285,7 @@ function SortableMapStop({
               <button
                 type="button"
                 disabled={!canSelectOnMap}
+                onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.stopPropagation();
                   if (canSelectOnMap) {
@@ -312,6 +309,7 @@ function SortableMapStop({
           <button
             type="button"
             aria-label={`刪除活動：${item.title}`}
+            onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();
               onDelete();
@@ -340,9 +338,10 @@ function typeLabel(itemType: TripPlanItem["type"]) {
 
 type ItineraryPanelProps = {
   embedded?: boolean;
+  enablePoiAdd?: boolean;
 };
 
-export default function ItineraryPanel({ embedded = false }: ItineraryPanelProps) {
+export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }: ItineraryPanelProps) {
   const { status } = useSession();
   const itinerary = useTripStore((state) => state.itinerary);
   const tripTitle = useTripStore((state) => state.title);
@@ -353,13 +352,48 @@ export default function ItineraryPanel({ embedded = false }: ItineraryPanelProps
   const updateItineraryItemTransport = useTripStore((state) => state.updateItineraryItemTransport);
   const removeItineraryItem = useTripStore((state) => state.removeItineraryItem);
   const reorderItineraryItem = useTripStore((state) => state.reorderItineraryItem);
-  const { panelOpen, setPanelOpen, pins, selectedPinId, setSelectedPinId, removePin } = useMapStore();
+  const {
+    panelOpen,
+    setPanelOpen,
+    pins,
+    selectedPinId,
+    setSelectedPinId,
+    removePin,
+    setPreferredPoiDay,
+    pendingPoi,
+    preferredPoiDay,
+  } = useMapStore();
   const pushToast = useToastStore((state) => state.pushToast);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const [expandedDay, setExpandedDay] = useState<number>(1);
+
+  const prevPendingPoiRef = useRef(pendingPoi);
+
+  useEffect(() => {
+    if (enablePoiAdd) {
+      setPreferredPoiDay(expandedDay);
+    }
+  }, [enablePoiAdd, expandedDay, setPreferredPoiDay]);
+
+  useEffect(() => {
+    if (!enablePoiAdd) {
+      prevPendingPoiRef.current = pendingPoi;
+      return;
+    }
+    if (prevPendingPoiRef.current && !pendingPoi) {
+      setExpandedDay(preferredPoiDay);
+    }
+    prevPendingPoiRef.current = pendingPoi;
+  }, [enablePoiAdd, pendingPoi, preferredPoiDay]);
+  const [deleteItemTarget, setDeleteItemTarget] = useState<{
+    dayNumber: number;
+    itemId: string;
+    title: string;
+    linkedPinId: string | null;
+  } | null>(null);
   const [editingItem, setEditingItem] = useState<{ dayNumber: number; itemId: string; title: string } | null>(null);
   const manualItemCounter = useRef(0);
   const routeSegments = useMemo(() => buildItineraryRouteSegments(itinerary), [itinerary]);
@@ -446,8 +480,6 @@ export default function ItineraryPanel({ embedded = false }: ItineraryPanelProps
         throw new Error("找不到符合的地點。");
       }
 
-      const day = itinerary.find((entry) => entry.dayNumber === placeSearch.dayNumber);
-      const time = nextActivityTime(day?.items ?? []);
       manualItemCounter.current += 1;
       const id = `manual_${placeSearch.dayNumber}_${manualItemCounter.current}`;
       const location: LocationReference = {
@@ -469,46 +501,15 @@ export default function ItineraryPanel({ embedded = false }: ItineraryPanelProps
         rawQuery: query,
         verified: true,
       };
-      addItineraryItem(placeSearch.dayNumber, {
-        id,
+      addPlaceToItinerary({
         dayNumber: placeSearch.dayNumber,
-        time,
-        title: result.query || query,
-        type: "activity",
-        notes: result.formattedAddress,
+        itemId: id,
         location,
-        source: "manual",
+        title: result.query || query,
+        notes: result.formattedAddress,
       });
-      const pinId = `day_${placeSearch.dayNumber}_${id}`;
-      useMapStore.getState().setPins([
-        ...useMapStore.getState().pins.filter((pin) => pin.id !== pinId),
-        {
-          id: pinId,
-          name: location.name,
-          lat: location.lat,
-          lng: location.lng,
-          description: location.description,
-          address: location.address,
-          placeId: location.placeId,
-          photoUrl: location.photoUrl,
-          thumbnail: location.thumbnail,
-          openingHours: location.openingHours,
-          phoneNumber: location.phoneNumber,
-          website: location.website,
-          googleMapsUrl: location.googleMapsUrl,
-          rating: location.rating,
-          userRatingsTotal: location.userRatingsTotal,
-          source: "itinerary",
-          linkedTripItemId: id,
-          dayNumber: placeSearch.dayNumber,
-          color: "#5a7ea3",
-          verified: true,
-        },
-      ]);
-      setSelectedPinId(pinId);
       setExpandedDay(placeSearch.dayNumber);
       setPlaceSearch(null);
-      void syncService.flushTripSyncNow();
     } catch (error) {
       const message = error instanceof Error ? error.message : "新增活動失敗。";
       setPlaceSearch((current) => (current ? { ...current, loading: false, error: message } : current));
@@ -518,7 +519,7 @@ export default function ItineraryPanel({ embedded = false }: ItineraryPanelProps
         description: message,
       });
     }
-  }, [addItineraryItem, itinerary, placeSearch, pushToast, setSelectedPinId, tripDestination]);
+  }, [itinerary, placeSearch, pushToast, tripDestination]);
 
   const commitTitleEdit = useCallback(() => {
     if (!editingItem) {
@@ -551,9 +552,10 @@ export default function ItineraryPanel({ embedded = false }: ItineraryPanelProps
   );
 
   return (
+    <>
     <AnimatePresence>
       {isPanelVisible && (
-        <motion.div
+        <m.div
           initial={embedded ? undefined : { x: "100%", opacity: 0 }}
           animate={embedded ? undefined : { x: 0, opacity: 1 }}
           exit={embedded ? undefined : { x: "100%", opacity: 0 }}
@@ -612,14 +614,14 @@ export default function ItineraryPanel({ embedded = false }: ItineraryPanelProps
 
           <AnimatePresence>
             {tripPickerOpen && (
-              <motion.div
+              <m.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 className="absolute inset-0 z-30 flex flex-col bg-black/40"
                 onClick={() => { if (!tripSwitching) setTripPickerOpen(false); }}
               >
-                <motion.div
+                <m.div
                   initial={{ opacity: 0, y: -12 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -12 }}
@@ -690,14 +692,14 @@ export default function ItineraryPanel({ embedded = false }: ItineraryPanelProps
                       })
                     )}
                   </div>
-                </motion.div>
-              </motion.div>
+                </m.div>
+              </m.div>
             )}
           </AnimatePresence>
 
           <AnimatePresence>
             {placeSearch && (
-              <motion.div
+              <m.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -708,7 +710,7 @@ export default function ItineraryPanel({ embedded = false }: ItineraryPanelProps
                   }
                 }}
               >
-                <motion.form
+                <m.form
                   initial={{ opacity: 0, scale: 0.96, y: 10 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.96, y: 10 }}
@@ -775,8 +777,8 @@ export default function ItineraryPanel({ embedded = false }: ItineraryPanelProps
                       加入行程
                     </button>
                   </div>
-                </motion.form>
-              </motion.div>
+                </m.form>
+              </m.div>
             )}
           </AnimatePresence>
 
@@ -818,7 +820,7 @@ export default function ItineraryPanel({ embedded = false }: ItineraryPanelProps
 
                 <AnimatePresence>
                   {expandedDay === day.dayNumber && (
-                    <motion.div
+                    <m.div
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: "auto", opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
@@ -910,10 +912,12 @@ export default function ItineraryPanel({ embedded = false }: ItineraryPanelProps
                                     updateItineraryItem(day.dayNumber, item.id, { time: value })
                                   }
                                   onDelete={() => {
-                                    removeItineraryItem(day.dayNumber, item.id);
-                                    if (linkedPin) {
-                                      removePin(linkedPin.id);
-                                    }
+                                    setDeleteItemTarget({
+                                      dayNumber: day.dayNumber,
+                                      itemId: item.id,
+                                      title: item.title.trim() || t.itineraryPanel.newActivityTitle,
+                                      linkedPinId: linkedPin?.id ?? null,
+                                    });
                                   }}
                                 />
                               );
@@ -931,15 +935,40 @@ export default function ItineraryPanel({ embedded = false }: ItineraryPanelProps
                           {t.itineraryPanel.addLocalActivity}
                         </button>
                       </div>
-                    </motion.div>
+                    </m.div>
                   )}
                 </AnimatePresence>
               </div>
             ))}
           </div>
 
-        </motion.div>
+        </m.div>
       )}
     </AnimatePresence>
+
+      <ConfirmDialog
+        open={Boolean(deleteItemTarget)}
+        title={t.itineraryPage.deleteItemDialogTitle}
+        description={
+          deleteItemTarget
+            ? t.itineraryPage.deleteItemConfirm.replace("{name}", deleteItemTarget.title)
+            : ""
+        }
+        confirmLabel={t.itineraryPage.deleteItemConfirmAction}
+        cancelLabel={t.itineraryPage.deleteItemCancel}
+        variant="danger"
+        onCancel={() => setDeleteItemTarget(null)}
+        onConfirm={() => {
+          if (!deleteItemTarget) {
+            return;
+          }
+          removeItineraryItem(deleteItemTarget.dayNumber, deleteItemTarget.itemId);
+          if (deleteItemTarget.linkedPinId) {
+            removePin(deleteItemTarget.linkedPinId);
+          }
+          setDeleteItemTarget(null);
+        }}
+      />
+    </>
   );
 }

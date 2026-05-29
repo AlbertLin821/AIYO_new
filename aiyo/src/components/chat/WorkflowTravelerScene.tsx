@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import type { WorkflowPhaseKey } from "@/lib/workflowSteps";
 
@@ -22,7 +22,7 @@ function TravelerCharacter({
   const scale = compact ? 0.82 : 1;
 
   return (
-    <motion.div
+    <m.div
       className="relative origin-bottom"
       style={{ scale }}
       animate={
@@ -57,15 +57,15 @@ function TravelerCharacter({
         <circle cx="20" cy="17" r="2" fill="#fda4af" fillOpacity="0.45" />
         <circle cx="32" cy="17" r="2" fill="#fda4af" fillOpacity="0.45" />
         {mode === "wave" ? (
-          <motion.g
+          <m.g
             animate={{ rotate: [0, 18, 0, 18, 0] }}
             transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
             style={{ transformOrigin: "36px 30px" }}
           >
             <rect x="34" y="26" width="5" height="12" rx="2.5" fill="#f8d4b8" transform="rotate(-12 36 32)" />
-          </motion.g>
+          </m.g>
         ) : null}
-        <motion.g
+        <m.g
           animate={mode === "walk" ? { rotate: [22, -12, 22] } : { rotate: 8 }}
           transition={
             mode === "walk"
@@ -75,8 +75,8 @@ function TravelerCharacter({
           style={{ transformOrigin: "18px 40px" }}
         >
           <rect x="14" y="38" width="7" height="14" rx="3.5" fill="#4a6d91" />
-        </motion.g>
-        <motion.g
+        </m.g>
+        <m.g
           animate={mode === "walk" ? { rotate: [-12, 22, -12] } : { rotate: -8 }}
           transition={
             mode === "walk"
@@ -86,9 +86,9 @@ function TravelerCharacter({
           style={{ transformOrigin: "34px 40px" }}
         >
           <rect x="30" y="38" width="7" height="14" rx="3.5" fill="#4a6d91" />
-        </motion.g>
+        </m.g>
         {mode === "celebrate" ? (
-          <motion.path
+          <m.path
             d="M8 8l3 3M44 10l-3 3M26 2v4"
             stroke="#f59e0b"
             strokeWidth="2"
@@ -101,7 +101,7 @@ function TravelerCharacter({
           <rect x="8" y="30" width="10" height="12" rx="3" fill="#d97706" stroke="#b45309" strokeWidth="1" />
         ) : null}
       </svg>
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -139,7 +139,7 @@ export default function WorkflowTravelerScene({
   const isWalking = mode === "walk";
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.28 }}
@@ -150,25 +150,25 @@ export default function WorkflowTravelerScene({
       )}
       aria-hidden
     >
-      <motion.div
+      <m.div
         className="pointer-events-none absolute -right-6 top-2 size-16 rounded-full bg-white/50 blur-xl"
         animate={{ x: [0, 8, 0], opacity: [0.5, 0.8, 0.5] }}
         transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
       />
-      <motion.div
+      <m.div
         className="pointer-events-none absolute -left-4 bottom-1 size-12 rounded-full bg-primary/10 blur-lg"
         animate={{ x: [0, -6, 0] }}
         transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
       />
 
       <div className={cn("flex items-center gap-3", compact ? "min-h-[72px]" : "min-h-[88px]")}>
-        <motion.div
+        <m.div
           className="relative min-w-0 flex-1"
           style={{ height: compact ? 56 : 64 }}
         >
           <div className="absolute inset-x-0 bottom-2 h-2 overflow-hidden rounded-full bg-white/80">
             <div className="h-full w-full bg-[repeating-linear-gradient(90deg,#cbd5e1_0,#cbd5e1_6px,transparent_6px,transparent_12px)] opacity-60" />
-            <motion.div
+            <m.div
               className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-primary/30 to-primary/50"
               initial={{ width: 0 }}
               animate={{ width: `${clampedProgress}%` }}
@@ -176,16 +176,16 @@ export default function WorkflowTravelerScene({
             />
           </div>
 
-          <motion.div
+          <m.div
             className="absolute bottom-0 z-10"
             style={{ left: `calc(${clampedProgress}% - ${compact ? 22 : 26}px)` }}
             animate={isWalking ? { x: [0, 2, 0, -2, 0] } : undefined}
             transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
           >
             <TravelerCharacter mode={mode} compact={compact} />
-          </motion.div>
+          </m.div>
 
-          <motion.div
+          <m.div
             className="absolute bottom-5 opacity-70"
             style={{ left: "12%" }}
             animate={{ y: [0, -2, 0] }}
@@ -197,8 +197,8 @@ export default function WorkflowTravelerScene({
               <ellipse cx="18" cy="10" rx="9" ry="6" fill="#f8fafc" />
               <ellipse cx="14" cy="8" rx="7" ry="5" fill="#fff" />
             </svg>
-          </motion.div>
-          <motion.div
+          </m.div>
+          <m.div
             className="absolute bottom-4 opacity-65"
             style={{ right: "16%" }}
             animate={{ y: [0, -3, 0] }}
@@ -211,8 +211,8 @@ export default function WorkflowTravelerScene({
               <circle cx="6" cy="8" r="5" fill="#4ade80" fillOpacity="0.7" />
               <circle cx="12" cy="7" r="5" fill="#bbf7d0" fillOpacity="0.8" />
             </svg>
-          </motion.div>
-        </motion.div>
+          </m.div>
+        </m.div>
 
         {!compact ? (
           <p className="max-w-[7.5rem] shrink-0 text-[11px] leading-4 text-primary/90">
@@ -220,6 +220,6 @@ export default function WorkflowTravelerScene({
           </p>
         ) : null}
       </div>
-    </motion.div>
+    </m.div>
   );
 }
