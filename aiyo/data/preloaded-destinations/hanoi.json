@@ -12,7 +12,7 @@
     "景點",
     "懶人包"
   ],
-  "generatedAt": "2026-05-29T04:21:27.419Z",
+  "generatedAt": "2026-05-29T07:15:29.618Z",
   "pipelineVersion": "preloaded-seed-v1",
   "videos": [
     {
@@ -867,9 +867,6 @@
   ],
   "validation": {
     "requestedCount": 6,
-    "exportedCount": 3,
-    "passCount": 3,
-    "failCount": 3,
-    "errorCount": 0
+    "exportedCount": 3
   }
 }

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-29T04:23:39.275Z",
+  "generatedAt": "2026-05-29T07:30:37.784Z",
   "pipelineVersion": "preloaded-seed-v1",
   "destinations": [
     {
@@ -22,6 +22,12 @@
       "videoCount": 6
     },
     {
+      "id": "dubai",
+      "destinationHint": "杜拜",
+      "file": "dubai.json",
+      "videoCount": 5
+    },
+    {
       "id": "hanoi",
       "destinationHint": "河內",
       "file": "hanoi.json",
@@ -31,13 +37,13 @@
       "id": "ho-chi-minh",
       "destinationHint": "胡志明市",
       "file": "ho-chi-minh.json",
-      "videoCount": 5
+      "videoCount": 6
     },
     {
       "id": "hong-kong",
       "destinationHint": "香港",
       "file": "hong-kong.json",
-      "videoCount": 5
+      "videoCount": 4
     },
     {
       "id": "kuala-lumpur",
@@ -49,25 +55,25 @@
       "id": "kyoto",
       "destinationHint": "京都",
       "file": "kyoto.json",
-      "videoCount": 5
+      "videoCount": 4
     },
     {
       "id": "london",
       "destinationHint": "倫敦",
       "file": "london.json",
-      "videoCount": 6
+      "videoCount": 5
     },
     {
       "id": "macau",
       "destinationHint": "澳門",
       "file": "macau.json",
-      "videoCount": 5
+      "videoCount": 4
     },
     {
       "id": "new-york",
       "destinationHint": "紐約",
       "file": "new-york.json",
-      "videoCount": 5
+      "videoCount": 4
     },
     {
       "id": "osaka",

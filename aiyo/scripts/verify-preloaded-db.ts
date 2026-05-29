@@ -46,7 +46,7 @@ async function loadSeedVideos(): Promise<
       destinationHint: string;
       videos: Array<{ videoId?: string; id: string; title: string }>;
     };
-    for (const v of bundle.videos) {
+    for (const v of bundle.videos ?? []) {
       const videoId = (v.videoId || v.id || "").trim();
       if (videoId) {
         out.push({

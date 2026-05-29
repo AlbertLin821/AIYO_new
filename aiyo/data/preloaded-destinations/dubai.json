@@ -1,0 +1,1032 @@
+{
+  "id": "dubai",
+  "destinationHint": "杜拜",
+  "searchKeyword": "杜拜自由行 哈里發塔 杜拜商城",
+  "aliases": [
+    "杜拜",
+    "dubai",
+    "中東"
+  ],
+  "preferences": [
+    "美食",
+    "景點",
+    "懶人包"
+  ],
+  "generatedAt": "2026-05-29T07:30:37.775Z",
+  "pipelineVersion": "preloaded-seed-v1",
+  "videos": [
+    {
+      "id": "youtube_u2olLnTsA3o",
+      "videoId": "u2olLnTsA3o",
+      "title": "【杜拜自由行1】杜拜著名景點攻略！未來博物館、哈利法塔、帆船酒店豪華體驗｜杜拜旅遊Vlog丨杜拜親子旅遊",
+      "thumbnail": "https://i.ytimg.com/vi/u2olLnTsA3o/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=u2olLnTsA3o",
+      "duration": "08:05",
+      "summary": "影片提到未來博物館、哈利法塔、帆船酒店等地點。",
+      "description": "杜拜旅遊的三大熱門景點！從充滿未來感的【未來博物館】到世界最高建築【哈利法塔】，再到奢華的七星級【帆船酒店】，一次帶你探索杜拜的魅力！✨ \n影片內還有美食、購票小技巧和 Fine Dining 體驗分享，讓你杜拜之行更加輕鬆！記得按讚、分享，並留言告訴我們你最想去的景點吧！👇\n\n📽️ 影片章節：\n 0:00 開場\n 0:16 杜拜三大必去景點簡介\n 0:29 【未來博物館】探索人類未來與創新\n 2:32 【哈利法塔】世界之巔的拍照技巧\n 3:33 【帆船酒店】極致奢華用餐體驗\n 7:45 結尾：下集預告杜拜旅遊\n\n🔗 相關連結：\n 🎟️ 未來博物館官網購票：https://museumofthefuture.ae\n 🍴 帆船酒店餐廳預約：https://www.jumeirah.com/en/stay/dubai/burj-al-arab-jumeirah/dining/burj-al-arab-muntaha\n\n📢 更多內容：\n下集預告：杜拜傳統餐廳、水族館及住宿分享！\n\n喜歡這條影片的話，別忘了【訂閱】我的頻道，開啟小鈴鐺，第一時間收到最新旅遊攻略！\n\n#杜拜旅遊 #未來博物館 #哈利法塔 #帆船酒店 #杜拜攻略 #旅遊Vlog",
+      "source": "youtube-data-api",
+      "channelTitle": "Travelaroundwe",
+      "publishedAt": "2025-09-14T11:01:29Z",
+      "timestamps": [
+        {
+          "time": "3:00",
+          "label": "未來博物館"
+        },
+        {
+          "time": "4:00",
+          "label": "哈利法塔"
+        },
+        {
+          "time": "4:00",
+          "label": "帆船酒店"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "name": "未來博物館",
+          "lat": 25.2192034,
+          "lng": 55.2819328,
+          "description": "從充滿未來感的【未來博物館",
+          "address": "67CP+H4Q - Sheikh Zayed Rd - Trade Center Second - Dubai - United Arab Emirates",
+          "placeId": "ChIJqU_DoUtDXz4RxC8gnP8G_Ss",
+          "rawQuery": "未來博物館",
+          "raw": "未來博物館",
+          "normalized": "未來博物館",
+          "normalizedName": "未來博物館",
+          "cleanedName": "未來博物館",
+          "rawMention": "未來博物館",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "哈利法塔",
+          "lat": 25.197197,
+          "lng": 55.27437639999999,
+          "description": "到世界最高建築【哈利法塔",
+          "address": "1 Sheikh Mohammed bin Rashid Blvd - Burj Khalifa - Downtown Dubai - Dubai - United Arab Emirates",
+          "placeId": "ChIJS-JnijRDXz4R4rfO4QLlRf8",
+          "rawQuery": "哈利法塔",
+          "raw": "哈利法塔",
+          "normalized": "哈利法塔",
+          "normalizedName": "哈利法塔",
+          "cleanedName": "哈利法塔",
+          "rawMention": "哈利法塔",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "帆船酒店",
+          "lat": 25.1411914,
+          "lng": 55.18524679999999,
+          "description": "再到奢華的七星級【帆船酒店",
+          "address": "Dubai - Umm Suqeim Third - Umm Suqeim 3 - Dubai - United Arab Emirates",
+          "placeId": "ChIJLc8UZFdqXz4ROODwebhx2rM",
+          "rawQuery": "帆船酒店",
+          "raw": "帆船酒店",
+          "normalized": "帆船酒店",
+          "normalizedName": "帆船酒店",
+          "cleanedName": "帆船酒店",
+          "rawMention": "帆船酒店",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "timestamp": "3:00",
+          "startLabel": "3:00",
+          "startSeconds": 180,
+          "endSeconds": 210,
+          "title": "未來博物館",
+          "text": "從充滿未來感的【未來博物館",
+          "summary": "從充滿未來感的【未來博物館",
+          "locationHints": [
+            "未來博物館"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_2",
+          "timestamp": "4:00",
+          "startLabel": "4:00",
+          "startSeconds": 240,
+          "endSeconds": 270,
+          "title": "哈利法塔",
+          "text": "到世界最高建築【哈利法塔",
+          "summary": "到世界最高建築【哈利法塔",
+          "locationHints": [
+            "哈利法塔"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_3",
+          "timestamp": "4:00",
+          "startLabel": "4:00",
+          "startSeconds": 240,
+          "endSeconds": 270,
+          "title": "帆船酒店",
+          "text": "再到奢華的七星級【帆船酒店",
+          "summary": "再到奢華的七星級【帆船酒店",
+          "locationHints": [
+            "帆船酒店"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的杜拜旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_C3_RcojVHpg",
+      "videoId": "C3_RcojVHpg",
+      "title": "【杜拜自由行２】必去4大景點＋酒店開箱｜Dubai Mall水族館、Al Khayma Heritage餐廳、棕櫚島、Sheraton Mall of the Emirates Hotel丨杜拜旅遊",
+      "thumbnail": "https://i.ytimg.com/vi/C3_RcojVHpg/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=C3_RcojVHpg",
+      "duration": "08:48",
+      "summary": "影片提到Dubai Mall 水族館、阿聯酋傳統餐廳、棕櫚島 Atlantis 水族館等地點，以及鷹嘴豆與阿拉伯薄餅等食物。",
+      "description": "🇦🇪 杜拜自由行必看影片！本集帶你走訪4大人氣景點：Dubai Mall 巨型水族館（Dubai Aquarium & Underwater Zoo）、阿聯酋傳統餐廳（Al Khayma Heritage Restaurant）、棕櫚島 Atlantis 酒店水族館（The Lost Chambers Aquarium）與瞭望台（The View at The Palm），並開箱超方便、直通商場的酒店（Sheraton Mall of the Emirates Hotel）！從美食、購物到住宿一次看個夠，適合首次前往杜拜或正在規劃旅程的你！\n📌 本集亮點：\n•  Dubai Mall水族館：玻璃船體驗+餵魚樂趣\n•  阿聯酋傳統餐廳：TripAdvisor 5星好評，鷹嘴豆與阿拉伯薄餅超推！\n•  棕櫚島Atlantis水族館與瞭望台：夜景絕美\n•  酒店開箱：寬敞舒適，還有專屬商場泊車\n📌 影片中更分享 Klook 購票攻略、餐廳預約小貼士、Carrefour 物價調查、退稅小提醒等實用資訊，讓你玩得盡興又精明消費！\n無論是親子旅遊、情侶出遊還是自由行都適用，內附各景點門票價格與美食推薦，讓你輕鬆規劃杜拜行程。\n🔔 喜歡我們的影片請記得訂閱＋開啟小鈴鐺，支持我們製作更多旅遊分享 🙌\n—\n章節：00:00 杜拜旅遊開場介紹\n00:17 杜拜四大人氣景點總覽\n00:38 Dubai Mall 水族館體驗（含玻璃船＆餵魚）\n01:24 探索Dubai Mall動物區與奇特生物\n02:00 Dubai Mall 美食廣場與Hardee's快餐\n02:34 阿聯酋傳統餐廳用餐體驗\n03:18 古城區散步與打卡熱點（風塔、香料店、星巴克）\n03:49 棕櫚島 Atlantis 水族館參觀\n04:14 棕櫚島觀景台夜景與導覽體驗\n04:39 酒店房間開箱（房型配置介紹）\n05:56 酒店Lounge與早餐體驗分享\n06:55 酒店直通 Emirates Mall 購物中心\n07:24 鼎泰豐用餐體驗與菜單價格\n07:49 深夜Carrefour超市購物與物價調查\n08:10 駱駝奶體驗分享與購物退稅提醒\n08:25 結尾總結與預告下一集（手信推介及下集介紹：馬爾代夫）\n---\n🔗 訂位連結：\nDubai Aquarium & Underwater Zoo（我們預訂的是Gold Pass）：https://s.klook.com/c/my8YJOgW3J\n\nAl Khayma Heritage Restaurant (可透過WhatsApp預約）：https://alkhayma.com/restaurant/al-khayma-heritage-restaurant-dubai\n\n#杜拜自由行 #杜拜必去 #杜拜美食 #杜拜景點 #棕櫚島 #阿聯酋美食 #杜拜酒店推薦 #DubaiTravel #中東旅遊 #旅遊開箱 #DubaiAquarium #AtlantisThePalm #DubaiMall #AtlantisHotel #杜拜旅遊Vlog #阿聯酋",
+      "source": "youtube-data-api",
+      "channelTitle": "Travelaroundwe",
+      "publishedAt": "2025-10-07T11:00:06Z",
+      "timestamps": [
+        {
+          "time": "3:58",
+          "label": "Dubai Mall 水族館"
+        },
+        {
+          "time": "4:34",
+          "label": "阿聯酋傳統餐廳"
+        },
+        {
+          "time": "5:49",
+          "label": "棕櫚島 Atlantis 水族館"
+        },
+        {
+          "time": "6:31",
+          "label": "Sheraton Mall of the Emirates Hotel"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "name": "Dubai Mall 水族館",
+          "lat": 25.1972295,
+          "lng": 55.279747,
+          "description": "Dubai Mall 水族館體驗（含玻璃船＆餵魚",
+          "address": "Burj Khalifa - Downtown Dubai - Dubai - United Arab Emirates",
+          "placeId": "ChIJB1zIKShoXz4RnbaTPPup7aU",
+          "rawQuery": "Dubai Mall 水族館",
+          "raw": "Dubai Mall 水族館",
+          "normalized": "Dubai Mall 水族館",
+          "normalizedName": "Dubai Mall 水族館",
+          "cleanedName": "Dubai Mall 水族館",
+          "rawMention": "Dubai Mall 水族館",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "阿聯酋傳統餐廳",
+          "lat": 25.2048493,
+          "lng": 55.2707828,
+          "description": "阿聯酋傳統餐廳用餐體驗",
+          "address": "Dubai - United Arab Emirates",
+          "placeId": "ChIJRcbZaklDXz4RYlEphFBu5r0",
+          "rawQuery": "阿聯酋傳統餐廳",
+          "raw": "阿聯酋傳統餐廳",
+          "normalized": "阿聯酋傳統餐廳",
+          "normalizedName": "阿聯酋傳統餐廳",
+          "cleanedName": "阿聯酋傳統餐廳",
+          "rawMention": "阿聯酋傳統餐廳",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "棕櫚島 Atlantis 水族館",
+          "lat": 25.1304426,
+          "lng": 55.1171498,
+          "description": "棕櫚島 Atlantis 水族館參觀",
+          "address": "Crescent Rd - The Palm Jumeirah - Dubai - United Arab Emirates",
+          "placeId": "ChIJeckJNj4VXz4RxUqAikFalAU",
+          "rawQuery": "棕櫚島 Atlantis 水族館",
+          "raw": "棕櫚島 Atlantis 水族館",
+          "normalized": "棕櫚島 Atlantis 水族館",
+          "normalizedName": "棕櫚島 Atlantis 水族館",
+          "cleanedName": "棕櫚島 Atlantis 水族館",
+          "rawMention": "棕櫚島 Atlantis 水族館",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "Sheraton Mall of the Emirates Hotel",
+          "lat": 25.1192959,
+          "lng": 55.2031531,
+          "description": "酒店房間開箱（房型配置介紹",
+          "address": "Mall of The Emirates - Sheikh Zayed Rd - Al Barsha First - Al Barsha - Dubai - United Arab Emirates",
+          "placeId": "ChIJnTOfw75rXz4Rc1mCICEuy80",
+          "rawQuery": "Sheraton Mall of the Emirates Hotel",
+          "raw": "Sheraton Mall of the Emirates Hotel",
+          "normalized": "Sheraton Mall of the Emirates Hotel",
+          "normalizedName": "Sheraton Mall of the Emirates Hotel",
+          "cleanedName": "Sheraton Mall of the Emirates Hotel",
+          "rawMention": "Sheraton Mall of the Emirates Hotel",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [
+        "鷹嘴豆與阿拉伯薄餅"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "timestamp": "3:58",
+          "startLabel": "3:58",
+          "startSeconds": 238,
+          "endSeconds": 268,
+          "title": "Dubai Mall 水族館",
+          "text": "Dubai Mall 水族館體驗（含玻璃船＆餵魚",
+          "summary": "Dubai Mall 水族館體驗（含玻璃船＆餵魚",
+          "locationHints": [
+            "Dubai Mall 水族館"
+          ],
+          "foods": [
+            "鷹嘴豆與阿拉伯薄餅"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_2",
+          "timestamp": "4:34",
+          "startLabel": "4:34",
+          "startSeconds": 274,
+          "endSeconds": 304,
+          "title": "阿聯酋傳統餐廳",
+          "text": "阿聯酋傳統餐廳用餐體驗",
+          "summary": "阿聯酋傳統餐廳用餐體驗",
+          "locationHints": [
+            "阿聯酋傳統餐廳"
+          ],
+          "foods": [
+            "鷹嘴豆與阿拉伯薄餅"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_3",
+          "timestamp": "5:49",
+          "startLabel": "5:49",
+          "startSeconds": 349,
+          "endSeconds": 379,
+          "title": "棕櫚島 Atlantis 水族館",
+          "text": "棕櫚島 Atlantis 水族館參觀",
+          "summary": "棕櫚島 Atlantis 水族館參觀",
+          "locationHints": [
+            "棕櫚島 Atlantis 水族館"
+          ],
+          "foods": [
+            "鷹嘴豆與阿拉伯薄餅"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_4",
+          "timestamp": "6:31",
+          "startLabel": "6:31",
+          "startSeconds": 391,
+          "endSeconds": 421,
+          "title": "Sheraton Mall of the Emirates Hotel",
+          "text": "酒店房間開箱（房型配置介紹",
+          "summary": "酒店房間開箱（房型配置介紹",
+          "locationHints": [
+            "Sheraton Mall of the Emirates Hotel"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的杜拜旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_WUShrVm1Dns",
+      "videoId": "WUShrVm1Dns",
+      "title": "繞地球一圈Day5-6| 杜拜自由行跟團踩雷分享｜沙漠飆沙竟然被退款｜Dubai Mall【請開字幕】有修正，抱歉",
+      "thumbnail": "https://i.ytimg.com/vi/WUShrVm1Dns/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=WUShrVm1Dns",
+      "duration": "11:29",
+      "summary": "影片提到Dubai Mall、哈里發塔等地點。",
+      "description": "這支影片帶你一天玩遍杜拜最經典地標，但最後的行程卻超展開…直接退款收場？！到底發生什麼事👇\n\n📍本集重點\n✔️ 世界最大購物中心【Dubai Mall】到底有多誇張？\n✔️ 48公尺水族館隧道近距離看鯊魚🦈\n❗️ 最重要：沙漠飆沙體驗「真實翻車紀錄」＋為什麼最後被退款？\n\n💡你會知道：\nDubai Mall 為什麼是「必去中的必去」\n沙漠行程超雷⚠️\n\n⏱️時間軸\n00:00 Dubai Mall登場＋恐龍化石\n00:07 超壯觀室內瀑布\n01:28 沙漠飆沙行程開始\n01:37 坐車災難預感…\n👉後面發生的事真的超誇張（一定要看到最後）\n\n😵真實心得\n這趟沙漠行程原本超期待，但從上車開始就覺得不對勁…\n座位像板凳、車程又長，整路顛簸到懷疑人生\n最後甚至發生讓我「直接退款」的情況…\n👉如果你也打算去杜拜，一定要看完這支再決定行程！\n\n—\n📌小提醒\n✔️ Dubai Mall 半天根本逛不完，建議先規劃重點\n✔️ 噴泉晚上看\n✔️ 沙漠行程一定要慎選評價（⚠️有些評價不一定真實）\n\n如果你喜歡這種「真實旅遊＋踩雷分享」\n記得按讚👍＋訂閱🔔\n之後會分享更多不踩雷攻略！\n\n#杜拜旅遊 #DubaiMall #哈里發塔 #沙漠飆沙 #旅遊踩雷 #自由行攻略 #中東旅行",
+      "source": "youtube-data-api",
+      "channelTitle": "王語璇",
+      "publishedAt": "2026-03-20T16:27:06Z",
+      "timestamps": [
+        {
+          "time": "0:00",
+          "label": "哈里發塔"
+        },
+        {
+          "time": "3:00",
+          "label": "Dubai Mall"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "name": "Dubai Mall",
+          "lat": 25.1972295,
+          "lng": 55.279747,
+          "description": "世界最大購物中心【Dubai Mall】到底有多誇張？",
+          "address": "Burj Khalifa - Downtown Dubai - Dubai - United Arab Emirates",
+          "placeId": "ChIJB1zIKShoXz4RnbaTPPup7aU",
+          "rawQuery": "Dubai Mall",
+          "raw": "Dubai Mall",
+          "normalized": "Dubai Mall",
+          "normalizedName": "Dubai Mall",
+          "cleanedName": "Dubai Mall",
+          "rawMention": "Dubai Mall",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "哈里發塔",
+          "lat": 25.197197,
+          "lng": 55.27437639999999,
+          "description": "杜拜最經典地標",
+          "address": "1 Sheikh Mohammed bin Rashid Blvd - Burj Khalifa - Downtown Dubai - Dubai - United Arab Emirates",
+          "placeId": "ChIJS-JnijRDXz4R4rfO4QLlRf8",
+          "rawQuery": "哈里發塔",
+          "raw": "哈里發塔",
+          "normalized": "哈里發塔",
+          "normalizedName": "哈里發塔",
+          "cleanedName": "哈里發塔",
+          "rawMention": "哈里發塔",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "timestamp": "0:00",
+          "startLabel": "0:00",
+          "startSeconds": 0,
+          "endSeconds": 30,
+          "title": "哈里發塔",
+          "text": "杜拜最經典地標",
+          "summary": "杜拜最經典地標",
+          "locationHints": [
+            "哈里發塔"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_2",
+          "timestamp": "3:00",
+          "startLabel": "3:00",
+          "startSeconds": 180,
+          "endSeconds": 210,
+          "title": "Dubai Mall",
+          "text": "世界最大購物中心【Dubai Mall】到底有多誇張？",
+          "summary": "世界最大購物中心【Dubai Mall】到底有多誇張？",
+          "locationHints": [
+            "Dubai Mall"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的杜拜旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_pJWnXCsbC8M",
+      "videoId": "pJWnXCsbC8M",
+      "title": "杜拜轉機快閃攻略｜哈里發塔、杜拜噴泉燈光秀、杜拜Mall一日精彩行程！｜工程師Eva X rd.dayoff",
+      "thumbnail": "https://i.ytimg.com/vi/pJWnXCsbC8M/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=pJWnXCsbC8M",
+      "duration": "10:20",
+      "summary": "影片提到哈里發塔、杜拜噴泉燈光秀、杜拜 Mall等地點。",
+      "description": "🍀 訂閱：https://goo.gl/2oM5Kw\n\n這次我們利用轉機時間，來了一場杜拜快閃一日遊！影片裡會帶你一起登上哈里發塔，俯瞰杜拜的壯麗景色，還有必看的杜拜噴泉燈光秀，以及超好逛的杜拜 Mall！影片中也分享了交通方式，還有行程中的趣事和省錢小技巧。如果你也想在轉機時玩轉杜拜，快來看看這支影片吧！一起感受這座沙漠城市的魅力！\n\n想看更多影片 → https://www.youtube.com/@eva_rd.dayoff\n\n🧐 尋找更多工程師 \nyoutube     ➡️  https://www.youtube.com/@eva_rd.dayoff\nfacebook   ➡️  https://www.facebook.com/rd.dayoff/\ninstagram  ➡️  https://www.instagram.com/rd.dayoff/\ninstagram  ➡️  https://www.instagram.com/eva.fang04/",
+      "source": "youtube-data-api",
+      "channelTitle": "工程師Eva X rd.dayoff",
+      "publishedAt": "2025-01-11T10:45:04Z",
+      "timestamps": [
+        {
+          "time": "4:00",
+          "label": "哈里發塔"
+        },
+        {
+          "time": "4:00",
+          "label": "杜拜噴泉燈光秀"
+        },
+        {
+          "time": "4:00",
+          "label": "杜拜 Mall"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "name": "哈里發塔",
+          "lat": 25.197197,
+          "lng": 55.27437639999999,
+          "description": "登上哈里發塔，俯瞰杜拜的壯麗景色",
+          "address": "1 Sheikh Mohammed bin Rashid Blvd - Burj Khalifa - Downtown Dubai - Dubai - United Arab Emirates",
+          "placeId": "ChIJS-JnijRDXz4R4rfO4QLlRf8",
+          "rawQuery": "哈里發塔",
+          "raw": "哈里發塔",
+          "normalized": "哈里發塔",
+          "normalizedName": "哈里發塔",
+          "cleanedName": "哈里發塔",
+          "rawMention": "哈里發塔",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "杜拜噴泉燈光秀",
+          "lat": 25.1951554,
+          "lng": 55.2751579,
+          "description": "必看的杜拜噴泉燈光秀",
+          "address": "Burj Khalifa - Downtown Dubai - Dubai - United Arab Emirates",
+          "placeId": "ChIJP_HMuyloXz4RyC5haEhlfT4",
+          "rawQuery": "杜拜噴泉燈光秀",
+          "raw": "杜拜噴泉燈光秀",
+          "normalized": "杜拜噴泉燈光秀",
+          "normalizedName": "杜拜噴泉燈光秀",
+          "cleanedName": "杜拜噴泉燈光秀",
+          "rawMention": "杜拜噴泉燈光秀",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "杜拜 Mall",
+          "lat": 25.2048493,
+          "lng": 55.2707828,
+          "description": "超好逛的杜拜 Mall",
+          "address": "Dubai - United Arab Emirates",
+          "placeId": "ChIJRcbZaklDXz4RYlEphFBu5r0",
+          "rawQuery": "杜拜 Mall",
+          "raw": "杜拜 Mall",
+          "normalized": "杜拜 Mall",
+          "normalizedName": "杜拜 Mall",
+          "cleanedName": "杜拜 Mall",
+          "rawMention": "杜拜 Mall",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "timestamp": "4:00",
+          "startLabel": "4:00",
+          "startSeconds": 240,
+          "endSeconds": 270,
+          "title": "哈里發塔",
+          "text": "登上哈里發塔，俯瞰杜拜的壯麗景色",
+          "summary": "登上哈里發塔，俯瞰杜拜的壯麗景色",
+          "locationHints": [
+            "哈里發塔"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_2",
+          "timestamp": "4:00",
+          "startLabel": "4:00",
+          "startSeconds": 240,
+          "endSeconds": 270,
+          "title": "杜拜噴泉燈光秀",
+          "text": "必看的杜拜噴泉燈光秀",
+          "summary": "必看的杜拜噴泉燈光秀",
+          "locationHints": [
+            "杜拜噴泉燈光秀"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_3",
+          "timestamp": "4:00",
+          "startLabel": "4:00",
+          "startSeconds": 240,
+          "endSeconds": 270,
+          "title": "杜拜 Mall",
+          "text": "超好逛的杜拜 Mall",
+          "summary": "超好逛的杜拜 Mall",
+          "locationHints": [
+            "杜拜 Mall"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的杜拜旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_gHclOYf_Fe0",
+      "videoId": "gHclOYf_Fe0",
+      "title": "【小資遊杜拜】Dubai▪︎杜拜必去的5個地方｜杜拜很貴？很奢侈？讓我帶你花小錢也可以在杜拜玩的盡興！ #UAE自由行 EP.1",
+      "thumbnail": "https://i.ytimg.com/vi/gHclOYf_Fe0/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=gHclOYf_Fe0",
+      "duration": "12:09",
+      "summary": "影片提到杜拜港、迪拜碼頭、碼頭高樓餐廳等地點，以及HOT BURGER、Tea House 飲品等食物。",
+      "description": "你可能在電影裡看過世界最高樓-哈里發塔、超奢華飯店-阿拉伯塔（帆船飯店）\n但你親眼看到的時候絕對會被他們的壯觀嚇傻  😱\n\n🌟透過我的Getyourguide連結購買杜拜行程➫ https://gyg.me/OWB0zVcy\n\n#阿聯酋 #阿拉伯聯合大公國 #杜拜  \n#UAE #UnitedArabEmirates #Dubai\n------------------------------------------------------------------------------------------\n在Holafly購買網路吃到飽eSIM, 輸入專屬折扣碼“ALICETRAVELS”享5%折扣\n ➥ https://holafly.sjv.io/55yA32\n------------------------------------------------------------------------------------------\nSee more on \nInstagram \n➫https://www.instagram.com/alice.travels.now/\nFacebook\n➫https://www.facebook.com/Alice.travels.now\n------------------------------------------------------------------------------------------\n\n杜拜港(迪拜碼頭) \\\\ Dubai Marina\n                         ➥ https://goo.gl/maps/zQW9gMn3w1UeiiT66\n\n碼頭高樓餐廳 \\\\ Observatory Bar & Grill\n                         ➥  https://goo.gl/maps/ZeE4u6cwpYPTx4bM6\n\n高空跳傘 \\\\ Skydive Dubai\n                         ➥ https://g.page/skydivedubai1111?share\n\nJBR 海灘 \\\\ JBR Beach\n                         ➥ https://goo.gl/maps/aWPTTEE5idEXMeU76\n\n哈里發塔 \\\\ Burj Khalifa\n                         ➥ https://goo.gl/maps/C93vdNARBVz3EgJu7\n\n杜拜購物中心 \\\\ Dubai mall\n                         ➥ https://g.page/the-dubai-mall-657?share\n\n帆船飯店(阿拉伯塔) \\\\ Burj Al Arab\n                         ➥ https://goo.gl/maps/J1HiKKPhgdvkAehG6\n\n旁邊的飯店 \\\\ Jumeirah Beach Hotel\n                         ➥ https://goo.gl/maps/o7qQMQooyiHsRqq48\n\nLevel 43 Sky Lounge\n                         ➥ https://goo.gl/maps/rkRUGWaPWhvzs1ig7\n\n黃金市集 \\\\ Dubai Gold Souk\n                         ➥ https://goo.gl/maps/YUxTgCXY6DPUsMyo7\n\n香料市集 \\\\ Dubai Spice Souk Entrance\n                         ➥ https://goo.gl/maps/EXMCM8aSNMuwagji9\n\nAl Fahidi歷史區 \\\\ Al Fahidi Historical District\n                         ➥ https://goo.gl/maps/t2pMP71XmHfGATS58\n\n長途巴士站 \\\\ RTA Bus Station Ibn Battuta\n                         ➥ https://goo.gl/maps/bcLftdbBPJF1UwnQA\n\n在Al Hamriya區去的餐廳 \\\\ SALAM HOT BURGER NEAR FAHIDI METRO STATION\n                         ➥ https://goo.gl/maps/PaAKVkxWaKkjboiV9\n\n網美餐廳 \\\\ Arabian Tea House Restaurant & Cafe - Al Fahidi\n                         ➥ https://g.page/ArabianTeaHouse?share\n\n 💌 商業合作：alice.officialbu@gmail.com",
+      "source": "youtube-data-api",
+      "channelTitle": "Alice travels now 愛遊鬧",
+      "publishedAt": "2021-12-06T13:00:30Z",
+      "timestamps": [
+        {
+          "time": "7:00",
+          "label": "杜拜港"
+        },
+        {
+          "time": "7:00",
+          "label": "迪拜碼頭"
+        },
+        {
+          "time": "8:00",
+          "label": "碼頭高樓餐廳"
+        },
+        {
+          "time": "9:00",
+          "label": "Skydive Dubai"
+        },
+        {
+          "time": "11:00",
+          "label": "JBR 海灘"
+        },
+        {
+          "time": "12:00",
+          "label": "哈里發塔"
+        },
+        {
+          "time": "13:00",
+          "label": "杜拜購物中心"
+        },
+        {
+          "time": "15:00",
+          "label": "帆船飯店(阿拉伯塔"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "name": "杜拜港",
+          "lat": 25.2048493,
+          "lng": 55.2707828,
+          "description": "杜拜港(迪拜碼頭",
+          "address": "Dubai - United Arab Emirates",
+          "placeId": "ChIJRcbZaklDXz4RYlEphFBu5r0",
+          "rawQuery": "杜拜港",
+          "raw": "杜拜港",
+          "normalized": "杜拜港",
+          "normalizedName": "杜拜港",
+          "cleanedName": "杜拜港",
+          "rawMention": "杜拜港",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "迪拜碼頭",
+          "lat": 25.0806744,
+          "lng": 55.13979209999999,
+          "description": "迪拜碼頭",
+          "address": "Dubai Marina - Dubai - United Arab Emirates",
+          "placeId": "ChIJ4ybBAlRrXz4RfG3EVWYeUbk",
+          "rawQuery": "迪拜碼頭",
+          "raw": "迪拜碼頭",
+          "normalized": "迪拜碼頭",
+          "normalizedName": "迪拜碼頭",
+          "cleanedName": "迪拜碼頭",
+          "rawMention": "迪拜碼頭",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "碼頭高樓餐廳",
+          "lat": 25.2048493,
+          "lng": 55.2707828,
+          "description": "碼頭高樓餐廳 \\ Observatory Bar & Grill",
+          "address": "Dubai - United Arab Emirates",
+          "placeId": "ChIJRcbZaklDXz4RYlEphFBu5r0",
+          "rawQuery": "碼頭高樓餐廳",
+          "raw": "碼頭高樓餐廳",
+          "normalized": "碼頭高樓餐廳",
+          "normalizedName": "碼頭高樓餐廳",
+          "cleanedName": "碼頭高樓餐廳",
+          "rawMention": "碼頭高樓餐廳",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "Skydive Dubai",
+          "lat": 25.0909144,
+          "lng": 55.1378525,
+          "description": "高空跳傘 \\ Skydive Dubai",
+          "address": "34RM+FW - Al Seyahi St - next to zero gravity - Skydive - Dubai Marina - Dubai - United Arab Emirates",
+          "placeId": "ChIJ8VRV4FYTXz4RTVWgqPcGwbg",
+          "rawQuery": "Skydive Dubai",
+          "raw": "Skydive Dubai",
+          "normalized": "Skydive Dubai",
+          "normalizedName": "Skydive Dubai",
+          "cleanedName": "Skydive Dubai",
+          "rawMention": "Skydive Dubai",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "JBR 海灘",
+          "lat": 25.0769441,
+          "lng": 55.1341346,
+          "description": "JBR 海灘 \\ JBR Beach",
+          "address": "Marsa Dubai - Jumeirah Beach Residence - Dubai - United Arab Emirates",
+          "placeId": "ChIJx374X6oUXz4Reit_53BUSJM",
+          "rawQuery": "JBR 海灘",
+          "raw": "JBR 海灘",
+          "normalized": "JBR 海灘",
+          "normalizedName": "JBR 海灘",
+          "cleanedName": "JBR 海灘",
+          "rawMention": "JBR 海灘",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "哈里發塔",
+          "lat": 25.197197,
+          "lng": 55.27437639999999,
+          "description": "哈里發塔 \\ Burj Khalifa",
+          "address": "1 Sheikh Mohammed bin Rashid Blvd - Burj Khalifa - Downtown Dubai - Dubai - United Arab Emirates",
+          "placeId": "ChIJS-JnijRDXz4R4rfO4QLlRf8",
+          "rawQuery": "哈里發塔",
+          "raw": "哈里發塔",
+          "normalized": "哈里發塔",
+          "normalizedName": "哈里發塔",
+          "cleanedName": "哈里發塔",
+          "rawMention": "哈里發塔",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "杜拜購物中心",
+          "lat": 25.1972295,
+          "lng": 55.279747,
+          "description": "杜拜購物中心 \\ Dubai mall",
+          "address": "Burj Khalifa - Downtown Dubai - Dubai - United Arab Emirates",
+          "placeId": "ChIJB1zIKShoXz4RnbaTPPup7aU",
+          "rawQuery": "杜拜購物中心",
+          "raw": "杜拜購物中心",
+          "normalized": "杜拜購物中心",
+          "normalizedName": "杜拜購物中心",
+          "cleanedName": "杜拜購物中心",
+          "rawMention": "杜拜購物中心",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "帆船飯店(阿拉伯塔",
+          "lat": 25.1411914,
+          "lng": 55.18524679999999,
+          "description": "帆船飯店(阿拉伯塔) \\ Burj Al Arab",
+          "address": "Dubai - Umm Suqeim Third - Umm Suqeim 3 - Dubai - United Arab Emirates",
+          "placeId": "ChIJLc8UZFdqXz4ROODwebhx2rM",
+          "rawQuery": "帆船飯店(阿拉伯塔",
+          "raw": "帆船飯店(阿拉伯塔",
+          "normalized": "帆船飯店(阿拉伯塔",
+          "normalizedName": "帆船飯店(阿拉伯塔",
+          "cleanedName": "帆船飯店(阿拉伯塔",
+          "rawMention": "帆船飯店(阿拉伯塔",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "Jumeirah Beach Hotel",
+          "lat": 25.1415843,
+          "lng": 55.19127770000001,
+          "description": "旁邊的飯店 \\ Jumeirah Beach Hotel",
+          "address": "Jumeira St - Umm Suqeim Third - Umm Suqeim 3 - Dubai - United Arab Emirates",
+          "placeId": "ChIJlbJpDVRqXz4RdilKOU6M90c",
+          "rawQuery": "Jumeirah Beach Hotel",
+          "raw": "Jumeirah Beach Hotel",
+          "normalized": "Jumeirah Beach Hotel",
+          "normalizedName": "Jumeirah Beach Hotel",
+          "cleanedName": "Jumeirah Beach Hotel",
+          "rawMention": "Jumeirah Beach Hotel",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "Al Hamriya 區",
+          "lat": 25.2601903,
+          "lng": 55.3046728,
+          "description": "在Al Hamriya區去的餐廳",
+          "address": "Al Hamriya - Dubai - United Arab Emirates",
+          "placeId": "ChIJG3VYxzBDXz4R-q6QExdVzA8",
+          "rawQuery": "Al Hamriya 區",
+          "raw": "Al Hamriya 區",
+          "normalized": "Al Hamriya 區",
+          "normalizedName": "Al Hamriya 區",
+          "cleanedName": "Al Hamriya 區",
+          "rawMention": "Al Hamriya 區",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "SALAM HOT BURGER NEAR FAHIDI METRO STATION",
+          "lat": 25.2599178,
+          "lng": 55.2991124,
+          "description": "SALAM HOT BURGER NEAR FAHIDI METRO STATION",
+          "address": "2 15A St - Al Hamriya - Dubai - United Arab Emirates",
+          "placeId": "ChIJqW8d4DtDXz4RRy4YaRRi0T8",
+          "rawQuery": "SALAM HOT BURGER NEAR FAHIDI METRO STATION",
+          "raw": "SALAM HOT BURGER NEAR FAHIDI METRO STATION",
+          "normalized": "SALAM HOT BURGER NEAR FAHIDI METRO STATION",
+          "normalizedName": "SALAM HOT BURGER NEAR FAHIDI METRO STATION",
+          "cleanedName": "SALAM HOT BURGER NEAR FAHIDI METRO STATION",
+          "rawMention": "SALAM HOT BURGER NEAR FAHIDI METRO STATION",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "Arabian Tea House Restaurant & Cafe - Al Fahidi",
+          "lat": 25.2633142,
+          "lng": 55.29973529999999,
+          "description": "網美餐廳 \\ Arabian Tea House Restaurant & Cafe - Al Fahidi",
+          "address": "Bastakiya Opposite Musalla Post Office - Al Fahidi St - Bur Dubai - Al Fahidi - Dubai - United Arab Emirates",
+          "placeId": "ChIJsSfTxjlDXz4RDIGbnFqsAlo",
+          "rawQuery": "Arabian Tea House Restaurant & Cafe - Al Fahidi",
+          "raw": "Arabian Tea House Restaurant & Cafe - Al Fahidi",
+          "normalized": "Arabian Tea House Restaurant & Cafe - Al Fahidi",
+          "normalizedName": "Arabian Tea House Restaurant & Cafe - Al Fahidi",
+          "cleanedName": "Arabian Tea House Restaurant & Cafe - Al Fahidi",
+          "rawMention": "Arabian Tea House Restaurant & Cafe - Al Fahidi",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "Al Fahidi 歷史區",
+          "lat": 25.2640103,
+          "lng": 55.28867210000001,
+          "description": "Al Fahidi歷史區",
+          "address": "Al Fahidi - Dubai - United Arab Emirates",
+          "placeId": "ChIJISX55T9DXz4Rez15A9bLb6g",
+          "rawQuery": "Al Fahidi 歷史區",
+          "raw": "Al Fahidi 歷史區",
+          "normalized": "Al Fahidi 歷史區",
+          "normalizedName": "Al Fahidi 歷史區",
+          "cleanedName": "Al Fahidi 歷史區",
+          "rawMention": "Al Fahidi 歷史區",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "Ibn Battuta 碼頭站",
+          "lat": 25.2048493,
+          "lng": 55.2707828,
+          "description": "長途巴士站 \\ RTA Bus Station Ibn Battuta",
+          "address": "Dubai - United Arab Emirates",
+          "placeId": "ChIJRcbZaklDXz4RYlEphFBu5r0",
+          "rawQuery": "Ibn Battuta 碼頭站",
+          "raw": "Ibn Battuta 碼頭站",
+          "normalized": "Ibn Battuta 碼頭站",
+          "normalizedName": "Ibn Battuta 碼頭站",
+          "cleanedName": "Ibn Battuta 碼頭站",
+          "rawMention": "Ibn Battuta 碼頭站",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [
+        "HOT BURGER",
+        "Tea House 飲品"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "timestamp": "7:00",
+          "startLabel": "7:00",
+          "startSeconds": 420,
+          "endSeconds": 450,
+          "title": "杜拜港",
+          "text": "杜拜港(迪拜碼頭",
+          "summary": "杜拜港(迪拜碼頭",
+          "locationHints": [
+            "杜拜港"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_2",
+          "timestamp": "7:00",
+          "startLabel": "7:00",
+          "startSeconds": 420,
+          "endSeconds": 450,
+          "title": "迪拜碼頭",
+          "text": "迪拜碼頭",
+          "summary": "迪拜碼頭",
+          "locationHints": [
+            "迪拜碼頭"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_3",
+          "timestamp": "8:00",
+          "startLabel": "8:00",
+          "startSeconds": 480,
+          "endSeconds": 510,
+          "title": "碼頭高樓餐廳",
+          "text": "碼頭高樓餐廳 \\ Observatory Bar & Grill",
+          "summary": "碼頭高樓餐廳 \\ Observatory Bar & Grill",
+          "locationHints": [
+            "碼頭高樓餐廳"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_4",
+          "timestamp": "9:00",
+          "startLabel": "9:00",
+          "startSeconds": 540,
+          "endSeconds": 570,
+          "title": "Skydive Dubai",
+          "text": "高空跳傘 \\ Skydive Dubai",
+          "summary": "高空跳傘 \\ Skydive Dubai",
+          "locationHints": [
+            "Skydive Dubai"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_5",
+          "timestamp": "11:00",
+          "startLabel": "11:00",
+          "startSeconds": 660,
+          "endSeconds": 690,
+          "title": "JBR 海灘",
+          "text": "JBR 海灘 \\ JBR Beach",
+          "summary": "JBR 海灘 \\ JBR Beach",
+          "locationHints": [
+            "JBR 海灘"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_6",
+          "timestamp": "12:00",
+          "startLabel": "12:00",
+          "startSeconds": 720,
+          "endSeconds": 750,
+          "title": "哈里發塔",
+          "text": "哈里發塔 \\ Burj Khalifa",
+          "summary": "哈里發塔 \\ Burj Khalifa",
+          "locationHints": [
+            "哈里發塔"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_7",
+          "timestamp": "13:00",
+          "startLabel": "13:00",
+          "startSeconds": 780,
+          "endSeconds": 810,
+          "title": "杜拜購物中心",
+          "text": "杜拜購物中心 \\ Dubai mall",
+          "summary": "杜拜購物中心 \\ Dubai mall",
+          "locationHints": [
+            "杜拜購物中心"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_8",
+          "timestamp": "15:00",
+          "startLabel": "15:00",
+          "startSeconds": 900,
+          "endSeconds": 930,
+          "title": "帆船飯店(阿拉伯塔",
+          "text": "帆船飯店(阿拉伯塔) \\ Burj Al Arab",
+          "summary": "帆船飯店(阿拉伯塔) \\ Burj Al Arab",
+          "locationHints": [
+            "帆船飯店(阿拉伯塔"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的杜拜旅遊影片，含重點片段與地圖標點。"
+    }
+  ],
+  "validation": {
+    "requestedCount": 6,
+    "exportedCount": 5
+  }
+}

@@ -681,3 +681,20 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
 
   return result;
 }
+
+/** 將既有摘要結果寫入快取（僅在 segments 非空時）。供種子補齊腳本使用。 */
+export async function persistVideoSummaryFromInput(
+  input: { videoId: string; destination?: string },
+  result: VideoSummaryResult,
+): Promise<void> {
+  if (!result.segments.length) {
+    return;
+  }
+  const videoId = extractYouTubeVideoId(input.videoId) || input.videoId.trim();
+  const resolvedCacheKey = buildSummaryCacheKey({
+    videoId,
+    destination: input.destination,
+    language: "zh-Hant",
+  });
+  await cacheVideoSummary(resolvedCacheKey, result);
+}

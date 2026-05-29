@@ -30,7 +30,7 @@ if (enableMockMaps) {
 }
 
 const nextConfig: NextConfig = {
-  // Enable after removing route-level `export const dynamic = "force-dynamic"` conflicts (see docs/PERFORMANCE_BASELINE.md).
+  // Enable after removing route-level `export const dynamic = "force-dynamic"` conflicts.
   // cacheComponents: true,
   reactCompiler: {
     compilationMode: "annotation",
