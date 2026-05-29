@@ -224,3 +224,46 @@ export async function summarizeVideo(input: {
   }
   return payload.data;
 }
+
+export async function recordVideoWatch(input: {
+  videoId: string;
+  videoUrl?: string;
+  title?: string;
+  currentTripId?: string | null;
+  watchDurationSeconds?: number;
+  progress?: number;
+}) {
+  const response = await fetch("/api/videos/interactions/watch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const payload = await parseJson<ApiResponse<{ id: string }>>(response);
+  if (!response.ok || isApiError(payload)) {
+    throw new Error(isApiError(payload) ? payload.error.message : `Request failed with status ${response.status}`);
+  }
+  return payload.data;
+}
+
+export async function recordAppliedVideoSummary(input: {
+  tripId?: string | null;
+  videoId: string;
+  summaryId?: string;
+  videoUrl?: string;
+  title?: string;
+  appliedPlaces?: unknown;
+  appliedSegments?: unknown;
+  createdTripItems?: unknown;
+  summarySnapshot?: unknown;
+}) {
+  const response = await fetch("/api/videos/summaries/apply", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const payload = await parseJson<ApiResponse<{ id: string }>>(response);
+  if (!response.ok || isApiError(payload)) {
+    throw new Error(isApiError(payload) ? payload.error.message : `Request failed with status ${response.status}`);
+  }
+  return payload.data;
+}

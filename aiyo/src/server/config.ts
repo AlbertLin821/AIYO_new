@@ -87,8 +87,9 @@ export const serverConfig = {
   aiWebSearchMaxResults: readNumber("AI_WEB_SEARCH_MAX_RESULTS", 6),
   aiWebSearchRequireCitations: readBoolean("AI_WEB_SEARCH_REQUIRE_CITATIONS", true),
   /**
-   * `auto` | `searxng` | `serper` | `tavily` | `mock`
-   * - `auto`: Serper (if SERPER_API_KEY) → Tavily → SearxNG → mock (if AIYO_WEB_SEARCH_MOCK) → none
+   * AI 對話與行程生成只允許 `auto` | `serper` | `tavily`。
+   * `auto`: Serper (if SERPER_API_KEY) → Tavily → none.
+   * SearXNG 設定保留給舊版非 AI 搜尋模組；AI 搜尋不得 fallback 到 SearXNG。
    */
   webSearchProvider: readString("WEB_SEARCH_PROVIDER", "auto").toLowerCase(),
   serperApiKey: readString("SERPER_API_KEY", ""),

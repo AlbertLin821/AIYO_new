@@ -31,7 +31,12 @@ import {
 } from "@/lib/replaceDismissedVideo";
 import { enqueueVideoSummaries, enqueueVideoSummary } from "@/lib/videoSummaryQueue";
 import { zhTW as t } from "@/locales/zh-TW";
-import { fetchVideoRecommendations, shouldSkipClientVideoSummarize, summarizeVideo } from "@/services/videoClient";
+import {
+  fetchVideoRecommendations,
+  recordVideoWatch,
+  shouldSkipClientVideoSummarize,
+  summarizeVideo,
+} from "@/services/videoClient";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
 import { useVideoStore } from "@/stores/useVideoStore";
@@ -310,6 +315,14 @@ export default function HomePage() {
   const openVideoSummary = useCallback(async (video: VideoRecommendation) => {
     setSummaryDiagnostics(null);
     setSelectedVideo(video);
+    if (video.videoId?.trim()) {
+      void recordVideoWatch({
+        videoId: video.videoId,
+        videoUrl: video.url,
+        title: video.title,
+        currentTripId: useTripStore.getState().tripId,
+      }).catch(() => undefined);
+    }
     logFrontendDebugEvent("home-video", "open-summary-click", {
       videoId: video.videoId,
       title: video.title,

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
 import { OllamaRequestError } from "@/server/ai/ollamaClient";
+import { buildPersonalizedAIContext, type AIContextBuildResult } from "@/server/ai/aiContextBuilder";
 import { completeChatProgress, ensureChatProgressSession } from "@/server/chat/chatProgressStore";
 import { addMemories, formatMemoryContext } from "@/server/memory/mem0Client";
 import { retrieveRelevantMemoriesForUser } from "@/server/memory/memoryRetrieval";
@@ -41,6 +42,7 @@ async function handleChatPost(request: Request) {
     let persistedUserId: string | null = null;
     let persistedTripId: string | undefined;
     let memoryContext: string | undefined;
+    let personalizedContext: AIContextBuildResult | null = null;
 
     try {
       const { userId } = await requireSessionUser();
@@ -56,7 +58,17 @@ async function handleChatPost(request: Request) {
           userId,
           query: userPersistContent,
         });
-        memoryContext = formatMemoryContext(memories);
+        const longTermMemory = formatMemoryContext(memories);
+        personalizedContext = await buildPersonalizedAIContext({
+          userId,
+          currentUserInput: userPersistContent,
+          chatContext: body.context,
+          tripId: persistedTripId,
+        });
+        memoryContext = [
+          longTermMemory ? `[Mem0 長期記憶]\n${longTermMemory}` : "",
+          personalizedContext.text ? `[AIYO 個人化資料]\n${personalizedContext.text}` : "",
+        ].filter(Boolean).join("\n\n") || undefined;
       }
     } catch {
       // Chat remains functional even if the user is not authenticated.
@@ -77,6 +89,7 @@ async function handleChatPost(request: Request) {
       questionAnswers: body.questionAnswers,
       progressSessionId,
       memoryContext,
+      aiContext: personalizedContext,
     });
 
     if (persistedUserId) {
@@ -113,7 +126,16 @@ async function handleChatPost(request: Request) {
       completeChatProgress(progressSessionId);
     }
 
-    return NextResponse.json(createSuccess(response));
+    return NextResponse.json(
+      createSuccess(
+        response,
+        process.env.NODE_ENV !== "production" && personalizedContext
+          ? {
+              aiContextDebug: personalizedContext.debug,
+            }
+          : undefined,
+      ),
+    );
   } catch (error) {
     if (progressSessionId) {
       completeChatProgress(progressSessionId);

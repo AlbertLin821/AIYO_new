@@ -422,6 +422,52 @@ export interface ChatContext {
   tripEndDate?: string;
 }
 
+export type ConversationMode =
+  | "casual_chat"
+  | "collect_requirements"
+  | "confirm_preferences"
+  | "generate_itinerary"
+  | "modify_itinerary"
+  | "answer_trip_question"
+  | "search_travel_info";
+
+export type TravelSearchProvider = "serper" | "tavily";
+
+export type TravelAgentKnownPreferences = {
+  destination?: string;
+  budget?: number;
+  budgetLevel?: "low" | "medium" | "high";
+  days?: number;
+  travelStyle?: string[];
+  transportPreference?: string;
+  accommodationPreference?: string;
+  companionType?: string;
+  pace?: TravelPace;
+  mustVisit?: string[];
+  avoid?: string[];
+  notes?: string;
+};
+
+export type TravelAgentPreferenceConfirmation = {
+  summary: string;
+  preferences: TravelAgentKnownPreferences;
+  prompt: string;
+};
+
+export type TravelAgentDecision = {
+  mode: ConversationMode;
+  shouldSearch: boolean;
+  searchReason?: string;
+  requiredSearchProviders: TravelSearchProvider[];
+  shouldGenerateItinerary: boolean;
+  shouldModifyItinerary: boolean;
+  shouldAskFollowUp: boolean;
+  missingRequirements: string[];
+  preferenceConfirmation?: TravelAgentPreferenceConfirmation;
+  userFacingGuidance?: string;
+  debugReason: string;
+};
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "system" | "ai";
@@ -462,6 +508,7 @@ export interface ChatResponsePayload {
   itinerarySuggestion?: TripPlanResult;
   proposedChanges?: AiProposedChange[];
   tripProfile?: TripProfile;
+  travelAgentDecision?: TravelAgentDecision;
 }
 
 export interface VideoSummarySegment {

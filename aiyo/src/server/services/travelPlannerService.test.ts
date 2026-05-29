@@ -85,7 +85,10 @@ test("travel chat retries once when the first compose request times out", async 
   };
 
   try {
-    const response = await chatWithTravelAssistant({ message: "你好" });
+    const response = await chatWithTravelAssistant({
+      message: "你覺得東京適合第一次自由行嗎",
+      context: { destination: "東京" },
+    });
     assert.equal(callCount, 2);
     assert.equal(response.reply.responseType, "text_message");
     assert.equal(response.reply.content, "已完成重試回覆");
@@ -106,7 +109,10 @@ test("travel chat returns timeout fallback text after retry exhaustion", async (
   };
 
   try {
-    const response = await chatWithTravelAssistant({ message: "你好" });
+    const response = await chatWithTravelAssistant({
+      message: "你覺得東京適合第一次自由行嗎",
+      context: { destination: "東京" },
+    });
     assert.equal(callCount, 2);
     assert.equal(response.reply.responseType, "text_message");
     assert.equal(
@@ -131,7 +137,12 @@ test("travel chat does not retry non-timeout ollama errors", async () => {
   };
 
   try {
-    await assert.rejects(() => chatWithTravelAssistant({ message: "你好" }));
+    await assert.rejects(() =>
+      chatWithTravelAssistant({
+        message: "你覺得東京適合第一次自由行嗎",
+        context: { destination: "東京" },
+      }),
+    );
     assert.equal(callCount, 1);
   } finally {
     globalThis.fetch = originalFetch;

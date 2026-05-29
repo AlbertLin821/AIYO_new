@@ -1,18 +1,25 @@
 import { serverConfig } from "@/server/config";
 import { tavilySearch } from "@/server/providers/tavilySearch";
-import { mockWebSearchResults } from "@/server/search/mockWebSearch";
 import { searchSerper } from "@/server/search/serperClient";
-import { searchWeb } from "@/server/search/searxngClient";
 import type { WebSearchOptions, WebSearchResult } from "@/server/search/searxngClient";
 
-export type WebSearchBackend = "searxng" | "serper" | "tavily" | "mock" | "none";
+export type WebSearchBackend = "serper" | "tavily" | "none";
 
 export type UnifiedWebSearchResult = {
   results: WebSearchResult[];
   backend: WebSearchBackend;
 };
 
-const ALLOWED = new Set(["auto", "searxng", "serper", "tavily", "mock"]);
+export const AI_WEB_SEARCH_ALLOWED_PROVIDERS = ["serper", "tavily"] as const;
+type AllowedProvider = (typeof AI_WEB_SEARCH_ALLOWED_PROVIDERS)[number];
+
+function warnProviderFallback(raw: string) {
+  if (process.env.NODE_ENV !== "production") {
+    console.warn(
+      `[web-search] Unsupported WEB_SEARCH_PROVIDER="${raw}". AI search only allows serper or tavily; falling back to auto.`,
+    );
+  }
+}
 
 function resolveBackendOrder(): WebSearchBackend[] {
   const order: WebSearchBackend[] = [];
@@ -22,13 +29,19 @@ function resolveBackendOrder(): WebSearchBackend[] {
   if (serverConfig.tavilyApiKey.trim()) {
     order.push("tavily");
   }
-  if (serverConfig.searxngEnabled) {
-    order.push("searxng");
-  }
-  if (serverConfig.aiWebSearchMock) {
-    order.push("mock");
-  }
   return order.length > 0 ? order : ["none"];
+}
+
+function resolveConfiguredProvider(): "auto" | AllowedProvider {
+  const configured = serverConfig.webSearchProvider;
+  if (configured === "auto" || configured === "") {
+    return "auto";
+  }
+  if ((AI_WEB_SEARCH_ALLOWED_PROVIDERS as readonly string[]).includes(configured)) {
+    return configured as AllowedProvider;
+  }
+  warnProviderFallback(configured);
+  return "auto";
 }
 
 async function searchTavilyAsWeb(options: WebSearchOptions): Promise<WebSearchResult[]> {
@@ -57,9 +70,7 @@ export async function runUnifiedWebSearch(options: WebSearchOptions): Promise<Un
     return { results: [], backend: "none" };
   }
 
-  const configured = ALLOWED.has(serverConfig.webSearchProvider)
-    ? serverConfig.webSearchProvider
-    : "auto";
+  const configured = resolveConfiguredProvider();
   const tryOrder: WebSearchBackend[] =
     configured === "auto"
       ? resolveBackendOrder()
@@ -69,11 +80,13 @@ export async function runUnifiedWebSearch(options: WebSearchOptions): Promise<Un
     if (backend === "none") {
       continue;
     }
-    if (backend === "mock") {
-      const results = mockWebSearchResults(query, options.limit ?? serverConfig.aiWebSearchMaxResults);
-      return { results, backend: "mock" };
-    }
     if (backend === "serper") {
+      if (!serverConfig.serperApiKey.trim()) {
+        if (configured === "serper") {
+          throw new Error("SERPER_API_KEY is required when WEB_SEARCH_PROVIDER=serper.");
+        }
+        continue;
+      }
       const results = await searchSerper(options);
       if (results.length) {
         return { results, backend: "serper" };
@@ -81,23 +94,18 @@ export async function runUnifiedWebSearch(options: WebSearchOptions): Promise<Un
       continue;
     }
     if (backend === "tavily") {
+      if (!serverConfig.tavilyApiKey.trim()) {
+        if (configured === "tavily") {
+          throw new Error("TAVILY_API_KEY is required when WEB_SEARCH_PROVIDER=tavily.");
+        }
+        continue;
+      }
       const results = await searchTavilyAsWeb(options);
       if (results.length) {
         return { results, backend: "tavily" };
       }
       continue;
     }
-    if (backend === "searxng") {
-      const results = await searchWeb(options);
-      if (results.length) {
-        return { results, backend: "searxng" };
-      }
-    }
-  }
-
-  if (serverConfig.aiWebSearchMock) {
-    const results = mockWebSearchResults(query, options.limit ?? serverConfig.aiWebSearchMaxResults);
-    return { results, backend: "mock" };
   }
 
   return { results: [], backend: "none" };

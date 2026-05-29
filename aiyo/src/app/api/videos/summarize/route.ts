@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
 import { requireSessionUser } from "@/server/auth";
 import { extractYouTubeVideoId } from "@/server/providers/youtubeProvider";
+import { recordVideoInteraction } from "@/server/personalization/personalizationService";
 import { summarizeVideoForApi } from "@/server/services/videoSummaryConnector";
 
 export const runtime = "nodejs";
@@ -22,7 +23,7 @@ function summarizeErrorMeta(error: unknown) {
 
 export async function POST(request: Request) {
   try {
-    await requireSessionUser();
+    const { userId } = await requireSessionUser();
     const body = (await request.json()) as {
       url?: string;
       videoId?: string;
@@ -50,6 +51,23 @@ export async function POST(request: Request) {
 
     try {
       const result = await summarizeVideoForApi(body);
+      await recordVideoInteraction(userId, {
+        videoId: result.video.videoId || body.videoId || "",
+        videoUrl: result.video.url || body.url,
+        title: result.video.title || body.title,
+        interactionType: "analyze",
+        summaryId: result.video.videoId,
+        extractedPlaces: result.video.extractedLocations.map((location) => location.name),
+        extractedTimestamps: result.video.summarySegments?.map((segment) => ({
+          timestamp: segment.timestamp,
+          title: segment.title,
+        })),
+        metadata: {
+          cacheStatus: result.debug?.cacheStatus,
+          summarySource: result.summarySource,
+          segmentSource: result.segmentSource,
+        },
+      }).catch(() => undefined);
       return NextResponse.json(createSuccess(result));
     } catch (error) {
       if (error instanceof Error && error.message === "INVALID_VIDEO_REFERENCE") {

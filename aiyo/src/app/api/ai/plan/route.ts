@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
 import { OllamaRequestError, resolveModelForTask } from "@/server/ai/ollamaClient";
+import { buildPersonalizedAIContext, type AIContextBuildResult } from "@/server/ai/aiContextBuilder";
 import { addMemories, formatMemoryContext } from "@/server/memory/mem0Client";
 import { retrieveRelevantMemoriesForUser } from "@/server/memory/memoryRetrieval";
 import { StructuredOutputError } from "@/server/ai/responseParser";
 import { requireSessionUser } from "@/server/auth";
 import { resolveSessionTrip, saveTripPayload } from "@/server/data/appStateService";
 import { generateTripPlan } from "@/server/services/travelPlannerService";
+import { updateTravelPreferencesFromSuggestion } from "@/server/personalization/personalizationService";
 import { buildPinsFromTripPlan } from "@/services/mapSync";
 import type { TravelPreferences, TripPlanRequest, TripPlanResult } from "@/types";
 
@@ -138,8 +140,35 @@ export async function POST(request: Request) {
         .filter(Boolean)
         .join(" "),
     });
+    let personalizedContext: AIContextBuildResult | null = null;
+    try {
+      personalizedContext = await buildPersonalizedAIContext({
+        userId,
+        currentUserInput: transcript || destination,
+        tripRequest,
+      });
+    } catch {
+      personalizedContext = null;
+    }
 
-    const generated = await generateTripPlan(tripRequest, formatMemoryContext(memories));
+    await updateTravelPreferencesFromSuggestion(userId, {
+      destination,
+      budget,
+      days,
+      travelStyle: tripRequest.preferences.interests,
+      transportPreference: tripRequest.preferences.transportPreference,
+      mustVisit,
+      avoid,
+      notes: tripRequest.preferences.notes,
+    });
+
+    const generated = await generateTripPlan(
+      tripRequest,
+      [
+        formatMemoryContext(memories) ? `[Mem0 長期記憶]\n${formatMemoryContext(memories)}` : "",
+        personalizedContext?.text ? `[AIYO 個人化資料]\n${personalizedContext.text}` : "",
+      ].filter(Boolean).join("\n\n") || undefined,
+    );
     const result = ensurePlanHasEditableItems(generated.plan, tripRequest);
 
     const existingTrip = await resolveSessionTrip(userId);
@@ -198,6 +227,9 @@ export async function POST(request: Request) {
         planGenerationMode: generated.diagnostics.planGenerationMode,
         parseMode: generated.diagnostics.parseMode,
         retryCount: generated.diagnostics.retryCount,
+        ...(process.env.NODE_ENV !== "production" && personalizedContext
+          ? { aiContextDebug: personalizedContext.debug }
+          : {}),
       }),
     );
   } catch (error) {

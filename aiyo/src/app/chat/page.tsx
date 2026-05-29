@@ -57,11 +57,22 @@ import {
 } from "@/app/chat/itineraryPatchUtils";
 import { CHAT_HISTORY_WINDOW } from "@/lib/chatConstants";
 import { cn } from "@/lib/utils";
-import { reviseTripPlan, sendChatMessage } from "@/services/aiClient";
+import {
+  applyTravelPreferences,
+  fetchTravelPreferenceSuggestion,
+  reviseTripPlan,
+  sendChatMessage,
+  type TravelPreferenceSuggestion,
+} from "@/services/aiClient";
 import { createNewTrip, setActiveTrip } from "@/services/itineraryClient";
 import { geocodeItineraryItemsMissingLocation } from "@/services/geocodeItineraryItems";
 import { syncService } from "@/services/syncService";
-import { fetchVideoRecommendations, shouldSkipClientVideoSummarize, summarizeVideo } from "@/services/videoClient";
+import {
+  fetchVideoRecommendations,
+  recordVideoWatch,
+  shouldSkipClientVideoSummarize,
+  summarizeVideo,
+} from "@/services/videoClient";
 import { useChatStore } from "@/stores/useChatStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useMapStore } from "@/stores/useMapStore";
@@ -349,6 +360,10 @@ export default function ChatPage() {
   const [autoSummaryProgress, setAutoSummaryProgress] = useState<{ current: number; total: number } | null>(null);
   const [sourceDrawerSource, setSourceDrawerSource] = useState<SourceReference | null>(null);
   const [isVoiceInputActive, setIsVoiceInputActive] = useState(false);
+  const [preferenceSuggestion, setPreferenceSuggestion] = useState<TravelPreferenceSuggestion | null>(null);
+  const [preferenceCardMode, setPreferenceCardMode] = useState<"summary" | "edit">("summary");
+  const [isApplyingPreferences, setIsApplyingPreferences] = useState(false);
+  const [editableSuggestion, setEditableSuggestion] = useState<TravelPreferenceSuggestion["preferences"] | null>(null);
   const chatInputRef = useRef<HTMLInputElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const statusStreamRef = useRef<EventSource | null>(null);
@@ -386,6 +401,22 @@ export default function ChatPage() {
   const pushToast = useToastStore((state) => state.pushToast);
   const setSummaryDiagnostics = useVideoStore((state) => state.setSummaryDiagnostics);
   const setIsSummarizing = useVideoStore((state) => state.setIsSummarizing);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchTravelPreferenceSuggestion()
+      .then((suggestion) => {
+        if (cancelled || !suggestion.has_previous_preferences) {
+          return;
+        }
+        setPreferenceSuggestion(suggestion);
+        setEditableSuggestion(suggestion.preferences);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -1021,6 +1052,40 @@ export default function ChatPage() {
       questionAnswers: answers,
       tripProfile: profile,
     });
+  }
+
+  async function handleApplyPreviousPreferences(nextPreferences?: TravelPreferenceSuggestion["preferences"]) {
+    const preferences = nextPreferences || preferenceSuggestion?.preferences;
+    if (!preferences || isApplyingPreferences) {
+      return;
+    }
+    setIsApplyingPreferences(true);
+    setErrorMessage(null);
+    try {
+      const result = await applyTravelPreferences({
+        preferences,
+        savePreferences: true,
+      });
+      const snapshot = await syncService.loadBootstrap();
+      syncService.applyBootstrap(snapshot, { forceTrip: true });
+      appendMessage({
+        id: `assistant_apply_preferences_${Date.now()}`,
+        role: "assistant",
+        content: `已套用先前設定，並建立 ${result.appliedPreferences.destination || "目的地"} 行程。`,
+        timestamp: new Date().toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" }),
+        responseType: "text_message",
+      });
+      setPreferenceSuggestion(null);
+      pushToast({ variant: "success", title: "已套用先前設定", description: "行程已依照你的偏好更新。" });
+    } catch (error) {
+      pushToast({
+        variant: "error",
+        title: "套用先前設定失敗",
+        description: error instanceof Error ? error.message : t.api.postFailed,
+      });
+    } finally {
+      setIsApplyingPreferences(false);
+    }
   }
 
   function handleToggleVoiceInput() {
@@ -2056,6 +2121,14 @@ export default function ChatPage() {
   async function openVideoSummary(video: VideoRecommendation) {
     setSummaryDiagnostics(null);
     setSelectedVideo(video);
+    if (video.videoId?.trim()) {
+      void recordVideoWatch({
+        videoId: video.videoId,
+        videoUrl: video.url,
+        title: video.title,
+        currentTripId: useTripStore.getState().tripId,
+      }).catch(() => undefined);
+    }
     logFrontendDebugEvent("chat-video", "open-summary-click", {
       videoId: video.videoId,
       title: video.title,
@@ -2206,6 +2279,104 @@ export default function ChatPage() {
               disabled={isSending}
               onSubmitQuestion={handleWorkflowQuestionSubmit}
             />
+          ) : null}
+
+          {preferenceSuggestion ? (
+            <div className="rounded-3xl border border-primary/20 bg-white p-5 shadow-sm">
+              <p className="text-sm font-semibold text-slate-900">偵測到你先前使用過以下旅遊設定，是否繼續套用？</p>
+              {preferenceCardMode === "summary" ? (
+                <>
+                  <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
+                    <p>目的地：{preferenceSuggestion.preferences.destination || "未設定"}</p>
+                    <p>預算：{preferenceSuggestion.preferences.budget || "未設定"}</p>
+                    <p>天數：{preferenceSuggestion.preferences.days || "未設定"}</p>
+                    <p>旅遊風格：{preferenceSuggestion.preferences.travelStyle?.join("、") || "未設定"}</p>
+                    <p>交通偏好：{preferenceSuggestion.preferences.transportPreference || "未設定"}</p>
+                    <p>住宿偏好：{preferenceSuggestion.preferences.accommodationPreference || "未設定"}</p>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleApplyPreviousPreferences()}
+                      disabled={isApplyingPreferences}
+                      className="rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isApplyingPreferences ? "套用中..." : "套用"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreferenceCardMode("edit")}
+                      disabled={isApplyingPreferences}
+                      className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      修改
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <input
+                    value={editableSuggestion?.destination || ""}
+                    onChange={(event) => setEditableSuggestion((prev) => ({ ...(prev || {}), destination: event.target.value }))}
+                    placeholder="目的地"
+                    className="rounded-2xl border border-slate-200 px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="number"
+                    value={editableSuggestion?.budget || ""}
+                    onChange={(event) => setEditableSuggestion((prev) => ({ ...(prev || {}), budget: Number(event.target.value) || undefined }))}
+                    placeholder="預算"
+                    className="rounded-2xl border border-slate-200 px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="number"
+                    value={editableSuggestion?.days || ""}
+                    onChange={(event) => setEditableSuggestion((prev) => ({ ...(prev || {}), days: Number(event.target.value) || undefined }))}
+                    placeholder="天數"
+                    className="rounded-2xl border border-slate-200 px-3 py-2 text-sm"
+                  />
+                  <input
+                    value={editableSuggestion?.travelStyle?.join("、") || ""}
+                    onChange={(event) => setEditableSuggestion((prev) => ({
+                      ...(prev || {}),
+                      travelStyle: event.target.value.split(/[、,，]/).map((item) => item.trim()).filter(Boolean),
+                    }))}
+                    placeholder="旅遊風格，用頓號分隔"
+                    className="rounded-2xl border border-slate-200 px-3 py-2 text-sm"
+                  />
+                  <input
+                    value={editableSuggestion?.transportPreference || ""}
+                    onChange={(event) => setEditableSuggestion((prev) => ({ ...(prev || {}), transportPreference: event.target.value }))}
+                    placeholder="交通偏好"
+                    className="rounded-2xl border border-slate-200 px-3 py-2 text-sm"
+                  />
+                  <input
+                    value={editableSuggestion?.accommodationPreference || ""}
+                    onChange={(event) => setEditableSuggestion((prev) => ({ ...(prev || {}), accommodationPreference: event.target.value }))}
+                    placeholder="住宿偏好"
+                    className="rounded-2xl border border-slate-200 px-3 py-2 text-sm"
+                  />
+                  <div className="flex gap-2 sm:col-span-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleApplyPreviousPreferences(editableSuggestion || undefined)}
+                      disabled={isApplyingPreferences}
+                      className="rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isApplyingPreferences ? "產生中..." : "用修改後設定產生行程"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreferenceCardMode("summary")}
+                      disabled={isApplyingPreferences}
+                      className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      返回
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : null}
 
           {messages.length === 0 && !isSending && !errorMessage && (

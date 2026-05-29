@@ -33,7 +33,8 @@ services:
       MEM0_TOP_K: ${MEM0_TOP_K:-5}
       SEARXNG_BASE_URL: ${SEARXNG_BASE_URL:-http://localhost:8081}
       SEARXNG_INTERNAL_BASE_URL: http://searxng:8080
-      SEARXNG_ENABLED: ${SEARXNG_ENABLED:-true}
+      # SearXNG is kept only for legacy/manual search experiments; AI chat search only uses Serper/Tavily.
+      SEARXNG_ENABLED: ${SEARXNG_ENABLED:-false}
       SEARXNG_TIMEOUT_MS: ${SEARXNG_TIMEOUT_MS:-12000}
       SEARXNG_DEFAULT_LANGUAGE: ${SEARXNG_DEFAULT_LANGUAGE:-zh-TW}
       SEARXNG_DEFAULT_CATEGORIES: ${SEARXNG_DEFAULT_CATEGORIES:-general}
@@ -103,7 +104,8 @@ services:
       MEM0_TOP_K: ${MEM0_TOP_K:-5}
       SEARXNG_BASE_URL: ${SEARXNG_BASE_URL:-http://localhost:8081}
       SEARXNG_INTERNAL_BASE_URL: http://searxng:8080
-      SEARXNG_ENABLED: ${SEARXNG_ENABLED:-true}
+      # SearXNG is kept only for legacy/manual search experiments; AI chat search only uses Serper/Tavily.
+      SEARXNG_ENABLED: ${SEARXNG_ENABLED:-false}
       SEARXNG_TIMEOUT_MS: ${SEARXNG_TIMEOUT_MS:-12000}
       SEARXNG_DEFAULT_LANGUAGE: ${SEARXNG_DEFAULT_LANGUAGE:-zh-TW}
       SEARXNG_DEFAULT_CATEGORIES: ${SEARXNG_DEFAULT_CATEGORIES:-general}
@@ -291,6 +293,7 @@ services:
       - backend
 
   searxng:
+    # Legacy/manual search service. AI chat and itinerary generation must not use SearXNG.
     image: searxng/searxng:latest
     container_name: aiyo-new-searxng
     ports:

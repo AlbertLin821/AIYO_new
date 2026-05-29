@@ -1,18 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { handleWebSearchRequest } from "@/app/api/search/web/handleWebSearch";
 
 test("handleWebSearchRequest returns results on success", async () => {
+  process.env.WEB_SEARCH_PROVIDER = "serper";
+  process.env.SERPER_API_KEY = "serper-test";
+  const { handleWebSearchRequest } = await import("@/app/api/search/web/handleWebSearch");
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async () =>
     new Response(
       JSON.stringify({
-        results: [
+        organic: [
           {
             title: "嘉義文化路夜市",
-            url: "https://example.com/night-market",
-            content: "附近美食與交通資訊",
-            engine: "google",
+            link: "https://example.com/night-market",
+            snippet: "附近美食與交通資訊",
           },
         ],
       }),
@@ -30,13 +31,14 @@ test("handleWebSearchRequest returns results on success", async () => {
     assert.equal(result.body.data.query, "嘉義美食景點");
     assert.equal(Array.isArray(result.body.data.results), true);
     assert.equal(result.body.data.results.length, 1);
-    assert.equal(result.body.data.provider, "searxng");
+    assert.equal(result.body.data.provider, "serper");
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
 test("handleWebSearchRequest validates empty query", async () => {
+  const { handleWebSearchRequest } = await import("@/app/api/search/web/handleWebSearch");
   const result = await handleWebSearchRequest({ query: "   " });
   assert.equal(result.ok, false);
   if (result.ok) {

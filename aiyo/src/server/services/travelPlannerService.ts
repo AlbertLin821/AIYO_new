@@ -1,6 +1,8 @@
 import { filterProposedChangesByVerifiedPlaces } from "@/server/ai/placeNameMatch";
 import { normalizeConversationHistory } from "@/server/services/travelPlanner/chatConversation";
+import type { AIContextBuildResult } from "@/server/ai/aiContextBuilder";
 import { chatWithOllama, OllamaRequestError, type OllamaMessage } from "@/server/ai/ollamaClient";
+import { decideTravelAgentMode } from "@/server/ai/travelAgentOrchestrator";
 import {
   questionCardJsonSchema,
   structuredChatOutputJsonSchema,
@@ -51,6 +53,7 @@ import type {
   QuestionCardPayload,
   StatusStepPayload,
   StatusStepProvider,
+  TravelAgentDecision,
   TravelPlanResponse,
   TravelPlanRevisionMeta,
   TripProfile,
@@ -87,6 +90,29 @@ function normalizeHistory(
             : `Current itinerary context:\n${itinerarySummary}`,
     },
   ];
+}
+
+function buildNaturalTravelAgentResponse(decision: TravelAgentDecision): ChatResponsePayload {
+  const content =
+    decision.userFacingGuidance ||
+    decision.preferenceConfirmation?.prompt ||
+    "我可以先幫你整理旅遊方向，再依你的偏好排成可執行的行程。";
+
+  return {
+    reply: {
+      id: `assistant_${Date.now()}`,
+      role: "assistant",
+      content,
+      timestamp: new Date().toLocaleTimeString("zh-TW", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      responseType: "text_message",
+      proposedChanges: [],
+    },
+    proposedChanges: [],
+    travelAgentDecision: decision,
+  };
 }
 
 function sanitizeAssistantReply(content: string): string {
@@ -2246,12 +2272,8 @@ function webSearchBackendToProgressProvider(backend: WebSearchBackend): StatusSt
       return "serper";
     case "tavily":
       return "tavily";
-    case "mock":
-      return "mock_web";
-    case "searxng":
-      return "searxng";
     default:
-      return "searxng";
+      return "serper";
   }
 }
 
@@ -2274,11 +2296,23 @@ async function runWebSearch(
     status: "running",
     query,
   });
-  const { results, backend } = await runUnifiedWebSearch({
-    query,
-    limit: cap,
-  });
-  const progressProvider = webSearchBackendToProgressProvider(backend === "none" ? "searxng" : backend);
+  let results: WebSearchResult[] = [];
+  let backend: WebSearchBackend = "none";
+  let providerError: Error | null = null;
+  try {
+    const bundle = await runUnifiedWebSearch({
+      query,
+      limit: cap,
+    });
+    results = bundle.results;
+    backend = bundle.backend;
+  } catch (error) {
+    providerError = error instanceof Error ? error : new Error("Web search failed.");
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[web-search] provider_failed", providerError.message);
+    }
+  }
+  const progressProvider = webSearchBackendToProgressProvider(backend);
 
   if (!results.length) {
     publishProgressStep(progressSessionId, {
@@ -2292,7 +2326,7 @@ async function runWebSearch(
     return {
       results: [],
       digest: "",
-      warning: "目前無法連線到搜尋服務，因此以下內容可能不是最新資料。",
+      warning: providerError?.message || "目前無法連線到 Serper 或 Tavily，因此以下內容可能不是最新資料。",
     };
   }
   publishProgressStep(progressSessionId, {
@@ -2964,14 +2998,31 @@ export async function chatWithTravelAssistant(input: {
   progressSessionId?: string;
   memoryContext?: string;
   forceStructuredRevision?: boolean;
+  aiContext?: AIContextBuildResult | null;
 }): Promise<ChatResponsePayload> {
+  const travelAgentDecision = decideTravelAgentMode({
+    message: input.message,
+    context: input.context,
+    tripProfile: input.tripProfile,
+    aiContext: input.aiContext,
+    memoryContext: input.memoryContext,
+  });
+
+  if (
+    travelAgentDecision.mode === "casual_chat" ||
+    travelAgentDecision.mode === "collect_requirements" ||
+    travelAgentDecision.mode === "confirm_preferences"
+  ) {
+    return buildNaturalTravelAgentResponse(travelAgentDecision);
+  }
+
   const itineraryInquiryResponse = buildExistingItineraryInquiryResponse({
     message: input.message,
     context: input.context,
     questionAnswers: input.questionAnswers,
   });
   if (itineraryInquiryResponse) {
-    return itineraryInquiryResponse;
+    return { ...itineraryInquiryResponse, travelAgentDecision };
   }
 
   const itineraryPatchResponse = await buildExistingItineraryPatchResponse({
@@ -2982,7 +3033,7 @@ export async function chatWithTravelAssistant(input: {
     progressSessionId: input.progressSessionId,
   });
   if (itineraryPatchResponse) {
-    return itineraryPatchResponse;
+    return { ...itineraryPatchResponse, travelAgentDecision };
   }
 
   if (input.structuredTravelPlanning) {
@@ -2996,7 +3047,7 @@ export async function chatWithTravelAssistant(input: {
       forceStructuredRevision: input.forceStructuredRevision,
     });
     if (structuredTripResponse) {
-      return structuredTripResponse;
+      return { ...structuredTripResponse, travelAgentDecision };
     }
   }
 
@@ -3025,10 +3076,7 @@ export async function chatWithTravelAssistant(input: {
     Math.max(45_000, serverConfig.ollamaTimeoutMs),
   );
 
-  const shouldResearch = needsTravelResearch({
-    message: input.message,
-    context: input.context,
-  });
+  const shouldResearch = travelAgentDecision.shouldSearch;
   let digest: { text: string; placeHits: PlaceSearchHit[]; sources: Record<string, ChatSource> } = {
     text: "",
     placeHits: [],
@@ -3148,6 +3196,7 @@ export async function chatWithTravelAssistant(input: {
             ? toCitationList(webSearch.results, 3)
             : undefined,
       },
+      travelAgentDecision,
     };
   }
 
@@ -3183,5 +3232,6 @@ export async function chatWithTravelAssistant(input: {
       sources,
     },
     proposedChanges,
+    travelAgentDecision,
   };
 }

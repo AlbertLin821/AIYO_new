@@ -1,5 +1,6 @@
 import { buildPinsFromLocations } from "@/services/mapSync";
 import { syncService } from "@/services/syncService";
+import { recordAppliedVideoSummary } from "@/services/videoClient";
 import { useMapStore } from "@/stores/useMapStore";
 import { useTripStore } from "@/stores/useTripStore";
 import type { LocationReference, Video } from "@/types";
@@ -174,5 +175,19 @@ export async function importVideoVerifiedPlacesToTrip(
   }));
   useMapStore.getState().addPins(pins);
   await syncService.flushTripSyncNow();
+  await recordAppliedVideoSummary({
+    tripId: useTripStore.getState().tripId,
+    videoId: video.videoId || video.id,
+    summaryId: video.videoId || video.id,
+    videoUrl: video.url,
+    title: video.title,
+    appliedPlaces: verified.map((location) => location.name),
+    appliedSegments: video.summarySegments || [],
+    createdTripItems: itemsToPin.map((entry) => entry.itemId),
+    summarySnapshot: {
+      summary: video.summary,
+      extractedLocations: verified.map((location) => location.name),
+    },
+  }).catch(() => undefined);
   return { addedItems: itemsToPin.length, addedPins: pins.length };
 }

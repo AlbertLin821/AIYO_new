@@ -22,6 +22,8 @@ model User {
   tripCollaborations TripCollaborator[]
   tripPublications TripPublication[]
   chatMessages   ChatMessage[]
+  videoInteractions VideoInteraction[]
+  appliedVideoSummaries AppliedVideoSummary[]
   comments       Comment[]
   presences      CollaborationPresence[]
   accounts       Account[]
@@ -60,6 +62,8 @@ model Trip {
   room        CollaborationRoom?
   collaborators TripCollaborator[]
   publication TripPublication?
+  videoInteractions VideoInteraction[]
+  appliedVideoSummaries AppliedVideoSummary[]
 
   @@index([userId, updatedAt])
   @@index([folderId])
@@ -223,6 +227,54 @@ model VideoSummaryCache {
   updatedAt DateTime @updatedAt
 
   @@map("video_summary_caches")
+}
+
+model VideoInteraction {
+  id              String   @id @default(cuid())
+  userId          String
+  tripId          String?
+  videoId         String
+  source          String?
+  videoUrl        String?
+  title           String?
+  interactionType String
+  analysisId      String?
+  summaryId       String?
+  watchDurationSeconds Int?
+  progress        Float?
+  extractedPlaces Json?
+  extractedTimestamps Json?
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trip            Trip?    @relation(fields: [tripId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([tripId, createdAt])
+  @@index([videoId])
+  @@map("video_interactions")
+}
+
+model AppliedVideoSummary {
+  id               String   @id @default(cuid())
+  userId           String
+  tripId           String?
+  videoId          String
+  summaryId        String?
+  videoUrl         String?
+  title            String?
+  appliedPlaces    Json?
+  appliedSegments  Json?
+  createdTripItems Json?
+  summarySnapshot  Json?
+  appliedAt        DateTime @default(now())
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trip             Trip?    @relation(fields: [tripId], references: [id], onDelete: SetNull)
+
+  @@index([userId, appliedAt])
+  @@index([tripId, appliedAt])
+  @@index([videoId])
+  @@map("applied_video_summaries")
 }
 
 model CollaborationRoom {

@@ -20,7 +20,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { zhTW as t } from "@/locales/zh-TW";
-import { deleteMemory, listMemories, updateMemory } from "@/services/aiClient";
+import {
+  clearPersonalizationData,
+  deleteAiMemory,
+  deleteMemory,
+  listMemories,
+  resetTravelPreferences,
+  updateMemory,
+} from "@/services/aiClient";
 import { syncService } from "@/services/syncService";
 import { useProfileStore } from "@/stores/useProfileStore";
 import { useToastStore } from "@/stores/useToastStore";
@@ -81,6 +88,7 @@ export default function SettingsModal() {
   const [editingMemoryText, setEditingMemoryText] = useState("");
   const [savingMemoryId, setSavingMemoryId] = useState<string | null>(null);
   const [deletingMemoryId, setDeletingMemoryId] = useState<string | null>(null);
+  const [bulkAction, setBulkAction] = useState<"preferences" | "memory" | "all" | null>(null);
 
   const loadMemories = useCallback(async () => {
     setMemoriesLoading(true);
@@ -181,6 +189,79 @@ export default function SettingsModal() {
       pushToast({ variant: "error", title: t.profile.memoryDeleteFailed, description: error instanceof Error ? error.message : t.api.postFailed });
     } finally {
       setDeletingMemoryId(null);
+    }
+  }
+
+  async function handleResetPreferences() {
+    if (!window.confirm("確定要重置旅遊偏好嗎？這會清除目的地、預算、旅遊風格與交通偏好。")) {
+      return;
+    }
+    setBulkAction("preferences");
+    try {
+      await resetTravelPreferences();
+      store.updateProfile({
+        destination: "",
+        budget: 0,
+        travelDays: 0,
+        preferredTransport: "",
+        travelPace: "",
+        travelPreferences: [],
+        interests: [],
+      });
+      setPace("");
+      setPreferences([]);
+      setInterests([]);
+      setTransport("");
+      pushToast({ variant: "success", title: "已重置旅遊偏好", description: "AI 後續不會再套用舊偏好。" });
+    } catch (error) {
+      pushToast({ variant: "error", title: "重置偏好失敗", description: error instanceof Error ? error.message : t.api.postFailed });
+    } finally {
+      setBulkAction(null);
+    }
+  }
+
+  async function handleDeleteAiMemory() {
+    if (!window.confirm("確定要刪除 AI 記憶嗎？這會刪除聊天記憶與 Mem0 向量記憶，且無法復原。")) {
+      return;
+    }
+    setBulkAction("memory");
+    try {
+      await deleteAiMemory();
+      setMemories([]);
+      pushToast({ variant: "success", title: "已刪除 AI 記憶", description: "後續 AI context 不會再讀取舊聊天記憶。" });
+    } catch (error) {
+      pushToast({ variant: "error", title: "刪除 AI 記憶失敗", description: error instanceof Error ? error.message : t.api.postFailed });
+    } finally {
+      setBulkAction(null);
+    }
+  }
+
+  async function handleClearPersonalizationData() {
+    if (!window.confirm("確定要清除所有個人化資料嗎？這會清除偏好、聊天記憶、影片互動與套用紀錄，無法復原。歷史行程本身會保留。")) {
+      return;
+    }
+    setBulkAction("all");
+    try {
+      await clearPersonalizationData();
+      store.updateProfile({
+        destination: "",
+        budget: 0,
+        travelDays: 0,
+        preferredTransport: "",
+        travelPace: "",
+        travelPreferences: [],
+        interests: [],
+      });
+      setPace("");
+      setPreferences([]);
+      setInterests([]);
+      setTransport("");
+      setMemories([]);
+      pushToast({ variant: "success", title: "已清除個人化資料", description: "行程會保留，但個人化依據已清除。" });
+    } catch (error) {
+      pushToast({ variant: "error", title: "清除個人化資料失敗", description: error instanceof Error ? error.message : t.api.postFailed });
+    } finally {
+      setBulkAction(null);
     }
   }
 
@@ -448,6 +529,39 @@ export default function SettingsModal() {
                     })}
                   </div>
                 )}
+              </section>
+
+              <section className="rounded-2xl border border-danger/20 bg-danger/5 p-4">
+                <h3 className="font-semibold text-danger">隱私與資料管理</h3>
+                <p className="mt-1 text-xs text-muted">
+                  這些操作會同步呼叫後端刪除資料；AI 後續 context 不會再讀取已清除的偏好或記憶。
+                </p>
+                <div className="mt-3 grid gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleResetPreferences()}
+                    disabled={bulkAction !== null}
+                    className="rounded-xl border border-border bg-surface px-3 py-2 text-left text-sm font-medium text-foreground transition-colors hover:bg-cream/60 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {bulkAction === "preferences" ? "重置中..." : "重置旅遊偏好"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteAiMemory()}
+                    disabled={bulkAction !== null}
+                    className="rounded-xl border border-danger/30 bg-surface px-3 py-2 text-left text-sm font-medium text-danger transition-colors hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {bulkAction === "memory" ? "刪除中..." : "刪除 AI 記憶"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleClearPersonalizationData()}
+                    disabled={bulkAction !== null}
+                    className="rounded-xl bg-danger px-3 py-2 text-left text-sm font-semibold text-white transition-colors hover:bg-danger/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {bulkAction === "all" ? "清除中..." : "清除所有個人化資料"}
+                  </button>
+                </div>
               </section>
         </div>
       </DialogContent>

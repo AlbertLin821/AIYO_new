@@ -16,6 +16,26 @@ import type {
   TripPlanResult,
 } from "@/types";
 
+export type TravelPreferenceSuggestion = {
+  has_previous_preferences: boolean;
+  preferences: {
+    destination?: string;
+    budget?: number;
+    budgetLevel?: "low" | "medium" | "high";
+    days?: number;
+    travelStyle?: string[];
+    transportPreference?: string;
+    accommodationPreference?: string;
+    companionType?: string;
+    mustVisit?: string[];
+    avoid?: string[];
+    notes?: string;
+  };
+  source: string[];
+  updated_at?: string;
+  confidence?: number;
+};
+
 export async function sendChatMessage(
   input: {
     message: string;
@@ -108,4 +128,40 @@ export async function updateMemory(memoryId: string, text: string) {
 
 export async function deleteMemory(memoryId: string) {
   return apiDelete<{ id: string }>(`/api/memories/${memoryId}`);
+}
+
+export async function fetchTravelPreferenceSuggestion() {
+  return apiGet<TravelPreferenceSuggestion>("/api/users/me/travel-preferences/suggestion");
+}
+
+export async function applyTravelPreferences(input: {
+  preferences?: TravelPreferenceSuggestion["preferences"];
+  savePreferences?: boolean;
+}) {
+  return apiPost<typeof input, {
+    tripId: string;
+    plan: TripPlanResult;
+    appliedPreferences: TravelPreferenceSuggestion["preferences"];
+    diagnostics: Record<string, unknown>;
+  }>("/api/trips/apply-preferences", input);
+}
+
+export async function resetTravelPreferences() {
+  return apiDelete<{ cleared: string[] }>("/api/users/me/preferences");
+}
+
+export async function deleteAiMemory() {
+  return apiDelete<{ chatMessages: number; externalMemories: number; vectorStore: string }>(
+    "/api/users/me/memory",
+  );
+}
+
+export async function clearPersonalizationData() {
+  return apiDelete<{
+    chatMessages: number;
+    videoInteractions: number;
+    appliedSummaries: number;
+    externalMemories: number;
+    vectorStore: string;
+  }>("/api/users/me/personalization-data");
 }

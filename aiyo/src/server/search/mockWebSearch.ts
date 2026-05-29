@@ -9,7 +9,7 @@ export function mockWebSearchResults(query: string, limit: number): WebSearchRes
     rows.push({
       title: `[Mock ${i + 1}] ${q.slice(0, 48)}${q.length > 48 ? "…" : ""}`,
       url: `https://example.com/mock-search/${encodeURIComponent(q.slice(0, 20))}-${i + 1}`,
-      content: `離線示範摘要：與「${q.slice(0, 40)}」相關的示意內容（第 ${i + 1} 筆）。實際環境請設定 Serper、Tavily 或 SearxNG。`,
+      content: `離線示範摘要：與「${q.slice(0, 40)}」相關的示意內容（第 ${i + 1} 筆）。AI 搜尋實際環境請設定 Serper 或 Tavily。`,
       engine: "mock",
       score: 0.5,
     });
