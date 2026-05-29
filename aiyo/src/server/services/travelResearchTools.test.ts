@@ -3,7 +3,7 @@ import test from "node:test";
 import { buildDefaultTravelToolRequests, buildTripPlanResearchRequests } from "@/server/services/travelResearchTools";
 import type { TripPlanRequest } from "@/types";
 
-test("buildTripPlanResearchRequests propagates trip dates into weather and event lookups", () => {
+test("buildTripPlanResearchRequests only searches when fresh info is requested", () => {
   const request: TripPlanRequest = {
     destination: "熊本",
     days: 5,
@@ -16,6 +16,8 @@ test("buildTripPlanResearchRequests propagates trip dates into weather and event
     },
   };
 
+  assert.deepEqual(buildTripPlanResearchRequests(request), []);
+  request.preferences.notes = "請幫我確認這趟旅程的天氣如何";
   const requests = buildTripPlanResearchRequests(request);
   const weatherRequest = requests.find((item) => item.type === "weather_forecast");
 

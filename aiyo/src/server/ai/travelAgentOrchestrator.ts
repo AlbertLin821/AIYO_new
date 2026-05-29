@@ -1,4 +1,5 @@
 import type { AIContextBuildResult } from "@/server/ai/aiContextBuilder";
+import { decideSearchIntent } from "@/server/search/searchIntent";
 import type {
   ChatContext,
   ConversationMode,
@@ -7,8 +8,6 @@ import type {
   TravelPace,
   TripProfile,
 } from "@/types";
-
-const SEARCH_PROVIDERS = ["serper", "tavily"] as const;
 
 type TravelAgentOrchestratorInput = {
   message: string;
@@ -237,16 +236,12 @@ function isModifyIntent(message: string, context?: ChatContext): boolean {
   return /(?:幫我|請|把|將)?.{0,12}(?:第\s*[\d一二兩两三四五六七八九十]+\s*天|第二天|第一天|第三天|最後一天|行程).{0,30}(?:改成|換成|新增|加入|刪除|刪掉|移除|取消|提前|延後|移到)|(?:改成|換成|新增|加入|刪除|刪掉|移除|取消).{0,30}(?:行程|景點|餐廳|活動)/u.test(message);
 }
 
-function isFreshInformationRequest(message: string): boolean {
-  return /今天|明天|現在|近期|最新|今年|營業時間|開到幾點|休館|公休|票價|門票|交通狀況|封路|活動|市集|祭典|天氣|降雨|氣溫|即時|目前/u.test(message);
-}
-
 function isTripPlanningIntent(message: string): boolean {
   return /(?:想去|我要去|我想去|幫我|請|可以|能不能|想要|需要).{0,24}(?:規劃|安排|排|行程|自由行|旅遊|旅行|玩[\d一二兩两三四五六七八九十]+\s*(?:天|日))|(?:規劃|安排|排).{0,16}(?:行程|旅行|旅遊|自由行)|[\d一二兩两三四五六七八九十]+\s*(?:天|日).{0,10}(?:行程|旅行|旅遊|自由行)?/u.test(message);
 }
 
 function isGeneralTravelQuestion(message: string): boolean {
-  return /適合|推薦|建議|怎麼看|好玩嗎|第一次|自由行|親子|蜜月|美食|購物|景點|交通/u.test(message);
+  return /適合|推薦|建議|怎麼看|好玩嗎|第一次|自由行|親子|蜜月|美食|購物|景點|地點|有哪些|查看|目前行程|交通/u.test(message);
 }
 
 function collectMissingRequirements(hints: TripRequestHints, knownPreferences: TravelAgentKnownPreferences): string[] {
@@ -287,6 +282,11 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
   const message = normalizeText(input.message);
   const hints = extractTripRequestHints(message);
   const knownPreferences = mergeKnownPreferences(input);
+  const searchDecision = decideSearchIntent({
+    message,
+    context: input.context,
+    preferences: knownPreferences,
+  });
   const reusablePreferences = input.aiContext?.structuredContext.preferences
     ? mergeKnownPreferences({ ...input, context: undefined, tripProfile: undefined })
     : input.aiContext?.structured.preferences;
@@ -315,21 +315,24 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
 
   if (isModifyIntent(message, input.context)) {
     return buildDecision("modify_itinerary", {
+      searchDecision,
       debugReason: "matched current itinerary mutation intent",
     });
   }
 
-  if (isFreshInformationRequest(message)) {
+  if (searchDecision.shouldSearch) {
     return buildDecision("search_travel_info", {
       shouldSearch: true,
-      searchReason: "使用者詢問營業時間、票價、近期活動、天氣或交通等需要最新資料的資訊。",
-      requiredSearchProviders: [...SEARCH_PROVIDERS],
-      debugReason: "matched fresh information request",
+      searchReason: searchDecision.reason,
+      requiredSearchProviders: searchDecision.providers,
+      searchDecision,
+      debugReason: `matched search intent: ${searchDecision.searchNeed}`,
     });
   }
 
   if (isPreferenceAcceptance(message)) {
     return buildDecision("generate_itinerary", {
+      searchDecision,
       preferenceConfirmation: {
         summary: formatPreferenceSummary(mergedPreferences),
         preferences: mergedPreferences,
@@ -346,6 +349,7 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
       const summary = formatPreferenceSummary(reusable);
       return buildDecision("confirm_preferences", {
         missingRequirements,
+        searchDecision,
         preferenceConfirmation: {
           summary,
           preferences: mergedPreferences,
@@ -359,12 +363,14 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
     if (missingRequirements.length) {
       return buildDecision("collect_requirements", {
         missingRequirements,
+        searchDecision,
         userFacingGuidance: buildFollowUpGuidance(hints, missingRequirements),
         debugReason: "planning intent missing key requirements",
       });
     }
 
     return buildDecision("generate_itinerary", {
+      searchDecision,
       preferenceConfirmation: {
         summary: formatPreferenceSummary(mergedPreferences),
         preferences: mergedPreferences,
@@ -376,11 +382,13 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
 
   if (isGeneralTravelQuestion(message)) {
     return buildDecision("answer_trip_question", {
+      searchDecision,
       debugReason: "general travel question without fresh-data requirement",
     });
   }
 
   return buildDecision("casual_chat", {
+    searchDecision,
     userFacingGuidance: "可以，我先用旅遊規劃角度幫你想。你想先聊目的地靈感，還是要我協助整理成行程？",
     debugReason: "fallback natural chat",
   });

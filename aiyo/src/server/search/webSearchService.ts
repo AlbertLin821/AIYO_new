@@ -13,6 +13,10 @@ export type UnifiedWebSearchResult = {
 export const AI_WEB_SEARCH_ALLOWED_PROVIDERS = ["serper", "tavily"] as const;
 type AllowedProvider = (typeof AI_WEB_SEARCH_ALLOWED_PROVIDERS)[number];
 
+function isAllowedProvider(value: string): value is AllowedProvider {
+  return (AI_WEB_SEARCH_ALLOWED_PROVIDERS as readonly string[]).includes(value);
+}
+
 function warnProviderFallback(raw: string) {
   if (process.env.NODE_ENV !== "production") {
     console.warn(
@@ -37,11 +41,19 @@ function resolveConfiguredProvider(): "auto" | AllowedProvider {
   if (configured === "auto" || configured === "") {
     return "auto";
   }
-  if ((AI_WEB_SEARCH_ALLOWED_PROVIDERS as readonly string[]).includes(configured)) {
+  if (isAllowedProvider(configured)) {
     return configured as AllowedProvider;
   }
   warnProviderFallback(configured);
   return "auto";
+}
+
+export function sanitizeAiSearchProviders(providers?: string[]): AllowedProvider[] {
+  const clean = (providers || [])
+    .map((provider) => provider.trim().toLowerCase())
+    .filter(isAllowedProvider);
+  const unique = Array.from(new Set(clean));
+  return unique.length ? unique : [...AI_WEB_SEARCH_ALLOWED_PROVIDERS];
 }
 
 async function searchTavilyAsWeb(options: WebSearchOptions): Promise<WebSearchResult[]> {
@@ -64,17 +76,22 @@ async function searchTavilyAsWeb(options: WebSearchOptions): Promise<WebSearchRe
 /**
  * Single unified web search for BFF `/api/search/web` and `travelPlannerService` supplementary research.
  */
-export async function runUnifiedWebSearch(options: WebSearchOptions): Promise<UnifiedWebSearchResult> {
+export async function runUnifiedWebSearch(
+  options: WebSearchOptions & { providers?: string[] },
+): Promise<UnifiedWebSearchResult> {
   const query = options.query.trim();
   if (!query) {
     return { results: [], backend: "none" };
   }
 
   const configured = resolveConfiguredProvider();
+  const allowedProviders = sanitizeAiSearchProviders(options.providers);
   const tryOrder: WebSearchBackend[] =
     configured === "auto"
-      ? resolveBackendOrder()
-      : ([configured] as WebSearchBackend[]).filter((b) => b !== "none");
+      ? allowedProviders.filter((provider) => resolveBackendOrder().includes(provider))
+      : allowedProviders.includes(configured)
+        ? ([configured] as WebSearchBackend[]).filter((b) => b !== "none")
+        : [];
 
   for (const backend of tryOrder) {
     if (backend === "none") {

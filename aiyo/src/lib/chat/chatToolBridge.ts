@@ -7,7 +7,7 @@ export function statusStepToChatToolStatus(step: StatusStepPayload): ChatToolSta
     return "error";
   }
 
-  if (step.provider === "tavily" || step.provider === "searxng" || step.provider === "serper" || step.provider === "mock_web") {
+  if (step.provider === "tavily" || step.provider === "serper" || step.provider === "mock_web") {
     return "searching_web";
   }
   if (step.provider === "youtube") {

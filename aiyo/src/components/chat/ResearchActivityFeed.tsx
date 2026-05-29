@@ -35,7 +35,7 @@ export default function ResearchActivityFeed({
 }: {
   steps: StatusStepPayload[];
 }) {
-  const activities = steps.filter((step) => step.provider || step.query || step.detail);
+  const activities = steps.filter((step) => step.provider !== "searxng" && (step.provider || step.query || step.detail));
   if (!activities.length) {
     return null;
   }

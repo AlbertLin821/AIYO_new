@@ -433,6 +433,42 @@ export type ConversationMode =
 
 export type TravelSearchProvider = "serper" | "tavily";
 
+export type SearchNeed =
+  | "none"
+  | "fresh_info"
+  | "place_details"
+  | "opening_hours"
+  | "ticket_price"
+  | "events"
+  | "weather"
+  | "transportation"
+  | "official_source"
+  | "general_web_research";
+
+export type SearchDecision = {
+  shouldSearch: boolean;
+  searchNeed: SearchNeed;
+  reason: string;
+  query?: string;
+  providers: TravelSearchProvider[];
+  freshnessRequired: boolean;
+  maxResults?: number;
+};
+
+export type TravelSearchContext = {
+  provider: TravelSearchProvider;
+  query: string;
+  searchNeed: SearchNeed;
+  results: Array<{
+    title: string;
+    url?: string;
+    snippet?: string;
+    source?: string;
+    publishedAt?: string;
+  }>;
+  usedAt: string;
+};
+
 export type TravelAgentKnownPreferences = {
   destination?: string;
   budget?: number;
@@ -539,6 +575,7 @@ export type PersonalizedAIContext = {
     source?: "mem0" | "profile" | "chat" | "trip" | "video";
     relevance?: number;
   }>;
+  travelSearchContexts?: TravelSearchContext[];
   contextWarnings: string[];
   debug?: {
     includedSources: string[];
@@ -562,6 +599,7 @@ export type TravelAgentDecision = {
   shouldModifyItinerary: boolean;
   shouldAskFollowUp: boolean;
   missingRequirements: string[];
+  searchDecision?: SearchDecision;
   preferenceConfirmation?: TravelAgentPreferenceConfirmation;
   userFacingGuidance?: string;
   debugReason: string;

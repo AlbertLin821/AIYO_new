@@ -17,6 +17,7 @@ import {
   normalizeYouTubeSources,
 } from "@/server/chat/sourceNormalization";
 import { publishChatProgress } from "@/server/chat/chatProgressStore";
+import { decideSearchIntent } from "@/server/search/searchIntent";
 import type { StatusStepPayload } from "@/types";
 
 export type TravelToolRequest =
@@ -109,6 +110,13 @@ export function buildDefaultTravelToolRequests(
   context?: ChatContext,
 ): TravelToolRequest[] {
   const requests: TravelToolRequest[] = [];
+  const searchDecision = decideSearchIntent({ message, context });
+  if (!searchDecision.shouldSearch) {
+    const wantsVideo = /影片|youtube|YouTube|vlog|靈感|參考影片|旅遊影片/u.test(message.trim());
+    if (!wantsVideo) {
+      return requests;
+    }
+  }
   const dest = context?.destination?.trim();
   const trimmed = message.trim();
   const wantsVideo = /影片|youtube|YouTube|vlog|靈感|參考影片|旅遊影片/u.test(trimmed);
@@ -158,17 +166,38 @@ export function buildTripPlanResearchRequests(request: TripPlanRequest): TravelT
   if (!dest) {
     return [];
   }
+  const decision = decideSearchIntent({
+    message: [
+      request.destination,
+      request.preferences.notes || "",
+      request.preferences.mustVisit?.join(" ") || "",
+    ].filter(Boolean).join(" "),
+    context: {
+      destination: request.destination,
+      days: request.days,
+      tripStartDate: request.tripStartDate,
+      tripEndDate: request.tripEndDate,
+      preferences: request.preferences,
+      itinerary: request.itineraryDraft,
+    },
+  });
+  if (!decision.shouldSearch) {
+    return [];
+  }
   const interest = request.preferences.interests.join(" ").trim();
-  const q = `${dest} 景點 美食 ${interest}`.replace(/\s+/g, " ").slice(0, 120);
-  const requests: TravelToolRequest[] = [
-    { type: "search_place", query: q, locationHint: dest },
-    {
+  const q = `${dest} ${request.preferences.notes || ""} ${interest}`.replace(/\s+/g, " ").slice(0, 120);
+  const requests: TravelToolRequest[] = [];
+  if (decision.searchNeed === "place_details" || decision.searchNeed === "opening_hours" || decision.searchNeed === "fresh_info") {
+    requests.push({ type: "search_place", query: q, locationHint: dest });
+  }
+  if (decision.searchNeed === "weather") {
+    requests.push({
       type: "weather_forecast",
       destination: dest,
       startDate: request.tripStartDate,
       endDate: request.tripEndDate || request.tripStartDate,
-    },
-  ];
+    });
+  }
   const shouldSearchYouTube = /影片|youtube|YouTube|vlog/i.test(request.preferences.notes || "");
   if (shouldSearchYouTube) {
     requests.push({
@@ -178,10 +207,17 @@ export function buildTripPlanResearchRequests(request: TripPlanRequest): TravelT
       limit: 3,
     });
   }
-  if (serverConfig.tavilyApiKey.trim()) {
+  if (
+    serverConfig.tavilyApiKey.trim() &&
+    (decision.searchNeed === "events" ||
+      decision.searchNeed === "official_source" ||
+      decision.searchNeed === "ticket_price" ||
+      decision.searchNeed === "transportation" ||
+      decision.searchNeed === "general_web_research")
+  ) {
     requests.push({
       type: "tavily_search",
-      query: `${dest} 旅遊 活動 展覽 市集 ${request.tripStartDate || ""}`.replace(/\s+/g, " ").trim(),
+      query: decision.query || `${dest} ${request.preferences.notes || ""} ${request.tripStartDate || ""}`.replace(/\s+/g, " ").trim(),
     });
   }
   return requests;

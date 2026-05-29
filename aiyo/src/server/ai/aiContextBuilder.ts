@@ -481,6 +481,7 @@ export async function buildPersonalizedAIContext(input: {
         ...snippet,
         content: truncate(snippet.content, 500),
       })),
+    travelSearchContexts: [],
     contextWarnings,
     debug: {
       includedSources: [],

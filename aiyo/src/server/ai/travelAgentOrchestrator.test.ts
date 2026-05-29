@@ -133,6 +133,7 @@ test("fresh opening-hour question uses only Serper or Tavily search providers", 
 
   assert.equal(decision.mode, "search_travel_info");
   assert.equal(decision.shouldSearch, true);
+  assert.equal(decision.searchDecision?.searchNeed, "opening_hours");
   assert.deepEqual(decision.requiredSearchProviders, ["serper", "tavily"]);
   assert.ok(!decision.requiredSearchProviders.includes("searxng" as never));
 });
@@ -142,4 +143,15 @@ test("general first-time Tokyo question does not force search", () => {
 
   assert.ok(decision.mode === "answer_trip_question" || decision.mode === "casual_chat");
   assert.equal(decision.shouldSearch, false);
+});
+
+test("events and route questions get specific search needs", () => {
+  const events = decideTravelAgentMode({ message: "京都下週有什麼祭典" });
+  assert.equal(events.shouldSearch, true);
+  assert.equal(events.searchDecision?.searchNeed, "events");
+
+  const route = decideTravelAgentMode({ message: "從淺草到晴空塔怎麼去" });
+  assert.equal(route.shouldSearch, true);
+  assert.equal(route.searchDecision?.searchNeed, "transportation");
+  assert.deepEqual(route.requiredSearchProviders, ["serper", "tavily"]);
 });

@@ -24,7 +24,11 @@ import {
   detectResponseLanguage,
 } from "@/server/ai/promptBuilder";
 import { serverConfig } from "@/server/config";
-import { shouldUseWebSearch } from "@/server/search/searchIntent";
+import {
+  decideSearchIntent,
+  formatTravelSearchContextForPrompt,
+  toTravelSearchContext,
+} from "@/server/search/searchIntent";
 import { runUnifiedWebSearch, type WebSearchBackend } from "@/server/search/webSearchService";
 import type { WebSearchResult } from "@/server/search/searxngClient";
 import { mergeChatSources, normalizeWebSearchSources, pickCitationIdsForText } from "@/server/chat/sourceNormalization";
@@ -53,7 +57,9 @@ import type {
   QuestionCardPayload,
   StatusStepPayload,
   StatusStepProvider,
+  SearchDecision,
   TravelAgentDecision,
+  TravelSearchContext,
   TravelPlanResponse,
   TravelPlanRevisionMeta,
   TripProfile,
@@ -236,6 +242,7 @@ type WebSearchBundle = {
   results: WebSearchResult[];
   digest: string;
   warning?: string;
+  searchContext?: TravelSearchContext;
 };
 
 const TRIP_PLAN_COMPOSE_TIMEOUT_MS = 90_000;
@@ -2281,28 +2288,31 @@ async function runWebSearch(
   query: string,
   limit?: number,
   progressSessionId?: string,
-  options?: { skipIntentGate?: boolean },
+  options?: { skipIntentGate?: boolean; decision?: SearchDecision },
 ): Promise<WebSearchBundle> {
+  const decision = options?.decision || decideSearchIntent({ message: query });
+  const effectiveQuery = decision.query || query;
   const allowWithoutIntent = Boolean(options?.skipIntentGate);
-  if (!serverConfig.aiWebSearchEnabled || (!allowWithoutIntent && !shouldUseWebSearch(query))) {
+  if (!serverConfig.aiWebSearchEnabled || (!allowWithoutIntent && !decision.shouldSearch)) {
     return { results: [], digest: "" };
   }
 
-  const cap = Math.min(serverConfig.aiWebSearchMaxResults, limit ?? serverConfig.aiWebSearchMaxResults);
+  const cap = Math.min(5, serverConfig.aiWebSearchMaxResults, decision.maxResults ?? limit ?? serverConfig.aiWebSearchMaxResults);
   publishProgressStep(progressSessionId, {
     phase: "research",
     label: "查詢一般網頁資料",
-    detail: `正在查詢：${query}`,
+    detail: `正在查詢：${effectiveQuery}`,
     status: "running",
-    query,
+    query: effectiveQuery,
   });
   let results: WebSearchResult[] = [];
   let backend: WebSearchBackend = "none";
   let providerError: Error | null = null;
   try {
     const bundle = await runUnifiedWebSearch({
-      query,
+      query: effectiveQuery,
       limit: cap,
+      providers: decision.providers,
     });
     results = bundle.results;
     backend = bundle.backend;
@@ -2321,7 +2331,7 @@ async function runWebSearch(
       detail: "未取得可用結果，將改以既有資料繼續整理。",
       status: "failed",
       provider: progressProvider,
-      query,
+      query: effectiveQuery,
     });
     return {
       results: [],
@@ -2335,11 +2345,22 @@ async function runWebSearch(
     detail: `已取得 ${results.length} 筆網頁結果。`,
     status: "completed",
     provider: progressProvider,
-    query,
+    query: effectiveQuery,
   });
+  const searchContext =
+    backend === "serper" || backend === "tavily"
+      ? toTravelSearchContext({
+          provider: backend,
+          query: effectiveQuery,
+          searchNeed: decision.searchNeed,
+          results,
+          maxResults: cap,
+        })
+      : undefined;
   return {
-    results,
-    digest: formatWebSearchDigest(results),
+    results: results.slice(0, cap),
+    digest: searchContext ? formatTravelSearchContextForPrompt(searchContext) : formatWebSearchDigest(results.slice(0, cap)),
+    searchContext,
   };
 }
 
@@ -2758,48 +2779,63 @@ export async function generateTripPlan(
   let externalResearch = "";
   let researchSources: Record<string, ChatSource> = {};
   let researchPlaceHits: PlaceSearchHit[] = [];
-  publishProgressStep(progressSessionId, {
-    phase: "research",
-    label: "查詢景點、交通與天氣",
-    detail: "正在蒐集景點、美食、活動與天氣資料。",
-    status: "running",
-  });
   const searchQuery = [
     request.destination,
     request.preferences.interests.join(" "),
     request.preferences.mustVisit?.join(" ") || "",
     request.preferences.notes || "",
-    "景點 美食 餐廳 活動 交通 營業時間",
   ]
     .filter(Boolean)
     .join(" ")
     .trim();
-  const webSearch = await runWebSearch(searchQuery, serverConfig.aiWebSearchMaxResults, progressSessionId);
-  try {
-    const reqs = buildTripPlanResearchRequests(request);
-    if (reqs.length) {
-      const digest = await executeTravelToolRequests(reqs, {
-        destination: request.destination,
-        days: request.days,
-        budget: request.budget,
-        tripStartDate: request.tripStartDate,
-        tripEndDate: request.tripEndDate,
-        preferences: request.preferences,
-        itinerary: request.itineraryDraft,
-      }, progressSessionId);
-      externalResearch = digest.text.trim();
-      researchSources = digest.sources;
-      researchPlaceHits = digest.placeHits;
-    }
-  } catch (error) {
-    console.warn("[trip-plan] research_failed", error);
-  }
-  publishProgressStep(progressSessionId, {
-    phase: "research",
-    label: "查詢景點、交通與天氣",
-    detail: "外部資料蒐集完成。",
-    status: "completed",
+  const planSearchDecision = decideSearchIntent({
+    message: searchQuery,
+    context: {
+      destination: request.destination,
+      days: request.days,
+      budget: request.budget,
+      tripStartDate: request.tripStartDate,
+      tripEndDate: request.tripEndDate,
+      preferences: request.preferences,
+      itinerary: request.itineraryDraft,
+    },
   });
+  const webSearch = await runWebSearch(searchQuery, serverConfig.aiWebSearchMaxResults, progressSessionId, {
+    decision: planSearchDecision,
+  });
+  if (planSearchDecision.shouldSearch) {
+    publishProgressStep(progressSessionId, {
+      phase: "research",
+      label: "查詢景點、交通與天氣",
+      detail: "這次需求需要近期外部資訊，正在查詢必要資料。",
+      status: "running",
+    });
+    try {
+      const reqs = buildTripPlanResearchRequests(request);
+      if (reqs.length) {
+        const digest = await executeTravelToolRequests(reqs, {
+          destination: request.destination,
+          days: request.days,
+          budget: request.budget,
+          tripStartDate: request.tripStartDate,
+          tripEndDate: request.tripEndDate,
+          preferences: request.preferences,
+          itinerary: request.itineraryDraft,
+        }, progressSessionId);
+        externalResearch = digest.text.trim();
+        researchSources = digest.sources;
+        researchPlaceHits = digest.placeHits;
+      }
+    } catch (error) {
+      console.warn("[trip-plan] research_failed", error);
+    }
+    publishProgressStep(progressSessionId, {
+      phase: "research",
+      label: "查詢景點、交通與天氣",
+      detail: "外部資料蒐集完成。",
+      status: "completed",
+    });
+  }
 
   const itineraryUserContent = buildItineraryPrompt(request, memoryContext, {
     externalResearch: externalResearch || undefined,
@@ -3122,7 +3158,7 @@ export async function chatWithTravelAssistant(input: {
       .join(" ")
       .trim();
     webSearch = await runWebSearch(webSearchQuery, serverConfig.aiWebSearchMaxResults, input.progressSessionId, {
-      skipIntentGate: true,
+      decision: travelAgentDecision.searchDecision,
     });
     publishProgressStep(input.progressSessionId, {
       phase: "research",
@@ -3134,7 +3170,9 @@ export async function chatWithTravelAssistant(input: {
   const digestText =
     shouldResearch
       ? digest.text.trim() ||
-        "我目前先根據已取得的資料整理建議，建議出發前再確認營業時間與交通資訊。"
+        (webSearch.warning
+          ? "我目前無法取得最新資料，但可以先根據既有資訊提供規劃方向。"
+          : "我目前先根據已取得的資料整理建議，建議出發前再確認營業時間與交通資訊。")
       : "";
 
   const prompt = buildChatPrompt(
