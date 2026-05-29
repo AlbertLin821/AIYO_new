@@ -46,8 +46,14 @@ import {
 import type { PlaceSearchHit } from "@/server/geo/placesSearchService";
 import { parseTripPlanResponse, StructuredOutputError } from "@/server/ai/responseParser";
 import { isUsableMapCoordinate } from "@/lib/geoCoordinates";
+import {
+  assistantActionToLegacyProposedChange,
+  mergeAssistantActionsWithLegacy,
+} from "@/lib/assistantActions/converters";
+import { validateAssistantActions } from "@/server/ai/assistantActionValidator";
 import type {
   AiProposedChange,
+  AssistantAction,
   ChatContext,
   ChatMessage,
   ChatQuestionAnswer,
@@ -219,18 +225,66 @@ function normalizeProposedChange(value: unknown): AiProposedChange | null {
   };
 }
 
-function parseStructuredChatOutput(raw: string): { replyText: string; proposedChanges: AiProposedChange[] } {
+function normalizeAssistantAction(value: unknown): AssistantAction | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const type = String((value as { type?: unknown }).type || "").trim();
+  if (!type.includes(".")) {
+    return null;
+  }
+  return value as AssistantAction;
+}
+
+function parseStructuredChatOutput(raw: string): {
+  replyText: string;
+  proposedChanges: AiProposedChange[];
+  assistantActions: AssistantAction[];
+} {
   const parsed = extractJsonObject(raw);
   if (!parsed) {
-    return { replyText: sanitizeAssistantReply(raw) || raw.trim(), proposedChanges: [] };
+    return { replyText: sanitizeAssistantReply(raw) || raw.trim(), proposedChanges: [], assistantActions: [] };
   }
   const replyText = String(parsed.replyText || parsed.reply || parsed.message || "").trim();
   const proposedChanges = Array.isArray(parsed.proposedChanges)
     ? parsed.proposedChanges.map(normalizeProposedChange).filter((item): item is AiProposedChange => Boolean(item))
     : [];
+  const assistantActions = Array.isArray((parsed as Record<string, unknown>).assistantActions)
+    ? ((parsed as Record<string, unknown>).assistantActions as unknown[])
+        .map(normalizeAssistantAction)
+        .filter((item): item is AssistantAction => Boolean(item))
+    : [];
   return {
     replyText: sanitizeAssistantReply(replyText || raw) || raw.trim(),
     proposedChanges,
+    assistantActions,
+  };
+}
+
+function validatedAssistantPayload(input: {
+  assistantActions?: AssistantAction[];
+  proposedChanges?: AiProposedChange[];
+  aiContext?: AIContextBuildResult | null;
+}): { assistantActions: AssistantAction[]; proposedChanges: AiProposedChange[] } {
+  const merged = mergeAssistantActionsWithLegacy({
+    assistantActions: input.assistantActions,
+    proposedChanges: input.proposedChanges,
+  });
+  if (!input.aiContext?.structuredContext || !merged.assistantActions.length) {
+    return merged;
+  }
+  const validation = validateAssistantActions({
+    userId: input.aiContext.structuredContext.userId,
+    tripId: input.aiContext.structuredContext.currentTrip?.id,
+    actions: merged.assistantActions,
+    structuredContext: input.aiContext.structuredContext,
+  });
+  const proposedChanges = validation.validActions
+    .map((action) => assistantActionToLegacyProposedChange(action))
+    .filter((change): change is AiProposedChange => Boolean(change));
+  return {
+    assistantActions: validation.validActions,
+    proposedChanges: proposedChanges.length ? proposedChanges : merged.proposedChanges,
   };
 }
 
@@ -1229,6 +1283,9 @@ function isExistingItineraryPatchRequest(input: {
   message: string;
   context?: ChatContext;
 }): boolean {
+  if (/(?:地圖|地图).{0,12}(?:定位到|移到|顯示|聚焦)/u.test(input.message)) {
+    return true;
+  }
   if (!input.context?.itinerary?.length) {
     return false;
   }
@@ -1485,6 +1542,7 @@ function summarizeProposedChangesForReply(changes: AiProposedChange[]): string {
 function buildItineraryPatchResponsePayload(input: {
   content: string;
   proposedChanges: AiProposedChange[];
+  assistantActions?: AssistantAction[];
 }): ChatResponsePayload {
   return {
     reply: {
@@ -1494,8 +1552,10 @@ function buildItineraryPatchResponsePayload(input: {
       timestamp: nowChatTimestamp(),
       responseType: "text_message",
       proposedChanges: input.proposedChanges,
+      assistantActions: input.assistantActions,
     },
     proposedChanges: input.proposedChanges,
+    assistantActions: input.assistantActions,
   };
 }
 
@@ -1643,11 +1703,33 @@ function buildDeterministicItineraryPatchResponse(input: {
   message: string;
   context?: ChatContext;
 }): ChatResponsePayload | null {
+  const message = input.message.trim();
+
+  const mapFocusMatch = message.match(/(?:地圖|地图).{0,8}(?:定位到|移到|顯示|聚焦)\s*([^\n，。,]+?)(?:$|[，。,])/u);
+  if (mapFocusMatch) {
+    const placeName = cleanupPatchTitle(mapFocusMatch[1]);
+    if (placeName) {
+      const assistantActions: AssistantAction[] = [
+        { type: "map.focus_location", payload: { placeName, zoom: 15 } },
+      ];
+      return {
+        reply: {
+          id: `assistant_${Date.now()}`,
+          role: "assistant",
+          content: `可以，我會把地圖焦點移到「${placeName}」。`,
+          timestamp: nowChatTimestamp(),
+          responseType: "text_message",
+          assistantActions,
+        },
+        assistantActions,
+        proposedChanges: [],
+      };
+    }
+  }
+
   if (!input.context?.itinerary?.length) {
     return null;
   }
-
-  const message = input.message.trim();
 
   const removeDayResponse = buildRemoveWholeDayPatchResponse({
     message,
@@ -1663,6 +1745,82 @@ function buildDeterministicItineraryPatchResponse(input: {
   });
   if (removeItemResponse) {
     return removeItemResponse;
+  }
+
+  const reorderMatch = message.match(
+    /(?:把)?第\s*(\d+|[一二兩三四五六七八九十])\s*天(?:的)?順序(?:改成|調整成|改為|換成)\s*([^\n。]+?)(?:$|[。])/u,
+  );
+  if (reorderMatch) {
+    const day = parsePatchDayNumber(reorderMatch[1]);
+    const names = reorderMatch[2]
+      .split(/[、,，]/)
+      .map((value) => cleanupPatchTitle(value))
+      .filter(Boolean);
+    const targetDay = input.context.itinerary.find((entry) => entry.dayNumber === day);
+    if (day && targetDay && names.length === targetDay.items.length) {
+      const orderedItemIds = names.map((name) => {
+        const item = targetDay.items.find((candidate) =>
+          compactComparableText(candidate.title).includes(compactComparableText(name)),
+        );
+        return item?.id || "";
+      });
+      if (orderedItemIds.every(Boolean) && new Set(orderedItemIds).size === targetDay.items.length) {
+        const assistantActions: AssistantAction[] = [
+          {
+            type: "itinerary.reorder_items",
+            payload: { dayId: `day-${day}`, orderedItemIds },
+          },
+        ];
+        return {
+          reply: {
+            id: `assistant_${Date.now()}`,
+            role: "assistant",
+            content: `可以，我會把第 ${day} 天順序調整為：${names.join("、")}。`,
+            timestamp: nowChatTimestamp(),
+            responseType: "text_message",
+            assistantActions,
+          },
+          assistantActions,
+          proposedChanges: [],
+        };
+      }
+    }
+  }
+
+  const relaxedDayMatch = message.match(
+    /(?:把)?第\s*(\d+|[一二兩三四五六七八九十])\s*天(?:改成|調整成|排)?(?:更)?輕鬆/u,
+  );
+  if (relaxedDayMatch) {
+    const day = parsePatchDayNumber(relaxedDayMatch[1]);
+    const targetDay = input.context.itinerary.find((entry) => entry.dayNumber === day);
+    if (day && targetDay?.items.length) {
+      const assistantActions: AssistantAction[] = targetDay.items.slice(0, 6).map((item) => ({
+        type: "itinerary.update_item",
+        payload: {
+          dayId: `day-${day}`,
+          itemId: item.id,
+          patch: {
+            notes: [item.notes, "AI 建議：這天調整為較輕鬆節奏，保留彈性休息與移動時間。"]
+              .filter(Boolean)
+              .join("\n"),
+          },
+        },
+      }));
+      return {
+        reply: {
+          id: `assistant_${Date.now()}`,
+          role: "assistant",
+          content: `可以，我會把第 ${day} 天調整為較輕鬆的節奏，減少趕行程感並保留休息彈性。`,
+          timestamp: nowChatTimestamp(),
+          responseType: "text_message",
+          assistantActions,
+        },
+        assistantActions,
+        proposedChanges: assistantActions
+          .map((action) => assistantActionToLegacyProposedChange(action))
+          .filter((change): change is AiProposedChange => Boolean(change)),
+      };
+    }
   }
 
   const replaceMatch =
@@ -3069,7 +3227,22 @@ export async function chatWithTravelAssistant(input: {
     progressSessionId: input.progressSessionId,
   });
   if (itineraryPatchResponse) {
-    return { ...itineraryPatchResponse, travelAgentDecision };
+    const assistantPayload = validatedAssistantPayload({
+      assistantActions: itineraryPatchResponse.assistantActions,
+      proposedChanges: itineraryPatchResponse.proposedChanges,
+      aiContext: input.aiContext,
+    });
+    return {
+      ...itineraryPatchResponse,
+      reply: {
+        ...itineraryPatchResponse.reply,
+        proposedChanges: assistantPayload.proposedChanges,
+        assistantActions: assistantPayload.assistantActions,
+      },
+      proposedChanges: assistantPayload.proposedChanges,
+      assistantActions: assistantPayload.assistantActions,
+      travelAgentDecision,
+    };
   }
 
   if (input.structuredTravelPlanning) {
@@ -3239,10 +3412,16 @@ export async function chatWithTravelAssistant(input: {
   }
 
   const structured = parseStructuredChatOutput(raw);
-  const proposedChanges = filterProposedChangesByVerifiedPlaces(
+  const filteredLegacyChanges = filterProposedChangesByVerifiedPlaces(
     structured.proposedChanges,
     digest.placeHits,
   );
+  const assistantPayload = validatedAssistantPayload({
+    assistantActions: structured.assistantActions,
+    proposedChanges: filteredLegacyChanges,
+    aiContext: input.aiContext,
+  });
+  const { assistantActions, proposedChanges } = assistantPayload;
   const replyText = structured.replyText;
   const sources =
     serverConfig.aiWebSearchRequireCitations && webSearch.results.length
@@ -3267,9 +3446,11 @@ export async function chatWithTravelAssistant(input: {
       }),
       responseType: "text_message",
       proposedChanges,
+      assistantActions,
       sources,
     },
     proposedChanges,
+    assistantActions,
     travelAgentDecision,
   };
 }

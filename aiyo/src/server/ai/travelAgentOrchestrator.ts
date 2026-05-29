@@ -236,6 +236,10 @@ function isModifyIntent(message: string, context?: ChatContext): boolean {
   return /(?:幫我|請|把|將)?.{0,12}(?:第\s*[\d一二兩两三四五六七八九十]+\s*天|第二天|第一天|第三天|最後一天|行程).{0,30}(?:改成|換成|新增|加入|刪除|刪掉|移除|取消|提前|延後|移到)|(?:改成|換成|新增|加入|刪除|刪掉|移除|取消).{0,30}(?:行程|景點|餐廳|活動)/u.test(message);
 }
 
+function isMapFocusIntent(message: string): boolean {
+  return /(?:地圖|地图).{0,12}(?:定位到|移到|顯示|聚焦)/u.test(message);
+}
+
 function isTripPlanningIntent(message: string): boolean {
   return /(?:想去|我要去|我想去|幫我|請|可以|能不能|想要|需要).{0,24}(?:規劃|安排|排|行程|自由行|旅遊|旅行|玩[\d一二兩两三四五六七八九十]+\s*(?:天|日))|(?:規劃|安排|排).{0,16}(?:行程|旅行|旅遊|自由行)|[\d一二兩两三四五六七八九十]+\s*(?:天|日).{0,10}(?:行程|旅行|旅遊|自由行)?/u.test(message);
 }
@@ -310,6 +314,13 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
       userFacingGuidance:
         "你好，我可以幫你把旅遊想法整理成順路、好執行的行程，也能依你的偏好調整目前行程。你可以直接告訴我想去哪裡、玩幾天，或貼一個想修改的安排。",
       debugReason: "matched casual greeting/help intent",
+    });
+  }
+
+  if (isMapFocusIntent(message)) {
+    return buildDecision("modify_itinerary", {
+      searchDecision,
+      debugReason: "matched map focus action intent",
     });
   }
 

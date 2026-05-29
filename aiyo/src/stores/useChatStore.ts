@@ -53,6 +53,7 @@ function hasStructuredChatPayload(message: ChatMessage): boolean {
       message.responseType === "travel_plan" ||
       message.responseType === "question_card" ||
       (message.proposedChanges?.length ?? 0) > 0 ||
+      (message.assistantActions?.length ?? 0) > 0 ||
       (message.sourceReferences?.length ?? 0) > 0,
   );
 }
@@ -69,6 +70,7 @@ function mergeStructuredChatFields(remote: ChatMessage, local: ChatMessage): Cha
     statusSteps: local.statusSteps?.length ? local.statusSteps : remote.statusSteps,
     tripProfile: local.tripProfile ?? remote.tripProfile,
     proposedChanges: local.proposedChanges ?? remote.proposedChanges,
+    assistantActions: local.assistantActions ?? remote.assistantActions,
     sourceReferences: local.sourceReferences ?? remote.sourceReferences,
     sources: local.sources ?? remote.sources,
   };

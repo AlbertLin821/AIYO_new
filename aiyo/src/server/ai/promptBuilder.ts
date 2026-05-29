@@ -117,11 +117,13 @@ export function buildItineraryPatchIntentPrompt(input: {
   return {
     system: [
       "You are AIYO itinerary action parser. Output JSON only (no markdown fences).",
-      'Shape: { "replyText": string, "proposedChanges": array }.',
+      'Shape: { "replyText": string, "assistantActions": array, "proposedChanges": array }.',
       "Step 1: infer what the user wants to do to the EXISTING itinerary (not a full replan).",
       "Step 2: emit ONLY actions from the executable catalog below.",
       "",
       "Executable actions:",
+      '- assistantActions itinerary.update_item: { "type": "itinerary.update_item", "payload": { "dayId": "day-N", "itemId": string, "patch": { "title"?: string, "location"?: string, "notes"?: string } } }.',
+      '- assistantActions itinerary.add_item/remove_item/reorder_items/replace_day/trip.update_metadata/map.focus_location are allowed when directly requested.',
       '- remove_itinerary_day: { "type": "remove_itinerary_day", "day": number, "reason"?: string } — delete an entire day.',
       '- remove_itinerary_item: { "type": "remove_itinerary_item", "day"?: number, "itemId"?: string, "targetTitle"?: string, "reason"?: string } — remove one activity.',
       '- update_itinerary_item: { "type": "update_itinerary_item", "day"?: number, "itemId"?: string, "targetTitle"?: string, "time"?: "HH:MM", "title"?: string, "locationName"?: string, "notes"?: string, "transport"?: string, "reason"?: string } — rename, retime, or replace one activity.',
@@ -129,10 +131,13 @@ export function buildItineraryPatchIntentPrompt(input: {
       "",
       "Rules:",
       "- Prefer itemId from the itinerary context when targeting an existing item.",
+      "- For any executable itinerary edit, also emit assistantActions. Keep proposedChanges for backward compatibility when possible.",
+      "- If location changes but coordinates are unknown, omit lat/lng; do not reuse old coordinates.",
+      "- Use at most 6 assistantActions. Do not emit raw SQL, script, or HTML.",
       "- When the user names a day (第N天; 地N天 is a common typo for 第N天), scope remove/update to that day only.",
       "- Use remove_itinerary_day only for deleting a whole day, not a single POI.",
       "- Do not replan the entire trip; do not add research tool requests.",
-      "- If the user is only asking a question, return proposedChanges: [].",
+      "- If the user is only asking a question, return assistantActions: [] and proposedChanges: [].",
       "- replyText: concise Traditional Chinese confirmation of what will change.",
       "Reply only in Traditional Chinese.",
     ].join("\n"),
@@ -158,14 +163,18 @@ export function buildChatPrompt(
     system: [
       "You are AIYO, a professional, natural, friendly, and concise travel planning assistant.",
       hasResearch
-        ? "You MUST output JSON only with this exact shape: { \"replyText\": string, \"proposedChanges\": array }."
-        : "Prefer output JSON with shape { \"replyText\": string, \"proposedChanges\": array } when possible; otherwise reply in concise plain Traditional Chinese.",
+        ? "You MUST output JSON only with this exact shape: { \"replyText\": string, \"assistantActions\": array, \"proposedChanges\": array }."
+        : "Prefer output JSON with shape { \"replyText\": string, \"assistantActions\": array, \"proposedChanges\": array } when possible; otherwise reply in concise plain Traditional Chinese.",
       hasResearch
-        ? 'proposedChanges may include: { "type": "add_itinerary_item", "day": number, "time": "HH:MM", "title": string, "locationName"?: string, "transport"?: string, "notes"?: string, "reason"?: string }, { "type": "update_itinerary_item", "itemId"?: string, "day"?: number, "targetTitle"?: string, "time"?: "HH:MM", "title"?: string, "locationName"?: string, "notes"?: string, "transport"?: string, "reason"?: string }, { "type": "remove_itinerary_item", "itemId"?: string, "day"?: number, "targetTitle"?: string, "reason"?: string }, or { "type": "remove_itinerary_day", "day": number, "reason"?: string }.'
+        ? 'assistantActions may include itinerary.add_item, itinerary.update_item, itinerary.remove_item, itinerary.reorder_items, itinerary.replace_day, trip.update_metadata, map.focus_location. proposedChanges remains legacy add/update/remove/remove_day compatibility.'
         : "",
       hasResearch
-        ? "For add_itinerary_item, concrete restaurants, attractions, or shops MUST match a venue listed under \"Verified research\" below (same name or clear substring). For update_itinerary_item or remove_itinerary_item, target an existing itinerary item by id when possible, otherwise by day + targetTitle. Use remove_itinerary_day only when the user wants to delete an entire day, not a single activity. If the user only asks a question, return proposedChanges: []."
+        ? "For add actions, concrete restaurants, attractions, or shops MUST match a venue listed under \"Verified research\" below when research is present. For update/remove, target an existing itinerary item by id when possible. If the user only asks a question, return assistantActions: [] and proposedChanges: []."
         : "",
+      "When users ask to add, modify, remove, reorder, replace itinerary content, update trip metadata, or focus the map, output natural replyText plus assistantActions.",
+      "If you cannot identify the target day/item from currentTrip context, ask one concise confirmation question and output empty actions.",
+      "If a new location has no coordinates, output title/location without lat/lng and mention that map positioning may need verification.",
+      "Use at most 6 assistantActions. Never output unknown action types, raw SQL, script, or HTML.",
       hasWebSearch
         ? "You may use web search results as factual grounding. Do not invent place names, opening hours, prices, or addresses."
         : "",

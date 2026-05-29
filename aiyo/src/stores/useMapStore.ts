@@ -10,10 +10,18 @@ export type PendingMapPoi = {
   lng?: number;
 };
 
+export type MapFocusLocation = {
+  placeName: string;
+  lat?: number | null;
+  lng?: number | null;
+  zoom?: number;
+} | null;
+
 interface MapState {
   pins: MapPin[];
   selectedPinId: string | null;
   pendingPoi: PendingMapPoi | null;
+  focusLocation: MapFocusLocation;
   preferredPoiDay: number;
   panelOpen: boolean;
   lastSyncedAt: string | null;
@@ -24,6 +32,7 @@ interface MapState {
   removePin: (id: string) => void;
   setSelectedPinId: (id: string | null) => void;
   setPendingPoi: (poi: PendingMapPoi | null) => void;
+  setFocusLocation: (focus: MapFocusLocation) => void;
   setPreferredPoiDay: (dayNumber: number) => void;
   setPanelOpen: (open: boolean) => void;
   clearPins: () => void;
@@ -34,6 +43,7 @@ export const useMapStore = create<MapState>((set) => ({
   pins: [],
   selectedPinId: null,
   pendingPoi: null,
+  focusLocation: null,
   preferredPoiDay: 1,
   panelOpen: true,
   lastSyncedAt: null,
@@ -77,6 +87,7 @@ export const useMapStore = create<MapState>((set) => ({
   setSelectedPinId: (selectedPinId) =>
     withSyncMutationSource("local-user-edit", () => set({ selectedPinId })),
   setPendingPoi: (pendingPoi) => set({ pendingPoi }),
+  setFocusLocation: (focusLocation) => set({ focusLocation }),
   setPreferredPoiDay: (preferredPoiDay) => set({ preferredPoiDay }),
   setPanelOpen: (panelOpen) => set({ panelOpen }),
   clearPins: () =>
@@ -85,6 +96,7 @@ export const useMapStore = create<MapState>((set) => ({
         pins: [],
         selectedPinId: null,
         pendingPoi: null,
+        focusLocation: null,
         lastSyncedAt: null,
         segmentDirectionsMinutes: {},
       }),

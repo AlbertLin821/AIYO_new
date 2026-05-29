@@ -55,6 +55,7 @@ import {
   buildItineraryItemFromAiChange,
   findItineraryItemTarget,
 } from "@/app/chat/itineraryPatchUtils";
+import { applyAssistantActions } from "@/lib/assistantActions/applyAssistantActions";
 import { CHAT_HISTORY_WINDOW } from "@/lib/chatConstants";
 import { cn } from "@/lib/utils";
 import {
@@ -1482,6 +1483,8 @@ export default function ChatPage() {
         );
         if (response.itinerarySuggestion) {
           await applyGeneratedTripPlan(response);
+        } else if (response.assistantActions?.length) {
+          await applyAssistantActions(response.assistantActions, { persist: true });
         } else if (response.proposedChanges?.length) {
           await applyAiProposedChanges(response.proposedChanges, {
             navigate: false,
@@ -1582,7 +1585,10 @@ export default function ChatPage() {
       }
       const shouldPersistPlanningResult =
         Boolean(response.itinerarySuggestion) ||
-        Boolean(response.proposedChanges?.length && response.reply.responseType !== "question_card");
+        Boolean(
+          (response.proposedChanges?.length || response.assistantActions?.length) &&
+            response.reply.responseType !== "question_card",
+        );
       if (shouldPersistPlanningResult && response.tripProfile?.plan_integration !== "self_merge") {
         await ensureTripPlanningContext(
           response.tripProfile?.destination ||
@@ -1600,12 +1606,15 @@ export default function ChatPage() {
         Boolean(
           response.itinerarySuggestion ||
             hasApplicableProposedChanges ||
+            response.assistantActions?.length ||
             isItineraryMutationCommand(message) ||
             shouldDirectMergeGeneratedPlan,
         );
       if (shouldApplyItineraryUpdate) {
         if (response.itinerarySuggestion) {
           await applyGeneratedTripPlan(response);
+        } else if (response.assistantActions?.length) {
+          await applyAssistantActions(response.assistantActions, { persist: true });
         } else if (response.proposedChanges?.length) {
           await applyAiProposedChanges(response.proposedChanges, {
             navigate: false,
@@ -1764,6 +1773,8 @@ export default function ChatPage() {
       }
       if (response.itinerarySuggestion) {
         await applyGeneratedTripPlan(response);
+      } else if (response.assistantActions?.length) {
+        await applyAssistantActions(response.assistantActions, { persist: true });
       } else if (response.proposedChanges?.length) {
         await applyAiProposedChanges(response.proposedChanges, {
           navigate: false,
@@ -2490,11 +2501,16 @@ export default function ChatPage() {
                       ))}
                     </div>
                   )}
-                  {message.role !== "user" && (message.proposedChanges || []).length > 0 && (
+                  {message.role !== "user" &&
+                    ((message.proposedChanges || []).length > 0 || (message.assistantActions || []).length > 0) && (
                     <button
                       type="button"
                       data-testid="chat-apply-proposed-changes"
-                      onClick={() => void applyAiProposedChanges(message.proposedChanges || [], { navigate: false })}
+                      onClick={() =>
+                        message.assistantActions?.length
+                          ? void applyAssistantActions(message.assistantActions, { persist: true })
+                          : void applyAiProposedChanges(message.proposedChanges || [], { navigate: false })
+                      }
                       className="mt-2 rounded-2xl border border-slate-900 bg-slate-900 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-slate-800"
                     >
                       立即同步到右側行程

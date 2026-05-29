@@ -469,7 +469,96 @@ test("existing itinerary replacement request becomes a targeted proposed change"
       source: "ai-chat",
     },
   ]);
+  assert.equal(response.assistantActions?.[0]?.type, "itinerary.update_item");
+  assert.deepEqual(response.assistantActions?.[0]?.payload, {
+    dayId: "day-3",
+    itemId: "item_d3_2",
+    patch: {
+      title: "海東龍宮寺",
+      location: "海東龍宮寺",
+      startTime: undefined,
+      notes: undefined,
+    },
+  });
   assert.equal(response.itinerarySuggestion, undefined);
+});
+
+test("assistant action updates second day Akihabara to Skytree while keeping legacy proposedChanges", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "幫我把第二天的秋葉原改成晴空塔",
+    structuredTravelPlanning: true,
+    context: {
+      destination: "東京",
+      days: 3,
+      itinerary: [
+        { dayNumber: 2, items: [{ id: "d2-a", time: "14:00", title: "秋葉原", type: "attraction" as const }] },
+      ],
+    },
+  });
+
+  assert.equal(response.assistantActions?.[0]?.type, "itinerary.update_item");
+  assert.equal(response.assistantActions?.[0]?.payload.itemId, "d2-a");
+  assert.equal(response.proposedChanges?.[0]?.type, "update_itinerary_item");
+});
+
+test("assistant action supports reordering a day", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "把第二天順序改成淺草、晴空塔、上野",
+    structuredTravelPlanning: true,
+    context: {
+      destination: "東京",
+      days: 3,
+      itinerary: [
+        {
+          dayNumber: 2,
+          items: [
+            { id: "ueno", time: "09:00", title: "上野", type: "attraction" as const },
+            { id: "asakusa", time: "11:00", title: "淺草", type: "attraction" as const },
+            { id: "skytree", time: "17:00", title: "晴空塔", type: "attraction" as const },
+          ],
+        },
+      ],
+    },
+  });
+
+  assert.equal(response.assistantActions?.[0]?.type, "itinerary.reorder_items");
+  assert.deepEqual(response.assistantActions?.[0]?.payload.orderedItemIds, ["asakusa", "skytree", "ueno"]);
+});
+
+test("assistant action keeps relaxed day changes within action limit", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "把第三天改成輕鬆一點",
+    structuredTravelPlanning: true,
+    context: {
+      destination: "東京",
+      days: 3,
+      itinerary: [
+        {
+          dayNumber: 3,
+          items: [
+            { id: "a", time: "09:00", title: "A", type: "attraction" as const },
+            { id: "b", time: "11:00", title: "B", type: "attraction" as const },
+            { id: "c", time: "13:00", title: "C", type: "attraction" as const },
+          ],
+        },
+      ],
+    },
+  });
+
+  assert.ok((response.assistantActions?.length ?? 0) > 0);
+  assert.ok((response.assistantActions?.length ?? 0) <= 6);
+  assert.equal(response.assistantActions?.[0]?.type, "itinerary.update_item");
+});
+
+test("map focus assistant action does not emit persistence proposedChanges", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "地圖幫我定位到清水寺",
+    structuredTravelPlanning: true,
+    context: { destination: "京都", days: 1, itinerary: [] },
+  });
+
+  assert.equal(response.assistantActions?.[0]?.type, "map.focus_location");
+  assert.equal(response.proposedChanges?.length ?? 0, 0);
 });
 
 test("existing itinerary delete whole day request becomes remove_itinerary_day proposed change", async () => {

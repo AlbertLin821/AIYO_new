@@ -209,6 +209,82 @@ export type ExistingItemChange = Extract<
   { type: "update_itinerary_item" | "remove_itinerary_item" }
 >;
 
+export type AssistantActionItemInput = {
+  title: string;
+  location?: string | null;
+  address?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  notes?: string | null;
+  category?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  source?: "assistant" | "search" | "video" | "manual";
+};
+
+export type AssistantAction =
+  | {
+      type: "itinerary.add_item";
+      payload: {
+        tripId?: string;
+        dayId: string;
+        item: AssistantActionItemInput;
+      };
+    }
+  | {
+      type: "itinerary.update_item";
+      payload: {
+        tripId?: string;
+        dayId: string;
+        itemId: string;
+        patch: Partial<Omit<AssistantActionItemInput, "source">>;
+      };
+    }
+  | {
+      type: "itinerary.remove_item";
+      payload: {
+        tripId?: string;
+        dayId: string;
+        itemId: string;
+      };
+    }
+  | {
+      type: "itinerary.reorder_items";
+      payload: {
+        tripId?: string;
+        dayId: string;
+        orderedItemIds: string[];
+      };
+    }
+  | {
+      type: "itinerary.replace_day";
+      payload: {
+        tripId?: string;
+        dayId: string;
+        items: AssistantActionItemInput[];
+      };
+    }
+  | {
+      type: "trip.update_metadata";
+      payload: {
+        tripId?: string;
+        title?: string;
+        destination?: string;
+        budgetLevel?: "low" | "medium" | "high" | string;
+        travelStyles?: string[];
+        pace?: "relaxed" | "balanced" | "intensive" | string;
+      };
+    }
+  | {
+      type: "map.focus_location";
+      payload: {
+        placeName: string;
+        lat?: number | null;
+        lng?: number | null;
+        zoom?: number;
+      };
+    };
+
 export type ChatResponseType = "text_message" | "question_card" | "status_step" | "travel_plan" | "error";
 
 export type ChatQuestionType =
@@ -617,6 +693,7 @@ export interface ChatMessage {
   tripProfile?: TripProfile;
   suggestedAction?: SuggestedAction;
   proposedChanges?: AiProposedChange[];
+  assistantActions?: AssistantAction[];
   sources?: Array<{
     title: string;
     url: string;
@@ -644,6 +721,7 @@ export interface ChatResponsePayload {
   reply: ChatMessage;
   itinerarySuggestion?: TripPlanResult;
   proposedChanges?: AiProposedChange[];
+  assistantActions?: AssistantAction[];
   tripProfile?: TripProfile;
   travelAgentDecision?: TravelAgentDecision;
 }

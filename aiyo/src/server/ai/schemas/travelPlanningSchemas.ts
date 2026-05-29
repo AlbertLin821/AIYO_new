@@ -149,8 +149,86 @@ export const AiProposedChangeSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
+const AssistantActionItemSchema = z.object({
+  title: z.string().trim().min(1).max(120),
+  location: z.string().trim().max(160).nullable().optional(),
+  address: z.string().trim().max(220).nullable().optional(),
+  startTime: z.string().trim().max(20).nullable().optional(),
+  endTime: z.string().trim().max(20).nullable().optional(),
+  notes: z.string().trim().max(500).nullable().optional(),
+  category: z.string().trim().max(40).nullable().optional(),
+  lat: z.number().nullable().optional(),
+  lng: z.number().nullable().optional(),
+  source: z.enum(["assistant", "search", "video", "manual"]).optional(),
+});
+
+export const AssistantActionSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("itinerary.add_item"),
+    payload: z.object({
+      tripId: z.string().trim().optional(),
+      dayId: z.string().trim().min(1),
+      item: AssistantActionItemSchema,
+    }),
+  }),
+  z.object({
+    type: z.literal("itinerary.update_item"),
+    payload: z.object({
+      tripId: z.string().trim().optional(),
+      dayId: z.string().trim().min(1),
+      itemId: z.string().trim().min(1),
+      patch: AssistantActionItemSchema.partial().omit({ source: true }),
+    }),
+  }),
+  z.object({
+    type: z.literal("itinerary.remove_item"),
+    payload: z.object({
+      tripId: z.string().trim().optional(),
+      dayId: z.string().trim().min(1),
+      itemId: z.string().trim().min(1),
+    }),
+  }),
+  z.object({
+    type: z.literal("itinerary.reorder_items"),
+    payload: z.object({
+      tripId: z.string().trim().optional(),
+      dayId: z.string().trim().min(1),
+      orderedItemIds: z.array(z.string().trim().min(1)).min(1),
+    }),
+  }),
+  z.object({
+    type: z.literal("itinerary.replace_day"),
+    payload: z.object({
+      tripId: z.string().trim().optional(),
+      dayId: z.string().trim().min(1),
+      items: z.array(AssistantActionItemSchema).min(1).max(12),
+    }),
+  }),
+  z.object({
+    type: z.literal("trip.update_metadata"),
+    payload: z.object({
+      tripId: z.string().trim().optional(),
+      title: z.string().trim().max(120).optional(),
+      destination: z.string().trim().max(120).optional(),
+      budgetLevel: z.string().trim().max(40).optional(),
+      travelStyles: z.array(z.string().trim().max(40)).max(12).optional(),
+      pace: z.string().trim().max(40).optional(),
+    }),
+  }),
+  z.object({
+    type: z.literal("map.focus_location"),
+    payload: z.object({
+      placeName: z.string().trim().min(1).max(160),
+      lat: z.number().nullable().optional(),
+      lng: z.number().nullable().optional(),
+      zoom: z.number().min(1).max(22).optional(),
+    }),
+  }),
+]);
+
 export const StructuredChatOutputSchema = z.object({
   replyText: z.string().trim(),
+  assistantActions: z.array(AssistantActionSchema).max(6).optional(),
   proposedChanges: z.array(AiProposedChangeSchema),
 });
 

@@ -9,6 +9,7 @@ export type PersistedChatMessageMetadata = {
   tripProfile?: ChatMessage["tripProfile"];
   suggestedAction?: ChatMessage["suggestedAction"];
   proposedChanges?: ChatMessage["proposedChanges"];
+  assistantActions?: ChatMessage["assistantActions"];
   sources?: ChatMessage["sources"];
   sourceReferences?: ChatMessage["sourceReferences"];
   toolCalls?: ChatMessage["toolCalls"];
@@ -38,6 +39,9 @@ export function extractChatMessageMetadata(message: ChatMessage): PersistedChatM
   }
   if (message.proposedChanges?.length) {
     metadata.proposedChanges = message.proposedChanges;
+  }
+  if (message.assistantActions?.length) {
+    metadata.assistantActions = message.assistantActions;
   }
   if (message.sources) {
     metadata.sources = message.sources;
@@ -72,6 +76,7 @@ export function applyChatMessageMetadata(
     tripProfile: stored.tripProfile ?? message.tripProfile,
     suggestedAction: stored.suggestedAction ?? message.suggestedAction,
     proposedChanges: stored.proposedChanges ?? message.proposedChanges,
+    assistantActions: stored.assistantActions ?? message.assistantActions,
     sources: stored.sources ?? message.sources,
     sourceReferences: stored.sourceReferences ?? message.sourceReferences,
     toolCalls: stored.toolCalls ?? message.toolCalls,
