@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
+import { buildPersonalizedAIContext, type AIContextBuildResult } from "@/server/ai/aiContextBuilder";
 import { OllamaRequestError } from "@/server/ai/ollamaClient";
 import { completeChatProgress, ensureChatProgressSession } from "@/server/chat/chatProgressStore";
 import { addMemories, formatMemoryContext } from "@/server/memory/mem0Client";
@@ -39,6 +40,7 @@ export async function POST(request: Request) {
     progressSessionId = body.progressSessionId?.trim() || undefined;
 
     let memoryContext: string | undefined;
+    let personalizedContext: AIContextBuildResult | null = null;
     let persistedUserId: string | null = null;
     let persistedTripId: string | undefined;
     try {
@@ -54,7 +56,18 @@ export async function POST(request: Request) {
         userId,
         query: [body.tripProfile.destination || "", body.instruction.trim()].filter(Boolean).join(" "),
       });
-      memoryContext = formatMemoryContext(memories);
+      personalizedContext = await buildPersonalizedAIContext({
+        userId,
+        currentUserInput: body.instruction.trim(),
+        chatContext: body.context,
+        tripId: persistedTripId,
+        memorySnippets: memories.map((memory) => ({
+          content: memory.memory,
+          source: "mem0",
+          relevance: memory.score,
+        })),
+      });
+      memoryContext = personalizedContext.promptContextText || formatMemoryContext(memories);
     } catch {
       // Revision still works without an authenticated memory lookup.
     }
@@ -67,6 +80,7 @@ export async function POST(request: Request) {
       progressSessionId,
       memoryContext,
       forceStructuredRevision: true,
+      aiContext: personalizedContext,
     });
 
     if (persistedUserId) {
@@ -103,7 +117,14 @@ export async function POST(request: Request) {
       completeChatProgress(progressSessionId);
     }
 
-    return NextResponse.json(createSuccess(response));
+    return NextResponse.json(
+      createSuccess(
+        response,
+        process.env.NODE_ENV !== "production" && personalizedContext
+          ? { aiContextDebug: personalizedContext.debug }
+          : undefined,
+      ),
+    );
   } catch (error) {
     if (progressSessionId) {
       completeChatProgress(progressSessionId);

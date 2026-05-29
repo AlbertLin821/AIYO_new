@@ -106,7 +106,26 @@ function hasMeaningfulPreferences(preferences?: TravelAgentKnownPreferences): bo
 }
 
 function mergeKnownPreferences(input: TravelAgentOrchestratorInput): TravelAgentKnownPreferences {
+  const structuredPreferences = input.aiContext?.structuredContext.preferences;
   const aiPreferences = input.aiContext?.structured.preferences || {};
+  const normalizedStructuredPreferences: TravelAgentKnownPreferences = structuredPreferences
+    ? {
+        destination: structuredPreferences.destinationPreferences?.[0],
+        budgetLevel: structuredPreferences.budgetLevel,
+        travelStyle: structuredPreferences.travelStyles,
+        travelStyles: structuredPreferences.travelStyles,
+        pace: structuredPreferences.pace,
+        transportPreference: structuredPreferences.transportPreference || undefined,
+        accommodationPreference: structuredPreferences.accommodationPreference || undefined,
+        avoid: structuredPreferences.avoidances,
+        avoidances: structuredPreferences.avoidances,
+        foodPreferences: structuredPreferences.foodPreferences,
+        confidence: structuredPreferences.confidence,
+        source: structuredPreferences.source,
+        updatedAt: structuredPreferences.updatedAt,
+      }
+    : {};
+  const mergedAiPreferences = { ...aiPreferences, ...normalizedStructuredPreferences };
   const contextPreferences = input.context?.preferences;
   const profileBudgetLevel =
     input.tripProfile?.budget === "high_end"
@@ -117,22 +136,37 @@ function mergeKnownPreferences(input: TravelAgentOrchestratorInput): TravelAgent
           ? "low"
           : undefined;
   return {
-    ...aiPreferences,
-    destination: input.context?.destination || input.tripProfile?.destination || aiPreferences.destination,
-    days: input.context?.days || input.tripProfile?.duration_days || aiPreferences.days,
-    budget: input.context?.budget || contextPreferences?.budget || aiPreferences.budget,
-    budgetLevel: aiPreferences.budgetLevel || profileBudgetLevel,
+    ...mergedAiPreferences,
+    destination: input.context?.destination || input.tripProfile?.destination || mergedAiPreferences.destination,
+    days: input.context?.days || input.tripProfile?.duration_days || mergedAiPreferences.days,
+    budget: input.context?.budget || contextPreferences?.budget || mergedAiPreferences.budget,
+    budgetLevel: mergedAiPreferences.budgetLevel || profileBudgetLevel,
     travelStyle: contextPreferences?.interests?.length
       ? contextPreferences.interests
       : input.tripProfile?.preferences?.length
         ? input.tripProfile.preferences
-        : aiPreferences.travelStyle,
-    pace: contextPreferences?.pace || (input.tripProfile?.pace as TravelPace | null) || aiPreferences.pace,
-    transportPreference: contextPreferences?.transportPreference || input.tripProfile?.transportation || aiPreferences.transportPreference,
-    mustVisit: contextPreferences?.mustVisit || aiPreferences.mustVisit,
-    avoid: contextPreferences?.avoid || input.tripProfile?.avoid_places || aiPreferences.avoid,
-    notes: contextPreferences?.notes || aiPreferences.notes,
+        : mergedAiPreferences.travelStyle || mergedAiPreferences.travelStyles,
+    pace: contextPreferences?.pace || (input.tripProfile?.pace as TravelPace | null) || mergedAiPreferences.pace,
+    transportPreference: contextPreferences?.transportPreference || input.tripProfile?.transportation || mergedAiPreferences.transportPreference,
+    mustVisit: contextPreferences?.mustVisit || mergedAiPreferences.mustVisit,
+    avoid: contextPreferences?.avoid || input.tripProfile?.avoid_places || mergedAiPreferences.avoid || mergedAiPreferences.avoidances,
+    notes: contextPreferences?.notes || mergedAiPreferences.notes,
   };
+}
+
+function localizePreferenceLabel(value: string): string {
+  const map: Record<string, string> = {
+    food: "美食",
+    shopping: "購物",
+    nature: "自然景觀",
+    culture: "文化",
+    history: "歷史",
+    relaxed: "輕鬆步調",
+    balanced: "適中步調",
+    moderate: "適中步調",
+    intensive: "充實緊湊",
+  };
+  return map[value] || value;
 }
 
 function formatPreferenceSummary(preferences: TravelAgentKnownPreferences): string {
@@ -146,12 +180,12 @@ function formatPreferenceSummary(preferences: TravelAgentKnownPreferences): stri
           : preferences.budget
             ? `預算約 ${preferences.budget}`
             : "",
-    preferences.travelStyle?.length ? preferences.travelStyle.join("、") : "",
+    preferences.travelStyle?.length ? preferences.travelStyle.map(localizePreferenceLabel).join("、") : "",
     preferences.pace === "relaxed"
       ? "輕鬆步調"
       : preferences.pace === "intensive"
         ? "充實緊湊"
-        : preferences.pace === "moderate"
+        : preferences.pace === "moderate" || preferences.pace === "balanced"
           ? "適中步調"
           : "",
     preferences.transportPreference,
@@ -253,7 +287,9 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
   const message = normalizeText(input.message);
   const hints = extractTripRequestHints(message);
   const knownPreferences = mergeKnownPreferences(input);
-  const reusablePreferences = input.aiContext?.structured.preferences;
+  const reusablePreferences = input.aiContext?.structuredContext.preferences
+    ? mergeKnownPreferences({ ...input, context: undefined, tripProfile: undefined })
+    : input.aiContext?.structured.preferences;
   const mergedPreferences: TravelAgentKnownPreferences = {
     ...knownPreferences,
     destination: hints.destination || knownPreferences.destination,
@@ -313,9 +349,9 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
         preferenceConfirmation: {
           summary,
           preferences: mergedPreferences,
-          prompt: `我看到你之前比較偏好${summary}，這次要沿用這個方向嗎？`,
+        prompt: `可以。我看到你之前比較偏好${summary}路線，這次${hints.destination || knownPreferences.destination || "這趟"}${hints.days || knownPreferences.days ? ` ${hints.days || knownPreferences.days} 天` : ""}也要沿用這個方向嗎？`,
         },
-        userFacingGuidance: `我看到你之前比較偏好${summary}，這次要沿用這個方向嗎？如果想換風格，也可以直接說「這次想輕鬆一點」或「改高預算」。`,
+        userFacingGuidance: `可以。我看到你之前比較偏好${summary}路線，這次${hints.destination || knownPreferences.destination || "這趟"}${hints.days || knownPreferences.days ? ` ${hints.days || knownPreferences.days} 天` : ""}也要沿用這個方向嗎？如果要，我可以直接幫你排；如果想改成更輕鬆或更高預算，也可以告訴我。`,
         debugReason: "planning intent with reusable known preferences",
       });
     }

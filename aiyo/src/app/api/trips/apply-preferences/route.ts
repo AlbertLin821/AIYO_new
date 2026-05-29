@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
+import { buildPersonalizedAIContext } from "@/server/ai/aiContextBuilder";
 import { requireSessionUser } from "@/server/auth";
 import { resolveSessionTrip, saveTripPayload } from "@/server/data/appStateService";
 import {
@@ -24,6 +25,7 @@ export async function POST(request: Request) {
       savePreferences?: boolean;
     };
     const previous = await getTravelPreferenceSuggestion(userId);
+    const existingTrip = await resolveSessionTrip(userId);
     const preferences = {
       ...previous.preferences,
       ...(body.preferences || {}),
@@ -47,15 +49,22 @@ export async function POST(request: Request) {
       await updateTravelPreferencesFromSuggestion(userId, preferences);
     }
 
+    const personalizedContext = await buildPersonalizedAIContext({
+      userId,
+      currentUserInput: `套用偏好產生 ${destination} ${days} 天行程`,
+      tripRequest,
+      tripId: existingTrip?.id,
+    });
+
     const generated = await generateTripPlan(
       tripRequest,
       [
         "使用者已選擇套用先前偏好。",
         `偏好來源：${previous.source.join(", ") || "user_profile"}`,
+        personalizedContext.promptContextText,
         preferences.notes || "",
       ].filter(Boolean).join("\n"),
     );
-    const existingTrip = await resolveSessionTrip(userId);
     const saved = await saveTripPayload(userId, {
       tripId: existingTrip?.id ?? "",
       title: `${destination} 行程`,
@@ -71,6 +80,8 @@ export async function POST(request: Request) {
         tripId: saved.tripId,
         plan: generated.plan,
         appliedPreferences: preferences,
+        preferenceSources: previous.source,
+        aiContextDebug: process.env.NODE_ENV !== "production" ? personalizedContext.debug : undefined,
         diagnostics: generated.diagnostics,
       }),
     );

@@ -7,6 +7,7 @@ import { decideTravelAgentMode } from "@/server/ai/travelAgentOrchestrator";
 function makeAiContext(preferences: NonNullable<AIContextBuildResult["structured"]["preferences"]>): AIContextBuildResult {
   return {
     text: "[使用者偏好摘要]\n預算：中等預算\n旅遊風格：美食、購物",
+    promptContextText: "[使用者偏好摘要]\n預算：中等預算\n旅遊風格：美食、購物",
     sources: ["user_preferences"],
     structured: {
       preferences,
@@ -14,9 +15,34 @@ function makeAiContext(preferences: NonNullable<AIContextBuildResult["structured
       recentVideoCount: 0,
       appliedVideoSummaryCount: 0,
     },
+    structuredContext: {
+      userId: "user_1",
+      preferences: {
+        destinationPreferences: preferences.destination ? [preferences.destination] : undefined,
+        budgetLevel: preferences.budgetLevel,
+        travelStyles: preferences.travelStyle || preferences.travelStyles,
+        pace: preferences.pace,
+        transportPreference: preferences.transportPreference || null,
+        accommodationPreference: preferences.accommodationPreference || null,
+        avoidances: preferences.avoid,
+        confidence: preferences.confidence,
+        source: preferences.source,
+        updatedAt: preferences.updatedAt,
+      },
+      recentTrips: [],
+      tripChatHistory: [],
+      globalChatMemory: [],
+      videoInteractions: [],
+      appliedVideoSummaries: [],
+      memorySnippets: [],
+      contextWarnings: [],
+    },
     debug: {
       sources: ["user_preferences"],
+      includedSources: ["user_preferences"],
+      excludedSources: [],
       counts: {},
+      limits: {},
       vectorStore: "mem0",
     },
   };
@@ -51,6 +77,24 @@ test("known mid-budget food preferences trigger preference confirmation", () => 
   assert.equal(decision.mode, "confirm_preferences");
   assert.match(decision.preferenceConfirmation?.prompt || "", /中等預算/);
   assert.match(decision.preferenceConfirmation?.prompt || "", /美食/);
+});
+
+test("structured preferences trigger natural confirmation copy", () => {
+  const decision = decideTravelAgentMode({
+    message: "我想去東京玩三天",
+    aiContext: makeAiContext({
+      budgetLevel: "medium",
+      travelStyle: ["food", "shopping"],
+      travelStyles: ["food", "shopping"],
+      pace: "balanced",
+    }),
+  });
+
+  assert.equal(decision.mode, "confirm_preferences");
+  assert.match(decision.userFacingGuidance || "", /中等預算/);
+  assert.match(decision.userFacingGuidance || "", /美食/);
+  assert.match(decision.userFacingGuidance || "", /東京 3 天/);
+  assert.doesNotMatch(decision.userFacingGuidance || "", /user_id|provider|debug/);
 });
 
 test("reuse preference follow-up can generate with relaxed pace", () => {

@@ -262,6 +262,7 @@ export async function clearAllPersonalizationData(userId: string) {
 
 export async function recordVideoInteraction(userId: string, input: VideoInteractionInput) {
   const id = randomUUID();
+  const ownedTripId = await resolveOwnedTripId(userId, input.tripId);
   await prisma.$executeRaw`
     INSERT INTO "video_interactions" (
       "id", "userId", "tripId", "videoId", "source", "videoUrl", "title",
@@ -269,7 +270,7 @@ export async function recordVideoInteraction(userId: string, input: VideoInterac
       "extractedPlaces", "extractedTimestamps", "metadata"
     )
     VALUES (
-      ${id}, ${userId}, ${input.tripId ?? null}, ${input.videoId}, ${input.source ?? null},
+      ${id}, ${userId}, ${ownedTripId}, ${input.videoId}, ${input.source ?? null},
       ${input.videoUrl ?? null}, ${input.title ?? null}, ${input.interactionType},
       ${input.analysisId ?? null}, ${input.summaryId ?? null}, ${input.watchDurationSeconds ?? null},
       ${input.progress ?? null},
@@ -283,13 +284,14 @@ export async function recordVideoInteraction(userId: string, input: VideoInterac
 
 export async function recordAppliedVideoSummary(userId: string, input: AppliedVideoSummaryInput) {
   const id = randomUUID();
+  const ownedTripId = await resolveOwnedTripId(userId, input.tripId);
   await prisma.$executeRaw`
     INSERT INTO "applied_video_summaries" (
       "id", "userId", "tripId", "videoId", "summaryId", "videoUrl", "title",
       "appliedPlaces", "appliedSegments", "createdTripItems", "summarySnapshot"
     )
     VALUES (
-      ${id}, ${userId}, ${input.tripId ?? null}, ${input.videoId}, ${input.summaryId ?? null},
+      ${id}, ${userId}, ${ownedTripId}, ${input.videoId}, ${input.summaryId ?? null},
       ${input.videoUrl ?? null}, ${input.title ?? null},
       CAST(${JSON.stringify(input.appliedPlaces ?? null)} AS JSONB),
       CAST(${JSON.stringify(input.appliedSegments ?? null)} AS JSONB),
@@ -298,7 +300,7 @@ export async function recordAppliedVideoSummary(userId: string, input: AppliedVi
     )
   `;
   await recordVideoInteraction(userId, {
-    tripId: input.tripId,
+    tripId: ownedTripId,
     videoId: input.videoId,
     videoUrl: input.videoUrl,
     title: input.title,
@@ -308,6 +310,21 @@ export async function recordAppliedVideoSummary(userId: string, input: AppliedVi
     metadata: { source: "applied_video_summary" },
   });
   return { id };
+}
+
+export async function resolveOwnedTripId(userId: string, tripId?: string | null): Promise<string | null> {
+  const normalized = tripId?.trim();
+  if (!normalized) {
+    return null;
+  }
+  const trip = await prisma.trip.findFirst({
+    where: { id: normalized, userId },
+    select: { id: true },
+  });
+  if (!trip) {
+    throw new Error("trip_not_owned");
+  }
+  return trip.id;
 }
 
 export async function getUserTravelActivitySummary(userId: string) {

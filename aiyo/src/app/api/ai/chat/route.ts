@@ -64,11 +64,13 @@ async function handleChatPost(request: Request) {
           currentUserInput: userPersistContent,
           chatContext: body.context,
           tripId: persistedTripId,
+          memorySnippets: memories.map((memory) => ({
+            content: memory.memory,
+            source: "mem0",
+            relevance: memory.score,
+          })),
         });
-        memoryContext = [
-          longTermMemory ? `[Mem0 長期記憶]\n${longTermMemory}` : "",
-          personalizedContext.text ? `[AIYO 個人化資料]\n${personalizedContext.text}` : "",
-        ].filter(Boolean).join("\n\n") || undefined;
+        memoryContext = personalizedContext.promptContextText || longTermMemory;
       }
     } catch {
       // Chat remains functional even if the user is not authenticated.

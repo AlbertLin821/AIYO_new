@@ -436,16 +436,115 @@ export type TravelSearchProvider = "serper" | "tavily";
 export type TravelAgentKnownPreferences = {
   destination?: string;
   budget?: number;
-  budgetLevel?: "low" | "medium" | "high";
+  budgetLevel?: "low" | "medium" | "high" | string;
   days?: number;
   travelStyle?: string[];
+  travelStyles?: string[];
   transportPreference?: string;
   accommodationPreference?: string;
   companionType?: string;
-  pace?: TravelPace;
+  pace?: TravelPace | "balanced" | string;
   mustVisit?: string[];
   avoid?: string[];
+  avoidances?: string[];
+  foodPreferences?: string[];
+  confidence?: number;
+  source?: string[];
+  updatedAt?: string | null;
   notes?: string;
+};
+
+export type PersonalizedAIContext = {
+  userId: string;
+  currentTrip?: {
+    id: string;
+    title?: string;
+    destination?: string;
+    startDate?: string | null;
+    endDate?: string | null;
+    days: Array<{
+      id: string;
+      dayNumber: number;
+      date?: string | null;
+      items: Array<{
+        id: string;
+        title: string;
+        location?: string | null;
+        startTime?: string | null;
+        endTime?: string | null;
+        notes?: string | null;
+        category?: string | null;
+      }>;
+    }>;
+  };
+  preferences: {
+    destinationPreferences?: string[];
+    budgetLevel?: "low" | "medium" | "high" | string;
+    travelStyles?: string[];
+    pace?: "relaxed" | "balanced" | "moderate" | "intensive" | string;
+    transportPreference?: string | null;
+    accommodationPreference?: string | null;
+    foodPreferences?: string[];
+    avoidances?: string[];
+    confidence?: number;
+    source?: string[];
+    updatedAt?: string | null;
+  };
+  recentTrips: Array<{
+    id: string;
+    title?: string;
+    destination?: string;
+    daysCount?: number;
+    summary?: string;
+    representativeItems?: string[];
+    createdAt?: string;
+  }>;
+  tripChatHistory: Array<{
+    role: "user" | "assistant" | "system";
+    content: string;
+    createdAt?: string;
+  }>;
+  globalChatMemory: Array<{
+    role: "user" | "assistant" | "system";
+    content: string;
+    createdAt?: string;
+    source?: string;
+  }>;
+  videoInteractions: Array<{
+    videoId?: string;
+    title?: string;
+    source?: string;
+    interactionType: string;
+    extractedPlaces?: string[];
+    extractedTimestamps?: Array<{
+      label?: string;
+      timestamp?: string;
+      seconds?: number;
+    }>;
+    relatedTripId?: string | null;
+    createdAt?: string;
+  }>;
+  appliedVideoSummaries: Array<{
+    videoId?: string;
+    title?: string;
+    summarySnapshot?: string;
+    appliedPlaces?: string[];
+    appliedSegments?: string[];
+    createdTripItems?: string[];
+    tripId?: string | null;
+    appliedAt?: string;
+  }>;
+  memorySnippets: Array<{
+    content: string;
+    source?: "mem0" | "profile" | "chat" | "trip" | "video";
+    relevance?: number;
+  }>;
+  contextWarnings: string[];
+  debug?: {
+    includedSources: string[];
+    excludedSources: string[];
+    limits: Record<string, number>;
+  };
 };
 
 export type TravelAgentPreferenceConfirmation = {

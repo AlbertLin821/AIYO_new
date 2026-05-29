@@ -41,6 +41,9 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "unauthorized") {
       return NextResponse.json(createError("unauthorized", "請先登入。"), { status: 401 });
     }
+    if (error instanceof Error && error.message === "trip_not_owned") {
+      return NextResponse.json(createError("forbidden", "指定行程不屬於目前使用者。"), { status: 403 });
+    }
     return NextResponse.json(createError("internal_error", "無法記錄影片分析。"), { status: 500 });
   }
 }

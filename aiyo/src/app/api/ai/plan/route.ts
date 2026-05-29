@@ -96,7 +96,10 @@ export async function POST(request: Request) {
       transcript?: string;
       interests?: string[];
       transportPreference?: string;
+      tripId?: string;
+      currentTripId?: string;
     };
+    const existingTrip = await resolveSessionTrip(userId);
 
     const transcript = body.transcript?.trim();
     const destination =
@@ -146,6 +149,12 @@ export async function POST(request: Request) {
         userId,
         currentUserInput: transcript || destination,
         tripRequest,
+        tripId: body.tripId || body.currentTripId || existingTrip?.id,
+        memorySnippets: memories.map((memory) => ({
+          content: memory.memory,
+          source: "mem0",
+          relevance: memory.score,
+        })),
       });
     } catch {
       personalizedContext = null;
@@ -164,14 +173,10 @@ export async function POST(request: Request) {
 
     const generated = await generateTripPlan(
       tripRequest,
-      [
-        formatMemoryContext(memories) ? `[Mem0 長期記憶]\n${formatMemoryContext(memories)}` : "",
-        personalizedContext?.text ? `[AIYO 個人化資料]\n${personalizedContext.text}` : "",
-      ].filter(Boolean).join("\n\n") || undefined,
+      personalizedContext?.promptContextText || formatMemoryContext(memories),
     );
     const result = ensurePlanHasEditableItems(generated.plan, tripRequest);
 
-    const existingTrip = await resolveSessionTrip(userId);
     const savedTrip = await saveTripPayload(userId, {
       tripId: existingTrip?.id ?? "",
       title: `${destination} 行程`,
