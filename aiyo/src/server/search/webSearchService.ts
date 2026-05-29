@@ -64,13 +64,16 @@ async function searchTavilyAsWeb(options: WebSearchOptions): Promise<WebSearchRe
   if (!res.ok) {
     return [];
   }
-  return res.results.map((row) => ({
-    title: row.title,
-    url: row.url,
-    content: row.content.slice(0, 500),
-    engine: "tavily",
-    score: row.score,
-  }));
+  const limit = Math.min(10, Math.max(1, options.limit ?? serverConfig.aiWebSearchMaxResults));
+  return res.results
+    .slice(0, limit)
+    .map((row) => ({
+      title: row.title,
+      url: row.url,
+      content: row.content.slice(0, 500),
+      engine: "tavily",
+      score: row.score,
+    }));
 }
 
 /**

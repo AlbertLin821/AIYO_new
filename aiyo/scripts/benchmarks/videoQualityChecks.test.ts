@@ -14,8 +14,8 @@ import type { VideoSummaryResult } from "@/types";
 function minimalResult(overrides: Partial<VideoSummaryResult> = {}): VideoSummaryResult {
   return {
     source: "youtube-summary-service",
-    transcriptSource: "youtube-transcript",
-    summarySource: "deterministic",
+    transcriptSource: "youtube",
+    summarySource: "heuristic-transcript-fallback",
     segmentSource: "deterministic-mentions",
     title: "測試",
     summary: "測試摘要",

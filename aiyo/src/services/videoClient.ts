@@ -30,7 +30,7 @@ export type VideoSearchDebugInfo = {
   executedQueries: string[];
   regionCode: string;
   relevanceLanguage: string;
-  selectedStrategy: "high-intent" | "literal-fallback";
+  selectedStrategy: "high-intent" | "literal-fallback" | "preloaded-seed";
   fallbackReasons: string[];
 };
 

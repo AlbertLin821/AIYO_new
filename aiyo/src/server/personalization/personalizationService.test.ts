@@ -6,27 +6,31 @@ import { recordVideoInteraction, resolveOwnedTripId } from "@/server/personaliza
 
 test("resolveOwnedTripId rejects trips not owned by the current user", async () => {
   const original = prisma.trip.findFirst;
-  (prisma.trip as any).findFirst = async () => null;
+  Object.assign(prisma.trip, { findFirst: async () => null });
 
   await assert.rejects(
     () => resolveOwnedTripId("user_1", "trip_other"),
     /trip_not_owned/,
   );
-  (prisma.trip as any).findFirst = original;
+  Object.assign(prisma.trip, { findFirst: original });
 });
 
 test("recordVideoInteraction refuses to bind a video to another user's trip", async () => {
   const originalFindFirst = prisma.trip.findFirst;
   const originalExecuteRaw = prisma.$executeRaw;
   let executeCalls = 0;
-  (prisma.trip as any).findFirst = async (args: unknown) => {
-    assert.deepEqual((args as { where: unknown }).where, { id: "trip_other", userId: "user_1" });
-    return null;
-  };
-  (prisma as any).$executeRaw = async () => {
-    executeCalls += 1;
-    return 1;
-  };
+  Object.assign(prisma.trip, {
+    findFirst: async (args: unknown) => {
+      assert.deepEqual((args as { where: unknown }).where, { id: "trip_other", userId: "user_1" });
+      return null;
+    },
+  });
+  Object.assign(prisma, {
+    $executeRaw: async () => {
+      executeCalls += 1;
+      return 1;
+    },
+  });
 
   await assert.rejects(
     () =>
@@ -38,6 +42,6 @@ test("recordVideoInteraction refuses to bind a video to another user's trip", as
     /trip_not_owned/,
   );
   assert.equal(executeCalls, 0);
-  (prisma.trip as any).findFirst = originalFindFirst;
-  (prisma as any).$executeRaw = originalExecuteRaw;
+  Object.assign(prisma.trip, { findFirst: originalFindFirst });
+  Object.assign(prisma, { $executeRaw: originalExecuteRaw });
 });

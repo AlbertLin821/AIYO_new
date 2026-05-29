@@ -15,9 +15,9 @@ export interface VideoSearchDebugInfo {
   executedQueries: string[];
   regionCode: string;
   relevanceLanguage: string;
-  selectedStrategy: "high-intent" | "literal-fallback";
+  selectedStrategy: "high-intent" | "literal-fallback" | "preloaded-seed";
   fallbackReasons: string[];
-  cacheStatus?: "memory-hit" | "miss";
+  cacheStatus?: "memory-hit" | "miss" | "preloaded-hit";
   cacheKey?: string;
 }
 

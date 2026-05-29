@@ -109,7 +109,7 @@ export default function MapPoiAddSheet({
           name: details.name || row?.name || t.map.poiAddTitle,
           lat: details.lat ?? pendingPoi.lat ?? 0,
           lng: details.lng ?? pendingPoi.lng ?? 0,
-          description: details.description ?? details.address,
+          description: details.description ?? details.address ?? "",
           address: details.address,
           placeId: pendingPoi.placeId,
           photoUrl: details.photoUrl,

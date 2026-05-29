@@ -47,7 +47,7 @@ export interface LocationReference {
   /**
    * 地點如何被採用並對應座標：Google 地理編碼成功，或僅依 LLM／規則抽取並以內部對照補座標。
    */
-  resolvedFrom?: "llm" | "heuristic" | "title-poi" | "google-geocode";
+  resolvedFrom?: "llm" | "heuristic" | "title-poi" | "google-geocode" | "google-place-details";
   rawQuery?: string;
   normalizedName?: string;
   /** Original transcript / query fragment before normalization. */

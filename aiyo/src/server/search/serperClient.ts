@@ -53,7 +53,7 @@ export async function searchSerper(options: WebSearchOptions): Promise<WebSearch
         };
       })
       .filter((row): row is WebSearchResult => row !== null);
-    return rows;
+    return rows.slice(0, limit);
   } catch {
     return [];
   } finally {

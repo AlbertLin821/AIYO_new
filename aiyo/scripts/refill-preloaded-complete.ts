@@ -229,7 +229,6 @@ async function fetchSearchPool(
       destination: dest.destinationHint,
       keyword: dest.searchKeyword,
       limit: options.searchPool,
-      preferences: ["美食", "景點", "懶人包"],
     });
 
     if (searchResult.videos.length > 0) {
@@ -276,7 +275,6 @@ async function fetchSearchPool(
     destination: dest.destinationHint,
     keyword: dest.searchKeyword,
     limit: options.searchPool,
-    preferences: ["美食", "景點", "懶人包"],
   });
 
   if (searchResult.videos.length > 0) {

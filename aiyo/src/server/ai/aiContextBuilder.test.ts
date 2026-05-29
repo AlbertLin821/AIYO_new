@@ -76,101 +76,119 @@ function mockBasePrisma(options?: {
           destination: "東京",
         },
   };
-  (prisma.user as any).findUnique = async () => mockedUser;
-  (prisma.user as any).findUniqueOrThrow = async () => mockedUser;
+  Object.assign(prisma.user, {
+    findUnique: async () => mockedUser,
+    findUniqueOrThrow: async () => mockedUser,
+  });
 
-  (prisma.trip as any).findFirst = async (args: unknown) => {
-    calls.tripFindFirstArgs.push(args);
-    const where = (args as { where?: { id?: string; userId?: string } }).where;
-    if (where?.id) {
-      return where.id === "trip_1" && where.userId === "user_1" ? currentTrip : null;
-    }
-    return options?.empty
-      ? null
-      : {
-          id: "latest_trip",
-          destination: "大阪",
-          days: 2,
-          title: "大阪週末",
-          updatedAt: now,
-          items: [{ title: "道頓堀" }],
-        };
-  };
+  Object.assign(prisma.trip, {
+    findFirst: async (args: unknown) => {
+      calls.tripFindFirstArgs.push(args);
+      const where = (args as { where?: { id?: string; userId?: string } }).where;
+      if (where?.id) {
+        return where.id === "trip_1" && where.userId === "user_1" ? currentTrip : null;
+      }
+      return options?.empty
+        ? null
+        : {
+            id: "latest_trip",
+            destination: "大阪",
+            days: 2,
+            title: "大阪週末",
+            updatedAt: now,
+            items: [{ title: "道頓堀" }],
+          };
+    },
+    findMany: async () =>
+      options?.empty
+        ? []
+        : [
+            {
+              id: "trip_1",
+              destination: "東京",
+              days: 3,
+              title: "東京三天",
+              createdAt: now,
+              items: [{ title: "淺草寺", itemType: "attraction", day: 1 }],
+            },
+          ],
+  });
 
-  (prisma.trip as any).findMany = async () =>
-    options?.empty
-      ? []
-      : [
+  Object.assign(prisma.chatMessage, {
+    findMany: async (args: unknown) => {
+      if (options?.empty) {
+        return [];
+      }
+      const where = (args as { where?: { tripId?: string | null } }).where;
+      if (where?.tripId === "trip_1") {
+        return [
+          { role: "user", content: "想保留購物時間", createdAt: now },
+          { role: "assistant", content: "可以安排秋葉原", createdAt: now },
+        ];
+      }
+      const count = options?.globalMessageCount ?? 3;
+      return Array.from({ length: count }, (_, index) => ({
+        role: index % 2 ? "assistant" : "user",
+        content: `全域聊天 ${index}`,
+        createdAt: now,
+        metadata: index === 0 ? { tripId: "deleted_trip" } : {},
+      }));
+    },
+  });
+
+  Object.assign(prisma, {
+    $queryRaw: async (...args: unknown[]) => {
+      calls.rawValues.push(args.slice(1));
+      const sql = Array.isArray(args[0]) ? (args[0] as string[]).join(" ") : "";
+      if (options?.empty) {
+        return [];
+      }
+      if (sql.includes("video_interactions")) {
+        return [
           {
-            id: "trip_1",
-            destination: "東京",
-            days: 3,
-            title: "東京三天",
+            videoId: "video_1",
+            title: "東京美食",
+            source: "youtube",
+            interactionType: "analyze",
             createdAt: now,
-            items: [{ title: "淺草寺", itemType: "attraction", day: 1 }],
+            tripId: "trip_1",
+            extractedPlaces: ["晴空塔", "淺草"],
+            extractedTimestamps: [{ label: "晴空塔", timestamp: "01:20", seconds: 80 }],
           },
         ];
-
-  (prisma.chatMessage as any).findMany = async (args: unknown) => {
-    const where = (args as { where?: { tripId?: string | null } }).where;
-    if (where?.tripId === "trip_1") {
-      return [
-        { role: "user", content: "想保留購物時間", createdAt: now },
-        { role: "assistant", content: "可以安排秋葉原", createdAt: now },
-      ];
-    }
-    const count = options?.globalMessageCount ?? 3;
-    return Array.from({ length: count }, (_, index) => ({
-      role: index % 2 ? "assistant" : "user",
-      content: `全域聊天 ${index}`,
-      createdAt: now,
-      metadata: index === 0 ? { tripId: "deleted_trip" } : {},
-    }));
-  };
-
-  (prisma as any).$queryRaw = async (...args: unknown[]) => {
-    calls.rawValues.push(args.slice(1));
-    const sql = Array.isArray(args[0]) ? (args[0] as string[]).join(" ") : "";
-    if (options?.empty) {
-      return [];
-    }
-    if (sql.includes("video_interactions")) {
+      }
       return [
         {
           videoId: "video_1",
           title: "東京美食",
-          source: "youtube",
-          interactionType: "analyze",
-          createdAt: now,
+          appliedAt: now,
           tripId: "trip_1",
-          extractedPlaces: ["晴空塔", "淺草"],
-          extractedTimestamps: [{ label: "晴空塔", timestamp: "01:20", seconds: 80 }],
+          summarySnapshot: { summary: "晴空塔與淺草路線" },
+          appliedPlaces: ["晴空塔"],
+          appliedSegments: ["01:20 晴空塔"],
+          createdTripItems: ["晴空塔"],
         },
       ];
-    }
-    return [
-      {
-        videoId: "video_1",
-        title: "東京美食",
-        appliedAt: now,
-        tripId: "trip_1",
-        summarySnapshot: { summary: "晴空塔與淺草路線" },
-        appliedPlaces: ["晴空塔"],
-        appliedSegments: ["01:20 晴空塔"],
-        createdTripItems: ["晴空塔"],
-      },
-    ];
-  };
+    },
+  });
 
   return {
     ...calls,
     restore() {
-      (prisma.user as any).findUnique = originals.userFindUnique;
-      (prisma.user as any).findUniqueOrThrow = originals.userFindUniqueOrThrow;
-      (prisma.trip as any).findFirst = originals.tripFindFirst;
-      (prisma.trip as any).findMany = originals.tripFindMany;
-      (prisma.chatMessage as any).findMany = originals.chatMessageFindMany;
-      (prisma as any).$queryRaw = originals.queryRaw;
+      Object.assign(prisma.user, {
+        findUnique: originals.userFindUnique,
+        findUniqueOrThrow: originals.userFindUniqueOrThrow,
+      });
+      Object.assign(prisma.trip, {
+        findFirst: originals.tripFindFirst,
+        findMany: originals.tripFindMany,
+      });
+      Object.assign(prisma.chatMessage, {
+        findMany: originals.chatMessageFindMany,
+      });
+      Object.assign(prisma, {
+        $queryRaw: originals.queryRaw,
+      });
     },
   };
 }
@@ -241,5 +259,6 @@ test("AIContextBuilder after personalization cleanup returns no optional memorie
   assert.deepEqual(context.structuredContext.videoInteractions, []);
   assert.deepEqual(context.structuredContext.appliedVideoSummaries, []);
   assert.equal(context.structuredContext.preferences.destinationPreferences?.length ?? 0, 0);
+  assert.doesNotMatch(context.promptContextText, /東京美食|晴空塔|全域聊天|想保留購物時間/);
   mocks.restore();
 });

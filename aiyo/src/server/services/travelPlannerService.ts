@@ -1291,7 +1291,7 @@ function isExistingItineraryPatchRequest(input: {
   }
   const message = input.message.trim();
   const mutatesCurrentItinerary =
-    /新增|加入|加上|刪除|刪掉|移除|取消|去掉|修改|調整|改成|換成|改到|提前|延後|移到/u.test(message) ||
+    /新增|加入|加上|加到|刪除|刪掉|移除|取消|去掉|修改|調整|改成|換成|改到|提前|延後|移到/u.test(message) ||
     (/(?:不要了|不用了)/u.test(message) &&
       /(?:(?:最後|最后)\s*(?:一)?\s*天|第\s*[\d一二兩三四五六七八九十]+\s*天|行程)/u.test(message));
   if (!mutatesCurrentItinerary) {
@@ -1944,9 +1944,14 @@ function buildDeterministicItineraryPatchResponse(input: {
     };
   }
 
-  const addMatch = message.match(
-    /(?:在)?第\s*(\d+|[一二兩三四五六七八九十])\s*天(?:.*?)(?:加入|加上|新增)\s*([^\n，。,]+?)(?:$|[，。,])/u,
+  const addToDayMatch = message.match(
+    /(?:幫我|請)?(?:把)?\s*([^\n，。,]+?)\s*(?:加到|加入|加上|新增到)\s*(?:第\s*)?(\d+|[一二兩三四五六七八九十])\s*天/u,
   );
+  const addMatch = addToDayMatch
+    ? [, addToDayMatch[2], addToDayMatch[1]]
+    : message.match(
+    /(?:在)?第\s*(\d+|[一二兩三四五六七八九十])\s*天(?:.*?)(?:加入|加上|新增)\s*([^\n，。,]+?)(?:$|[，。,])/u,
+      );
   if (addMatch) {
     const day = parsePatchDayNumber(addMatch[1]);
     const title = cleanupPatchTitle(addMatch[2]);

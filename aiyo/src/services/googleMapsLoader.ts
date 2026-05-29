@@ -1,5 +1,15 @@
 export type GoogleMapTypeId = "roadmap" | "satellite" | "hybrid" | "terrain";
 
+export interface GoogleMapClickEvent {
+  placeId?: string;
+  stop?: () => void;
+  latLng?: { lat: () => number; lng: () => number };
+}
+
+export interface GoogleMapListenerHandle {
+  remove?: () => void;
+}
+
 export interface GoogleMapInstance {
   setCenter: (coords: { lat: number; lng: number }) => void;
   setZoom: (zoom: number) => void;
@@ -7,6 +17,10 @@ export interface GoogleMapInstance {
   fitBounds: (bounds: GoogleLatLngBounds, padding?: number) => void;
   panTo: (coords: { lat: number; lng: number }) => void;
   setMapTypeId: (type: GoogleMapTypeId) => void;
+  addListener?: (
+    eventName: string,
+    handler: (event: GoogleMapClickEvent) => void,
+  ) => GoogleMapListenerHandle | void;
 }
 
 export interface GoogleMarkerInstance {

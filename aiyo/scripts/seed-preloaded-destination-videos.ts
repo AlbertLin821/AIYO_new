@@ -238,6 +238,16 @@ async function runDestination(
       searchResult = {
         videos: parsed.videos,
         provider: "youtube-data-api",
+        debug: {
+          rawInput: dest.searchKeyword,
+          searchQueries: [],
+          executedQueries: [],
+          regionCode: "TW",
+          relevanceLanguage: "zh-Hant",
+          selectedStrategy: "high-intent",
+          fallbackReasons: [],
+          cacheStatus: "memory-hit",
+        },
       };
       console.log(`[${dest.id}] 使用既有 search.json`);
     } else {
@@ -248,7 +258,6 @@ async function runDestination(
       destination: dest.destinationHint,
       keyword: dest.searchKeyword,
       limit: options.videosPerDest,
-      preferences: ["美食", "景點", "懶人包"],
     });
     await writeFile(
       searchPath,

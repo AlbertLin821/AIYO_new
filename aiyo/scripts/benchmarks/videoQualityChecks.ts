@@ -199,7 +199,7 @@ export function evaluateVideoQuality(
 
   const noTranscript =
     result.transcriptSource === "none" ||
-    result.transcriptSource === "description-fallback" ||
+    result.transcriptSource === "fallback-description" ||
     Boolean(result.summaryUnavailable);
 
   const chronological = segmentsChronological(segments);

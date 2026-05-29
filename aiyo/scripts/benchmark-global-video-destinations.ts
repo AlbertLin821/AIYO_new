@@ -119,7 +119,7 @@ async function runDestination(
   await mkdir(destDir, { recursive: true });
 
   const searchPath = path.join(destDir, "search.json");
-  let searchResult: Awaited<ReturnType<typeof searchYouTubeVideos>>;
+  let searchResult: Awaited<ReturnType<typeof searchYouTubeVideos>> | undefined;
   let useCachedSearch = false;
 
   try {
@@ -176,6 +176,11 @@ async function runDestination(
     );
     console.log(`[${dest.id}] 搜尋完成：${searchResult.videos.length} 支`);
     await sleep(options.delayMs);
+  }
+
+  if (!searchResult) {
+    console.warn(`[${dest.id}] 無可用搜尋結果，略過`);
+    return;
   }
 
   for (const video of searchResult.videos) {

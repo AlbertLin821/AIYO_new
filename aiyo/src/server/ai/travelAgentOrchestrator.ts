@@ -226,14 +226,14 @@ function isModifyIntent(message: string, context?: ChatContext): boolean {
   if (!context?.itinerary?.length) {
     return false;
   }
-  const hasMutationVerb = /改成|換成|新增|加入|加上|刪除|刪掉|移除|取消|不要了|不用了|提前|延後|移到/u.test(message);
+  const hasMutationVerb = /改成|換成|新增|加入|加上|加到|刪除|刪掉|移除|取消|不要了|不用了|提前|延後|移到/u.test(message);
   const mentionsCurrentPlanTarget =
     /第\s*[\d一二兩两三四五六七八九十]+\s*天|地\s*[\d一二兩两三四五六七八九十]+\s*天|最後一天|最后一天|行程/u.test(message) ||
     context.itinerary.some((day) => day.items.some((item) => item.title && message.includes(item.title)));
   if (hasMutationVerb && mentionsCurrentPlanTarget) {
     return true;
   }
-  return /(?:幫我|請|把|將)?.{0,12}(?:第\s*[\d一二兩两三四五六七八九十]+\s*天|第二天|第一天|第三天|最後一天|行程).{0,30}(?:改成|換成|新增|加入|刪除|刪掉|移除|取消|提前|延後|移到)|(?:改成|換成|新增|加入|刪除|刪掉|移除|取消).{0,30}(?:行程|景點|餐廳|活動)/u.test(message);
+  return /(?:幫我|請|把|將)?.{0,12}(?:第\s*[\d一二兩两三四五六七八九十]+\s*天|第二天|第一天|第三天|最後一天|行程).{0,30}(?:改成|換成|新增|加入|加到|刪除|刪掉|移除|取消|提前|延後|移到)|(?:改成|換成|新增|加入|加到|刪除|刪掉|移除|取消).{0,30}(?:行程|景點|餐廳|活動)/u.test(message);
 }
 
 function isMapFocusIntent(message: string): boolean {

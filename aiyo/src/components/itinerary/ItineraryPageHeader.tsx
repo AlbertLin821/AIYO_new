@@ -65,17 +65,15 @@ function ItineraryPageHeader({
   const canEditDays = metaEditable && Boolean(onDaysCommit);
   const canEditBudget = metaEditable && Boolean(onBudgetCommit);
 
-  useEffect(() => {
-    if (!editingDays) {
-      setDaysDraft(String(days));
-    }
-  }, [days, editingDays]);
+  const startEditingDays = useCallback(() => {
+    setDaysDraft(String(days));
+    setEditingDays(true);
+  }, [days]);
 
-  useEffect(() => {
-    if (!editingBudget) {
-      setBudgetDraft(budget > 0 ? String(budget) : "");
-    }
-  }, [budget, editingBudget]);
+  const startEditingBudget = useCallback(() => {
+    setBudgetDraft(budget > 0 ? String(budget) : "");
+    setEditingBudget(true);
+  }, [budget]);
 
   useEffect(() => {
     if (editingDays) {
@@ -228,7 +226,7 @@ function ItineraryPageHeader({
                     type="button"
                     data-testid="itinerary-meta-days-button"
                     title={t.itineraryPage.metaDaysEditHint}
-                    onClick={() => setEditingDays(true)}
+                    onClick={startEditingDays}
                     className="mt-0.5 text-left text-sm font-semibold text-foreground underline decoration-dotted underline-offset-4 transition-colors hover:text-primary"
                   >
                     {days}
@@ -267,7 +265,7 @@ function ItineraryPageHeader({
                     type="button"
                     data-testid="itinerary-meta-budget-button"
                     title={t.itineraryPage.metaBudgetEditHint}
-                    onClick={() => setEditingBudget(true)}
+                    onClick={startEditingBudget}
                     className="mt-0.5 truncate text-left text-sm font-semibold text-foreground underline decoration-dotted underline-offset-4 transition-colors hover:text-primary"
                   >
                     {formatBudgetLabel(budget)}
