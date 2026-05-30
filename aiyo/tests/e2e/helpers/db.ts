@@ -166,6 +166,130 @@ export async function seedAuthUsers() {
 }
 
 /** 嘉義兩天一夜手動模擬情境：供完整旅遊 QA 與影片摘要流程使用（不建立預設景點項目，由測試後續填入）。 */
+export type Phase7TokyoSeed = {
+  tripId: string;
+  itemIds: {
+    day1Asakusa: string;
+    day1Ueno: string;
+    day2Akihabara: string;
+    day2Ginza: string;
+    day3Shinjuku: string;
+    day3Shibuya: string;
+  };
+};
+
+/** Phase 7 東京三天行程：含偏好、活動 ID 與秋葉原 pin（供 marker 清除驗證）。 */
+export async function seedTokyoPhase7ScenarioForUser(userId: string): Promise<Phase7TokyoSeed> {
+  await prisma.profile.update({
+    where: { userId },
+    data: {
+      destination: "東京",
+      budget: 15000,
+      preferences: {
+        interests: ["food", "shopping"],
+        preferredTransport: "transit",
+        pace: "moderate",
+        notes: "中等預算、美食與購物、步調適中",
+      } as object,
+    },
+  });
+
+  const trip = await prisma.trip.create({
+    data: {
+      userId,
+      title: "東京三天美食購物行程",
+      destination: "東京",
+      days: 3,
+      itineraryDays: {
+        create: [
+          { dayNumber: 1, sortOrder: 0, theme: "淺草與上野", summary: "傳統與公園" },
+          { dayNumber: 2, sortOrder: 1, theme: "秋葉原與銀座", summary: "動漫與購物" },
+          { dayNumber: 3, sortOrder: 2, theme: "新宿與澀谷", summary: "都會散步" },
+        ],
+      },
+      items: {
+        create: [
+          { day: 1, order: 0, title: "淺草", timeSlot: "09:00", itemType: "attraction", source: "manual", location: "淺草" },
+          { day: 1, order: 1, title: "上野", timeSlot: "14:00", itemType: "attraction", source: "manual", location: "上野" },
+          {
+            day: 2,
+            order: 0,
+            title: "秋葉原",
+            timeSlot: "10:00",
+            itemType: "attraction",
+            source: "manual",
+            location: "秋葉原",
+            latitude: 35.6984,
+            longitude: 139.7731,
+          },
+          { day: 2, order: 1, title: "銀座", timeSlot: "15:00", itemType: "attraction", source: "manual", location: "銀座" },
+          { day: 3, order: 0, title: "新宿", timeSlot: "10:00", itemType: "attraction", source: "manual", location: "新宿" },
+          { day: 3, order: 1, title: "澀谷", timeSlot: "16:00", itemType: "attraction", source: "manual", location: "澀谷" },
+        ],
+      },
+      room: {
+        create: {
+          inviteCode: `P7-${Date.now().toString(36).toUpperCase()}`,
+        },
+      },
+    },
+    include: {
+      items: {
+        orderBy: [{ day: "asc" }, { order: "asc" }],
+      },
+    },
+  });
+
+  const byTitle = (title: string) => {
+    const item = trip.items.find((candidate) => candidate.title === title);
+    if (!item) {
+      throw new Error(`seedTokyoPhase7ScenarioForUser: missing item ${title}`);
+    }
+    return item.id;
+  };
+
+  const day2Akihabara = trip.items.find((item) => item.title === "秋葉原");
+  if (day2Akihabara) {
+    await prisma.mapPin.create({
+      data: {
+        tripId: trip.id,
+        label: "秋葉原",
+        lat: 35.6984,
+        lng: 139.7731,
+        description: "秋葉原",
+        linkedTripItemId: day2Akihabara.id,
+        dayNumber: 2,
+        source: "manual",
+        color: "#5a7ea3",
+        verified: true,
+      },
+    });
+  }
+
+  const prev = await prisma.profile.findUnique({ where: { userId }, select: { preferences: true } });
+  const raw = prev?.preferences;
+  const prefs: Record<string, unknown> =
+    raw && typeof raw === "object" && !Array.isArray(raw) ? { ...(raw as Record<string, unknown>) } : {};
+  prefs.activeTripId = trip.id;
+
+  await prisma.profile.update({
+    where: { userId },
+    data: { preferences: prefs as object },
+  });
+
+  return {
+    tripId: trip.id,
+    itemIds: {
+      day1Asakusa: byTitle("淺草"),
+      day1Ueno: byTitle("上野"),
+      day2Akihabara: byTitle("秋葉原"),
+      day2Ginza: byTitle("銀座"),
+      day3Shinjuku: byTitle("新宿"),
+      day3Shibuya: byTitle("澀谷"),
+    },
+  };
+}
+
 export async function seedChiayiScenarioForUser(userId: string) {
   await prisma.profile.update({
     where: { userId },
@@ -223,6 +347,95 @@ export async function seedChiayiScenarioForUser(userId: string) {
   });
 
   return trip;
+}
+
+/** Phase 7.5 首爾兩天行程：供 live AssistantAction 修改驗證（弘大 → 聖水洞）。 */
+export type Phase75SeoulSeed = {
+  tripId: string;
+  itemIds: {
+    day1Hongdae: string;
+    day1Myeongdong: string;
+    day2Gyeongbok: string;
+    day2Bukchon: string;
+  };
+};
+
+export async function seedSeoulPhase75ScenarioForUser(userId: string): Promise<Phase75SeoulSeed> {
+  await prisma.profile.update({
+    where: { userId },
+    data: {
+      destination: "首爾",
+      budget: 18000,
+      preferences: {
+        interests: ["food", "shopping", "culture"],
+        preferredTransport: "transit",
+        pace: "moderate",
+        notes: "咖啡廳、購物、韓劇景點",
+      } as object,
+    },
+  });
+
+  const trip = await prisma.trip.create({
+    data: {
+      userId,
+      title: "首爾五天咖啡廳與韓劇景點",
+      destination: "首爾",
+      days: 2,
+      itineraryDays: {
+        create: [
+          { dayNumber: 1, sortOrder: 0, theme: "弘大與明洞", summary: "年輕文化與購物" },
+          { dayNumber: 2, sortOrder: 1, theme: "景福宮與北村", summary: "傳統韓屋" },
+        ],
+      },
+      items: {
+        create: [
+          { day: 1, order: 0, title: "弘大", timeSlot: "10:00", itemType: "attraction", source: "manual", location: "弘大" },
+          { day: 1, order: 1, title: "明洞", timeSlot: "15:00", itemType: "attraction", source: "manual", location: "明洞" },
+          { day: 2, order: 0, title: "景福宮", timeSlot: "09:30", itemType: "attraction", source: "manual", location: "景福宮" },
+          { day: 2, order: 1, title: "北村韓屋村", timeSlot: "14:00", itemType: "attraction", source: "manual", location: "北村韓屋村" },
+        ],
+      },
+      room: {
+        create: {
+          inviteCode: `P75-${Date.now().toString(36).toUpperCase()}`,
+        },
+      },
+    },
+    include: {
+      items: {
+        orderBy: [{ day: "asc" }, { order: "asc" }],
+      },
+    },
+  });
+
+  const byTitle = (title: string) => {
+    const item = trip.items.find((candidate) => candidate.title === title);
+    if (!item) {
+      throw new Error(`seedSeoulPhase75ScenarioForUser: missing item ${title}`);
+    }
+    return item.id;
+  };
+
+  const prev = await prisma.profile.findUnique({ where: { userId }, select: { preferences: true } });
+  const raw = prev?.preferences;
+  const prefs: Record<string, unknown> =
+    raw && typeof raw === "object" && !Array.isArray(raw) ? { ...(raw as Record<string, unknown>) } : {};
+  prefs.activeTripId = trip.id;
+
+  await prisma.profile.update({
+    where: { userId },
+    data: { preferences: prefs as object },
+  });
+
+  return {
+    tripId: trip.id,
+    itemIds: {
+      day1Hongdae: byTitle("弘大"),
+      day1Myeongdong: byTitle("明洞"),
+      day2Gyeongbok: byTitle("景福宮"),
+      day2Bukchon: byTitle("北村韓屋村"),
+    },
+  };
 }
 
 export async function seedTripForUser(userId: string, title = "E2E 台南行程") {

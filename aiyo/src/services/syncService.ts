@@ -72,7 +72,7 @@ class SyncService {
   }
 
   flushTripSyncNow(options?: { keepalive?: boolean; force?: boolean }) {
-    if ((!this.hydrated && !options?.force) || this.isApplyingRemote) {
+    if ((!this.hydrated && !options?.force) || (this.isApplyingRemote && !options?.force)) {
       return Promise.resolve();
     }
     this.debouncedTripSync.cancel();
@@ -413,7 +413,7 @@ class SyncService {
     const payload = this.buildCurrentTripPayload();
     const payloadKey = this.getPayloadKey(payload);
 
-    if ((!this.hydrated && !options?.force) || this.isApplyingRemote) {
+    if ((!this.hydrated && !options?.force) || (this.isApplyingRemote && !options?.force)) {
       return;
     }
 
@@ -423,11 +423,11 @@ class SyncService {
       return;
     }
 
-    if (payloadKey === this.lastSyncedPayloadKey) {
+    if (payloadKey === this.lastSyncedPayloadKey && !options?.force) {
       this.log("skip duplicate trip sync", { source });
       return;
     }
-    if (this.isSyncing) {
+    if (this.isSyncing && !options?.force) {
       this.log("skip overlapping trip sync", { source });
       return;
     }
