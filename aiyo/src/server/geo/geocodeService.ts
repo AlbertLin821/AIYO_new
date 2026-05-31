@@ -1,6 +1,13 @@
 import { serverConfig } from "@/server/config";
 import { isUsableMapCoordinate } from "@/lib/geoCoordinates";
 import {
+  geocodeResultFailsDestinationScope,
+  isGeocodeCountryInScope,
+  isGeocodePointInScope,
+  resolveTripDestinationScope,
+  type TripDestinationScope,
+} from "@/lib/tripDestinationScope";
+import {
   mergeAndDedupeExtractions,
   type PlaceCandidate,
 } from "@/server/geo/extractLocations";
@@ -79,69 +86,8 @@ function normalizeToken(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-/** 依使用者目的地粗判預期國碼（僅在明顯可判時）。 */
-function expectedCountryFromDestination(hint?: string): string | null {
-  if (!hint?.trim()) {
-    return null;
-  }
-  const n = normalizeToken(hint);
-  const japanHints = [
-    "tokyo",
-    "osaka",
-    "kyoto",
-    "japan",
-    "日本",
-    "東京",
-    "大阪",
-    "京都",
-    "沖繩",
-    "okinawa",
-    "hokkaido",
-    "北海道",
-    "福岡",
-    "fukuoka",
-    "名古屋",
-    "nagoya",
-    "廣島",
-    "hiroshima",
-  ];
-  if (japanHints.some((h) => n.includes(h))) {
-    return "JP";
-  }
-  const korea = ["seoul", "korea", "首爾", "韓國", "韩国", "busan", "釜山"];
-  if (korea.some((h) => n.includes(h))) {
-    return "KR";
-  }
-  const taiwan = [
-    "taiwan",
-    "台灣",
-    "臺灣",
-    "台北",
-    "臺北",
-    "新北",
-    "桃園",
-    "台中",
-    "臺中",
-    "台南",
-    "臺南",
-    "高雄",
-    "嘉義",
-    "苗栗",
-    "彰化",
-    "南投",
-    "雲林",
-    "屏東",
-    "宜蘭",
-    "花蓮",
-    "台東",
-    "臺東",
-    "基隆",
-    "新竹",
-  ];
-  if (taiwan.some((h) => n.includes(h))) {
-    return "TW";
-  }
-  return null;
+function destinationScopeFromHint(hint?: string): TripDestinationScope | null {
+  return resolveTripDestinationScope(hint);
 }
 
 function scoreGeocodeTypes(types: string[]): number {
@@ -422,11 +368,12 @@ export async function fetchGooglePlaceDetailsByPlaceId(
 export async function geocodeWithGoogle(
   rawQuery: string,
   regionBias?: string,
+  destinationScope?: TripDestinationScope | null,
 ): Promise<
   | { ok: true; result: GeocodeResult }
   | { ok: false; reason: string; googleStatus?: string }
 > {
-  const key = serverConfig.googleMapsApiKey;
+  const key = process.env.GOOGLE_MAPS_API_KEY?.trim() || serverConfig.googleMapsApiKey;
   if (!key) {
     return { ok: false, reason: "GOOGLE_MAPS_API_KEY is not configured." };
   }
@@ -478,6 +425,14 @@ export async function geocodeWithGoogle(
   const types = first.types || [];
   const countryCode = extractCountryCode(first.address_components);
 
+  const scopeFailure = geocodeResultFailsDestinationScope(
+    { countryCode, lat: loc.lat, lng: loc.lng },
+    destinationScope,
+  );
+  if (scopeFailure) {
+    return { ok: false, reason: scopeFailure, googleStatus: status };
+  }
+
   return {
     ok: true,
     result: {
@@ -510,14 +465,19 @@ function sortLocationsForMap(locations: LocationReference[]): LocationReference[
  */
 export async function resolvePlaceExtractionsHybrid(
   candidates: PlaceCandidate[],
-  options: { destinationHint?: string; transcriptContext?: string },
+  options: {
+    destinationHint?: string;
+    transcriptContext?: string;
+    destinationScope?: TripDestinationScope | null;
+  },
 ): Promise<{
   locations: LocationReference[];
   failures: string[];
   mapsProvenance: "google-geocoding" | "catalog-fallback" | "mixed";
 }> {
   const destinationHint = options.destinationHint;
-  const expectedCountry = expectedCountryFromDestination(destinationHint);
+  const destinationScope =
+    options.destinationScope ?? destinationScopeFromHint(destinationHint);
   const locations: LocationReference[] = [];
   const failures: string[] = [];
   let googleCount = 0;
@@ -550,14 +510,26 @@ export async function resolvePlaceExtractionsHybrid(
     if (resolved.ok) {
       const { result } = resolved;
       const typeScore = scoreGeocodeTypes(result.types);
-      const countryMatch =
-        !expectedCountry ||
-        !result.countryCode ||
-        result.countryCode === expectedCountry;
+      const countryInScope = isGeocodeCountryInScope(result.countryCode, destinationScope);
+      const pointInScope = isGeocodePointInScope(result.lat, result.lng, destinationScope);
+      const countryMatch = countryInScope && pointInScope;
       const addressMatch = formattedAddressMentionsCandidate(
         result.formattedAddress,
         extraction.displayName,
       );
+
+      if (destinationScope?.countryCodes.length && result.countryCode && !countryInScope) {
+        failures.push(
+          `${extraction.displayName}：地理編碼國家（${result.countryCode}）與行程目的地不符，已略過。`,
+        );
+        continue;
+      }
+      if (destinationScope?.center && destinationScope.radiusKm && !pointInScope) {
+        failures.push(
+          `${extraction.displayName}：地理編碼座標超出目的地範圍，已略過。`,
+        );
+        continue;
+      }
 
       let confidence = combineConfidence({
         rerankScore: cand.rerankScore,
@@ -565,10 +537,6 @@ export async function resolvePlaceExtractionsHybrid(
         countryMatch,
         addressMatch,
       });
-
-      if (!countryMatch && cand.source === "heuristic") {
-        confidence *= 0.35;
-      }
 
       const gate = evaluateGeocodeConfidenceGate({
         rawMention: extraction.raw,
@@ -705,9 +673,11 @@ export async function resolvePlaceMentionsWithGeocode(input: {
     return { locations: [], failures: [], mapsProvenance: "catalog-fallback" };
   }
 
+  const destinationScope = destinationScopeFromHint(input.destinationHint);
   const resolved = await resolvePlaceExtractionsHybrid(candidates, {
     destinationHint: input.destinationHint,
     transcriptContext: input.mentions.map((mention) => mention.context).join("\n"),
+    destinationScope,
   });
 
   const enriched = resolved.locations.map((location) => {

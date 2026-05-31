@@ -1,6 +1,9 @@
+import type { TripDestinationScope } from "@/lib/tripDestinationScope";
+import { isGeocodePointInScope } from "@/lib/tripDestinationScope";
 import { serverConfig } from "@/server/config";
-import { evaluateGeocodeConfidenceGate, geocodeWithGoogle } from "@/server/geo/geocodeService";
+import { evaluateGeocodeConfidenceGate } from "@/server/geo/geocodeService";
 import { findKnownLocationReference, resolveLocationReference } from "@/server/geo/locationCatalog";
+import { geocodePlace } from "@/server/places/geocodePlace";
 import { searchWeb } from "@/server/search/searxngClient";
 import { validatePoiNameQuality } from "@/server/video/placeExtraction/placeNameQualityGate";
 import { scoreSearchEvidence } from "@/server/video/placeExtraction/searchEvidenceScorer";
@@ -35,6 +38,7 @@ export async function verifyCanonicalPlaces(
   candidates: CanonicalPlaceCandidate[],
   options?: {
     destinationHint?: string;
+    destinationScope?: TripDestinationScope | null;
     enableGeocode?: boolean;
     enableSearch?: boolean;
   },
@@ -53,6 +57,14 @@ export async function verifyCanonicalPlaces(
 
     const known = findKnownLocationReference(candidate.canonicalName);
     if (known) {
+      if (
+        options?.destinationScope?.countryCodes.length &&
+        Number.isFinite(known.lat) &&
+        Number.isFinite(known.lng) &&
+        !isGeocodePointInScope(known.lat, known.lng, options.destinationScope)
+      ) {
+        continue;
+      }
       verified.push(
         buildVerifiedPlace(candidate, {
           source: "gazetteer",
@@ -67,24 +79,28 @@ export async function verifyCanonicalPlaces(
     }
 
     if (options?.enableGeocode) {
-      const geo = await geocodeWithGoogle(candidate.canonicalName, options.destinationHint);
+      const geo = await geocodePlace({
+        query: candidate.canonicalName,
+        destinationHint: options.destinationHint,
+        destinationScope: options.destinationScope,
+      });
       if (geo.ok) {
         const gate = evaluateGeocodeConfidenceGate({
           rawMention: candidate.rawText,
           cleanedName: candidate.canonicalName,
-          formattedAddress: geo.result.formattedAddress,
+          formattedAddress: geo.place.formattedAddress || geo.place.placeName,
           resultName: candidate.canonicalName,
-          types: geo.result.types,
-          placeId: geo.result.placeId,
+          types: [],
+          placeId: geo.place.placeId ?? undefined,
           baseConfidence: candidate.confidence,
         });
         if (gate.accepted) {
           verified.push(
             buildVerifiedPlace(candidate, {
               source: "geocode",
-              lat: geo.result.lat,
-              lng: geo.result.lng,
-              address: geo.result.formattedAddress,
+              lat: geo.place.lat,
+              lng: geo.place.lng,
+              address: geo.place.formattedAddress ?? undefined,
               confidence: Math.min(1, gate.confidence),
             }),
           );

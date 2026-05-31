@@ -1,5 +1,24 @@
 import type { ChatQuestionAnswer, QuestionCardPayload } from "@/types";
 
+export type QuestionCardAnswersRecord = Record<
+  string,
+  string | string[] | { start?: string; end?: string }
+>;
+
+export function answersRecordFromPayload(
+  answers: ChatQuestionAnswer[],
+): QuestionCardAnswersRecord {
+  const record: QuestionCardAnswersRecord = {};
+  for (const answer of answers) {
+    if (answer.value === null || answer.value === undefined) {
+      continue;
+    }
+    record[answer.slot] =
+      typeof answer.value === "number" ? String(answer.value) : answer.value;
+  }
+  return record;
+}
+
 export function formatQuestionAnswerSummary(
   card: QuestionCardPayload,
   answers: ChatQuestionAnswer[],

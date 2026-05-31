@@ -4,6 +4,7 @@ import test from "node:test";
 process.env.AIYO_SKIP_LLM_PATCH = "1";
 process.env.AIYO_DYNAMIC_QUESTION_CARD = "0";
 
+import type { AIContextBuildResult } from "@/server/ai/aiContextBuilder";
 import {
   applyQuestionAnswers,
   buildQuestionCard,
@@ -18,6 +19,47 @@ import {
 } from "@/server/services/travelPlannerService";
 import { sanitizeDynamicQuestionCard } from "@/server/ai/validators/questionCardValidator";
 import type { ChatSource, TripPlanDay, TripPlanResult, TripProfile } from "@/types";
+
+function makeMemoryAiContext(destinations: string[]): AIContextBuildResult {
+  return {
+    text: "",
+    promptContextText: "",
+    sources: ["recent_trip_history"],
+    structured: {
+      recentTripCount: destinations.length,
+      recentVideoCount: 0,
+      appliedVideoSummaryCount: 0,
+    },
+    structuredContext: {
+      userId: "user_1",
+      preferences: {
+        destinationPreferences: destinations,
+      },
+      recentTrips: destinations.map((destination, index) => ({
+        id: `trip_${index}`,
+        title: `${destination} 自由行`,
+        destination,
+        daysCount: 4,
+        representativeItems: ["市區散步"],
+        createdAt: "2026-01-01T00:00:00.000Z",
+      })),
+      tripChatHistory: [],
+      globalChatMemory: [],
+      videoInteractions: [],
+      appliedVideoSummaries: [],
+      memorySnippets: [],
+      contextWarnings: [],
+    },
+    debug: {
+      sources: [],
+      includedSources: [],
+      excludedSources: [],
+      counts: {},
+      limits: {},
+      vectorStore: "none",
+    },
+  };
+}
 
 function makeStructuredProfile(): TripProfile {
   return {
@@ -124,6 +166,81 @@ test("travel chat returns timeout fallback text after retry exhaustion", async (
   }
 });
 
+test("personal memory recall with no stored data returns guidance without heavy compose", async () => {
+  const originalFetch = globalThis.fetch;
+  let callCount = 0;
+
+  globalThis.fetch = async () => {
+    callCount += 1;
+    return new Response(JSON.stringify({ message: { content: "should not be used" } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    const response = await chatWithTravelAssistant({
+      message: "我之前去過哪些地方啊",
+    });
+    assert.equal(callCount, 0);
+    assert.equal(response.travelAgentDecision?.debugReason, "personal memory recall");
+    assert.match(response.reply.content, /還沒有記錄/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("personal memory recall uses lightweight LLM polish when memory exists", async () => {
+  const originalFetch = globalThis.fetch;
+  let callCount = 0;
+
+  globalThis.fetch = async () => {
+    callCount += 1;
+    return new Response(JSON.stringify({ message: { content: "你過去去過京都和大阪，偏好美食與寺廟。" } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    const response = await chatWithTravelAssistant({
+      message: "我之前去過哪些地方啊",
+      aiContext: makeMemoryAiContext(["京都", "大阪"]),
+    });
+    assert.equal(callCount, 1);
+    assert.equal(response.travelAgentDecision?.debugReason, "personal memory recall");
+    assert.match(response.reply.content, /京都/);
+    assert.match(response.reply.content, /大阪/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("personal memory recall timeout falls back to deterministic destination list", async () => {
+  const originalFetch = globalThis.fetch;
+  let callCount = 0;
+
+  globalThis.fetch = async () => {
+    callCount += 1;
+    const abortError = new Error("aborted");
+    abortError.name = "AbortError";
+    throw abortError;
+  };
+
+  try {
+    const response = await chatWithTravelAssistant({
+      message: "我之前去過哪些地方啊",
+      aiContext: makeMemoryAiContext(["京都", "大阪"]),
+    });
+    assert.equal(callCount, 1);
+    assert.match(response.reply.content, /京都/);
+    assert.match(response.reply.content, /大阪/);
+    assert.doesNotMatch(response.reply.content, /重新規劃/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("travel chat does not retry non-timeout ollama errors", async () => {
   const originalFetch = globalThis.fetch;
   let callCount = 0;
@@ -190,16 +307,80 @@ test("travel_dates answers override stale duration to the actual inclusive span"
   });
 });
 
-test("question card becomes null after destination and duration are provided", () => {
+test("question card skips destination when conversation already mentions Kumamoto", () => {
+  const card = buildQuestionCard(
+    {
+      ...makeStructuredProfile(),
+      destination: null,
+      duration_days: null,
+      duration_nights: null,
+      preferences: [],
+      pace: null,
+    },
+    { destination: "熊本", days: undefined },
+  );
+  assert.equal(card?.response_type, "question_card");
+  assert.ok(card?.questions.some((question) => question.slot === "duration_days"));
+  assert.equal(
+    card?.questions.some((question) => question.slot === "destination"),
+    false,
+  );
+});
+
+test("question card asks for companions when destination and duration are known", () => {
   const card = buildQuestionCard({
     ...makeStructuredProfile(),
     destination: "熊本",
     duration_days: 5,
     duration_nights: 4,
     companions: null,
+    traveler_count: null,
     preferences: [],
     pace: null,
   });
+  assert.equal(card?.response_type, "question_card");
+  assert.ok(card?.questions.some((question) => question.slot === "companions"));
+  assert.equal(
+    card?.questions.some((question) => question.slot === "preferences"),
+    false,
+  );
+});
+
+test("question card asks for preferences after companions are known", () => {
+  const card = buildQuestionCard({
+    ...makeStructuredProfile(),
+    destination: "熊本",
+    duration_days: 5,
+    duration_nights: 4,
+    companions: "couple_or_friend",
+    traveler_count: 2,
+    preferences: [],
+    pace: null,
+  });
+  assert.equal(card?.response_type, "question_card");
+  assert.ok(card?.questions.some((question) => question.slot === "preferences"));
+  assert.equal(card?.questions[0]?.type, "multi_choice");
+});
+
+test("applyQuestionAnswers maps traveler_count to companions", () => {
+  const profile = applyQuestionAnswers(makeStructuredProfile(), [
+    { slot: "traveler_count", value: "3" },
+  ]);
+  assert.equal(profile.traveler_count, 3);
+  assert.equal(profile.companions, "small_group");
+});
+
+test("applyQuestionAnswers maps companions to traveler_count", () => {
+  const profile = applyQuestionAnswers(
+    { ...makeStructuredProfile(), companions: null, traveler_count: null },
+    [{ slot: "companions", value: "solo" }],
+  );
+  assert.equal(profile.companions, "solo");
+  assert.equal(profile.traveler_count, 1);
+});
+
+test("question card becomes null after core planning fields are complete", () => {
+  const card = buildQuestionCard(makeStructuredProfile());
   assert.equal(card, null);
 });
 

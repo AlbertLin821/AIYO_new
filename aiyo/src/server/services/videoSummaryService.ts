@@ -2,7 +2,11 @@ import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { serverConfig } from "@/server/config";
 import { findKnownLocationReference } from "@/server/geo/locationCatalog";
-import { geocodeWithGoogle } from "@/server/geo/geocodeService";
+import { geocodePlace } from "@/server/places/geocodePlace";
+import {
+  resolveTripDestinationScope,
+  type TripDestinationScope,
+} from "@/lib/tripDestinationScope";
 import {
   extractYouTubeVideoId,
   fetchYouTubeMetadata,
@@ -312,6 +316,7 @@ function buildSimpleSegments(input: {
 async function buildSimpleMapReadyLocations(input: {
   places: SimpleExtractedPlace[];
   destinationHint?: string;
+  destinationScope?: TripDestinationScope | null;
 }): Promise<LocationReference[]> {
   const out: LocationReference[] = [];
 
@@ -320,15 +325,19 @@ async function buildSimpleMapReadyLocations(input: {
     const known = findKnownLocationReference(place.name, description);
 
     if (serverConfig.googleMapsApiKey) {
-      const geocode = await geocodeWithGoogle(place.name, input.destinationHint);
-      if (geocode.ok) {
+      const geocoded = await geocodePlace({
+        query: place.name,
+        destinationHint: input.destinationHint,
+        destinationScope: input.destinationScope,
+      });
+      if (geocoded.ok) {
         out.push({
           name: place.name,
-          lat: geocode.result.lat,
-          lng: geocode.result.lng,
+          lat: geocoded.place.lat,
+          lng: geocoded.place.lng,
           description,
-          address: geocode.result.formattedAddress,
-          placeId: geocode.result.placeId,
+          address: geocoded.place.formattedAddress ?? undefined,
+          placeId: geocoded.place.placeId ?? undefined,
           rawQuery: place.name,
           raw: place.name,
           normalized: place.name,
@@ -410,6 +419,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     }
   }
   const resolvedCacheKey = resolvedCacheKeyEarly;
+  const destinationScope = resolveTripDestinationScope(input.destination);
 
   const transcriptResult = await fetchYouTubeTranscript(resolvedVideoId);
   const descriptionFallbackEntries = buildDescriptionFallbackTranscriptEntries({
@@ -494,6 +504,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     const mapReadyLocations = await buildSimpleMapReadyLocations({
       places: simpleResult.places,
       destinationHint: input.destination,
+      destinationScope,
     });
     const resolvedSegments = buildSimpleSegments({
       places: simpleResult.places,
@@ -566,6 +577,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     title: metadata.title,
     description: metadata.description,
     destinationHint: input.destination,
+    destinationScope,
     enableGeocode: Boolean(serverConfig.googleMapsApiKey),
     enableSearch: serverConfig.searxngEnabled,
   });

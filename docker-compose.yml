@@ -23,11 +23,12 @@ services:
       NEXTAUTH_URL: http://localhost:3000
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:9b}
-      OLLAMA_TRIP_PLAN_MODEL: ${OLLAMA_TRIP_PLAN_MODEL:-}
-      OLLAMA_VIDEO_SUMMARY_MODEL: ${OLLAMA_VIDEO_SUMMARY_MODEL:-qwen3.5:9b}
-      OLLAMA_VIDEO_SUMMARY_FAST_MODEL: ${OLLAMA_VIDEO_SUMMARY_FAST_MODEL:-qwen3.5:9b}
-      OLLAMA_VIDEO_SUMMARY_FINAL_MODEL: ${OLLAMA_VIDEO_SUMMARY_FINAL_MODEL:-qwen3.5:9b}
-      OLLAMA_LOCATION_MODEL: ${OLLAMA_LOCATION_MODEL:-qwen3.5:9b}
+      OLLAMA_TRAVEL_CHAT_MODEL: ${OLLAMA_TRAVEL_CHAT_MODEL:-qwen3.5:9b}
+      OLLAMA_TRIP_PLAN_MODEL: ${OLLAMA_TRIP_PLAN_MODEL:-granite4.1:3b}
+      OLLAMA_VIDEO_SUMMARY_MODEL: ${OLLAMA_VIDEO_SUMMARY_MODEL:-granite4.1:8b}
+      OLLAMA_VIDEO_SUMMARY_FAST_MODEL: ${OLLAMA_VIDEO_SUMMARY_FAST_MODEL:-mistral-small:24b}
+      OLLAMA_VIDEO_SUMMARY_FINAL_MODEL: ${OLLAMA_VIDEO_SUMMARY_FINAL_MODEL:-granite4.1:8b}
+      OLLAMA_LOCATION_MODEL: ${OLLAMA_LOCATION_MODEL:-granite4.1:8b}
       MEM0_BASE_URL: http://mem0-memory:8000
       MEM0_ENABLED: ${MEM0_ENABLED:-true}
       MEM0_TOP_K: ${MEM0_TOP_K:-5}
@@ -94,11 +95,12 @@ services:
       NEXTAUTH_URL: http://localhost:3000
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:9b}
-      OLLAMA_TRIP_PLAN_MODEL: ${OLLAMA_TRIP_PLAN_MODEL:-}
-      OLLAMA_VIDEO_SUMMARY_MODEL: ${OLLAMA_VIDEO_SUMMARY_MODEL:-qwen3.5:9b}
-      OLLAMA_VIDEO_SUMMARY_FAST_MODEL: ${OLLAMA_VIDEO_SUMMARY_FAST_MODEL:-qwen3.5:9b}
-      OLLAMA_VIDEO_SUMMARY_FINAL_MODEL: ${OLLAMA_VIDEO_SUMMARY_FINAL_MODEL:-qwen3.5:9b}
-      OLLAMA_LOCATION_MODEL: ${OLLAMA_LOCATION_MODEL:-qwen3.5:9b}
+      OLLAMA_TRAVEL_CHAT_MODEL: ${OLLAMA_TRAVEL_CHAT_MODEL:-qwen3.5:9b}
+      OLLAMA_TRIP_PLAN_MODEL: ${OLLAMA_TRIP_PLAN_MODEL:-granite4.1:3b}
+      OLLAMA_VIDEO_SUMMARY_MODEL: ${OLLAMA_VIDEO_SUMMARY_MODEL:-granite4.1:8b}
+      OLLAMA_VIDEO_SUMMARY_FAST_MODEL: ${OLLAMA_VIDEO_SUMMARY_FAST_MODEL:-mistral-small:24b}
+      OLLAMA_VIDEO_SUMMARY_FINAL_MODEL: ${OLLAMA_VIDEO_SUMMARY_FINAL_MODEL:-granite4.1:8b}
+      OLLAMA_LOCATION_MODEL: ${OLLAMA_LOCATION_MODEL:-granite4.1:8b}
       MEM0_BASE_URL: http://mem0-memory:8000
       MEM0_ENABLED: ${MEM0_ENABLED:-true}
       MEM0_TOP_K: ${MEM0_TOP_K:-5}
@@ -198,6 +200,8 @@ services:
       # mem0ai 的 Ollama LLM/嵌入需 PyPI 套件 ollama（僅 HTTP client，連 host 上的 ollama serve；非安裝 Ollama 本體）
       # 勿用雙引號包住 ollama 版本：Compose 會誤判插值，截斷後續 && alembic / uvicorn。
       pip install -q --force-reinstall --no-deps mem0ai 'ollama>=0.3.0' &&
+      pip install -q 'spacy>=3.7.0' &&
+      python -m spacy download en_core_web_sm &&
       python /tmp/ensure_mem0_app_db.py &&
       alembic upgrade head &&
       uvicorn main:app --host 0.0.0.0 --port 8000"

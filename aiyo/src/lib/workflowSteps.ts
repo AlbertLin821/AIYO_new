@@ -1,4 +1,8 @@
 import type { StatusStepPayload } from "@/types";
+import {
+  resolveChatTypingLabel,
+  type ChatTypingContext,
+} from "@/lib/chat/chatTypingMessages";
 
 export const WORKFLOW_PHASE_ORDER = [
   "understand",
@@ -235,7 +239,13 @@ export function getStepStatusLabel(status: StatusStepPayload["status"]): string 
   }
 }
 
-export function getProcessingHint(activeStep: WorkflowStepView | null): string {
+export function getProcessingHint(
+  activeStep: WorkflowStepView | null,
+  typingContext?: ChatTypingContext | null,
+): string {
+  if (typingContext && activeStep?.status === "running") {
+    return resolveChatTypingLabel(typingContext, { tick: 0 });
+  }
   if (!activeStep) {
     return "系統正在為你處理，請稍候…";
   }

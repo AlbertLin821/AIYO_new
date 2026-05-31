@@ -1,4 +1,6 @@
 import { expect, type TestInfo } from "@playwright/test";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import type { ChatApiPayload } from "./chat";
 
@@ -23,6 +25,33 @@ export type LiveAiProbeResult = {
 
 export function isLiveAiEnvEnabled(): boolean {
   return process.env.E2E_LIVE_AI === "1";
+}
+
+let liveAvailabilityChecked = false;
+
+function readEnvValue(name: string): string {
+  const fromProcess = process.env[name]?.trim();
+  if (fromProcess) {
+    return fromProcess;
+  }
+  const envPath = join(process.cwd(), ".env");
+  if (!existsSync(envPath)) {
+    return "";
+  }
+  const line = readFileSync(envPath, "utf8")
+    .split(/\r?\n/u)
+    .find((row) => row.startsWith(`${name}=`));
+  if (!line) {
+    return "";
+  }
+  return line.slice(name.length + 1).trim().replace(/^['"]|['"]$/g, "");
+}
+
+export function hasLiveSearchApiKeys(): boolean {
+  if (readEnvValue("AIYO_WEB_SEARCH_MOCK") === "1") {
+    return true;
+  }
+  return Boolean(readEnvValue("SERPER_API_KEY") || readEnvValue("TAVILY_API_KEY"));
 }
 
 export async function probeLiveAiChat(page: Page): Promise<LiveAiProbeResult> {
@@ -59,6 +88,19 @@ export async function probeLiveAiChat(page: Page): Promise<LiveAiProbeResult> {
   }
 
   return { available: true, status: probe.status };
+}
+
+export async function ensureLiveAiAvailability(
+  page: Page,
+  state: { liveAvailable: boolean; skipReason: string },
+): Promise<void> {
+  if (!isLiveAiEnvEnabled() || liveAvailabilityChecked) {
+    return;
+  }
+  const probe = await probeLiveAiChat(page);
+  state.liveAvailable = probe.available;
+  state.skipReason = probe.reason || state.skipReason;
+  liveAvailabilityChecked = true;
 }
 
 export function skipIfLiveAiUnavailable(liveAvailable: boolean, reason?: string) {

@@ -9,6 +9,7 @@ import {
   parseIsoLocalDate,
   shiftMonth,
   toIsoLocalDate,
+  type QuestionCardAnswersRecord,
 } from "@/components/chat/questionCardUtils";
 import { cn } from "@/lib/utils";
 import type { ChatQuestion, ChatQuestionAnswer, QuestionCardPayload } from "@/types";
@@ -119,13 +120,19 @@ export default function QuestionCard({
   card,
   disabled,
   onSubmit,
+  initialAnswers,
+  submitted = false,
 }: {
   card: QuestionCardPayload;
   disabled?: boolean;
   onSubmit: (answers: ChatQuestionAnswer[], displayMessage: string) => void;
+  initialAnswers?: QuestionCardAnswersRecord;
+  submitted?: boolean;
 }) {
-  const [answers, setAnswers] = useState<Record<string, string | string[] | { start?: string; end?: string }>>({});
+  const [answers, setAnswers] = useState<QuestionCardAnswersRecord>(() => initialAnswers ?? {});
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  const locked = submitted;
+  const fieldsDisabled = disabled || locked;
   const REQUIRED_SLOTS = new Set(["destination", "duration_days"]);
 
   function isAnswered(question: ChatQuestion, value: unknown): boolean {
@@ -198,8 +205,12 @@ export default function QuestionCard({
 
   return (
     <div
-      className="question-card-attention w-full space-y-4 rounded-3xl border-2 border-primary/30 bg-slate-50 p-4"
+      className={cn(
+        "w-full space-y-4 rounded-3xl border-2 bg-slate-50 p-4",
+        locked ? "border-slate-200" : "question-card-attention border-primary/30",
+      )}
       aria-label={card.title}
+      data-submitted={locked ? "true" : "false"}
     >
       <div className="space-y-1">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
@@ -225,7 +236,7 @@ export default function QuestionCard({
                     <button
                       key={option.value}
                       type="button"
-                      disabled={disabled}
+                      disabled={fieldsDisabled}
                       onClick={() => setSingle(question, option.value)}
                       className={cn(
                         "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
@@ -248,7 +259,7 @@ export default function QuestionCard({
                       <button
                         key={option.value}
                         type="button"
-                        disabled={disabled}
+                        disabled={fieldsDisabled}
                         onClick={() => setSingle(question, option.value)}
                         className={cn(
                           "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
@@ -263,7 +274,7 @@ export default function QuestionCard({
                   })}
                   <button
                     type="button"
-                    disabled={disabled}
+                    disabled={fieldsDisabled}
                     onClick={() => setSingle(question, "")}
                     className={cn(
                       "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
@@ -280,7 +291,7 @@ export default function QuestionCard({
                 !(question.options || []).some((option) => option.value === answers[question.slot]) ? (
                   <input
                     type="text"
-                    disabled={disabled}
+                    disabled={fieldsDisabled}
                     value={typeof answers[question.slot] === "string" ? (answers[question.slot] as string) : ""}
                     onChange={(event) => setSingle(question, event.target.value)}
                     placeholder={question.placeholder || "自訂預算，例如：每人 25000，或總預算 80000"}
@@ -298,7 +309,7 @@ export default function QuestionCard({
                     <button
                       key={option.value}
                       type="button"
-                      disabled={disabled}
+                      disabled={fieldsDisabled}
                       onClick={() => toggleMulti(question, option.value)}
                       className={cn(
                         "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
@@ -317,7 +328,7 @@ export default function QuestionCard({
                 <div className="grid gap-3 sm:grid-cols-2">
                   <CalendarDateField
                     label={question.startLabel || "開始日期"}
-                    disabled={disabled}
+                    disabled={fieldsDisabled}
                     value={
                       typeof answers[question.slot] === "object" && !Array.isArray(answers[question.slot])
                         ? ((answers[question.slot] as { start?: string; end?: string }).start || "")
@@ -327,7 +338,7 @@ export default function QuestionCard({
                   />
                   <CalendarDateField
                     label={question.endLabel || "結束日期"}
-                    disabled={disabled}
+                    disabled={fieldsDisabled}
                     min={
                       typeof answers[question.slot] === "object" && !Array.isArray(answers[question.slot])
                         ? ((answers[question.slot] as { start?: string; end?: string }).start || undefined)
@@ -345,7 +356,7 @@ export default function QuestionCard({
             ) : (
               <input
                 type={question.type === "number" ? "number" : "text"}
-                disabled={disabled}
+                disabled={fieldsDisabled}
                 value={typeof answers[question.slot] === "string" ? (answers[question.slot] as string) : ""}
                 onChange={(event) => setSingle(question, event.target.value)}
                 placeholder={question.placeholder}
@@ -360,17 +371,25 @@ export default function QuestionCard({
       </div>
       <button
         type="button"
-        disabled={disabled || !canSubmit}
+        disabled={locked || disabled || !canSubmit}
         onClick={() => {
+          if (locked) {
+            return;
+          }
           setSubmitAttempted(true);
           if (!canSubmit) {
             return;
           }
           onSubmit(normalizedAnswers, formatQuestionAnswerSummary(card, normalizedAnswers));
         }}
-        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+        className={cn(
+          "inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-medium transition-colors",
+          locked
+            ? "cursor-not-allowed bg-slate-200 text-slate-500"
+            : "bg-slate-900 text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50",
+        )}
       >
-        {disabled ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+        {disabled && !locked ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
         {card.action?.label || "繼續"}
       </button>
     </div>

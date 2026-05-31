@@ -79,6 +79,10 @@ function needReason(need: SearchNeed): string {
 }
 
 function destinationFromInput(input: SearchIntentInput): string {
+  const scopeLabel = input.context?.destinationScope?.canonicalLabel?.trim();
+  if (scopeLabel) {
+    return scopeLabel;
+  }
   return input.context?.destination || input.preferences?.destination || "";
 }
 

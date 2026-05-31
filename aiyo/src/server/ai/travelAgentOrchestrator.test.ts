@@ -63,6 +63,7 @@ test("Tokyo three-day request collects requirements before generating", () => {
   assert.equal(decision.shouldSearch, false);
   assert.equal(decision.shouldGenerateItinerary, false);
   assert.ok(decision.missingRequirements.includes("預算"));
+  assert.ok(decision.missingRequirements.includes("旅客人數"));
 });
 
 test("known mid-budget food preferences trigger preference confirmation", () => {
@@ -143,6 +144,22 @@ test("general first-time Tokyo question does not force search", () => {
 
   assert.ok(decision.mode === "answer_trip_question" || decision.mode === "casual_chat");
   assert.equal(decision.shouldSearch, false);
+});
+
+test("unmatched general message routes to answer_trip_question for LLM reply", () => {
+  const decision = decideTravelAgentMode({ message: "今天想吃什麼" });
+
+  assert.equal(decision.mode, "answer_trip_question");
+  assert.equal(decision.userFacingGuidance, undefined);
+  assert.equal(decision.debugReason, "fallback natural chat — route to LLM");
+});
+
+test("personal memory recall routes to answer_trip_question without search", () => {
+  const decision = decideTravelAgentMode({ message: "我之前去過哪些地方啊" });
+
+  assert.equal(decision.mode, "answer_trip_question");
+  assert.equal(decision.shouldSearch, false);
+  assert.equal(decision.debugReason, "personal memory recall");
 });
 
 test("events and route questions get specific search needs", () => {

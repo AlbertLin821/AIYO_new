@@ -21,6 +21,7 @@ import {
   buildItineraryPatchIntentPrompt,
   buildItineraryPrompt,
   buildMapPlanningPrompt,
+  buildPersonalMemoryRecallPrompt,
   detectResponseLanguage,
 } from "@/server/ai/promptBuilder";
 import { serverConfig } from "@/server/config";
@@ -46,16 +47,27 @@ import {
 import type { PlaceSearchHit } from "@/server/geo/placesSearchService";
 import { parseTripPlanResponse, StructuredOutputError } from "@/server/ai/responseParser";
 import { isUsableMapCoordinate } from "@/lib/geoCoordinates";
+import { enrichChatContextWithDestinationScope } from "@/lib/tripDestinationScope";
+import { resolveTripDestinationScopeWithGeocode } from "@/server/places/resolveTripDestinationScope";
+import { inferPlanningUpdateFromTexts } from "@/lib/tripPlanningSignals";
+import { filterTripPlanByDestinationScope } from "@/server/services/filterTripPlanByDestinationScope";
 import {
   assistantActionToLegacyProposedChange,
   mergeAssistantActionsWithLegacy,
 } from "@/lib/assistantActions/converters";
 import { validateAssistantActions } from "@/server/ai/assistantActionValidator";
+import {
+  buildPersonalMemoryBundle,
+  formatPersonalMemoryBundleForPrompt,
+  formatPersonalMemoryDeterministicReply,
+  isPersonalMemoryRecallIntent,
+} from "@/server/memory/personalMemoryRecall";
 import type {
   AiProposedChange,
   AssistantAction,
   ChatContext,
   ChatMessage,
+  ChatQuestion,
   ChatQuestionAnswer,
   ChatResponsePayload,
   ChatSource,
@@ -122,6 +134,80 @@ function buildNaturalTravelAgentResponse(decision: TravelAgentDecision): ChatRes
       responseType: "text_message",
       proposedChanges: [],
     },
+    proposedChanges: [],
+    travelAgentDecision: decision,
+  };
+}
+
+function collectConversationTexts(input: {
+  message?: string;
+  messages?: ChatMessage[];
+  extraTexts?: string[];
+}): string[] {
+  const texts: string[] = [];
+  for (const item of input.messages?.slice(-12) ?? []) {
+    if (item.content?.trim()) {
+      texts.push(item.content);
+    }
+  }
+  if (input.message?.trim()) {
+    texts.push(input.message);
+  }
+  for (const chunk of input.extraTexts ?? []) {
+    if (chunk?.trim()) {
+      texts.push(chunk);
+    }
+  }
+  return texts;
+}
+
+function stripRedundantFollowUpPrompts(content: string): string {
+  return content
+    .replace(/\n*📋\s*還需要確認[^\n]*\n(?:\s*[-*•].+\n?)+/gu, "")
+    .replace(/\n*你比較想體驗哪種類型[^?\n]*\?[^\n]*\n?/gu, "")
+    .replace(/\n*另外[，,]?\s*預計停留幾天[^?\n]*\?[^\n]*\n?/gu, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function buildGuidedTravelAgentResponse(
+  decision: TravelAgentDecision,
+  input: {
+    tripProfile?: TripProfile;
+    context?: ChatContext;
+    message?: string;
+    messages?: ChatMessage[];
+  },
+): ChatResponsePayload {
+  const content =
+    decision.userFacingGuidance ||
+    decision.preferenceConfirmation?.prompt ||
+    "我可以先幫你整理旅遊方向，再依你的偏好排成可執行的行程。";
+  const mergedProfile = mergeTripProfileWithContext(input.tripProfile, input.context, {
+    message: input.message,
+    messages: input.messages,
+  });
+  const followUpCard = buildQuestionCard(mergedProfile, input.context);
+
+  if (!followUpCard) {
+    return buildNaturalTravelAgentResponse(decision);
+  }
+
+  return {
+    reply: {
+      id: `assistant_${Date.now()}`,
+      role: "assistant",
+      content: stripRedundantFollowUpPrompts(content),
+      timestamp: new Date().toLocaleTimeString("zh-TW", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      responseType: "question_card",
+      questionCard: followUpCard,
+      tripProfile: mergedProfile,
+      proposedChanges: [],
+    },
+    tripProfile: mergedProfile,
     proposedChanges: [],
     travelAgentDecision: decision,
   };
@@ -301,6 +387,7 @@ type WebSearchBundle = {
 
 const TRIP_PLAN_COMPOSE_TIMEOUT_MS = 90_000;
 const CHAT_COMPOSE_TIMEOUT_MS = 75_000;
+const PERSONAL_MEMORY_RECALL_TIMEOUT_MS = 45_000;
 const TRAVEL_CHAT_TIMEOUT_FALLBACK =
   "我先保留目前的行程脈絡；你可以再補充想調整的地點、天數或預算，我會用更精簡的查詢重新規劃。";
 
@@ -322,9 +409,106 @@ function publishProgressStep(
   });
 }
 
-function buildTravelChatTimeoutFallbackText(digestText: string): string {
+function buildTravelChatTimeoutFallbackText(
+  digestText: string,
+  options?: {
+    message?: string;
+    aiContext?: AIContextBuildResult | null;
+    memoryContext?: string;
+    mem0Memories?: string[];
+    tripProfile?: TripProfile | null;
+  },
+): string {
   const normalized = digestText.trim();
-  return normalized || TRAVEL_CHAT_TIMEOUT_FALLBACK;
+  if (normalized) {
+    return normalized;
+  }
+  if (options?.message && isPersonalMemoryRecallIntent(options.message)) {
+    const bundle = buildPersonalMemoryBundle({
+      aiContext: options.aiContext,
+      memoryContext: options.memoryContext,
+      mem0Memories: options.mem0Memories,
+      tripProfile: options.tripProfile,
+    });
+    if (bundle.hasData) {
+      return formatPersonalMemoryDeterministicReply(bundle);
+    }
+  }
+  return TRAVEL_CHAT_TIMEOUT_FALLBACK;
+}
+
+async function buildPersonalMemoryRecallResponse(input: {
+  message: string;
+  aiContext?: AIContextBuildResult | null;
+  memoryContext?: string;
+  mem0Memories?: string[];
+  tripProfile?: TripProfile;
+  progressSessionId?: string;
+  travelAgentDecision: TravelAgentDecision;
+}): Promise<ChatResponsePayload> {
+  const bundle = buildPersonalMemoryBundle({
+    aiContext: input.aiContext,
+    memoryContext: input.memoryContext,
+    mem0Memories: input.mem0Memories,
+    tripProfile: input.tripProfile,
+  });
+
+  if (!bundle.hasData) {
+    return {
+      reply: {
+        id: `assistant_${Date.now()}`,
+        role: "assistant",
+        content: formatPersonalMemoryDeterministicReply(bundle),
+        timestamp: new Date().toLocaleTimeString("zh-TW", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        responseType: "text_message",
+      },
+      travelAgentDecision: input.travelAgentDecision,
+    };
+  }
+
+  const memoryDigest = formatPersonalMemoryBundleForPrompt(bundle);
+  const prompt = buildPersonalMemoryRecallPrompt(input.message, memoryDigest);
+  const recallTimeout = Math.min(
+    PERSONAL_MEMORY_RECALL_TIMEOUT_MS,
+    serverConfig.ollamaTimeoutCapMs,
+    Math.max(30_000, serverConfig.ollamaTimeoutMs),
+  );
+
+  let content: string;
+  try {
+    const raw = await chatWithOllama({
+      task: "travel-chat",
+      timeoutMs: recallTimeout,
+      options: { temperature: 0.2, top_p: 0.9, num_ctx: 8192 },
+      messages: [
+        { role: "system", content: prompt.system },
+        { role: "user", content: prompt.user },
+      ],
+    });
+    content = raw.trim() || formatPersonalMemoryDeterministicReply(bundle);
+  } catch (error) {
+    if (!(error instanceof OllamaRequestError) || !error.isTimeout) {
+      throw error;
+    }
+    content = formatPersonalMemoryDeterministicReply(bundle);
+  }
+
+  return {
+    reply: {
+      id: `assistant_${Date.now()}`,
+      role: "assistant",
+      content,
+      timestamp: new Date().toLocaleTimeString("zh-TW", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      responseType: "text_message",
+    },
+    travelAgentDecision: input.travelAgentDecision,
+  };
 }
 
 function delay(ms: number): Promise<void> {
@@ -896,6 +1080,15 @@ export function applyQuestionAnswers(profile: TripProfile, answers?: ChatQuestio
         next.traveler_count =
           first === "solo" ? 1 : first === "couple_or_friend" ? 2 : first === "small_group" ? 4 : first ? 5 : next.traveler_count;
         break;
+      case "traveler_count": {
+        const count = parseFlexibleNumber(first);
+        if (count && count > 0) {
+          const companionProfile = classifyCompanionsFromTravelerCount(count);
+          next.traveler_count = companionProfile.travelerCount;
+          next.companions = companionProfile.companions;
+        }
+        break;
+      }
       case "preferences":
         next.preferences = uniqueStrings([...next.preferences, ...values]);
         break;
@@ -1058,36 +1251,156 @@ function buildTransportOptions(destination: string): Array<{
   ];
 }
 
-export function buildQuestionCard(profile: TripProfile, _context?: ChatContext): QuestionCardPayload | null {
-  const destination = normalizeDestinationLabel(profile.destination || "這次");
+function mergeTripProfileWithContext(
+  profile: TripProfile | undefined,
+  context?: ChatContext,
+  options?: {
+    message?: string;
+    messages?: ChatMessage[];
+    replyText?: string;
+  },
+): TripProfile {
+  const base = normalizeTripProfile(profile ?? emptyTripProfile());
+  const daysFromContext =
+    typeof context?.days === "number" && Number.isFinite(context.days) && context.days > 0
+      ? Math.round(context.days)
+      : null;
+  const destinationFromContext = context?.destination?.trim()
+    ? normalizeDestinationLabel(context.destination)
+    : null;
+  const inferred = inferPlanningUpdateFromTexts(
+    collectConversationTexts({
+      message: options?.message,
+      messages: options?.messages,
+      extraTexts: options?.replyText ? [options.replyText] : undefined,
+    }),
+  );
 
-  if (!profile.destination || !profile.duration_days) {
-    return {
-      response_type: "question_card",
-      title: "先確認行程的基本條件",
-      questions: [
-        ...(profile.destination
-          ? []
-          : [{
-              slot: "destination" as const,
-              question: "你想去哪個目的地？",
-              type: "text" as const,
-              placeholder: "例如：熊本、福岡、東京",
-            }]),
-        ...(profile.duration_days
-          ? []
-          : [{
-              slot: "duration_days" as const,
-              question: "你預計玩幾天？",
-              type: "number" as const,
-              placeholder: "例如：5",
-            }]),
-      ],
-      action: { label: "繼續", shortcut: "Enter" },
-    };
+  return normalizeTripProfile({
+    ...base,
+    destination:
+      base.destination ||
+      destinationFromContext ||
+      (inferred.destination ? normalizeDestinationLabel(inferred.destination) : null),
+    duration_days: base.duration_days ?? daysFromContext ?? inferred.days ?? null,
+  });
+}
+
+export function buildQuestionCard(profile: TripProfile, context?: ChatContext): QuestionCardPayload | null {
+  const merged = mergeTripProfileWithContext(profile, context);
+  const destination = normalizeDestinationLabel(merged.destination || "這次");
+  const questions: ChatQuestion[] = [];
+
+  if (!merged.destination) {
+    questions.push({
+      slot: "destination",
+      question: "你想去哪個目的地？",
+      type: "text",
+      placeholder: "例如：熊本、福岡、東京",
+    });
   }
 
-  return null;
+  if (!merged.duration_days) {
+    questions.push({
+      slot: "duration_days",
+      question: merged.destination ? `這趟${destination}預計玩幾天？` : "你預計玩幾天？",
+      type: "single_choice",
+      options: [
+        { label: "1 天", value: "1" },
+        { label: "2–3 天", value: "3", recommended: true },
+        { label: "4–5 天", value: "5" },
+        { label: "6 天以上", value: "7" },
+      ],
+      helperText: "選最接近的選項即可，之後還能再調整。",
+    });
+  }
+
+  const hasTravelParty = Boolean(merged.companions) || (merged.traveler_count ?? 0) > 0;
+
+  if (merged.destination && merged.duration_days && !hasTravelParty) {
+    questions.push({
+      slot: "companions",
+      question: `這趟${destination}幾個人一起去？`,
+      type: "single_choice",
+      options: [
+        { label: "自己一個人（獨旅）", value: "solo" },
+        { label: "兩人（伴侶或朋友）", value: "couple_or_friend", recommended: true },
+        { label: "3–4 人小團", value: "small_group" },
+        { label: "5 人以上（含家人）", value: "family_group" },
+      ],
+      helperText: "會影響住宿、交通與預算估算。",
+    });
+  }
+
+  if (merged.destination && merged.duration_days && hasTravelParty && !merged.preferences.length) {
+    questions.push({
+      slot: "preferences",
+      question: `你想讓${destination}行程更偏向哪幾種體驗？`,
+      type: "multi_choice",
+      options: buildPreferenceOptions(merged),
+      helperText: "可複選；我會依此安排景點密度與路線。",
+    });
+  }
+
+  if (merged.destination && merged.duration_days && hasTravelParty && merged.preferences.length && !merged.pace) {
+    questions.push({
+      slot: "pace",
+      question: "每天的節奏希望怎麼安排？",
+      type: "single_choice",
+      options: [
+        { label: "輕鬆慢遊，保留休息時間", value: "relaxed", recommended: true },
+        { label: "平均節奏，景點與休息兼具", value: "balanced" },
+        { label: "行程緊湊，多跑幾個點", value: "intensive" },
+      ],
+    });
+  }
+
+  if (
+    merged.destination &&
+    merged.duration_days &&
+    hasTravelParty &&
+    merged.preferences.length &&
+    merged.pace &&
+    !merged.transportation
+  ) {
+    questions.push({
+      slot: "transportation",
+      question: `${destination}這趟打算怎麼移動？`,
+      type: "single_choice",
+      options: buildTransportOptions(destination),
+    });
+  }
+
+  if (
+    merged.destination &&
+    merged.duration_days &&
+    hasTravelParty &&
+    merged.preferences.length &&
+    merged.pace &&
+    merged.transportation &&
+    !merged.budget
+  ) {
+    questions.push({
+      slot: "budget",
+      question: `${destination}這趟每人預算大概落在哪個區間？`,
+      type: "budget",
+      options: estimateBudgetOptions(merged),
+      helperText: "以新台幣估算，含交通、餐食與門票，住宿另計。",
+    });
+  }
+
+  const trimmed = questions.slice(0, 2);
+  if (!trimmed.length) {
+    return null;
+  }
+
+  return {
+    response_type: "question_card",
+    title: merged.destination ? `再確認一下${destination}行程偏好` : "先確認行程的基本條件",
+    description: "選好後我會依你的偏好繼續規劃。",
+    questions: trimmed,
+    action: { label: "送出並繼續", shortcut: "Enter" },
+  };
 }
 
 const DYNAMIC_QUESTION_CARD_TIMEOUT_MS = 8_000;
@@ -2361,7 +2674,10 @@ async function buildPlanningFallbackReturn(input: {
     input.webSearch.warning,
   );
   return {
-    plan: await enrichTripPlanWithRouteTravelTimes(enrichedPlan),
+    plan: await applyDestinationScopeToTripPlan(
+      await enrichTripPlanWithRouteTravelTimes(enrichedPlan),
+      input.request.destination,
+    ),
     sources: input.researchSources,
     diagnostics: {
       planGenerationMode: "fallback" as const,
@@ -2749,15 +3065,22 @@ function enrichPlanLocationsFromPlaceHits(plan: TripPlanResult, placeHits: Place
   };
 }
 
-function createSyntheticFallbackStops(chinese: boolean): PlaceSearchHit[] {
+function createDestinationAwareFallbackStops(destination: string, chinese: boolean): PlaceSearchHit[] {
+  const dest = destination.trim() || (chinese ? "目的地" : "destination");
   const names = chinese
-    ? ["市區自由探索", "河岸散策", "文創街区漫步", "在地市場", "夜景收尾"]
+    ? [
+        `${dest} 代表性景點`,
+        `${dest} 文化體驗`,
+        `${dest} 特色街區`,
+        `${dest} 在地美食`,
+        `${dest} 夜景或河岸`,
+      ]
     : [
-        "Free exploration",
-        "Riverside stroll",
-        "Creative district walk",
-        "Local market",
-        "Evening viewpoint",
+        `${dest} landmark`,
+        `${dest} cultural stop`,
+        `${dest} neighborhood walk`,
+        `${dest} local food`,
+        `${dest} evening viewpoint`,
       ];
   return names.map((name, index) => ({
     name,
@@ -2825,7 +3148,7 @@ function buildFallbackTripPlan(request: TripPlanRequest, placeHits: PlaceSearchH
   ]);
   const fallbackStops = dedupePlaceHitsByName([
     ...preferredStops,
-    ...createSyntheticFallbackStops(chinese),
+    ...createDestinationAwareFallbackStops(request.destination, chinese),
   ]);
   const fallbackMeals = restaurants.length ? dedupePlaceHitsByName(restaurants) : [];
 
@@ -3061,10 +3384,15 @@ export async function generateTripPlan(
       status: "completed",
       provider: "ollama",
     });
-    return {
-      plan: await enrichTripPlanWithRouteTravelTimes(
-        enrichPlanWithSearchSources(enrichPlanLocationsFromPlaceHits(parsed.result, researchPlaceHits), webSearch.results, webSearch.warning),
+    const composed = await enrichTripPlanWithRouteTravelTimes(
+      enrichPlanWithSearchSources(
+        enrichPlanLocationsFromPlaceHits(parsed.result, researchPlaceHits),
+        webSearch.results,
+        webSearch.warning,
       ),
+    );
+    return {
+      plan: await applyDestinationScopeToTripPlan(composed, request.destination),
       sources: researchSources,
       diagnostics: {
         planGenerationMode: "model",
@@ -3129,10 +3457,15 @@ export async function generateTripPlan(
         status: "completed",
         provider: "ollama",
       });
-      return {
-        plan: await enrichTripPlanWithRouteTravelTimes(
-          enrichPlanWithSearchSources(enrichPlanLocationsFromPlaceHits(parsed.result, researchPlaceHits), webSearch.results, webSearch.warning),
+      const composedRetry = await enrichTripPlanWithRouteTravelTimes(
+        enrichPlanWithSearchSources(
+          enrichPlanLocationsFromPlaceHits(parsed.result, researchPlaceHits),
+          webSearch.results,
+          webSearch.warning,
         ),
+      );
+      return {
+        plan: await applyDestinationScopeToTripPlan(composedRetry, request.destination),
         sources: researchSources,
         diagnostics: {
           planGenerationMode: "model",
@@ -3155,10 +3488,15 @@ export async function generateTripPlan(
         status: "completed",
         provider: "ollama",
       });
-      return {
-        plan: await enrichTripPlanWithRouteTravelTimes(
-          enrichPlanWithSearchSources(enrichPlanLocationsFromPlaceHits(fallback, researchPlaceHits), webSearch.results, webSearch.warning),
+      const composedFallback = await enrichTripPlanWithRouteTravelTimes(
+        enrichPlanWithSearchSources(
+          enrichPlanLocationsFromPlaceHits(fallback, researchPlaceHits),
+          webSearch.results,
+          webSearch.warning,
         ),
+      );
+      return {
+        plan: await applyDestinationScopeToTripPlan(composedFallback, request.destination),
         sources: researchSources,
         diagnostics: {
           planGenerationMode: "fallback",
@@ -3187,6 +3525,31 @@ export async function buildMapPlanningNotes(request: TripPlanRequest): Promise<s
   });
 }
 
+function contextWithoutItineraryForGeneralReply(
+  context: ChatContext | undefined,
+  decision: TravelAgentDecision,
+): ChatContext | undefined {
+  if (!context?.itinerary?.length) {
+    return context;
+  }
+  if (
+    decision.mode === "answer_trip_question" ||
+    (decision.mode === "search_travel_info" && !decision.shouldModifyItinerary)
+  ) {
+    return { ...context, itinerary: undefined };
+  }
+  return context;
+}
+
+async function applyDestinationScopeToTripPlan(
+  plan: TripPlanResult,
+  destination?: string | null,
+  scope?: import("@/lib/tripDestinationScope").TripDestinationScope | null,
+): Promise<TripPlanResult> {
+  const filtered = await filterTripPlanByDestinationScope(plan, destination, scope);
+  return filtered.plan;
+}
+
 export async function chatWithTravelAssistant(input: {
   message: string;
   messages?: ChatMessage[];
@@ -3196,28 +3559,78 @@ export async function chatWithTravelAssistant(input: {
   questionAnswers?: ChatQuestionAnswer[];
   progressSessionId?: string;
   memoryContext?: string;
+  mem0Memories?: string[];
   forceStructuredRevision?: boolean;
   aiContext?: AIContextBuildResult | null;
 }): Promise<ChatResponsePayload> {
+  let resolvedTripProfile = updateTripProfileFromText(
+    mergeTripProfileWithContext(input.tripProfile, input.context, {
+      message: input.message,
+      messages: input.messages,
+    }),
+    input.message,
+  );
+  if (input.questionAnswers?.length) {
+    resolvedTripProfile = applyQuestionAnswers(resolvedTripProfile, input.questionAnswers);
+  }
+  const resolvedDestination = resolvedTripProfile.destination || input.context?.destination;
+  let destinationScope = input.context?.destinationScope;
+  if (resolvedDestination?.trim() && !destinationScope?.countryCodes?.length) {
+    destinationScope =
+      (await resolveTripDestinationScopeWithGeocode(resolvedDestination)) ?? destinationScope;
+  }
+  const context = enrichChatContextWithDestinationScope({
+    ...input.context,
+    destination: resolvedDestination,
+    destinationScope,
+  });
+
   const travelAgentDecision = decideTravelAgentMode({
     message: input.message,
-    context: input.context,
-    tripProfile: input.tripProfile,
+    context,
+    tripProfile: resolvedTripProfile,
     aiContext: input.aiContext,
     memoryContext: input.memoryContext,
   });
+  const generalReplyContext = contextWithoutItineraryForGeneralReply(context, travelAgentDecision);
+
+  const skipNaturalShortcut = Boolean(input.questionAnswers?.length);
 
   if (
-    travelAgentDecision.mode === "casual_chat" ||
-    travelAgentDecision.mode === "collect_requirements" ||
-    travelAgentDecision.mode === "confirm_preferences"
+    !skipNaturalShortcut &&
+    (travelAgentDecision.mode === "casual_chat" ||
+      travelAgentDecision.mode === "collect_requirements" ||
+      travelAgentDecision.mode === "confirm_preferences")
   ) {
+    if (
+      travelAgentDecision.mode === "collect_requirements" ||
+      travelAgentDecision.mode === "confirm_preferences"
+    ) {
+      return buildGuidedTravelAgentResponse(travelAgentDecision, {
+        tripProfile: resolvedTripProfile,
+        context,
+        message: input.message,
+        messages: input.messages,
+      });
+    }
     return buildNaturalTravelAgentResponse(travelAgentDecision);
+  }
+
+  if (!skipNaturalShortcut && isPersonalMemoryRecallIntent(input.message)) {
+    return buildPersonalMemoryRecallResponse({
+      message: input.message,
+      aiContext: input.aiContext,
+      memoryContext: input.memoryContext,
+      mem0Memories: input.mem0Memories,
+      tripProfile: resolvedTripProfile,
+      progressSessionId: input.progressSessionId,
+      travelAgentDecision,
+    });
   }
 
   const itineraryInquiryResponse = buildExistingItineraryInquiryResponse({
     message: input.message,
-    context: input.context,
+    context,
     questionAnswers: input.questionAnswers,
   });
   if (itineraryInquiryResponse) {
@@ -3227,7 +3640,7 @@ export async function chatWithTravelAssistant(input: {
   const itineraryPatchResponse = await buildExistingItineraryPatchResponse({
     message: input.message,
     messages: input.messages,
-    context: input.context,
+    context,
     memoryContext: input.memoryContext,
     progressSessionId: input.progressSessionId,
   });
@@ -3253,7 +3666,7 @@ export async function chatWithTravelAssistant(input: {
   if (input.structuredTravelPlanning) {
     const structuredTripResponse = await handleStructuredTripWorkflow({
       message: input.message,
-      context: input.context,
+      context,
       tripProfile: input.tripProfile,
       questionAnswers: input.questionAnswers,
       progressSessionId: input.progressSessionId,
@@ -3274,7 +3687,7 @@ export async function chatWithTravelAssistant(input: {
   const language = detectResponseLanguage(input.message);
   const researchPrompt = buildChatResearchPlanningPrompt({
     message: input.message,
-    context: input.context,
+    context: generalReplyContext,
     memoryContext: input.memoryContext,
   });
   publishProgressStep(input.progressSessionId, {
@@ -3313,7 +3726,7 @@ export async function chatWithTravelAssistant(input: {
         options: { temperature: 0, top_p: 0.9, num_ctx: 16_384 },
         messages: [
           { role: "system", content: researchPrompt.system },
-          ...normalizeHistory(input.context, language),
+          ...normalizeHistory(generalReplyContext, language),
           ...normalizeConversationHistory(input.messages),
           { role: "user", content: researchPrompt.user },
         ],
@@ -3326,12 +3739,12 @@ export async function chatWithTravelAssistant(input: {
       extractJsonObject(rawResearch)?.toolRequests,
     );
     if (!toolRequests.length) {
-      toolRequests = buildDefaultTravelToolRequests(input.message, input.context);
+      toolRequests = buildDefaultTravelToolRequests(input.message, generalReplyContext);
     }
 
-    digest = await executeTravelToolRequests(toolRequests, input.context, input.progressSessionId);
-    const interestText = input.context?.preferences?.interests?.filter(Boolean).join(" ") || "";
-    const webSearchQuery = [input.context?.destination || "", interestText, input.message]
+    digest = await executeTravelToolRequests(toolRequests, generalReplyContext, input.progressSessionId);
+    const interestText = generalReplyContext?.preferences?.interests?.filter(Boolean).join(" ") || "";
+    const webSearchQuery = [generalReplyContext?.destination || "", interestText, input.message]
       .filter(Boolean)
       .join(" ")
       .trim();
@@ -3355,7 +3768,7 @@ export async function chatWithTravelAssistant(input: {
 
   const prompt = buildChatPrompt(
     input.message,
-    input.context,
+    generalReplyContext,
     input.memoryContext,
     digestText,
     webSearch.digest || undefined,
@@ -3368,20 +3781,33 @@ export async function chatWithTravelAssistant(input: {
     status: "running",
     provider: "ollama",
   });
+  const composeMessages: OllamaMessage[] = [
+    { role: "system", content: prompt.system },
+    ...normalizeHistory(generalReplyContext, language),
+    ...normalizeConversationHistory(input.messages),
+    { role: "user", content: prompt.user },
+  ];
+  const composeOllamaBase = {
+    task: "travel-chat" as const,
+    timeoutMs: perRoundTimeout,
+    options: { temperature: 0, top_p: 0.9, num_ctx: 16_384 },
+    messages: composeMessages,
+  };
+
   let raw: string;
   try {
-    raw = await chatWithOllamaTimeoutRetry({
-      task: "travel-chat",
-      format: structuredChatOutputJsonSchema,
-      timeoutMs: perRoundTimeout,
-      options: { temperature: 0, top_p: 0.9, num_ctx: 16_384 },
-      messages: [
-        { role: "system", content: prompt.system },
-        ...normalizeHistory(input.context, language),
-        ...normalizeConversationHistory(input.messages),
-        { role: "user", content: prompt.user },
-      ],
-    });
+    try {
+      raw = await chatWithOllamaTimeoutRetry({
+        ...composeOllamaBase,
+        format: structuredChatOutputJsonSchema,
+      });
+    } catch (error) {
+      if (error instanceof OllamaRequestError && error.code === "http_error") {
+        raw = await chatWithOllamaTimeoutRetry(composeOllamaBase);
+      } else {
+        throw error;
+      }
+    }
   } catch (error) {
     if (!(error instanceof OllamaRequestError)) {
       throw error;
@@ -3389,7 +3815,13 @@ export async function chatWithTravelAssistant(input: {
     if (!error.isTimeout) {
       throw error;
     }
-    const fallbackText = buildTravelChatTimeoutFallbackText(digestText);
+    const fallbackText = buildTravelChatTimeoutFallbackText(digestText, {
+      message: input.message,
+      aiContext: input.aiContext,
+      memoryContext: input.memoryContext,
+      mem0Memories: input.mem0Memories,
+      tripProfile: resolvedTripProfile,
+    });
     publishProgressStep(input.progressSessionId, {
       phase: "compose",
       label: "生成回覆",
@@ -3440,6 +3872,40 @@ export async function chatWithTravelAssistant(input: {
     provider: "ollama",
   });
 
+  const mergedTripProfile = mergeTripProfileWithContext(resolvedTripProfile, input.context, {
+    message: input.message,
+    messages: input.messages,
+    replyText,
+  });
+  const followUpCard =
+    !input.context?.itinerary?.length && !proposedChanges.length && !assistantActions.length
+      ? buildQuestionCard(mergedTripProfile, input.context)
+      : null;
+
+  if (followUpCard) {
+    return {
+      reply: {
+        id: `assistant_${Date.now()}`,
+        role: "assistant",
+        content: stripRedundantFollowUpPrompts(replyText),
+        timestamp: new Date().toLocaleTimeString("zh-TW", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        responseType: "question_card",
+        questionCard: followUpCard,
+        tripProfile: mergedTripProfile,
+        proposedChanges,
+        assistantActions,
+        sources,
+      },
+      tripProfile: mergedTripProfile,
+      proposedChanges,
+      assistantActions,
+      travelAgentDecision,
+    };
+  }
+
   return {
     reply: {
       id: `assistant_${Date.now()}`,
@@ -3454,6 +3920,7 @@ export async function chatWithTravelAssistant(input: {
       assistantActions,
       sources,
     },
+    tripProfile: mergedTripProfile,
     proposedChanges,
     assistantActions,
     travelAgentDecision,

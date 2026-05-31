@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
-import { OllamaRequestError } from "@/server/ai/ollamaClient";
+import { formatOllamaErrorMessage, OllamaRequestError } from "@/server/ai/ollamaClient";
 import { buildPersonalizedAIContext, type AIContextBuildResult } from "@/server/ai/aiContextBuilder";
 import { completeChatProgress, ensureChatProgressSession } from "@/server/chat/chatProgressStore";
 import { addMemories, formatMemoryContext } from "@/server/memory/mem0Client";
+import { isPersonalMemoryRecallIntent } from "@/server/memory/personalMemoryRecall";
 import { retrieveRelevantMemoriesForUser } from "@/server/memory/memoryRetrieval";
 import { requireSessionUser } from "@/server/auth";
 import { resolveSessionTrip, saveChatMessage } from "@/server/data/appStateService";
@@ -13,8 +14,25 @@ import type { ChatContext, ChatMessage, ChatQuestionAnswer, TripProfile } from "
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function logChatRouteFailure(messagePreview: string, error: unknown) {
+  if (process.env.NODE_ENV === "production") {
+    return;
+  }
+  const detail =
+    error instanceof OllamaRequestError
+      ? { kind: "ollama", message: error.message.slice(0, 240), isTimeout: error.isTimeout }
+      : error instanceof Error
+        ? { kind: error.name, message: error.message.slice(0, 240) }
+        : { kind: "unknown", message: String(error).slice(0, 240) };
+  console.error("[api/ai/chat] request failed", {
+    messagePreview: messagePreview.slice(0, 80),
+    ...detail,
+  });
+}
+
 async function handleChatPost(request: Request) {
   let progressSessionId: string | undefined;
+  let normalizedMessage = "";
   try {
     const body = (await request.json()) as {
       message?: string;
@@ -27,7 +45,7 @@ async function handleChatPost(request: Request) {
       progressSessionId?: string;
     };
 
-    const normalizedMessage = body.message?.trim() || "";
+    normalizedMessage = body.message?.trim() || "";
     const displayMessage = body.displayMessage?.trim() || "";
     const hasQuestionAnswers = Boolean(body.questionAnswers?.length);
     const userPersistContent = normalizedMessage || displayMessage;
@@ -43,6 +61,7 @@ async function handleChatPost(request: Request) {
     let persistedTripId: string | undefined;
     let memoryContext: string | undefined;
     let personalizedContext: AIContextBuildResult | null = null;
+    let mem0Memories: string[] | undefined;
 
     try {
       const { userId } = await requireSessionUser();
@@ -54,9 +73,12 @@ async function handleChatPost(request: Request) {
       }
       if (userPersistContent) {
         await saveChatMessage(userId, "user", userPersistContent, persistedTripId);
+        const recallIntent = isPersonalMemoryRecallIntent(userPersistContent);
         const { memories } = await retrieveRelevantMemoriesForUser({
           userId,
           query: userPersistContent,
+          topK: recallIntent ? 20 : undefined,
+          broadRecall: recallIntent,
         });
         const longTermMemory = formatMemoryContext(memories);
         personalizedContext = await buildPersonalizedAIContext({
@@ -70,7 +92,14 @@ async function handleChatPost(request: Request) {
             relevance: memory.score,
           })),
         });
-        memoryContext = personalizedContext.promptContextText || longTermMemory;
+        memoryContext = recallIntent
+          ? longTermMemory
+          : personalizedContext.promptContextText || longTermMemory;
+        if (recallIntent) {
+          mem0Memories = memories
+            .map((memory) => memory.memory?.trim() || "")
+            .filter(Boolean);
+        }
       }
     } catch {
       // Chat remains functional even if the user is not authenticated.
@@ -82,8 +111,10 @@ async function handleChatPost(request: Request) {
       });
     }
 
+    const effectiveMessage = normalizedMessage || displayMessage;
+
     const response = await chatWithTravelAssistant({
-      message: normalizedMessage,
+      message: effectiveMessage,
       messages: body.messages,
       context: body.context,
       structuredTravelPlanning: body.structuredTravelPlanning,
@@ -91,6 +122,7 @@ async function handleChatPost(request: Request) {
       questionAnswers: body.questionAnswers,
       progressSessionId,
       memoryContext,
+      mem0Memories,
       aiContext: personalizedContext,
     });
 
@@ -124,6 +156,14 @@ async function handleChatPost(request: Request) {
       }
     }
 
+    if (process.env.NODE_ENV !== "production" && response.travelAgentDecision) {
+      console.info("[api/ai/chat] travelAgentDecision", {
+        mode: response.travelAgentDecision.mode,
+        debugReason: response.travelAgentDecision.debugReason,
+        messagePreview: effectiveMessage.slice(0, 80),
+      });
+    }
+
     if (progressSessionId) {
       completeChatProgress(progressSessionId);
     }
@@ -142,9 +182,10 @@ async function handleChatPost(request: Request) {
     if (progressSessionId) {
       completeChatProgress(progressSessionId);
     }
+    logChatRouteFailure(normalizedMessage, error);
     if (error instanceof OllamaRequestError) {
       return NextResponse.json(
-        createError("ollama_error", `Ollama 回應失敗：${error.message}`, error.details),
+        createError("ollama_error", formatOllamaErrorMessage(error, "travel-chat"), error.details),
         { status: 502 },
       );
     }

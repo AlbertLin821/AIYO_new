@@ -1,10 +1,16 @@
 import { dayNumberFromDayId } from "@/lib/assistantActions/converters";
+import {
+  collectMapFocusGeocodeTargets,
+  maybeEnqueueItemGeocodeTarget,
+  processPendingGeocodeTargets,
+} from "@/lib/assistantActions/geocodeAssistantActionTargets";
 import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
 import { reconcileTripMapState } from "@/services/mapSync";
 import { syncService } from "@/services/syncService";
 import { useMapStore } from "@/stores/useMapStore";
 import { useTripStore } from "@/stores/useTripStore";
 import type { AssistantAction, AssistantActionItemInput, LocationReference, TripPlanItem } from "@/types";
+import type { PendingGeocodeTarget } from "@/types/geocode";
 
 function sourceToTripItemSource(source: AssistantActionItemInput["source"]): TripPlanItem["source"] {
   if (source === "video") return "video";
@@ -57,10 +63,17 @@ function reconcileMapWithTrip() {
 
 export async function applyAssistantActions(
   actions: AssistantAction[],
-  options: { persist?: boolean } = {},
+  options: { persist?: boolean; geocode?: boolean } = {},
 ): Promise<{ appliedCount: number; skippedCount: number }> {
   let appliedCount = 0;
   let skippedCount = 0;
+  const geocodeTargets: PendingGeocodeTarget[] = [];
+  const geocodeSeen = new Set<string>();
+  const tripState = useTripStore.getState();
+  const geocodeContext = {
+    tripId: tripState.tripId,
+    destinationHint: tripState.destination,
+  };
 
   for (const action of actions) {
     if (action.type === "map.focus_location") {
@@ -97,7 +110,15 @@ export async function applyAssistantActions(
     }
 
     if (action.type === "itinerary.add_item") {
-      useTripStore.getState().addItineraryItem(dayNumber, itemFromInput(action.payload.item, dayNumber));
+      const newItem = itemFromInput(action.payload.item, dayNumber);
+      useTripStore.getState().addItineraryItem(dayNumber, newItem);
+      maybeEnqueueItemGeocodeTarget(geocodeTargets, geocodeSeen, {
+        ...geocodeContext,
+        dayId: action.payload.dayId,
+        itemId: newItem.id,
+        itemInput: action.payload.item,
+        reason: "assistant_action_add",
+      });
       appliedCount += 1;
       continue;
     }
@@ -113,12 +134,21 @@ export async function applyAssistantActions(
 
     if (action.type === "itinerary.reorder_items") {
       const order = new Map(action.payload.orderedItemIds.map((id, index) => [id, index]));
+      const originalIndex = new Map(day.items.map((item, index) => [item.id, index]));
       useTripStore.getState().setItinerary(
         useTripStore.getState().itinerary.map((candidate) =>
           candidate.dayNumber === dayNumber
             ? {
                 ...candidate,
-                items: [...candidate.items].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0)),
+                items: [...candidate.items].sort((a, b) => {
+                  const left = order.has(a.id)
+                    ? order.get(a.id)!
+                    : (originalIndex.get(a.id) ?? Number.MAX_SAFE_INTEGER) + order.size;
+                  const right = order.has(b.id)
+                    ? order.get(b.id)!
+                    : (originalIndex.get(b.id) ?? Number.MAX_SAFE_INTEGER) + order.size;
+                  return left - right;
+                }),
               }
             : candidate,
         ),
@@ -156,15 +186,29 @@ export async function applyAssistantActions(
         }
       }
       useTripStore.getState().updateItineraryItem(dayNumber, action.payload.itemId, patch);
+      maybeEnqueueItemGeocodeTarget(geocodeTargets, geocodeSeen, {
+        ...geocodeContext,
+        dayId: action.payload.dayId,
+        itemId: action.payload.itemId,
+        itemInput: action.payload.patch,
+        reason: "assistant_action_update",
+      });
       appliedCount += 1;
     }
   }
+
+  geocodeTargets.push(...collectMapFocusGeocodeTargets(actions, geocodeContext));
 
   if (appliedCount > 0) {
     reconcileMapWithTrip();
     if (options.persist !== false) {
       await syncService.flushTripSyncNow({ force: true });
     }
+  }
+
+  const geocodeEnabled = options.geocode ?? typeof window !== "undefined";
+  if (geocodeEnabled) {
+    await processPendingGeocodeTargets(geocodeTargets, { persist: options.persist !== false });
   }
 
   return { appliedCount, skippedCount };

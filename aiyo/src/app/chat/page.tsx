@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -21,7 +21,10 @@ import {
 import ChatHistorySidebar from "@/components/chat/ChatHistorySidebar";
 import ChatWorkflowRail from "@/components/chat/ChatWorkflowRail";
 import PlanningWaitGame from "@/components/chat/PlanningWaitGame";
+import PreferenceReusePanel from "@/components/chat/PreferenceReusePanel";
 import MarkdownMessage from "@/components/chat/MarkdownMessage";
+import QuestionCard from "@/components/chat/QuestionCard";
+import { answersRecordFromPayload } from "@/components/chat/questionCardUtils";
 import TravelPlanCard from "@/components/chat/TravelPlanCard";
 import { CitationList } from "@/components/sources/CitationList";
 import { SourceDrawer } from "@/components/sources/SourceDrawer";
@@ -52,18 +55,25 @@ import {
 } from "@/lib/frontendDebug";
 import { buildWorkflowSteps } from "@/lib/workflowSteps";
 import {
+  buildChatTypingContext,
+  resolveChatTypingLabel,
+} from "@/lib/chat/chatTypingMessages";
+import {
   buildItineraryItemFromAiChange,
   findItineraryItemTarget,
 } from "@/app/chat/itineraryPatchUtils";
 import { applyAssistantActions } from "@/lib/assistantActions/applyAssistantActions";
 import { CHAT_HISTORY_WINDOW } from "@/lib/chatConstants";
+import {
+  isFullItineraryRevisionCommand,
+  isItineraryMutationCommand,
+  isLikelyTripWorkflowMessage,
+  shouldShowPlanningWorkflowRail,
+} from "@/lib/chat/workflowRailVisibility";
 import { cn } from "@/lib/utils";
 import {
-  applyTravelPreferences,
-  fetchTravelPreferenceSuggestion,
   reviseTripPlan,
   sendChatMessage,
-  type TravelPreferenceSuggestion,
 } from "@/services/aiClient";
 import { createNewTrip, setActiveTrip } from "@/services/itineraryClient";
 import { geocodeItineraryItemsMissingLocation } from "@/services/geocodeItineraryItems";
@@ -85,11 +95,12 @@ import type {
   AiProposedChange,
   ChatMessage,
   ChatQuestionAnswer,
-  QuestionCardPayload,
   StatusStepPayload,
   TripPlanDay,
   TripPlanItem,
   TripProfile,
+  TravelAgentDecision,
+  TravelAgentPreferenceConfirmation,
   VideoRecommendation,
   VideoSummaryResult,
 } from "@/types";
@@ -237,29 +248,29 @@ function buildChatVideoSearchKeyword(userMessage: string, itinerary: TripPlanDay
   return [userMessage.trim(), ...hints].filter(Boolean).join(" ").slice(0, 420);
 }
 
-function isItineraryMutationCommand(message: string): boolean {
-  return /新增|加入|加上|刪除|刪掉|移除|取消|去掉|修改|調整|改成|換成|改到|提前|延後|移到|重排|重新規劃|幫我(?:安排|規劃|新增|加入|調整|修改|刪除|刪掉|移除|取消|去掉)|請(?:安排|規劃|新增|加入|調整|修改|刪除|刪掉|移除|取消|去掉)/u.test(message);
-}
-
-function isFullItineraryRevisionCommand(message: string): boolean {
-  return /重新規劃|重排|整份|整個|全部|從頭|完整(?:安排|規劃)|(?:規劃|安排).{0,8}(?:新|完整|整份|全部)?行程/u.test(
-    message,
-  );
-}
-
-function isLikelyTripWorkflowMessage(message: string): boolean {
-  return /(?:幫我|請|可以|能不能|想要|我要|我想|需要).{0,12}(?:規劃|安排|建立|創建|產生|生成|做一份|排|新增|加入|加上|修改|調整|重排|重新規劃)|(?:規劃|安排|建立|產生|生成|新增|加入|修改|調整|重排|重新規劃).{0,12}(?:行程|旅行|旅遊|景點|活動|餐廳|美食)|(?:想去|我要去|我想去).{0,30}(?:旅遊|旅行|自由行|[一二兩三四五六七八九十\d]+\s*天)|(?:玩|排)[一二兩三四五六七八九十\d]+\s*天|[一二兩三四五六七八九十\d]+\s*天[一二兩三四五六七八九十\d]*\s*夜(?:行程|旅行|旅遊|自由行)?/u.test(
-    message,
-  );
-}
-
 type WorkflowRailState = {
   visible: boolean;
   steps: StatusStepPayload[];
-  questionCard: QuestionCardPayload | null;
   tripProfile: TripProfile | null;
   questionMessageId: string | null;
+  preferenceConfirmation: TravelAgentPreferenceConfirmation | null;
+  travelAgentMode: TravelAgentDecision["mode"] | null;
 };
+
+function workflowRailFromTravelDecision(
+  decision?: TravelAgentDecision,
+): Pick<WorkflowRailState, "preferenceConfirmation" | "travelAgentMode"> {
+  if (decision?.mode === "confirm_preferences" && decision.preferenceConfirmation) {
+    return {
+      preferenceConfirmation: decision.preferenceConfirmation,
+      travelAgentMode: decision.mode,
+    };
+  }
+  return {
+    preferenceConfirmation: null,
+    travelAgentMode: decision?.mode ?? null,
+  };
+}
 
 type ItinerarySyncState = {
   status: "idle" | "syncing" | "synced" | "failed";
@@ -345,10 +356,14 @@ export default function ChatPage() {
   const [workflowRail, setWorkflowRail] = useState<WorkflowRailState>({
     visible: false,
     steps: [],
-    questionCard: null,
     tripProfile: null,
     questionMessageId: null,
+    preferenceConfirmation: null,
+    travelAgentMode: null,
   });
+  const [answeredQuestionCards, setAnsweredQuestionCards] = useState<
+    Record<string, ChatQuestionAnswer[]>
+  >({});
   const [itinerarySyncState, setItinerarySyncState] = useState<ItinerarySyncState>({
     status: "idle",
     title: "尚未同步",
@@ -361,10 +376,6 @@ export default function ChatPage() {
   const [autoSummaryProgress, setAutoSummaryProgress] = useState<{ current: number; total: number } | null>(null);
   const [sourceDrawerSource, setSourceDrawerSource] = useState<SourceReference | null>(null);
   const [isVoiceInputActive, setIsVoiceInputActive] = useState(false);
-  const [preferenceSuggestion, setPreferenceSuggestion] = useState<TravelPreferenceSuggestion | null>(null);
-  const [preferenceCardMode, setPreferenceCardMode] = useState<"summary" | "edit">("summary");
-  const [isApplyingPreferences, setIsApplyingPreferences] = useState(false);
-  const [editableSuggestion, setEditableSuggestion] = useState<TravelPreferenceSuggestion["preferences"] | null>(null);
   const chatInputRef = useRef<HTMLInputElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const statusStreamRef = useRef<EventSource | null>(null);
@@ -373,6 +384,10 @@ export default function ChatPage() {
   const speechBaseInputRef = useRef("");
   const speechFinalTranscriptRef = useRef("");
   const chatRequestEpochRef = useRef(0);
+  const planningWorkflowActiveRef = useRef(false);
+  const [planningWorkflowActive, setPlanningWorkflowActive] = useState(false);
+  const typingSeedRef = useRef(Math.floor(Math.random() * 10_000));
+  const [typingTick, setTypingTick] = useState(0);
   const videoSummaryQueueTokenRef = useRef(0);
   const videoSummaryInflightRef = useRef(new Map<string, Promise<VideoSummaryResult>>());
   const autoSummaryActiveRef = useRef(false);
@@ -380,6 +395,7 @@ export default function ChatPage() {
   const conversationVideosLoadedMoreRef = useRef<Map<string, boolean>>(new Map());
   const hydratedConversationTripRef = useRef<string | null>(null);
   const contextTripResyncAttemptRef = useRef<string | null>(null);
+  const lastTravelPlanScrollIdRef = useRef<string | null>(null);
   const [videosPanelExpanded, setVideosPanelExpanded] = useState(true);
   const {
     conversations,
@@ -404,22 +420,6 @@ export default function ChatPage() {
   const setIsSummarizing = useVideoStore((state) => state.setIsSummarizing);
 
   useEffect(() => {
-    let cancelled = false;
-    void fetchTravelPreferenceSuggestion()
-      .then((suggestion) => {
-        if (cancelled || !suggestion.has_previous_preferences) {
-          return;
-        }
-        setPreferenceSuggestion(suggestion);
-        setEditableSuggestion(suggestion.preferences);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
     return () => {
       speechRecognitionRef.current?.abort();
       speechRecognitionRef.current = null;
@@ -427,7 +427,18 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
-    if (!isSending || streamingStatusSteps.length === 0) {
+    if (!isSending) {
+      setTypingTick(0);
+      return;
+    }
+    const intervalId = window.setInterval(() => {
+      setTypingTick((current) => current + 1);
+    }, 3000);
+    return () => window.clearInterval(intervalId);
+  }, [isSending]);
+
+  useEffect(() => {
+    if (!isSending || streamingStatusSteps.length === 0 || !planningWorkflowActiveRef.current) {
       return;
     }
     setWorkflowRail((prev) => ({
@@ -446,9 +457,10 @@ export default function ChatPage() {
       setWorkflowRail({
         visible: false,
         steps: [],
-        questionCard: null,
         tripProfile: tripProfile,
         questionMessageId: null,
+        preferenceConfirmation: null,
+        travelAgentMode: null,
       });
       return;
     }
@@ -456,46 +468,62 @@ export default function ChatPage() {
       return;
     }
     if (last.responseType === "question_card" && last.questionCard) {
-      setWorkflowRail({
+      setWorkflowRail((prev) => ({
         visible: true,
         steps: last.statusSteps || [],
-        questionCard: last.questionCard,
         tripProfile: last.tripProfile ?? tripProfile,
         questionMessageId: last.id,
-      });
+        preferenceConfirmation:
+          prev.travelAgentMode === "confirm_preferences" ? prev.preferenceConfirmation : null,
+        travelAgentMode:
+          prev.travelAgentMode === "confirm_preferences" ? prev.travelAgentMode : null,
+      }));
       return;
     }
     if (last.responseType === "travel_plan") {
       setWorkflowRail({
         visible: false,
         steps: [],
-        questionCard: null,
         tripProfile: last.tripProfile ?? tripProfile,
         questionMessageId: null,
+        preferenceConfirmation: null,
+        travelAgentMode: null,
       });
       return;
     }
     if (last.statusSteps?.length) {
-      setWorkflowRail({
+      setWorkflowRail((prev) => ({
         visible: true,
         steps: last.statusSteps,
-        questionCard: null,
         tripProfile: last.tripProfile ?? tripProfile,
-        questionMessageId: null,
-      });
+        questionMessageId: prev.questionMessageId,
+        preferenceConfirmation:
+          prev.travelAgentMode === "confirm_preferences" ? prev.preferenceConfirmation : null,
+        travelAgentMode:
+          prev.travelAgentMode === "confirm_preferences" ? prev.travelAgentMode : null,
+      }));
       return;
     }
-    setWorkflowRail((prev) =>
-      prev.visible || prev.steps.length || prev.questionCard
-        ? {
-            visible: false,
-            steps: [],
-            questionCard: null,
-            tripProfile: last.tripProfile ?? tripProfile,
-            questionMessageId: null,
-          }
-        : prev,
-    );
+    setWorkflowRail((prev) => {
+      if (prev.travelAgentMode === "confirm_preferences" && prev.preferenceConfirmation) {
+        return {
+          ...prev,
+          visible: true,
+          tripProfile: last.tripProfile ?? tripProfile,
+        };
+      }
+      if (prev.visible || prev.steps.length || prev.preferenceConfirmation) {
+        return {
+          visible: false,
+          steps: [],
+          tripProfile: last.tripProfile ?? tripProfile,
+          questionMessageId: null,
+          preferenceConfirmation: null,
+          travelAgentMode: null,
+        };
+      }
+      return prev;
+    });
   }, [activeConversationId, messages, isSending, tripProfile]);
 
   const tagConfigs = [
@@ -507,15 +535,26 @@ export default function ChatPage() {
   useEffect(() => {
     const last = messages[messages.length - 1];
     if (last?.responseType === "travel_plan" && last.travelPlan) {
-      requestAnimationFrame(() => {
-        document
-          .querySelector(`[data-travel-plan-message-id="${last.id}"]`)
-          ?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
+      if (lastTravelPlanScrollIdRef.current !== last.id) {
+        lastTravelPlanScrollIdRef.current = last.id;
+        requestAnimationFrame(() => {
+          document
+            .querySelector(`[data-travel-plan-message-id="${last.id}"]`)
+            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      }
       return;
     }
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, isSending, errorMessage]);
+  }, [messages, errorMessage]);
+
+  function scrollToRecommendedVideosPanel() {
+    requestAnimationFrame(() => {
+      document
+        .querySelector('[data-testid="chat-recommended-videos"]')
+        ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }
 
   useEffect(() => {
     try {
@@ -594,12 +633,14 @@ export default function ChatPage() {
       tripStore.itinerary.length > 0);
   const workflowView = buildWorkflowSteps(workflowRail.steps);
   const hasWorkflowRail =
-    workflowRail.visible ||
-    isSending ||
-    Boolean(workflowRail.questionCard) ||
-    workflowView.length > 0;
+    workflowRail.visible &&
+    (workflowView.length > 0 ||
+      Boolean(workflowRail.preferenceConfirmation) ||
+      workflowRail.travelAgentMode === "confirm_preferences");
   const activePlanningSteps =
-    isSending && streamingStatusSteps.length > 0 ? streamingStatusSteps : workflowRail.steps;
+    planningWorkflowActive && isSending && streamingStatusSteps.length > 0
+      ? streamingStatusSteps
+      : workflowRail.steps;
   const planningWorkflowView = buildWorkflowSteps(activePlanningSteps);
   const lastAssistantMessage = [...messages].reverse().find((message) => message.role === "assistant");
   const completedPlanningPhases = new Set(
@@ -609,7 +650,32 @@ export default function ChatPage() {
     lastAssistantMessage?.responseType === "travel_plan" &&
     ["understand", "plan", "research", "compose"].every((phase) => completedPlanningPhases.has(phase));
   const isPlanningActive =
-    isSending || (hasWorkflowRail && !planningComplete && activePlanningSteps.some((step) => step.status === "running"));
+    (planningWorkflowActive && isSending) ||
+    (hasWorkflowRail &&
+      !planningComplete &&
+      activePlanningSteps.some((step) => step.status === "running"));
+  const showStructuredPlanningProgress =
+    (planningWorkflowActive && Boolean(streamingStatusSteps.length)) ||
+    Boolean(workflowRail.steps.length) ||
+    Boolean(workflowRail.preferenceConfirmation);
+  const assistantTypingLabel = useMemo(() => {
+    const typingContext = buildChatTypingContext({
+      steps: activePlanningSteps,
+      travelAgentMode: workflowRail.travelAgentMode,
+      hasPreferenceConfirmation: Boolean(workflowRail.preferenceConfirmation),
+      isStructuredPlanning: showStructuredPlanningProgress,
+    });
+    return resolveChatTypingLabel(typingContext, {
+      seed: typingSeedRef.current,
+      tick: typingTick,
+    });
+  }, [
+    activePlanningSteps,
+    workflowRail.travelAgentMode,
+    workflowRail.preferenceConfirmation,
+    showStructuredPlanningProgress,
+    typingTick,
+  ]);
 
   useEffect(() => {
     if (itinerarySyncState.status === "syncing" || itinerarySyncState.status === "failed") {
@@ -830,7 +896,7 @@ export default function ChatPage() {
     setStreamingStatusSteps([]);
     setWorkflowRail((prev) => ({
       ...prev,
-      visible: prev.questionCard ? prev.visible : false,
+      visible: prev.steps.length > 0 ? prev.visible : false,
       steps: [],
     }));
     setIsSending(false);
@@ -1040,53 +1106,32 @@ export default function ChatPage() {
     return { sessionId, processId };
   }
 
-  function handleWorkflowQuestionSubmit(answers: ChatQuestionAnswer[], displayMessage: string) {
-    const profile = workflowRail.tripProfile ?? tripProfile;
-    setWorkflowRail((prev) => ({
-      ...prev,
-      questionCard: null,
-      questionMessageId: null,
-      visible: true,
-    }));
-    void handleSend("", {
-      displayMessage,
-      questionAnswers: answers,
-      tripProfile: profile,
-    });
+  function markQuestionCardAnswered(messageId: string, answers: ChatQuestionAnswer[]) {
+    setAnsweredQuestionCards((prev) => ({ ...prev, [messageId]: answers }));
   }
 
-  async function handleApplyPreviousPreferences(nextPreferences?: TravelPreferenceSuggestion["preferences"]) {
-    const preferences = nextPreferences || preferenceSuggestion?.preferences;
-    if (!preferences || isApplyingPreferences) {
-      return;
-    }
-    setIsApplyingPreferences(true);
-    setErrorMessage(null);
-    try {
-      const result = await applyTravelPreferences({
-        preferences,
-        savePreferences: true,
-      });
-      const snapshot = await syncService.loadBootstrap();
-      syncService.applyBootstrap(snapshot, { forceTrip: true });
-      appendMessage({
-        id: `assistant_apply_preferences_${Date.now()}`,
-        role: "assistant",
-        content: `已套用先前設定，並建立 ${result.appliedPreferences.destination || "目的地"} 行程。`,
-        timestamp: new Date().toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" }),
-        responseType: "text_message",
-      });
-      setPreferenceSuggestion(null);
-      pushToast({ variant: "success", title: "已套用先前設定", description: "行程已依照你的偏好更新。" });
-    } catch (error) {
-      pushToast({
-        variant: "error",
-        title: "套用先前設定失敗",
-        description: error instanceof Error ? error.message : t.api.postFailed,
-      });
-    } finally {
-      setIsApplyingPreferences(false);
-    }
+  function handlePreferenceAccept() {
+    setWorkflowRail((prev) => ({
+      ...prev,
+      preferenceConfirmation: null,
+    }));
+    void handleSend("沿用", { displayMessage: "沿用先前偏好" });
+  }
+
+  function handlePreferenceDecline() {
+    setWorkflowRail((prev) => ({
+      ...prev,
+      preferenceConfirmation: null,
+    }));
+    void handleSend("這次不用沿用", { displayMessage: "這次重新填寫偏好" });
+  }
+
+  function handlePreferenceEditSubmit(message: string, displayMessage: string) {
+    setWorkflowRail((prev) => ({
+      ...prev,
+      preferenceConfirmation: null,
+    }));
+    void handleSend(message, { displayMessage });
   }
 
   function handleToggleVoiceInput() {
@@ -1165,9 +1210,10 @@ export default function ChatPage() {
     planningSnapshot: ReturnType<typeof derivePlanningSnapshot>;
     chatProcessId?: string;
     append?: boolean;
+    scrollAfterLoad?: boolean;
   }) {
-    const conversationId = useChatStore.getState().activeConversationId;
-    const existingVideos = getStoredConversationVideos(conversationId);
+    const conversationIdAtStart = useChatStore.getState().activeConversationId;
+    const existingVideos = getStoredConversationVideos(conversationIdAtStart);
     const videoSummaryQueueToken = videoSummaryQueueTokenRef.current + 1;
     videoSummaryQueueTokenRef.current = videoSummaryQueueToken;
     autoSummaryActiveRef.current = false;
@@ -1197,8 +1243,10 @@ export default function ChatPage() {
         excludeVideoIds: existingVideos.map(getVideoIdentity).filter(Boolean),
       });
       const append = input.append === true;
-      if (conversationId) {
-        conversationVideosLoadedMoreRef.current.set(conversationId, append);
+      const conversationIdAfterFetch = useChatStore.getState().activeConversationId;
+      const cacheConversationId = conversationIdAfterFetch || conversationIdAtStart;
+      if (cacheConversationId) {
+        conversationVideosLoadedMoreRef.current.set(cacheConversationId, append);
       }
       const previousIds = new Set(existingVideos.map(getVideoIdentity).filter(Boolean));
       const mergedVideos = append
@@ -1208,7 +1256,13 @@ export default function ChatPage() {
         const key = getVideoIdentity(video);
         return key && !previousIds.has(key);
       });
-      updateRecommendedVideos(mergedVideos);
+      if (cacheConversationId) {
+        conversationVideosRef.current.set(cacheConversationId, mergedVideos);
+      }
+      setRecommendedVideos(mergedVideos);
+      if (input.scrollAfterLoad && mergedVideos.length > 0) {
+        scrollToRecommendedVideosPanel();
+      }
       autoSummaryStarted = newlyAdded
         .slice(0, 6)
         .some((video) => !shouldSkipClientVideoSummarize(video));
@@ -1400,12 +1454,22 @@ export default function ChatPage() {
     setInput("");
     setErrorMessage(null);
     setIsSending(true);
+    const showPlanningRail = shouldShowPlanningWorkflowRail({
+      message,
+      inQuestionCardFlow: Boolean(workflowRail.questionMessageId) || hasQuestionAnswers,
+      hasPreferenceConfirmation: Boolean(workflowRail.preferenceConfirmation),
+    });
+    planningWorkflowActiveRef.current = showPlanningRail;
+    setPlanningWorkflowActive(showPlanningRail);
     setWorkflowRail((prev) => ({
       ...prev,
-      visible: true,
-      steps: prev.questionCard ? prev.steps : [],
-      questionCard: null,
+      visible: showPlanningRail,
+      steps:
+        showPlanningRail && (prev.questionMessageId || prev.preferenceConfirmation)
+          ? prev.steps
+          : [],
       questionMessageId: null,
+      preferenceConfirmation: null,
     }));
     const chatProcessId = startFrontendDebugProcess("chat-ui", "聊天送出流程", {
       messagePreview: (message || options?.displayMessage || "").slice(0, 80),
@@ -1521,7 +1585,7 @@ export default function ChatPage() {
       const shouldUseStructuredPlanning =
         Boolean(options?.questionAnswers?.length) ||
         Boolean(options?.tripProfile) ||
-        Boolean(workflowRail.questionCard) ||
+        Boolean(workflowRail.questionMessageId) ||
         isLikelyTripWorkflowMessage(message) ||
         isItineraryMutationCommand(message) ||
         isFullItineraryRevisionCommand(message);
@@ -1559,29 +1623,65 @@ export default function ChatPage() {
         setTripProfile(response.tripProfile);
       }
       if (response.reply.responseType === "question_card" && response.reply.questionCard) {
+        const followUpSteps =
+          response.reply.statusSteps?.length
+            ? response.reply.statusSteps
+            : streamingStatusSteps.length
+              ? streamingStatusSteps
+              : [
+                  {
+                    type: "status_step" as const,
+                    phase: "understand" as const,
+                    label: "等你補充偏好",
+                    detail: "請在下方選擇或填寫，我會接著規劃。",
+                    status: "waiting_input" as const,
+                  },
+                ];
         setWorkflowRail({
           visible: true,
-          steps: response.reply.statusSteps?.length ? response.reply.statusSteps : streamingStatusSteps,
-          questionCard: response.reply.questionCard,
+          steps: followUpSteps,
           tripProfile: response.tripProfile ?? options?.tripProfile ?? tripProfile ?? null,
           questionMessageId: response.reply.id,
+          ...workflowRailFromTravelDecision(response.travelAgentDecision),
         });
       } else if (response.reply.responseType === "travel_plan") {
         setWorkflowRail({
           visible: false,
           steps: [],
-          questionCard: null,
           tripProfile: response.tripProfile ?? options?.tripProfile ?? tripProfile ?? null,
           questionMessageId: null,
+          preferenceConfirmation: null,
+          travelAgentMode: response.travelAgentDecision?.mode ?? null,
         });
       } else if (response.reply.statusSteps?.length) {
         setWorkflowRail((prev) => ({
           visible: true,
           steps: response.reply.statusSteps || prev.steps,
-          questionCard: null,
           tripProfile: response.tripProfile ?? prev.tripProfile,
           questionMessageId: null,
+          ...workflowRailFromTravelDecision(response.travelAgentDecision),
         }));
+      } else if (response.travelAgentDecision?.mode === "confirm_preferences") {
+        setWorkflowRail((prev) => ({
+          ...prev,
+          visible: true,
+          ...workflowRailFromTravelDecision(response.travelAgentDecision),
+        }));
+      } else if (
+        !shouldShowPlanningWorkflowRail({
+          travelAgentMode: response.travelAgentDecision?.mode ?? null,
+          responseType: response.reply.responseType,
+          hasStructuredSteps: Boolean(response.reply.statusSteps?.length),
+        })
+      ) {
+        setWorkflowRail({
+          visible: false,
+          steps: [],
+          tripProfile: response.tripProfile ?? options?.tripProfile ?? tripProfile ?? null,
+          questionMessageId: null,
+          preferenceConfirmation: null,
+          travelAgentMode: response.travelAgentDecision?.mode ?? null,
+        });
       }
       const shouldPersistPlanningResult =
         Boolean(response.itinerarySuggestion) ||
@@ -1641,10 +1741,14 @@ export default function ChatPage() {
         replyResponseType: response.reply.responseType,
         hadItinerarySuggestion: Boolean(response.itinerarySuggestion),
       })) {
+        const scrollAfterLoad =
+          response.reply.responseType === "travel_plan" ||
+          Boolean(response.itinerarySuggestion);
         await fetchChatVideoRecommendations({
           userMessage: message,
           planningSnapshot,
           chatProcessId,
+          scrollAfterLoad,
         });
       } else {
         startAutoVideoSummaryQueue(recommendedVideos, planningSnapshot.destination);
@@ -1666,7 +1770,7 @@ export default function ChatPage() {
       setWorkflowRail((prev) => ({
         ...prev,
         steps: [],
-        visible: Boolean(prev.questionCard),
+        visible: prev.steps.length > 0,
       }));
       if (userTextForRetry) {
         setInput(userTextForRetry);
@@ -1695,6 +1799,8 @@ export default function ChatPage() {
         }
         stopStatusStream();
         setStreamingStatusSteps([]);
+        planningWorkflowActiveRef.current = false;
+        setPlanningWorkflowActive(false);
         setIsSending(false);
       }
     }
@@ -1726,6 +1832,8 @@ export default function ChatPage() {
     appendMessage(buildUserMessage(`請幫我把行程調整成：${instruction}`));
     setErrorMessage(null);
     setIsSending(true);
+    planningWorkflowActiveRef.current = false;
+    setPlanningWorkflowActive(false);
     const reviseProcessId = startFrontendDebugProcess("trip-revise-ui", "前端送出行程修改", {
       instruction,
       destination: activeProfile.destination,
@@ -1802,7 +1910,7 @@ export default function ChatPage() {
       setWorkflowRail((prev) => ({
         ...prev,
         steps: [],
-        visible: Boolean(prev.questionCard),
+        visible: prev.steps.length > 0,
       }));
       const description =
         error instanceof Error ? error.message : t.chat.requestFailedGeneric;
@@ -1823,6 +1931,8 @@ export default function ChatPage() {
         }
         stopStatusStream();
         setStreamingStatusSteps([]);
+        planningWorkflowActiveRef.current = false;
+        setPlanningWorkflowActive(false);
         setIsSending(false);
       }
     }
@@ -2275,119 +2385,10 @@ export default function ChatPage() {
         )}
 
         <div
-          className={cn(
-            "relative z-[1] flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto bg-[rgba(255,255,255,0.42)] px-6 py-6",
-            hasWorkflowRail && workflowRail.questionCard
-              ? "scroll-pb-28 pb-[max(5rem,env(safe-area-inset-bottom))]"
-              : "",
-          )}
+          className="relative z-[1] flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto bg-[rgba(255,255,255,0.42)] px-6 py-6"
         >
           {hasWorkflowRail ? (
-            <ChatWorkflowRail
-              visible={hasWorkflowRail}
-              steps={workflowRail.steps}
-              questionCard={workflowRail.questionCard}
-              disabled={isSending}
-              onSubmitQuestion={handleWorkflowQuestionSubmit}
-            />
-          ) : null}
-
-          {preferenceSuggestion ? (
-            <div className="rounded-3xl border border-primary/20 bg-white p-5 shadow-sm">
-              <p className="text-sm font-semibold text-slate-900">偵測到你先前使用過以下旅遊設定，是否繼續套用？</p>
-              {preferenceCardMode === "summary" ? (
-                <>
-                  <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
-                    <p>目的地：{preferenceSuggestion.preferences.destination || "未設定"}</p>
-                    <p>預算：{preferenceSuggestion.preferences.budget || "未設定"}</p>
-                    <p>天數：{preferenceSuggestion.preferences.days || "未設定"}</p>
-                    <p>旅遊風格：{preferenceSuggestion.preferences.travelStyle?.join("、") || "未設定"}</p>
-                    <p>交通偏好：{preferenceSuggestion.preferences.transportPreference || "未設定"}</p>
-                    <p>住宿偏好：{preferenceSuggestion.preferences.accommodationPreference || "未設定"}</p>
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void handleApplyPreviousPreferences()}
-                      disabled={isApplyingPreferences}
-                      className="rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {isApplyingPreferences ? "套用中..." : "套用"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPreferenceCardMode("edit")}
-                      disabled={isApplyingPreferences}
-                      className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      修改
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <input
-                    value={editableSuggestion?.destination || ""}
-                    onChange={(event) => setEditableSuggestion((prev) => ({ ...(prev || {}), destination: event.target.value }))}
-                    placeholder="目的地"
-                    className="rounded-2xl border border-slate-200 px-3 py-2 text-sm"
-                  />
-                  <input
-                    type="number"
-                    value={editableSuggestion?.budget || ""}
-                    onChange={(event) => setEditableSuggestion((prev) => ({ ...(prev || {}), budget: Number(event.target.value) || undefined }))}
-                    placeholder="預算"
-                    className="rounded-2xl border border-slate-200 px-3 py-2 text-sm"
-                  />
-                  <input
-                    type="number"
-                    value={editableSuggestion?.days || ""}
-                    onChange={(event) => setEditableSuggestion((prev) => ({ ...(prev || {}), days: Number(event.target.value) || undefined }))}
-                    placeholder="天數"
-                    className="rounded-2xl border border-slate-200 px-3 py-2 text-sm"
-                  />
-                  <input
-                    value={editableSuggestion?.travelStyle?.join("、") || ""}
-                    onChange={(event) => setEditableSuggestion((prev) => ({
-                      ...(prev || {}),
-                      travelStyle: event.target.value.split(/[、,，]/).map((item) => item.trim()).filter(Boolean),
-                    }))}
-                    placeholder="旅遊風格，用頓號分隔"
-                    className="rounded-2xl border border-slate-200 px-3 py-2 text-sm"
-                  />
-                  <input
-                    value={editableSuggestion?.transportPreference || ""}
-                    onChange={(event) => setEditableSuggestion((prev) => ({ ...(prev || {}), transportPreference: event.target.value }))}
-                    placeholder="交通偏好"
-                    className="rounded-2xl border border-slate-200 px-3 py-2 text-sm"
-                  />
-                  <input
-                    value={editableSuggestion?.accommodationPreference || ""}
-                    onChange={(event) => setEditableSuggestion((prev) => ({ ...(prev || {}), accommodationPreference: event.target.value }))}
-                    placeholder="住宿偏好"
-                    className="rounded-2xl border border-slate-200 px-3 py-2 text-sm"
-                  />
-                  <div className="flex gap-2 sm:col-span-2">
-                    <button
-                      type="button"
-                      onClick={() => void handleApplyPreviousPreferences(editableSuggestion || undefined)}
-                      disabled={isApplyingPreferences}
-                      className="rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {isApplyingPreferences ? "產生中..." : "用修改後設定產生行程"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPreferenceCardMode("summary")}
-                      disabled={isApplyingPreferences}
-                      className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      返回
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+            <ChatWorkflowRail visible={hasWorkflowRail} steps={workflowRail.steps} />
           ) : null}
 
           {messages.length === 0 && !isSending && !errorMessage && (
@@ -2435,14 +2436,9 @@ export default function ChatPage() {
                     }`}
                   >
                     {message.responseType === "question_card" && message.questionCard ? (
-                      <div className="space-y-3">
-                        <MarkdownMessage
-                          content={message.content?.trim() || "請先補充這些條件，我會接著完成規劃。"}
-                        />
-                        {message.id === workflowRail.questionMessageId && workflowRail.questionCard ? (
-                          <p className="text-xs font-medium text-slate-500">上方進度列已開啟，請直接在那裡補充需求。</p>
-                        ) : null}
-                      </div>
+                      <MarkdownMessage
+                        content={message.content?.trim() || "請先補充這些條件，我會接著完成規劃。"}
+                      />
                     ) : message.responseType === "travel_plan" && message.travelPlan ? (
                       <div
                         data-travel-plan-message-id={message.id}
@@ -2477,6 +2473,48 @@ export default function ChatPage() {
                         />
                       </div>
                     )}
+                  {message.role === "assistant" && message.questionCard ? (
+                    <div className="mt-3 w-full min-w-[min(100%,20rem)] max-w-md">
+                      <QuestionCard
+                        card={message.questionCard}
+                        disabled={isSending}
+                        submitted={Boolean(answeredQuestionCards[message.id])}
+                        initialAnswers={
+                          answeredQuestionCards[message.id]
+                            ? answersRecordFromPayload(answeredQuestionCards[message.id])
+                            : undefined
+                        }
+                        onSubmit={(answers, summary) => {
+                          markQuestionCardAnswered(message.id, answers);
+                          void handleSend("", {
+                            displayMessage: summary,
+                            questionAnswers: answers,
+                            tripProfile:
+                              message.tripProfile ??
+                              workflowRail.tripProfile ??
+                              tripProfile ??
+                              undefined,
+                          });
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                  {message.role === "assistant" &&
+                  index === messages.length - 1 &&
+                  workflowRail.preferenceConfirmation ? (
+                    <div className="mt-3 w-full min-w-[min(100%,20rem)] max-w-md">
+                      <PreferenceReusePanel
+                        variant="inline"
+                        confirmation={workflowRail.preferenceConfirmation}
+                        disabled={isSending}
+                        currentDestination={tripProfile?.destination || planningSnapshot.destination}
+                        currentDays={tripProfile?.duration_days || planningSnapshot.days}
+                        onAccept={handlePreferenceAccept}
+                        onDecline={handlePreferenceDecline}
+                        onEditSubmit={handlePreferenceEditSubmit}
+                      />
+                    </div>
+                  ) : null}
                   <p
                     className={`mt-1 text-[10px] text-muted ${
                       message.role === "user" ? "text-right" : ""
@@ -2521,14 +2559,22 @@ export default function ChatPage() {
             </m.div>
           ))}
 
-          {isSending && !hasWorkflowRail ? (
-            <m.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2">
+          {isSending ? (
+            <m.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex items-center gap-2"
+              data-testid="chat-typing-indicator"
+              role="status"
+              aria-live="polite"
+              aria-busy="true"
+            >
               <div className="flex size-8 items-center justify-center rounded-full bg-slate-700 text-xs text-white">
                 {t.chat.aiShort}
               </div>
-              <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
-                <Loader2 className="size-4 animate-spin text-slate-700" aria-hidden />
-                {t.chat.workflowProcessing}
+              <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">
+                <Loader2 className="size-4 shrink-0 animate-spin text-slate-700" aria-hidden />
+                <span>{assistantTypingLabel}</span>
               </div>
             </m.div>
           ) : null}

@@ -32,11 +32,24 @@ type PreloadedIndex = {
   }>;
 };
 
-const DATA_DIR = path.join(process.cwd(), "data", "preloaded-destinations");
-const INDEX_FILE = path.join(DATA_DIR, "index.json");
+/** Minimum videos required for a bundle to be served as preloaded seed (aligns with seed --min-pass=4). */
+export const MIN_PRELOADED_VIDEOS = 3;
+
+export function getPreloadedDataDir(): string {
+  return (
+    process.env.PRELOADED_DESTINATIONS_DIR?.trim() ||
+    path.join(process.cwd(), "data", "preloaded-destinations")
+  );
+}
+
+function getIndexFile(): string {
+  return path.join(getPreloadedDataDir(), "index.json");
+}
 
 let cachedBundles: PreloadedDestinationBundle[] | null = null;
+let cachedIndexedBundles: PreloadedDestinationBundle[] | null = null;
 let loadPromise: Promise<PreloadedDestinationBundle[]> | null = null;
+let indexedLoadPromise: Promise<PreloadedDestinationBundle[]> | null = null;
 
 function normalizeToken(value: string): string {
   return value
@@ -44,6 +57,17 @@ function normalizeToken(value: string): string {
     .toLowerCase()
     .replace(/\s+/g, "")
     .replace(/臺/g, "台");
+}
+
+export function isProductionReadyPreloadedBundle(bundle: PreloadedDestinationBundle): boolean {
+  if (bundle.pipelineVersion === "test") {
+    return false;
+  }
+  const validVideos = bundle.videos.filter((video) => {
+    const id = (video.videoId || video.id || "").trim();
+    return Boolean(id) && id !== "abc123";
+  });
+  return validVideos.length >= MIN_PRELOADED_VIDEOS;
 }
 
 function bundleMatchesQuery(bundle: PreloadedDestinationBundle, rawQuery: string): boolean {
@@ -63,18 +87,25 @@ function bundleMatchesQuery(bundle: PreloadedDestinationBundle, rawQuery: string
   return tokens.some((token) => q === token || q.includes(token) || token.includes(q));
 }
 
-async function loadBundlesFromDisk(): Promise<PreloadedDestinationBundle[]> {
+async function loadBundlesFromDisk(options?: { productionOnly?: boolean }): Promise<PreloadedDestinationBundle[]> {
+  const productionOnly = options?.productionOnly !== false;
+  const dataDir = getPreloadedDataDir();
+  const indexFile = getIndexFile();
   try {
-    const indexRaw = await readFile(INDEX_FILE, "utf8");
+    const indexRaw = await readFile(indexFile, "utf8");
     const index = JSON.parse(indexRaw) as PreloadedIndex;
     const bundles: PreloadedDestinationBundle[] = [];
     for (const entry of index.destinations) {
-      const filePath = path.join(DATA_DIR, entry.file);
+      const filePath = path.join(dataDir, entry.file);
       const raw = await readFile(filePath, "utf8");
       const bundle = JSON.parse(raw) as PreloadedDestinationBundle;
-      if (bundle.videos.length > 0) {
-        bundles.push(bundle);
+      if (bundle.videos.length === 0) {
+        continue;
       }
+      if (productionOnly && !isProductionReadyPreloadedBundle(bundle)) {
+        continue;
+      }
+      bundles.push(bundle);
     }
     return bundles;
   } catch {
@@ -82,29 +113,23 @@ async function loadBundlesFromDisk(): Promise<PreloadedDestinationBundle[]> {
   }
 }
 
-export async function getPreloadedDestinationBundles(): Promise<PreloadedDestinationBundle[]> {
-  if (cachedBundles) {
-    return cachedBundles;
+async function getIndexedDestinationBundles(): Promise<PreloadedDestinationBundle[]> {
+  if (cachedIndexedBundles) {
+    return cachedIndexedBundles;
   }
-  if (!loadPromise) {
-    loadPromise = loadBundlesFromDisk().then((bundles) => {
-      cachedBundles = bundles;
+  if (!indexedLoadPromise) {
+    indexedLoadPromise = loadBundlesFromDisk({ productionOnly: false }).then((bundles) => {
+      cachedIndexedBundles = bundles;
       return bundles;
     });
   }
-  return loadPromise;
+  return indexedLoadPromise;
 }
 
-export function clearPreloadedDestinationCache(): void {
-  cachedBundles = null;
-  loadPromise = null;
-}
-
-export async function findPreloadedDestinationBundle(input: {
-  destination?: string;
-  keyword?: string;
-}): Promise<PreloadedDestinationBundle | null> {
-  const bundles = await getPreloadedDestinationBundles();
+function findBundleInList(
+  bundles: PreloadedDestinationBundle[],
+  input: { destination?: string; keyword?: string },
+): PreloadedDestinationBundle | null {
   if (bundles.length === 0) {
     return null;
   }
@@ -136,6 +161,48 @@ export async function findPreloadedDestinationBundle(input: {
   return null;
 }
 
+export async function getPreloadedDestinationBundles(): Promise<PreloadedDestinationBundle[]> {
+  if (cachedBundles) {
+    return cachedBundles;
+  }
+  if (!loadPromise) {
+    loadPromise = loadBundlesFromDisk().then((bundles) => {
+      cachedBundles = bundles;
+      return bundles;
+    });
+  }
+  return loadPromise;
+}
+
+export function clearPreloadedDestinationCache(): void {
+  cachedBundles = null;
+  cachedIndexedBundles = null;
+  loadPromise = null;
+  indexedLoadPromise = null;
+}
+
+export async function findPreloadedDestinationBundle(input: {
+  destination?: string;
+  keyword?: string;
+}): Promise<PreloadedDestinationBundle | null> {
+  const bundles = await getPreloadedDestinationBundles();
+  return findBundleInList(bundles, input);
+}
+
+/** Resolve destination label from keyword when it matches a preloaded catalog entry. */
+export async function resolvePreloadedDestinationHint(input: {
+  destination?: string;
+  keyword?: string;
+}): Promise<string | undefined> {
+  const destination = input.destination?.trim();
+  if (destination) {
+    return destination;
+  }
+  const bundles = await getIndexedDestinationBundles();
+  const bundle = findBundleInList(bundles, { keyword: input.keyword });
+  return bundle?.destinationHint;
+}
+
 export async function getPreloadedDestinationVideos(input: {
   destination?: string;
   keyword?: string;
@@ -154,8 +221,12 @@ export async function getPreloadedDestinationVideos(input: {
 
   const filtered = bundle.videos.filter((video) => {
     const id = (video.videoId || video.id || "").trim();
-    return id && !excluded.has(id);
+    return id && id !== "abc123" && !excluded.has(id);
   });
+
+  if (filtered.length < MIN_PRELOADED_VIDEOS && offset === 0) {
+    return null;
+  }
 
   const slice = filtered.slice(offset, offset + limit);
   return slice.length > 0 ? slice : null;

@@ -66,6 +66,42 @@ export async function resetE2EData() {
   await prisma.$disconnect();
 }
 
+/** Live AI E2E：清掉 owner 聊天與行程，避免 serial 測試互相污染。 */
+export async function clearE2EOwnerLiveAiState() {
+  const owner = await prisma.user.findUnique({
+    where: { email: E2E_OWNER.email },
+    select: { id: true },
+  });
+  if (!owner) {
+    await prisma.$disconnect();
+    return;
+  }
+
+  const trips = await prisma.trip.findMany({
+    where: { userId: owner.id },
+    select: { id: true },
+  });
+  const tripIds = trips.map((trip) => trip.id);
+
+  const ops = [prisma.chatMessage.deleteMany({ where: { userId: owner.id } })];
+  if (tripIds.length) {
+    ops.push(
+      prisma.tripItem.deleteMany({ where: { tripId: { in: tripIds } } }),
+      prisma.tripDay.deleteMany({ where: { tripId: { in: tripIds } } }),
+      prisma.trip.updateMany({
+        where: { id: { in: tripIds } },
+        data: {
+          destination: null,
+          days: 0,
+          title: "新行程",
+        },
+      }),
+    );
+  }
+  await prisma.$transaction(ops);
+  await prisma.$disconnect();
+}
+
 export async function seedAuthUsers() {
   await resetE2EData();
   const passwordHash = await bcrypt.hash(TEST_PASSWORD, 10);

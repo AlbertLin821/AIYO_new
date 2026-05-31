@@ -1,3 +1,9 @@
+import {
+  isTextInTripDestinationScope,
+  resolveTripDestinationScope,
+  type TripDestinationScope,
+} from "@/lib/tripDestinationScope";
+
 /**
  * 搜尋欄以地名／關鍵字找片：優先「旅遊」且「與輸入地名／地方相關」。
  */
@@ -252,6 +258,7 @@ function hasTravelOrFoodSignal(combined: string, title: string): boolean {
 export function isTravelRelatedVideo(
   meta: TravelVideoMeta,
   originalQuery: string,
+  scope?: TripDestinationScope | null,
 ): boolean {
   const title = meta.title || "";
   const description = (meta.description || "").slice(0, 2000);
@@ -281,14 +288,14 @@ export function isTravelRelatedVideo(
   // 僅輸入泛旅遊詞、無核心地名時：須整句或強旅遊訊號
   if (core.length === 0) {
     const raw = originalQuery.trim();
-    return (
+    const base =
       combined.includes(raw) ||
       lowerIncludesPhrase(combined, raw) ||
-      TRAVEL_POSITIVE.test(combined)
-    );
+      TRAVEL_POSITIVE.test(combined);
+    return base && isInTripDestinationScope(meta, scope, originalQuery);
   }
 
-  return true;
+  return isInTripDestinationScope(meta, scope, originalQuery);
 }
 
 /**
@@ -348,9 +355,36 @@ export function scoreVideoPlaceTravelRank(
  * 寬鬆篩選：僅排除明顯新聞／時事，並要求與查詢地名／關鍵詞有關且不太像純新聞內容。
  * 當嚴格「旅遊＋美食訊號」篩掉所有結果時作為備援，避免搜尋 API 有片卻零筆。
  */
+/**
+ * 影片是否在行程目的地範圍內（國家級時須命中 positive、且不得僅含 negative 區域詞）。
+ */
+export function isInTripDestinationScope(
+  meta: TravelVideoMeta,
+  scope: TripDestinationScope | null | undefined,
+  _originalQuery?: string,
+): boolean {
+  if (!scope?.countryCodes.length && !scope?.positiveTokens.length) {
+    return true;
+  }
+  const combined = `${meta.title}\n${meta.description || ""}\n${meta.channelTitle || ""}`;
+  return isTextInTripDestinationScope(combined, scope);
+}
+
+export function resolveVideoDestinationScope(input: {
+  destination?: string;
+  destinationScope?: TripDestinationScope | null;
+}): TripDestinationScope | null {
+  if (input.destinationScope) {
+    return input.destinationScope;
+  }
+  const dest = input.destination?.trim();
+  return dest ? resolveTripDestinationScope(dest) : null;
+}
+
 export function isLoosePlaceRelatedVideo(
   meta: TravelVideoMeta,
   originalQuery: string,
+  scope?: TripDestinationScope | null,
 ): boolean {
   const title = meta.title || "";
   const description = (meta.description || "").slice(0, 2000);
@@ -367,6 +401,9 @@ export function isLoosePlaceRelatedVideo(
     return false;
   }
   if (BODY_STRONG_EXCLUDE.test(combined)) {
+    return false;
+  }
+  if (!isInTripDestinationScope(meta, scope, originalQuery)) {
     return false;
   }
   return true;

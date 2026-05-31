@@ -496,6 +496,8 @@ export interface ChatContext {
   tripStartDate?: string;
   /** ISO yyyy-mm-dd，若省略則與 tripStartDate 同日 */
   tripEndDate?: string;
+  /** Server-resolved trip destination scope for geo/video filtering */
+  destinationScope?: import("@/lib/tripDestinationScope").TripDestinationScope;
 }
 
 export type ConversationMode =

@@ -31,6 +31,9 @@ export const ITINERARY_OUTPUT_POLICY = [
   "- Do not put multiple stops, interest labels, meal suffixes, or route descriptions in title.",
   "- If a real restaurant is unknown, use a generic meal title and explain the area in notes.",
   "- Use verified research for factual place names, addresses, weather, events, and source references.",
+  "- Avoid vague placeholder titles such as 市區自由探索, 河岸散策, 文創街区漫步, 在地市場, 夜景收尾, or similar filler labels.",
+  "- When research is limited, prefer well-known landmarks or districts for the stated destination using general travel knowledge; do not invent opening hours, ticket prices, or addresses.",
+  "- If destination, interests, or pace are too unclear to name concrete POIs, ask one concise follow-up instead of filling days with generic placeholders.",
 ].join("\n");
 
 export function buildQuestionCardDesignerSystemPrompt(): string {

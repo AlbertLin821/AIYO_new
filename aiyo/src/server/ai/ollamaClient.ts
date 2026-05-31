@@ -72,7 +72,36 @@ export function resolveModelForTask(
   if (task === "trip-plan" && serverConfig.ollamaTripPlanModel) {
     return serverConfig.ollamaTripPlanModel;
   }
+  if (task === "travel-chat" && serverConfig.ollamaTravelChatModel) {
+    return serverConfig.ollamaTravelChatModel;
+  }
   return serverConfig.ollamaModel;
+}
+
+export function formatOllamaErrorMessage(
+  error: OllamaRequestError,
+  task: OllamaChatOptions["task"] = "default",
+): string {
+  const model = resolveModelForTask(task);
+  let detail = "";
+  if (typeof error.details === "string" && error.details.trim()) {
+    detail = error.details.trim().slice(0, 280);
+  } else if (error.details !== undefined) {
+    try {
+      detail = JSON.stringify(error.details).slice(0, 280);
+    } catch {
+      detail = "";
+    }
+  }
+
+  const parts = [`Ollama 回應失敗（${error.message}）`];
+  if (detail) {
+    parts.push(detail);
+  }
+  if (error.code === "http_error" || error.code === "network_error") {
+    parts.push(`使用模型：${model}。請確認 Ollama 已啟動、模型已 pull，或調整 aiyo/.env 的 OLLAMA_MODEL / OLLAMA_TRAVEL_CHAT_MODEL。`);
+  }
+  return parts.join(" ");
 }
 
 export async function chatWithOllama({

@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { hasMeaningfulReusablePreferences } from "@/lib/personalization/preferenceDisplay";
 import { clearUserChatMessages, ensureProfile, toUserProfile } from "@/server/data/appStateService";
 import { deleteMemory, listMemories } from "@/server/memory/mem0Client";
 import type { TravelPace, TravelPreferences, TripPlanItem } from "@/types";
@@ -16,6 +17,7 @@ export type TravelPreferenceSuggestion = {
     transportPreference?: string;
     accommodationPreference?: string;
     companionType?: string;
+    pace?: TravelPace;
     mustVisit?: string[];
     avoid?: string[];
     notes?: string;
@@ -120,6 +122,16 @@ export async function getTravelPreferenceSuggestion(userId: string): Promise<Tra
   const days = profile.travelDays || latestTrip?.days || undefined;
   const interests = profile.interests.length ? profile.interests : cleanStringArray(profilePrefs.interests);
   const transportPreference = profile.preferredTransport || cleanString(profilePrefs.preferredTransport);
+  const profilePace =
+    profile.travelPace === "relaxed" || profile.travelPace === "intensive" || profile.travelPace === "moderate"
+      ? profile.travelPace
+      : undefined;
+  const storedPace = profilePrefs.pace;
+  const pace =
+    profilePace ||
+    (storedPace === "relaxed" || storedPace === "intensive" || storedPace === "moderate"
+      ? storedPace
+      : undefined);
   const notesParts = [
     cleanString(profilePrefs.notes),
     latestTrip?.items.length ? `最近行程包含：${latestTrip.items.map((item) => item.title).join("、")}` : "",
@@ -142,18 +154,13 @@ export async function getTravelPreferenceSuggestion(userId: string): Promise<Tra
     transportPreference,
     accommodationPreference: cleanString(profilePrefs.accommodationPreference),
     companionType: cleanString(profilePrefs.companionType),
+    pace,
     mustVisit: cleanStringArray(profilePrefs.mustVisit),
     avoid: cleanStringArray(profilePrefs.avoid),
     notes: notesParts.join("\n") || undefined,
   };
 
-  const has_previous_preferences = Boolean(
-    preferences.destination ||
-      preferences.budget ||
-      preferences.days ||
-      preferences.travelStyle?.length ||
-      preferences.transportPreference,
-  );
+  const has_previous_preferences = hasMeaningfulReusablePreferences(preferences);
 
   return {
     has_previous_preferences,

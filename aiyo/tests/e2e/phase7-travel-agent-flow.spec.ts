@@ -79,9 +79,12 @@ test.describe("Phase 7 travel agent browser flow", () => {
   test("B. 偏好確認：東京三天", async ({ page }) => {
     test.setTimeout(120_000);
     await openChatWithHarness(page);
+    await expect(page.getByText("偵測到你先前使用過以下旅遊設定")).toHaveCount(0);
     await sendChatMessage(page, "我想去東京玩三天");
     const reply = page.getByTestId("chat-message-ai").last();
     await expect(reply).toContainText(/偏好|中等|預算|美食|購物|沿用/);
+    await expect(page.getByTestId("preference-reuse-panel")).toBeVisible();
+    await expect(page.getByTestId("preference-reuse-accept")).toBeVisible();
     await expect(reply).not.toContainText(/第 1 天：/);
   });
 
@@ -89,9 +92,10 @@ test.describe("Phase 7 travel agent browser flow", () => {
     test.setTimeout(120_000);
     await openChatWithHarness(page);
     await sendChatMessage(page, "我想去東京玩三天");
-    await sendChatMessage(page, "沿用，但排輕鬆一點");
+    await expect(page.getByTestId("preference-reuse-panel")).toBeVisible();
+    await page.getByTestId("preference-reuse-accept").click();
     const reply = page.getByTestId("chat-message-ai").last();
-    await expect(reply).toContainText(/輕鬆|沿用|東京/);
+    await expect(reply).toContainText(/沿用|東京|偏好|輕鬆|中等/);
   });
 
   test("D. 條件式搜尋：晴空塔營業時間", async ({ page }) => {
@@ -148,6 +152,9 @@ test.describe("Phase 7 travel agent browser flow", () => {
     await dismissOnboardingIfVisible(page);
     await expect(page.getByTestId("map-view")).toBeVisible({ timeout: 40_000 });
     await expect(page.getByTestId("map-view").getByRole("button", { name: "秋葉原" })).toHaveCount(0);
+    await expect(page.getByTestId("map-view").getByRole("button", { name: /晴空塔/ })).toHaveCount(1, {
+      timeout: 20_000,
+    });
 
     await returnToChat(page);
     await sendChatMessage(page, "幫我把晴空塔加到第一天下午", { waitForTripSync: true });
@@ -215,6 +222,48 @@ test.describe("Phase 7 travel agent browser flow", () => {
     const titles = itinerary.flatMap((day) => day.items.map((item) => item.title));
     expect(titles.filter((title) => title.includes("晴空塔")).length).toBeGreaterThanOrEqual(1);
     expect(titles.some((title) => title === "秋葉原")).toBe(false);
+
+    const skytreeCoords = await page.evaluate(async () => {
+      const response = await fetch("/api/bootstrap", { cache: "no-store", credentials: "same-origin" });
+      const json = (await response.json()) as {
+        data?: {
+          trip?: {
+            itinerary?: Array<{
+              items: Array<{ title: string; location?: { lat?: number; lng?: number } }>;
+            }>;
+          };
+        };
+      };
+      const item = (json.data?.trip?.itinerary || [])
+        .flatMap((day) => day.items)
+        .find((candidate) => candidate.title.includes("晴空塔"));
+      return item?.location;
+    });
+    expect(skytreeCoords?.lat).toBeCloseTo(35.7101, 3);
+    expect(skytreeCoords?.lng).toBeCloseTo(139.8107, 3);
+  });
+
+  test("K. Geocode mock：非東京地點查詢可回傳座標", async ({ page }) => {
+    test.setTimeout(60_000);
+    await openChatWithHarness(page);
+    test.skip(useLiveAi, "Geocode mock 整合測試使用 scenario harness");
+
+    const result = await page.evaluate(async () => {
+      const response = await fetch("/api/places/geocode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: "聖水洞",
+          destinationHint: "Seoul",
+          purpose: "map_focus",
+        }),
+      });
+      return response.json();
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data.place.lat).toBeCloseTo(37.5447, 3);
+    expect(result.data.place.lng).toBeCloseTo(127.0559, 3);
   });
 });
 

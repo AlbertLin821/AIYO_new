@@ -1,3 +1,4 @@
+import { enrichChatContextWithDestinationScope } from "@/lib/tripDestinationScope";
 import type { ChatContext, ChatSource, TripPlanRequest } from "@/types";
 import { serverConfig } from "@/server/config";
 import {
@@ -117,7 +118,11 @@ export function buildDefaultTravelToolRequests(
       return requests;
     }
   }
-  const dest = context?.destination?.trim();
+  const scopedContext = enrichChatContextWithDestinationScope(context);
+  const dest =
+    scopedContext?.destinationScope?.canonicalLabel?.trim() ||
+    scopedContext?.destination?.trim() ||
+    context?.destination?.trim();
   const trimmed = message.trim();
   const wantsVideo = /影片|youtube|YouTube|vlog|靈感|參考影片|旅遊影片/u.test(trimmed);
   const wantsPoi =
@@ -166,6 +171,10 @@ export function buildTripPlanResearchRequests(request: TripPlanRequest): TravelT
   if (!dest) {
     return [];
   }
+  const scoped = enrichChatContextWithDestinationScope({
+    destination: dest,
+  } as ChatContext);
+  const scopeLabel = scoped?.destinationScope?.canonicalLabel || dest;
   const decision = decideSearchIntent({
     message: [
       request.destination,
@@ -185,7 +194,9 @@ export function buildTripPlanResearchRequests(request: TripPlanRequest): TravelT
     return [];
   }
   const interest = request.preferences.interests.join(" ").trim();
-  const q = `${dest} ${request.preferences.notes || ""} ${interest}`.replace(/\s+/g, " ").slice(0, 120);
+  const q = `${scopeLabel} ${request.preferences.notes || ""} ${interest}`
+    .replace(/\s+/g, " ")
+    .slice(0, 120);
   const requests: TravelToolRequest[] = [];
   if (decision.searchNeed === "place_details" || decision.searchNeed === "opening_hours" || decision.searchNeed === "fresh_info") {
     requests.push({ type: "search_place", query: q, locationHint: dest });
@@ -376,10 +387,15 @@ export async function executeTravelToolRequests(
         query: youtubeQuery || "travel vlog",
         status: "running",
       });
+      const videoDest = req.destination || context?.destination;
       const res = await searchYouTubeVideos({
-        destination: req.destination || context?.destination,
+        destination: videoDest,
         keyword: req.keyword,
         limit: Math.min(3, Math.max(1, req.limit ?? 2)),
+        destinationScope: enrichChatContextWithDestinationScope({
+          destination: videoDest,
+          destinationScope: context?.destinationScope,
+        })?.destinationScope,
       });
       if (res.videos.length > 0) {
         sections.push(

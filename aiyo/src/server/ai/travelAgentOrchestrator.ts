@@ -1,5 +1,10 @@
 import type { AIContextBuildResult } from "@/server/ai/aiContextBuilder";
+import { isPersonalMemoryRecallIntent } from "@/server/memory/personalMemoryRecall";
 import { decideSearchIntent } from "@/server/search/searchIntent";
+import {
+  formatPreferenceSummary,
+  hasMeaningfulReusablePreferences,
+} from "@/lib/personalization/preferenceDisplay";
 import type {
   ChatContext,
   ConversationMode,
@@ -89,19 +94,7 @@ function extractTripRequestHints(message: string): TripRequestHints {
 }
 
 function hasMeaningfulPreferences(preferences?: TravelAgentKnownPreferences): boolean {
-  if (!preferences) {
-    return false;
-  }
-  return Boolean(
-    preferences.budget ||
-      preferences.budgetLevel ||
-      preferences.travelStyle?.length ||
-      preferences.transportPreference ||
-      preferences.accommodationPreference ||
-      preferences.companionType ||
-      preferences.pace ||
-      preferences.notes,
-  );
+  return hasMeaningfulReusablePreferences(preferences);
 }
 
 function mergeKnownPreferences(input: TravelAgentOrchestratorInput): TravelAgentKnownPreferences {
@@ -151,45 +144,6 @@ function mergeKnownPreferences(input: TravelAgentOrchestratorInput): TravelAgent
     avoid: contextPreferences?.avoid || input.tripProfile?.avoid_places || mergedAiPreferences.avoid || mergedAiPreferences.avoidances,
     notes: contextPreferences?.notes || mergedAiPreferences.notes,
   };
-}
-
-function localizePreferenceLabel(value: string): string {
-  const map: Record<string, string> = {
-    food: "美食",
-    shopping: "購物",
-    nature: "自然景觀",
-    culture: "文化",
-    history: "歷史",
-    relaxed: "輕鬆步調",
-    balanced: "適中步調",
-    moderate: "適中步調",
-    intensive: "充實緊湊",
-  };
-  return map[value] || value;
-}
-
-function formatPreferenceSummary(preferences: TravelAgentKnownPreferences): string {
-  const parts = [
-    preferences.budgetLevel === "high"
-      ? "高預算"
-      : preferences.budgetLevel === "medium"
-        ? "中等預算"
-        : preferences.budgetLevel === "low"
-          ? "低預算"
-          : preferences.budget
-            ? `預算約 ${preferences.budget}`
-            : "",
-    preferences.travelStyle?.length ? preferences.travelStyle.map(localizePreferenceLabel).join("、") : "",
-    preferences.pace === "relaxed"
-      ? "輕鬆步調"
-      : preferences.pace === "intensive"
-        ? "充實緊湊"
-        : preferences.pace === "moderate" || preferences.pace === "balanced"
-          ? "適中步調"
-          : "",
-    preferences.transportPreference,
-  ].filter(Boolean);
-  return parts.length ? parts.join("、") : "你之前的旅遊偏好";
 }
 
 function buildDecision(
@@ -248,13 +202,41 @@ function isGeneralTravelQuestion(message: string): boolean {
   return /適合|推薦|建議|怎麼看|好玩嗎|第一次|自由行|親子|蜜月|美食|購物|景點|地點|有哪些|查看|目前行程|交通/u.test(message);
 }
 
-function collectMissingRequirements(hints: TripRequestHints, knownPreferences: TravelAgentKnownPreferences): string[] {
+function hasTravelPartyInfo(tripProfile?: TripProfile | null, message?: string): boolean {
+  if (tripProfile?.companions) {
+    return true;
+  }
+  if (typeof tripProfile?.traveler_count === "number" && tripProfile.traveler_count > 0) {
+    return true;
+  }
+  const text = message?.trim() || "";
+  if (!text) {
+    return false;
+  }
+  return (
+    /(?:總共|一共|共)\s*[\d一二兩两三四五六七八九十]+\s*(?:個人|人)/u.test(text) ||
+    /[\d一二兩两三四五六七八九十]+\s*(?:個人|人)(?:同行|一起|出遊|旅遊|旅行|去玩)?/u.test(text) ||
+    /獨旅|自己去|我自己|一個人/u.test(text) ||
+    /女朋友|男朋友|老婆|老公|另一半|情侶/u.test(text) ||
+    /家人|家庭旅遊|爸媽|父母|小孩|孩子|親子/u.test(text)
+  );
+}
+
+function collectMissingRequirements(
+  hints: TripRequestHints,
+  knownPreferences: TravelAgentKnownPreferences,
+  tripProfile?: TripProfile | null,
+  message?: string,
+): string[] {
   const missing: string[] = [];
   if (!hints.destination && !knownPreferences.destination) {
     missing.push("目的地");
   }
   if (!hints.days && !knownPreferences.days) {
     missing.push("天數");
+  }
+  if (!hasTravelPartyInfo(tripProfile, message)) {
+    missing.push("旅客人數");
   }
   if (!hints.budgetLevel && !knownPreferences.budget && !knownPreferences.budgetLevel) {
     missing.push("預算");
@@ -270,6 +252,9 @@ function collectMissingRequirements(hints: TripRequestHints, knownPreferences: T
 
 function buildFollowUpGuidance(hints: TripRequestHints, missingRequirements: string[]): string {
   const destinationPart = hints.destination ? `${hints.destination}` : "這趟旅行";
+  if (missingRequirements.includes("旅客人數")) {
+    return `可以，${destinationPart}${hints.days ? ` ${hints.days} 天` : ""}我先記下來。這趟幾個人一起去？`;
+  }
   if (missingRequirements.includes("預算") && missingRequirements.includes("旅遊風格")) {
     return `可以，我先抓到你想安排${destinationPart}${hints.days ? ` ${hints.days} 天` : ""}。想走中等預算、較高預算，還是小資一點？另外這趟比較想偏美食購物、景點打卡，還是輕鬆散步？`;
   }
@@ -317,6 +302,13 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
     });
   }
 
+  if (isPersonalMemoryRecallIntent(message)) {
+    return buildDecision("answer_trip_question", {
+      searchDecision: { ...searchDecision, shouldSearch: false, searchNeed: "none" },
+      debugReason: "personal memory recall",
+    });
+  }
+
   if (isMapFocusIntent(message)) {
     return buildDecision("modify_itinerary", {
       searchDecision,
@@ -354,7 +346,7 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
   }
 
   if (isTripPlanningIntent(message)) {
-    const missingRequirements = collectMissingRequirements(hints, knownPreferences);
+    const missingRequirements = collectMissingRequirements(hints, knownPreferences, input.tripProfile, message);
     if (hasMeaningfulPreferences(reusablePreferences) && !isPreferenceRejectionOrOverride(message)) {
       const reusable = reusablePreferences || {};
       const summary = formatPreferenceSummary(reusable);
@@ -398,9 +390,8 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
     });
   }
 
-  return buildDecision("casual_chat", {
+  return buildDecision("answer_trip_question", {
     searchDecision,
-    userFacingGuidance: "可以，我先用旅遊規劃角度幫你想。你想先聊目的地靈感，還是要我協助整理成行程？",
-    debugReason: "fallback natural chat",
+    debugReason: "fallback natural chat — route to LLM",
   });
 }

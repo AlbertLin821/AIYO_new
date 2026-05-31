@@ -1,10 +1,13 @@
 import { serverConfig } from "@/server/config";
+import type { TripDestinationScope } from "@/lib/tripDestinationScope";
 import {
   buildExpandedTravelSearchQueries,
   buildVideoRecommendationSearchQuery,
+  isInTripDestinationScope,
   isLowIntentShortFormVideo,
   isLoosePlaceRelatedVideo,
   isTravelRelatedVideo,
+  resolveVideoDestinationScope,
   scoreSearchResultQuality,
 } from "@/server/providers/travelVideoFilter";
 import type { VideoRecommendation } from "@/types";
@@ -52,6 +55,7 @@ interface SearchInput {
   limit?: number;
   offset?: number;
   excludeVideoIds?: string[];
+  destinationScope?: TripDestinationScope | null;
 }
 
 interface YouTubeMetadata {
@@ -460,6 +464,11 @@ export async function searchYouTubeVideos(input: SearchInput): Promise<{
     };
   }
 
+  const destinationScope = resolveVideoDestinationScope({
+    destination: input.destination,
+    destinationScope: input.destinationScope,
+  });
+
   const rawUserQuery = buildVideoRecommendationSearchQuery({
     keyword: input.keyword,
     destination: input.destination,
@@ -522,16 +531,41 @@ export async function searchYouTubeVideos(input: SearchInput): Promise<{
     channelTitle: v.channelTitle,
   });
 
+  const passesScope = (video: VideoRecommendation) =>
+    isInTripDestinationScope(metaFor(video), destinationScope, rawUserQuery);
+
   const buildPool = (mapped: VideoRecommendation[]): VideoRecommendation[] => {
     const strictFiltered = mapped.filter((video) =>
       !isLowIntentShortFormVideo({
         ...metaFor(video),
         durationSeconds: parseDisplayDurationToSeconds(video.duration),
       }) &&
-      isTravelRelatedVideo(metaFor(video), rawUserQuery),
+      isTravelRelatedVideo(metaFor(video), rawUserQuery, destinationScope) &&
+      passesScope(video),
     );
     if (strictFiltered.length > 0) {
       return strictFiltered;
+    }
+    const looseFiltered = mapped.filter(
+      (video) =>
+        !isLowIntentShortFormVideo({
+          ...metaFor(video),
+          durationSeconds: parseDisplayDurationToSeconds(video.duration),
+        }) &&
+        isLoosePlaceRelatedVideo(metaFor(video), rawUserQuery, destinationScope) &&
+        passesScope(video),
+    );
+    if (looseFiltered.length > 0) {
+      fallbackReasons.push(
+        "Strict travel filter produced too few results; falling back to loose place filter.",
+      );
+      return looseFiltered;
+    }
+    if (destinationScope?.countryCodes.length) {
+      fallbackReasons.push(
+        "No videos matched trip destination scope; not returning out-of-scope results.",
+      );
+      return [];
     }
     fallbackReasons.push("Strict travel filter produced too few results; falling back to loose place filter.");
     return mapped.filter(
@@ -539,7 +573,7 @@ export async function searchYouTubeVideos(input: SearchInput): Promise<{
         !isLowIntentShortFormVideo({
           ...metaFor(video),
           durationSeconds: parseDisplayDurationToSeconds(video.duration),
-        }) && isLoosePlaceRelatedVideo(metaFor(video), rawUserQuery),
+        }) && isLoosePlaceRelatedVideo(metaFor(video), rawUserQuery, destinationScope),
     );
   };
 

@@ -23,6 +23,8 @@ import {
   updateFrontendDebugProcess,
 } from "@/lib/frontendDebug";
 import { mergeVideosWithStoredSummaries } from "@/lib/mergeVideoSummaries";
+import { fetchRecommendationsWithClientCache } from "@/lib/fetchRecommendationsWithClientCache";
+import { buildRecommendationQueryKey } from "@/lib/videoRecommendationCache";
 import { readPendingVideoImport } from "@/lib/pendingVideoImport";
 import {
   collectVideoIdentityIds,
@@ -248,7 +250,6 @@ export default function HomePage() {
       return;
     }
     let cancelled = false;
-    setIsSearching(true);
     setErrorMessage(null);
     const processId = startFrontendDebugProcess("home-video-seed", "首頁自動載入影片推薦", {
       destination: tripDestination.trim(),
@@ -260,7 +261,13 @@ export default function HomePage() {
       preferences: ["美食", "景點", "懶人包"],
       limit: 6,
     };
-    void fetchVideoRecommendations(request)
+    const hasCachedSeed = Boolean(
+      useVideoStore.getState().getCachedRecommendations(buildRecommendationQueryKey(request)),
+    );
+    if (!hasCachedSeed) {
+      setIsSearching(true);
+    }
+    void fetchRecommendationsWithClientCache(request)
       .then((outcome) => {
         if (cancelled) {
           return;

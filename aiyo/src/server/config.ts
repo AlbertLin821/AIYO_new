@@ -20,20 +20,22 @@ function readBoolean(name: string, fallback: boolean): boolean {
   return raw.toLowerCase() === "true";
 }
 
-const ollamaModel = readString("OLLAMA_MODEL", "gemma4:26B");
+const ollamaModel = readString("OLLAMA_MODEL", "qwen3.5:9b");
 
 export const serverConfig = {
   appName: readString("NEXT_PUBLIC_APP_NAME", "AIYO"),
   ollamaBaseUrl: readString("OLLAMA_BASE_URL", "http://localhost:11434"),
   ollamaModel,
   /** 語音／POST /api/ai/plan 行程 JSON；未設定時與 `OLLAMA_MODEL` 相同。 */
-  ollamaTripPlanModel: readString("OLLAMA_TRIP_PLAN_MODEL", ollamaModel),
+  ollamaTripPlanModel: readString("OLLAMA_TRIP_PLAN_MODEL", "granite4.1:3b"),
+  /** 旅遊聊天／結構化回覆；未設定時與 `OLLAMA_MODEL` 相同。 */
+  ollamaTravelChatModel: readString("OLLAMA_TRAVEL_CHAT_MODEL", ollamaModel),
   ollamaSummaryModel: readString(
     "OLLAMA_VIDEO_SUMMARY_MODEL",
-    readString("OLLAMA_SUMMARY_MODEL", "gemma4:26B"),
+    readString("OLLAMA_SUMMARY_MODEL", "granite4.1:8b"),
   ),
   ollamaFastSummaryModel: readString("OLLAMA_VIDEO_SUMMARY_FAST_MODEL", "mistral-small:24b"),
-  ollamaFinalSummaryModel: readString("OLLAMA_VIDEO_SUMMARY_FINAL_MODEL", "gemma4:26B"),
+  ollamaFinalSummaryModel: readString("OLLAMA_VIDEO_SUMMARY_FINAL_MODEL", "granite4.1:8b"),
   ollamaLocationModel: readString("OLLAMA_LOCATION_MODEL", "granite4.1:8b"),
   videoExtractionMode: readString("VIDEO_EXTRACTION_MODE", "simple-ollama"),
   /**

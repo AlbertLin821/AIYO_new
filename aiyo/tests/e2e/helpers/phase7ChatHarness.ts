@@ -4,6 +4,18 @@ import type { Phase7TokyoSeed } from "./db";
 type HarnessReply = {
   content: string;
   responseType?: string;
+  questionCard?: {
+    response_type: "question_card";
+    title: string;
+    description: string;
+    questions: Array<{
+      slot: string;
+      question: string;
+      type: string;
+      options?: Array<{ label: string; value: string; recommended?: boolean }>;
+    }>;
+    action: { label: string; shortcut: string };
+  };
   statusSteps?: Array<{
     type: "status_step";
     phase: string;
@@ -11,9 +23,18 @@ type HarnessReply = {
     status: string;
     provider?: string;
     query?: string;
+    detail?: string;
   }>;
   assistantActions?: Array<{ type: string; payload: Record<string, unknown> }>;
   proposedChanges?: unknown[];
+  travelAgentDecision?: {
+    mode: string;
+    preferenceConfirmation?: {
+      summary: string;
+      preferences: Record<string, unknown>;
+      prompt: string;
+    };
+  };
 };
 
 function buildChatSuccess(reply: HarnessReply) {
@@ -27,9 +48,11 @@ function buildChatSuccess(reply: HarnessReply) {
         timestamp: new Date().toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" }),
         responseType: reply.responseType || "general",
         statusSteps: reply.statusSteps,
+        questionCard: reply.questionCard,
       },
       assistantActions: reply.assistantActions || [],
       proposedChanges: reply.proposedChanges || [],
+      travelAgentDecision: reply.travelAgentDecision,
     },
   };
 }
@@ -72,9 +95,9 @@ function buildReorderScenario(
 ): HarnessReply {
   const ginzaItem = day2Items.find((item) => item.title.includes("銀座"));
   const skytreeItem = day2Items.find((item) => /晴空塔/.test(item.title));
-  const nonGinzaItem = day2Items.find((item) => !item.title.includes("銀座"));
+  const akihabaraItem = day2Items.find((item) => item.id === seed.itemIds.day2Akihabara);
   const ginzaId = ginzaItem?.id || seed.itemIds.day2Ginza;
-  const skytreeId = skytreeItem?.id || nonGinzaItem?.id || seed.itemIds.day2Akihabara;
+  const skytreeId = skytreeItem?.id || akihabaraItem?.id || seed.itemIds.day2Akihabara;
   return {
     content: "好的，第二天順序已調整為銀座、東京晴空塔。",
     responseType: "itinerary_update",
@@ -103,14 +126,60 @@ function resolveScenario(message: string, seed: Phase7TokyoSeed, body?: ChatRout
   if (/東京.*(三天|3天)/.test(text) || /去東京玩/.test(text)) {
     return {
       content:
-        "東京三天聽起來很棒！我看到你先前偏好中等預算、美食與購物、步調適中。要沿用這些偏好來規劃嗎？還是想調整？",
-      responseType: "general",
+        "東京三天聽起來很棒！我看到你先前偏好中等預算、美食與購物、步調適中。要沿用這些偏好來規劃嗎？",
+      responseType: "question_card",
+      statusSteps: [
+        {
+          type: "status_step",
+          phase: "understand",
+          label: "等你確認偏好",
+          detail: "請在下方選擇是否沿用先前設定。",
+          status: "waiting_input",
+        },
+      ],
+      questionCard: {
+        response_type: "question_card",
+        title: "再確認一下東京行程偏好",
+        description: "選好後我會依你的偏好繼續規劃。",
+        questions: [
+          {
+            slot: "preferences",
+            question: "你想讓東京行程更偏向哪幾種體驗？",
+            type: "multi_choice",
+            options: [
+              { label: "美食", value: "food", recommended: true },
+              { label: "購物", value: "shopping", recommended: true },
+            ],
+          },
+        ],
+        action: { label: "送出並繼續", shortcut: "Enter" },
+      },
+      travelAgentDecision: {
+        mode: "confirm_preferences",
+        preferenceConfirmation: {
+          summary: "中等預算、美食、購物、適中步調",
+          preferences: {
+            budgetLevel: "medium",
+            travelStyle: ["美食", "購物"],
+            pace: "moderate",
+            transportPreference: "地鐵與步行",
+          },
+          prompt: "要沿用這些偏好來規劃東京三天嗎？",
+        },
+      },
     };
   }
 
   if (/沿用/.test(text) && /輕鬆|relax/i.test(text)) {
     return {
       content: "好的，我會沿用中等預算與美食、購物偏好，並把步調調整為較輕鬆的節奏，開始準備東京三天行程。",
+      responseType: "general",
+    };
+  }
+
+  if (/^沿用/.test(text) || /沿用先前偏好/.test(text)) {
+    return {
+      content: "好的，我會沿用中等預算與美食、購物偏好，開始準備東京三天行程。",
       responseType: "general",
     };
   }
@@ -200,8 +269,6 @@ function resolveScenario(message: string, seed: Phase7TokyoSeed, body?: ChatRout
           type: "map.focus_location",
           payload: {
             placeName: "清水寺",
-            lat: 34.9949,
-            lng: 135.785,
             zoom: 15,
           },
         },
@@ -212,7 +279,71 @@ function resolveScenario(message: string, seed: Phase7TokyoSeed, body?: ChatRout
   return null;
 }
 
+function geocodeMockResponse(query: string) {
+  const normalized = query.trim().toLowerCase();
+  if (/skytree|晴空塔/.test(normalized)) {
+    return {
+      success: true,
+      data: {
+        place: {
+          placeName: "東京晴空塔",
+          formattedAddress: "1 Chome Oshiage, Sumida City, Tokyo",
+          placeId: "e2e-skytree",
+          lat: 35.7101,
+          lng: 139.8107,
+          provider: "google-geocoding",
+        },
+      },
+    };
+  }
+  if (/清水寺|kiyomizu/.test(normalized)) {
+    return {
+      success: true,
+      data: {
+        place: {
+          placeName: "清水寺",
+          formattedAddress: "Kyoto",
+          placeId: "e2e-kiyomizu",
+          lat: 34.9949,
+          lng: 135.785,
+          provider: "google-geocoding",
+        },
+      },
+    };
+  }
+  if (/聖水|seongsu/.test(normalized)) {
+    return {
+      success: true,
+      data: {
+        place: {
+          placeName: "聖水洞",
+          formattedAddress: "Seongsu-dong, Seoul",
+          placeId: "e2e-seongsu",
+          lat: 37.5447,
+          lng: 127.0559,
+          provider: "google-geocoding",
+        },
+      },
+    };
+  }
+  return {
+    success: false,
+    error: { code: "not_found", message: "E2E geocode mock miss" },
+  };
+}
+
 export async function registerPhase7ChatHarness(page: Page, seed: Phase7TokyoSeed) {
+  await page.unroute("**/api/places/geocode").catch(() => {});
+  await page.route("**/api/places/geocode", async (route) => {
+    const body = route.request().postDataJSON() as { query?: string };
+    const payload = geocodeMockResponse(String(body.query || ""));
+    await route.fulfill({
+      status: payload.success ? 200 : 404,
+      contentType: "application/json",
+      body: JSON.stringify(payload),
+    });
+  });
+
   await page.unroute("**/api/ai/chat").catch(() => {});
   await page.route("**/api/ai/chat", async (route) => {
     const body = route.request().postDataJSON() as ChatRouteBody;
@@ -221,7 +352,7 @@ export async function registerPhase7ChatHarness(page: Page, seed: Phase7TokyoSee
 
     if (isReorderMessage(text)) {
       const contextItems = dayItemsFromContext(body, 2);
-      const liveItems = await fetchLiveDayItems(page, 2);
+      const liveItems = contextItems.length >= 2 ? [] : await fetchLiveDayItems(page, 2);
       const day2Items = contextItems.length >= 2 ? contextItems : liveItems;
       const scenario = buildReorderScenario(day2Items, seed);
       await route.fulfill({

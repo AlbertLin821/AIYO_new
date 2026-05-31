@@ -4,6 +4,7 @@ import {
   INITIAL_VIDEO_RECOMMENDATIONS_LIMIT,
   limitInitialVideoRecommendations,
 } from "@/lib/videoListLimits";
+import type { CachedVideoRecommendations } from "@/lib/videoRecommendationCache";
 import type { VideoRecommendation } from "@/types";
 
 export type SummaryDiagnostics = {
@@ -58,6 +59,9 @@ interface VideoState {
   hasLoadedMoreVideos: boolean;
   /** Incremented when the home drawer closes so VideoSearchBar can clear URL text (not persisted). */
   searchBarResetNonce: number;
+  recommendationCache: Record<string, CachedVideoRecommendations>;
+  getCachedRecommendations: (queryKey: string) => CachedVideoRecommendations | null;
+  setCachedRecommendations: (queryKey: string, entry: CachedVideoRecommendations) => void;
   setVideos: (videos: VideoRecommendation[]) => void;
   /** 重設推薦列表（搜尋／種子），最多 INITIAL_VIDEO_RECOMMENDATIONS_LIMIT 筆 */
   setInitialVideoList: (videos: VideoRecommendation[]) => void;
@@ -97,6 +101,18 @@ export const useVideoStore = create<VideoState>((set) => ({
   errorMessage: null,
   hasLoadedMoreVideos: false,
   searchBarResetNonce: 0,
+  recommendationCache: {},
+  getCachedRecommendations: (queryKey) => {
+    const entry = useVideoStore.getState().recommendationCache[queryKey];
+    return entry ?? null;
+  },
+  setCachedRecommendations: (queryKey, entry) =>
+    set((state) => ({
+      recommendationCache: {
+        ...state.recommendationCache,
+        [queryKey]: entry,
+      },
+    })),
   setVideos: (videos) =>
     set((state) => ({
       videos: state.hasLoadedMoreVideos

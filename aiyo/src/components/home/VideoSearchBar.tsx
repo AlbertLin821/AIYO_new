@@ -11,13 +11,15 @@ import {
   updateFrontendDebugProcess,
 } from "@/lib/frontendDebug";
 import { mergeVideosWithStoredSummaries } from "@/lib/mergeVideoSummaries";
+import { fetchRecommendationsWithClientCache } from "@/lib/fetchRecommendationsWithClientCache";
 import { enqueueVideoSummaries } from "@/lib/videoSummaryQueue";
+import { buildRecommendationQueryKey } from "@/lib/videoRecommendationCache";
 import { cn } from "@/lib/utils";
 import { zhTW as t } from "@/locales/zh-TW";
 import { useTripStore } from "@/stores/useTripStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useVideoStore } from "@/stores/useVideoStore";
-import { fetchVideoRecommendations, summarizeVideo } from "@/services/videoClient";
+import { summarizeVideo } from "@/services/videoClient";
 
 export type VideoSearchBarMode = "video" | "itinerary";
 
@@ -147,28 +149,52 @@ const VideoSearchBar = forwardRef<HTMLInputElement, VideoSearchBarProps>(functio
           keyword: trimmed,
           limit: 6,
         };
-        const outcome = await fetchVideoRecommendations(request);
-        const nextVideos = mergeVideosWithStoredSummaries(
-          outcome.videos,
-          useVideoStore.getState().videos,
-        );
-        setInitialVideoList(nextVideos);
-        setRecommendationSource(outcome.source);
-        setLastRecommendationRequest(request);
-        enqueueVideoSummaries(nextVideos, {
-          destination: tripDestination,
-        });
-        if (outcome.source === "mock-fallback") {
-          pushToast({
-            variant: "warning",
-            title: t.video.mockVideosTitle,
-            description: outcome.fallbackReason || t.video.mockVideosDesc,
+        const applyRecommendationOutcome = (
+          outcome: Awaited<ReturnType<typeof fetchRecommendationsWithClientCache>>,
+        ) => {
+          const nextVideos = mergeVideosWithStoredSummaries(
+            outcome.videos,
+            useVideoStore.getState().videos,
+          );
+          setInitialVideoList(nextVideos);
+          setRecommendationSource(outcome.source);
+          setLastRecommendationRequest(request);
+          enqueueVideoSummaries(nextVideos, {
+            destination: tripDestination,
           });
+          if (outcome.source === "mock-fallback") {
+            pushToast({
+              variant: "warning",
+              title: t.video.mockVideosTitle,
+              description: outcome.fallbackReason || t.video.mockVideosDesc,
+            });
+          }
+        };
+
+        const cacheBeforeFetch = useVideoStore
+          .getState()
+          .getCachedRecommendations(buildRecommendationQueryKey(request));
+        const hasImmediateCache = Boolean(cacheBeforeFetch);
+
+        if (!hasImmediateCache) {
+          setIsSearching(true);
         }
+
+        const outcome = await fetchRecommendationsWithClientCache(request, {
+          onBackgroundUpdate: (refreshed) => {
+            applyRecommendationOutcome({
+              ...refreshed,
+              servedFromCache: false,
+              cacheStatus: "miss",
+            });
+          },
+        });
+        applyRecommendationOutcome(outcome);
         finishFrontendDebugProcess(processId, {
           mode: "recommendation-search",
           resultCount: outcome.videos.length,
           source: outcome.source,
+          cacheStatus: outcome.cacheStatus,
         });
       }
     } catch (error) {

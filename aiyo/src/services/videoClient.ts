@@ -36,7 +36,7 @@ export type VideoSearchDebugInfo = {
 
 export type VideoRecommendationsClientResult = {
   videos: VideoRecommendation[];
-  source: "youtube-data-api" | "mock-fallback";
+  source: "youtube-data-api" | "mock-fallback" | "preloaded-destination-seed";
   fallbackReason?: string;
   debug?: VideoSearchDebugInfo;
 };
@@ -45,15 +45,18 @@ async function parseJson<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
-export async function fetchVideoRecommendations(input: {
-  destination?: string;
-  keyword?: string;
-  days?: number;
-  preferences?: string[];
-  limit?: number;
-  offset?: number;
-  excludeVideoIds?: string[];
-}): Promise<VideoRecommendationsClientResult> {
+export async function fetchVideoRecommendations(
+  input: {
+    destination?: string;
+    keyword?: string;
+    days?: number;
+    preferences?: string[];
+    limit?: number;
+    offset?: number;
+    excludeVideoIds?: string[];
+  },
+  options?: { cache?: RequestCache },
+): Promise<VideoRecommendationsClientResult> {
   const processId = startFrontendDebugProcess("video-search", "查詢旅遊影片推薦", {
     destination: input.destination,
     keyword: input.keyword,
@@ -88,7 +91,7 @@ export async function fetchVideoRecommendations(input: {
 
   const response = await fetch(`/api/videos/recommendations?${params.toString()}`, {
     method: "GET",
-    cache: "no-store",
+    cache: options?.cache ?? "no-store",
   });
   updateFrontendDebugProcess(processId, "api-response", {
     status: response.status,
@@ -132,7 +135,9 @@ export async function fetchVideoRecommendations(input: {
   const result: VideoRecommendationsClientResult = {
     videos: payload.data,
     source:
-      source === "mock-fallback" || source === "youtube-data-api"
+      source === "mock-fallback" ||
+      source === "youtube-data-api" ||
+      source === "preloaded-destination-seed"
         ? source
         : "youtube-data-api",
     fallbackReason:

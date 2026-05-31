@@ -58,6 +58,7 @@ export type FinalVideoPlaceExtractionInput = {
   title: string;
   description?: string;
   destinationHint?: string;
+  destinationScope?: import("@/lib/tripDestinationScope").TripDestinationScope | null;
   enableGeocode?: boolean;
   enableSearch?: boolean;
 };

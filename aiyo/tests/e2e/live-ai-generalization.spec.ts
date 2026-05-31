@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { dismissOnboardingIfVisible, loginAs, waitForAuthenticatedSession } from "./helpers/auth";
 import { ChatNetworkMonitor, sendChatMessage } from "./helpers/chat";
 import {
+  clearE2EOwnerLiveAiState,
   E2E_OWNER,
   resetE2EData,
   seedAuthUsers,
@@ -15,18 +16,20 @@ import {
   assertNoSearchProviders,
   assertNoTokyoTemplatePollution,
   assertSearchUsedProviders,
+  ensureLiveAiAvailability,
   extractAssistantActions,
+  hasLiveSearchApiKeys,
   isLiveAiEnvEnabled,
-  probeLiveAiChat,
   recordLiveAiOutcome,
   resolveAiReplyText,
   skipIfLiveAiUnavailable,
 } from "./helpers/liveAi";
 
-test.describe.configure({ mode: "serial" });
+const liveState = {
+  liveAvailable: false,
+  skipReason: "E2E_LIVE_AI 未啟用",
+};
 
-let liveAvailable = false;
-let skipReason = "E2E_LIVE_AI 未啟用";
 let seoulSeed: Phase75SeoulSeed | undefined;
 
 test.beforeAll(async () => {
@@ -37,21 +40,26 @@ test.beforeAll(async () => {
   await seedAuthUsers();
 });
 
+test.beforeEach(async () => {
+  if (!isLiveAiEnvEnabled()) {
+    return;
+  }
+  await clearE2EOwnerLiveAiState();
+});
+
+function liveSkip() {
+  const gate = skipIfLiveAiUnavailable(liveState.liveAvailable, liveState.skipReason);
+  test.skip(gate.skip, gate.reason);
+}
+
 async function openLiveChat(page: import("@playwright/test").Page) {
   await loginAs(page, E2E_OWNER, "/chat");
   await dismissOnboardingIfVisible(page);
   await waitForAuthenticatedSession(page, E2E_OWNER.email);
-  const probe = await probeLiveAiChat(page);
-  liveAvailable = probe.available;
-  skipReason = probe.reason || skipReason;
+  await ensureLiveAiAvailability(page, liveState);
 }
 
-function liveSkip() {
-  const gate = skipIfLiveAiUnavailable(liveAvailable, skipReason);
-  test.skip(gate.skip, gate.reason);
-}
-
-test.describe("Phase 7.5 Live AI generalization", () => {
+test.describe("Phase 7.6 Live AI generalization", () => {
   test("A. 嘉義兩天一夜", async ({ page }, testInfo) => {
     test.setTimeout(180_000);
     if (!isLiveAiEnvEnabled()) {
@@ -65,7 +73,13 @@ test.describe("Phase 7.5 Live AI generalization", () => {
 
     const message =
       "我想安排嘉義兩天一夜，想吃火雞肉飯，也想去阿里山或文化路夜市，你可以幫我規劃嗎？";
-    const { payload } = await sendChatMessage(page, message, { chatTimeoutMs: 150_000 });
+    const { payload, firstFailure } = await sendChatMessage(page, message, { chatTimeoutMs: 150_000 });
+    if (firstFailure) {
+      testInfo.annotations.push({
+        type: "live-ai-retry",
+        description: `首次失敗 HTTP ${firstFailure.status}: ${firstFailure.bodyPreview.slice(0, 200)}`,
+      });
+    }
     const reply = await resolveAiReplyText(page, payload);
 
     expect(reply.length).toBeGreaterThanOrEqual(10);
@@ -94,7 +108,13 @@ test.describe("Phase 7.5 Live AI generalization", () => {
     monitor.attach(page);
 
     const message = "我想去大阪玩四天，第一次去，想吃美食、逛街，預算中等。";
-    const { payload } = await sendChatMessage(page, message, { chatTimeoutMs: 150_000 });
+    const { payload, firstFailure } = await sendChatMessage(page, message, { chatTimeoutMs: 150_000 });
+    if (firstFailure) {
+      testInfo.annotations.push({
+        type: "live-ai-retry",
+        description: `首次失敗 HTTP ${firstFailure.status}: ${firstFailure.bodyPreview.slice(0, 200)}`,
+      });
+    }
     const reply = await resolveAiReplyText(page, payload);
 
     expect(reply.length).toBeGreaterThanOrEqual(10);
@@ -123,7 +143,13 @@ test.describe("Phase 7.5 Live AI generalization", () => {
     monitor.attach(page);
 
     const message = "我想去首爾五天，想安排咖啡廳、購物和韓劇景點。";
-    const { payload } = await sendChatMessage(page, message, { chatTimeoutMs: 150_000 });
+    const { payload, firstFailure } = await sendChatMessage(page, message, { chatTimeoutMs: 150_000 });
+    if (firstFailure) {
+      testInfo.annotations.push({
+        type: "live-ai-retry",
+        description: `首次失敗 HTTP ${firstFailure.status}: ${firstFailure.bodyPreview.slice(0, 200)}`,
+      });
+    }
     const reply = await resolveAiReplyText(page, payload);
 
     expect(reply.length).toBeGreaterThanOrEqual(10);
@@ -152,16 +178,23 @@ test.describe("Phase 7.5 Live AI generalization", () => {
     monitor.attach(page);
 
     const message = "我想去巴黎七天，主要想看美術館、建築和咖啡廳，步調不要太趕。";
-    const { payload } = await sendChatMessage(page, message, { chatTimeoutMs: 150_000 });
+    const { payload, firstFailure } = await sendChatMessage(page, message, { chatTimeoutMs: 150_000 });
+    if (firstFailure) {
+      testInfo.annotations.push({
+        type: "live-ai-retry",
+        description: `首次失敗 HTTP ${firstFailure.status}: ${firstFailure.bodyPreview.slice(0, 200)}`,
+      });
+    }
     const reply = await resolveAiReplyText(page, payload);
 
     expect(reply.length).toBeGreaterThanOrEqual(10);
     assertNoTokyoTemplatePollution(reply);
     assertMentionsAny(
       reply,
-      [/巴黎|Paris/, /美術館|博物館|羅浮宮|奧賽|Louvre|Orsay|文化|建築|咖啡|步調|慢|自由探索/],
+      [/巴黎|Paris/, /美術館|博物館|羅浮宮|奧賽|Louvre|Orsay|文化|建築|咖啡|步調|慢/],
       "巴黎文化慢步調",
     );
+    expect(reply, "不應以泛用 placeholder 填滿巴黎行程").not.toMatch(/市區自由探索|河岸散策|文創街区漫步/);
     expect(reply).not.toMatch(/日本|東京|大阪|京都/);
     assertNoApiKeyLeak(reply);
     monitor.assertNoSearxngInAiChat();
@@ -186,7 +219,15 @@ test.describe("Phase 7.5 Live AI generalization", () => {
     monitor.attach(page);
 
     const message = "你覺得大阪適合第一次自由行嗎？";
-    const { payload } = await sendChatMessage(page, message, { chatTimeoutMs: 150_000 });
+    const { payload, firstFailure, attempts } = await sendChatMessage(page, message, {
+      chatTimeoutMs: 150_000,
+    });
+    if (firstFailure) {
+      testInfo.annotations.push({
+        type: "live-ai-retry",
+        description: `首次失敗 HTTP ${firstFailure.status}: ${firstFailure.bodyPreview.slice(0, 240)} | attempts=${attempts}`,
+      });
+    }
     const reply = await resolveAiReplyText(page, payload);
 
     expect(reply.length).toBeGreaterThanOrEqual(10);
@@ -209,6 +250,9 @@ test.describe("Phase 7.5 Live AI generalization", () => {
     if (!isLiveAiEnvEnabled()) {
       test.skip(true, "需 E2E_LIVE_AI=1");
     }
+    if (!hasLiveSearchApiKeys()) {
+      test.skip(true, "缺少 SERPER_API_KEY 或 TAVILY_API_KEY（亦未啟用 AIYO_WEB_SEARCH_MOCK）");
+    }
     await openLiveChat(page);
     liveSkip();
 
@@ -216,7 +260,15 @@ test.describe("Phase 7.5 Live AI generalization", () => {
     monitor.attach(page);
 
     const message = "大阪環球影城今天營業到幾點？";
-    const { payload } = await sendChatMessage(page, message, { chatTimeoutMs: 150_000 });
+    const { payload, firstFailure, attempts } = await sendChatMessage(page, message, {
+      chatTimeoutMs: 150_000,
+    });
+    if (firstFailure) {
+      testInfo.annotations.push({
+        type: "live-ai-retry",
+        description: `首次失敗 HTTP ${firstFailure.status}: ${firstFailure.bodyPreview.slice(0, 240)} | attempts=${attempts}`,
+      });
+    }
     const reply = await resolveAiReplyText(page, payload);
 
     expect(reply.length).toBeGreaterThan(5);
@@ -224,35 +276,22 @@ test.describe("Phase 7.5 Live AI generalization", () => {
     assertNoApiKeyLeak(reply);
 
     const providers = monitor.searchProviders;
-    const usedWebSearch = providers.has("serper") || providers.has("tavily");
-    if (usedWebSearch) {
-      assertSearchUsedProviders(providers, providers.has("serper") ? ["serper"] : ["tavily"]);
-    } else {
-      recordLiveAiOutcome(testInfo, {
-        scenario: "F search",
-        passed: false,
-        replyPreview: reply,
-        failureReason: "未觸發 serper/tavily（可能缺 search API key 或模型未走 search 分支）",
-        searchProviders: [...providers],
-      });
-      test.info().annotations.push({
-        type: "live-ai-soft-fail",
-        description: "即時資訊問題未觸發 web search；記錄為不穩定而非硬失敗",
-      });
-    }
+    assertSearchUsedProviders(
+      providers,
+      providers.has("serper") ? ["serper"] : ["tavily"],
+    );
     monitor.assertNoSearxngInAiChat();
 
     recordLiveAiOutcome(testInfo, {
       scenario: "F search",
-      passed: usedWebSearch,
+      passed: true,
       replyPreview: reply,
       searchProviders: [...providers],
-      failureReason: usedWebSearch ? undefined : "no serper/tavily",
     });
   });
 });
 
-test.describe("Phase 7.5 Live AssistantAction smoke", () => {
+test.describe("Phase 7.6 Live AssistantAction smoke", () => {
   test.beforeAll(async () => {
     if (!isLiveAiEnvEnabled()) {
       return;
@@ -280,10 +319,7 @@ test.describe("Phase 7.5 Live AssistantAction smoke", () => {
     await loginAs(page, E2E_OWNER, "/chat");
     await dismissOnboardingIfVisible(page);
     await waitForAuthenticatedSession(page, E2E_OWNER.email);
-
-    const probe = await probeLiveAiChat(page);
-    liveAvailable = probe.available;
-    skipReason = probe.reason || skipReason;
+    await ensureLiveAiAvailability(page, liveState);
     liveSkip();
 
     const monitor = new ChatNetworkMonitor();
@@ -312,7 +348,7 @@ test.describe("Phase 7.5 Live AssistantAction smoke", () => {
         assistantActionCount: actions.length,
         failureReason: `無 itinerary.update_item；proposedChanges=${proposedChanges.length}；可能 prompt/parser/context 或模型能力不足`,
       });
-      test.info().annotations.push({
+      testInfo.annotations.push({
         type: "live-ai-raw",
         description: JSON.stringify({ reply: reply.slice(0, 300), actions, proposedChanges }).slice(0, 800),
       });
