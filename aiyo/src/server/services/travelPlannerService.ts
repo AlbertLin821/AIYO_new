@@ -13,7 +13,6 @@ import { buildQuestionCardDesignerSystemPrompt } from "@/server/ai/policies/trav
 import { sanitizeDynamicQuestionCard } from "@/server/ai/validators/questionCardValidator";
 import {
   validateTravelPlanResponseQuality,
-  validateTripPlanQuality,
 } from "@/server/ai/validators/travelPlanValidator";
 import {
   buildChatPrompt,
@@ -39,8 +38,15 @@ import { applyRevisionInstructionToProfile } from "@/server/chat/tripRevision";
 import { enrichTripPlanWithRouteTravelTimes } from "@/server/geo/routeTravelTimeService";
 import { runStructuredTripWorkflow } from "@/server/services/travelPlanningWorkflowService";
 import {
+  INSUFFICIENT_RESEARCH_WARNING,
+  INSUFFICIENT_RESEARCH_TRAVEL_PLAN_WARNING,
+  getDayItemCountBounds,
+  suggestedMealTime,
+} from "@/server/ai/planning/itineraryPlanningStandard";
+import { validateItineraryQuality } from "@/server/ai/planning/itineraryQualityValidator";
+import { buildTripPlanResearchPlan } from "@/server/ai/planning/tripPlanResearchPolicy";
+import {
   buildDefaultTravelToolRequests,
-  buildTripPlanResearchRequests,
   executeTravelToolRequests,
   parseTravelToolRequestsFromModel,
 } from "@/server/services/travelResearchTools";
@@ -82,6 +88,7 @@ import type {
   TravelPlanRevisionMeta,
   TripProfile,
   TripPlanDay,
+  TripPlanItem,
   TripPlanRequest,
   TripPlanResult,
 } from "@/types";
@@ -2490,8 +2497,21 @@ function assertTripPlanQualityWarnings(warnings?: string[]): void {
   }
 }
 
-function assertTripPlanValidatorQuality(plan: TripPlanResult, request: TripPlanRequest): void {
-  const issues = validateTripPlanQuality(plan, request);
+function hasInsufficientVerifiedResearch(request: TripPlanRequest, placeHits: PlaceSearchHit[]): boolean {
+  const usablePlaces = dedupePlaceHitsByName(placeHits.filter((place) => place.name.trim().length > 1 && isUsablePlaceHit(place)));
+  return usablePlaces.length < request.days * 2;
+}
+
+function assertTripPlanValidatorQuality(
+  plan: TripPlanResult,
+  request: TripPlanRequest,
+  options?: { researchPlaceHits?: PlaceSearchHit[] },
+): void {
+  const issues = validateItineraryQuality(plan, request, {
+    researchInsufficient: options?.researchPlaceHits
+      ? hasInsufficientVerifiedResearch(request, options.researchPlaceHits)
+      : undefined,
+  });
   if (!issues.length) {
     return;
   }
@@ -2761,11 +2781,14 @@ async function handleStructuredTripWorkflow(input: {
     buildPlanningStatusSteps,
     profileToTripPlanRequest,
     generateTripPlan,
-    loadSupplementarySources: async (profile, progressSessionId) => {
+    loadSupplementarySources: async (profile, progressSessionId, generated, researchPlan) => {
+      void generated;
+      void researchPlan;
       const supplementaryWebBundle = await runWebSearch(
         [profile.destination || "", profile.preferences.join(" "), "行程 交通 美食"].filter(Boolean).join(" ").trim(),
         4,
         progressSessionId,
+        { skipIntentGate: true },
       );
       return normalizeWebSearchSources(supplementaryWebBundle.results);
     },
@@ -3094,45 +3117,6 @@ function enrichPlanLocationsFromPlaceHits(plan: TripPlanResult, placeHits: Place
   };
 }
 
-function createDestinationAwareFallbackStops(destination: string, chinese: boolean): PlaceSearchHit[] {
-  const dest = destination.trim() || (chinese ? "目的地" : "destination");
-  const names = chinese
-    ? [
-        `${dest} 代表性景點`,
-        `${dest} 文化體驗`,
-        `${dest} 特色街區`,
-        `${dest} 在地美食`,
-        `${dest} 夜景或河岸`,
-      ]
-    : [
-        `${dest} landmark`,
-        `${dest} cultural stop`,
-        `${dest} neighborhood walk`,
-        `${dest} local food`,
-        `${dest} evening viewpoint`,
-      ];
-  return names.map((name, index) => ({
-    name,
-    formattedAddress: "",
-    lat: 0,
-    lng: 0,
-    placeId: `synthetic_fallback_${index + 1}`,
-    types: ["point_of_interest"],
-  }));
-}
-
-function buildSyntheticMealStop(chinese: boolean, slot: "lunch" | "dinner"): PlaceSearchHit {
-  const name = chinese ? (slot === "lunch" ? "午餐" : "晚餐") : slot === "lunch" ? "Lunch" : "Dinner";
-  return {
-    name,
-    formattedAddress: "",
-    lat: 0,
-    lng: 0,
-    placeId: `synthetic_${slot}`,
-    types: ["restaurant"],
-  };
-}
-
 function pickUniquePlaces(
   pool: PlaceSearchHit[],
   startIndex: number,
@@ -3156,125 +3140,147 @@ function pickUniquePlaces(
   return picks;
 }
 
-function buildFallbackTripPlan(request: TripPlanRequest, placeHits: PlaceSearchHit[] = []): TripPlanResult {
+export function buildFallbackTripPlan(request: TripPlanRequest, placeHits: PlaceSearchHit[] = []): TripPlanResult {
   const chinese = isCjk(
     [request.destination, request.preferences.notes, request.preferences.interests.join(" ")]
       .filter(Boolean)
       .join(" "),
   );
   const transportLabel = request.preferences.transportPreference || (chinese ? "大眾運輸" : "Public transit");
-  const summary = chinese
-    ? `${request.destination} ${request.days} 天基礎行程已建立，可再依需求微調。`
-    : `Created a ${request.days}-day starter itinerary for ${request.destination}.`;
+  const destLabel = request.destination.trim() || (chinese ? "目的地" : "destination");
   const mustVisit = request.preferences.mustVisit || [];
   const normalizedMustVisit = new Set(mustVisit.map((value) => value.trim().toLowerCase()).filter(Boolean));
-  const validPlaces = dedupePlaceHitsByName(placeHits.filter((place) => place.name.trim().length > 1 && isUsablePlaceHit(place)));
+  const validPlaces = dedupePlaceHitsByName(
+    placeHits.filter((place) => place.name.trim().length > 1 && isUsablePlaceHit(place)),
+  );
   const restaurants = validPlaces.filter(isRestaurantLikePlace);
   const attractions = validPlaces.filter((place) => !isRestaurantLikePlace(place));
-  const preferredStops = dedupePlaceHitsByName([
+  const poiPool = dedupePlaceHitsByName([
     ...validPlaces.filter((place) => normalizedMustVisit.has(place.name.trim().toLowerCase())),
     ...attractions,
+    ...restaurants,
   ]);
-  const fallbackStops = dedupePlaceHitsByName([
-    ...preferredStops,
-    ...createDestinationAwareFallbackStops(request.destination, chinese),
-  ]);
-  const fallbackMeals = restaurants.length ? dedupePlaceHitsByName(restaurants) : [];
+  const researchInsufficient = poiPool.length < request.days * 2;
+  const summary = chinese
+    ? researchInsufficient
+      ? `${destLabel} ${request.days} 天基礎行程已建立（地點資料有限，建議再補充偏好）。`
+      : `${destLabel} ${request.days} 天基礎行程已建立，可再依需求微調。`
+    : researchInsufficient
+      ? `Created a ${request.days}-day starter itinerary for ${destLabel} with limited place data.`
+      : `Created a ${request.days}-day starter itinerary for ${destLabel}.`;
 
   const toLocation = (place: PlaceSearchHit | undefined, description: string) =>
     isUsablePlaceHit(place) ? placeHitToLocation(place, description) : undefined;
 
+  const buildMealItem = (
+    dayNumber: number,
+    slot: "lunch" | "dinner",
+    anchor: PlaceSearchHit | undefined,
+    itemIndex: number,
+  ): TripPlanItem => {
+    const restaurant = restaurants[(dayNumber + itemIndex) % Math.max(1, restaurants.length)];
+    const synthetic = !restaurant;
+    const title = restaurant?.name || (chinese ? (slot === "lunch" ? "午餐" : "晚餐") : slot === "lunch" ? "Lunch" : "Dinner");
+    const areaHint = anchor?.name || destLabel;
+    return {
+      id: `fallback_${dayNumber}_meal_${slot}`,
+      dayNumber,
+      time: suggestedMealTime(slot),
+      title,
+      type: "restaurant",
+      transport: transportLabel,
+      notes: chinese
+        ? synthetic
+          ? `於 ${areaHint} 一帶安排${slot === "lunch" ? "午餐" : "晚餐"}。`
+          : `安排在 ${title} 用餐。`
+        : synthetic
+          ? `${slot === "lunch" ? "Lunch" : "Dinner"} near ${areaHint}.`
+          : `Dine at ${title}.`,
+      source: "ai",
+      location: toLocation(restaurant, `${destLabel} ${slot}`),
+    };
+  };
+
   const days: TripPlanDay[] = Array.from({ length: request.days }, (_, index) => {
     const dayNumber = index + 1;
-    const dayStops = pickUniquePlaces(
-      fallbackStops,
-      index * 2,
-      Math.min(3, Math.max(2, fallbackStops.length >= request.days * 2 ? 3 : 2)),
-    );
-    const morning = dayStops[0] || fallbackStops[0];
-    const afternoon = dayStops[1] || dayStops[0] || fallbackStops[0];
-    const eveningAnchor = dayStops[2] || afternoon || morning;
-    const lunch = fallbackMeals[index % fallbackMeals.length] || buildSyntheticMealStop(chinese, "lunch");
-    const dinner = fallbackMeals[(index + 1) % fallbackMeals.length] || buildSyntheticMealStop(chinese, "dinner");
+    const bounds = getDayItemCountBounds(dayNumber, request.days);
+    const targetPoiCount = researchInsufficient
+      ? Math.min(Math.max(1, Math.min(2, poiPool.length)), poiPool.length)
+      : Math.max(bounds.min - 2, Math.min(bounds.max - 2, poiPool.length));
+    const dayPois = pickUniquePlaces(poiPool, index * 2, targetPoiCount);
+    const anchor = dayPois[0];
+    const items: TripPlanItem[] = [];
+    let itemCursor = 0;
+
+    const pushPoi = (place: PlaceSearchHit, time: string, type: TripPlanItem["type"] = "attraction") => {
+      itemCursor += 1;
+      items.push({
+        id: `fallback_${dayNumber}_${itemCursor}`,
+        dayNumber,
+        time,
+        title: place.name,
+        type,
+        transport: itemCursor === 1 ? transportLabel : transportLabel,
+        notes: chinese ? `安排停留 ${place.name}。` : `Visit ${place.name}.`,
+        source: "ai",
+        location: toLocation(place, `${destLabel} 建議停留點`),
+      });
+    };
+
+    if (dayPois[0]) {
+      pushPoi(dayPois[0], dayNumber === 1 ? "10:30" : "09:30");
+    }
+
+    const includeLunch =
+      request.days === 1 ||
+      dayNumber !== 1 ||
+      (request.days !== 3 && dayNumber !== request.days);
+    const includeDinner =
+      request.days === 1 ||
+      dayNumber !== request.days ||
+      (request.days === 2 && dayNumber === 1);
+
+    if (includeLunch) {
+      items.push(buildMealItem(dayNumber, "lunch", anchor, itemCursor));
+      itemCursor += 1;
+    }
+    if (dayPois[1]) {
+      pushPoi(dayPois[1], "14:30", "activity");
+    }
+    if (dayPois[2] && dayNumber !== request.days) {
+      pushPoi(dayPois[2], "16:30", "activity");
+    }
+    if (includeDinner) {
+      items.push(buildMealItem(dayNumber, "dinner", anchor || dayPois[1], itemCursor));
+    }
+
+    const themeNames = dayPois.map((place) => place.name).filter(Boolean);
     const dayTheme = chinese
-      ? cleanDayThemeLabel(`${uniqueStrings([morning.name, afternoon.name]).join("・")}`, true)
-      : cleanDayThemeLabel(`${morning.name} and ${afternoon.name} route`, false);
+      ? cleanDayThemeLabel(themeNames[0] || `${destLabel} 當日行程`, true)
+      : cleanDayThemeLabel(themeNames[0] || `${destLabel} daily plan`, false);
 
     return {
       dayNumber,
       theme: dayTheme,
       summary: chinese
-        ? `第 ${dayNumber} 天以 ${morning.name}、${afternoon.name} 和沿線餐食安排為主，保留午晚餐與散步節奏。`
-        : `Day ${dayNumber} focuses on ${morning.name}, ${afternoon.name}, and nearby meal stops.`,
-      items: [
-        {
-          id: `fallback_${dayNumber}_1`,
-          dayNumber,
-          time: "09:00",
-          title: morning.name,
-          type: "attraction",
-          transport: transportLabel,
-          notes: chinese
-            ? `上午先從 ${morning.name} 開始，方便銜接後續動線。`
-            : `Start the morning at ${morning.name} for a coherent route.`,
-          source: "ai",
-          location: toLocation(morning, `${request.destination} 建議上午停留點`),
-        },
-        {
-          id: `fallback_${dayNumber}_2`,
-          dayNumber,
-          time: "12:00",
-          title: lunch.name,
-          type: "restaurant",
-          transport: transportLabel,
-          notes: chinese
-            ? lunch.placeId?.startsWith("synthetic_")
-              ? `於 ${morning.name} 附近安排午餐。`
-              : `中午安排在 ${lunch.name} 用餐，保留休息時間。`
-            : lunch.placeId?.startsWith("synthetic_")
-              ? `Lunch near ${morning.name}.`
-              : `Lunch at ${lunch.name} with a short rest buffer.`,
-          source: "ai",
-          location: toLocation(lunch, `${request.destination} 建議午餐停留點`),
-        },
-        {
-          id: `fallback_${dayNumber}_3`,
-          dayNumber,
-          time: "15:00",
-          title: afternoon.name,
-          type: "activity",
-          transport: transportLabel,
-          notes: chinese
-            ? `下午接續 ${afternoon.name}，讓景點分布維持在同一條路線上。`
-            : `Continue to ${afternoon.name} in the afternoon to keep the route compact.`,
-          source: "ai",
-          location: toLocation(afternoon, `${request.destination} 建議下午停留點`),
-        },
-        {
-          id: `fallback_${dayNumber}_4`,
-          dayNumber,
-          time: "18:30",
-          title: dinner.name,
-          type: /夜景|viewpoint|stroll/i.test(dinner.name) ? "activity" : "restaurant",
-          transport: transportLabel,
-          notes: chinese
-            ? dinner.placeId?.startsWith("synthetic_")
-              ? `於 ${eveningAnchor.name} 附近安排晚餐與散步。`
-              : `晚餐與收尾安排放在 ${dinner.name}，方便串接夜間散步或回住宿。`
-            : dinner.placeId?.startsWith("synthetic_")
-              ? `Dinner and an evening walk near ${eveningAnchor.name}.`
-              : `Use ${dinner.name} as the evening stop before returning to the hotel.`,
-          source: "ai",
-          location: toLocation(dinner, `${request.destination} 建議晚餐停留點`),
-        },
-      ],
+        ? themeNames.length
+          ? `第 ${dayNumber} 天以 ${themeNames.join("、")} 為主。`
+          : `第 ${dayNumber} 天行程較精簡，建議補充想去的區域。`
+        : themeNames.length
+          ? `Day ${dayNumber} focuses on ${themeNames.join(", ")}.`
+          : `Day ${dayNumber} is a lighter route pending more place data.`,
+      items,
     };
   });
+
+  const warnings = researchInsufficient
+    ? [INSUFFICIENT_RESEARCH_TRAVEL_PLAN_WARNING, INSUFFICIENT_RESEARCH_WARNING]
+    : [];
 
   return {
     summary,
     days,
-    warnings: [],
+    warnings,
   };
 }
 
@@ -3294,63 +3300,79 @@ export async function generateTripPlan(
   let externalResearch = "";
   let researchSources: Record<string, ChatSource> = {};
   let researchPlaceHits: PlaceSearchHit[] = [];
-  const searchQuery = [
-    request.destination,
-    request.preferences.interests.join(" "),
-    request.preferences.mustVisit?.join(" ") || "",
-    request.preferences.notes || "",
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .trim();
-  const planSearchDecision = decideSearchIntent({
-    message: searchQuery,
-    context: {
-      destination: request.destination,
-      days: request.days,
-      budget: request.budget,
-      tripStartDate: request.tripStartDate,
-      tripEndDate: request.tripEndDate,
-      preferences: request.preferences,
-      itinerary: request.itineraryDraft,
-    },
+  const researchPlan = buildTripPlanResearchPlan(request);
+  const researchContext = {
+    destination: request.destination,
+    days: request.days,
+    budget: request.budget,
+    tripStartDate: request.tripStartDate,
+    tripEndDate: request.tripEndDate,
+    preferences: request.preferences,
+    itinerary: request.itineraryDraft,
+  };
+
+  publishProgressStep(progressSessionId, {
+    phase: "research",
+    label: "查詢地點候選",
+    detail: researchPlan.reason,
+    status: "running",
   });
-  const webSearch = await runWebSearch(searchQuery, serverConfig.aiWebSearchMaxResults, progressSessionId, {
-    decision: planSearchDecision,
-  });
-  if (planSearchDecision.shouldSearch) {
-    publishProgressStep(progressSessionId, {
-      phase: "research",
-      label: "查詢景點、交通與天氣",
-      detail: "這次需求需要近期外部資訊，正在查詢必要資料。",
-      status: "running",
-    });
-    try {
-      const reqs = buildTripPlanResearchRequests(request);
-      if (reqs.length) {
-        const digest = await executeTravelToolRequests(reqs, {
-          destination: request.destination,
-          days: request.days,
-          budget: request.budget,
-          tripStartDate: request.tripStartDate,
-          tripEndDate: request.tripEndDate,
-          preferences: request.preferences,
-          itinerary: request.itineraryDraft,
-        }, progressSessionId);
-        externalResearch = digest.text.trim();
-        researchSources = digest.sources;
-        researchPlaceHits = digest.placeHits;
-      }
-    } catch (error) {
-      console.warn("[trip-plan] research_failed", error);
-    }
-    publishProgressStep(progressSessionId, {
-      phase: "research",
-      label: "查詢景點、交通與天氣",
-      detail: "外部資料蒐集完成。",
-      status: "completed",
-    });
+
+  const emptyDigest = { text: "", placeHits: [] as PlaceSearchHit[], sources: {} as Record<string, ChatSource> };
+  const researchTasks: Promise<unknown>[] = [];
+  if (researchPlan.shouldResearch && researchPlan.toolRequests.length) {
+    researchTasks.push(
+      executeTravelToolRequests(researchPlan.toolRequests, researchContext, progressSessionId),
+    );
+  } else {
+    researchTasks.push(Promise.resolve(emptyDigest));
   }
+  for (const query of researchPlan.webSearchQueries) {
+    researchTasks.push(
+      runWebSearch(query, serverConfig.aiWebSearchMaxResults, progressSessionId, { skipIntentGate: true }),
+    );
+  }
+
+  const settled = await Promise.allSettled(researchTasks);
+  const webSearchBundles: WebSearchBundle[] = [];
+  for (const result of settled) {
+    if (result.status !== "fulfilled") {
+      console.warn("[trip-plan] research_failed", result.reason);
+      continue;
+    }
+    const value = result.value;
+    if (value && typeof value === "object" && "placeHits" in value) {
+      const digest = value as typeof emptyDigest;
+      externalResearch = [externalResearch, digest.text].filter(Boolean).join("\n\n").trim();
+      researchSources = mergeChatSources(researchSources, digest.sources);
+      researchPlaceHits = dedupePlaceHitsByName([...researchPlaceHits, ...digest.placeHits]);
+    } else if (value && typeof value === "object" && "digest" in value) {
+      webSearchBundles.push(value as WebSearchBundle);
+    }
+  }
+
+  const webSearch: WebSearchBundle = webSearchBundles.reduce<WebSearchBundle>(
+    (acc, bundle) => ({
+      digest: [acc.digest, bundle.digest].filter(Boolean).join("\n\n"),
+      results: [...acc.results, ...bundle.results],
+      warning: acc.warning || bundle.warning,
+    }),
+    { digest: "", results: [], warning: undefined },
+  );
+  if (webSearch.digest) {
+    externalResearch = [externalResearch, webSearch.digest].filter(Boolean).join("\n\n").trim();
+    researchSources = mergeChatSources(researchSources, normalizeWebSearchSources(webSearch.results));
+  }
+
+  publishProgressStep(progressSessionId, {
+    phase: "research",
+    label: "查詢地點候選",
+    detail: "外部資料蒐集完成。",
+    status: "completed",
+  });
+
+  const researchChars = (externalResearch + (webSearch.digest || "")).length;
+  const composeNumCtx = researchChars > 12_000 ? 32_768 : 16_384;
 
   const itineraryUserContent = buildItineraryPrompt(request, memoryContext, {
     externalResearch: externalResearch || undefined,
@@ -3373,7 +3395,7 @@ export async function generateTripPlan(
   let retryCount = 0;
   publishProgressStep(progressSessionId, {
     phase: "compose",
-    label: "整理每日路線與節奏",
+    label: "生成行程",
     detail: "正在根據查詢結果安排每日動線。",
     status: "running",
     provider: "ollama",
@@ -3383,7 +3405,7 @@ export async function generateTripPlan(
       format: tripPlanResultJsonSchema,
       task: "trip-plan",
       timeoutMs: TRIP_PLAN_COMPOSE_TIMEOUT_MS,
-      options: { temperature: 0, top_p: 0.9, num_ctx: 32_768 },
+      options: { temperature: 0, top_p: 0.9, num_ctx: composeNumCtx },
       messages: requestMessages,
     });
   } catch (error) {
@@ -3404,11 +3426,11 @@ export async function generateTripPlan(
   try {
     const parsed = parseTripPlanResponse(raw, request);
     assertTripPlanQualityWarnings(parsed.result.warnings);
-    assertTripPlanValidatorQuality(parsed.result, request);
+    assertTripPlanValidatorQuality(parsed.result, request, { researchPlaceHits });
     console.info(`[trip-plan] parse_mode=${parsed.diagnostics.parseMode} retry_count=${retryCount}`);
     publishProgressStep(progressSessionId, {
       phase: "compose",
-      label: "整理每日路線與節奏",
+      label: "驗證行程",
       detail: "每日動線整理完成。",
       status: "completed",
       provider: "ollama",
@@ -3444,7 +3466,7 @@ export async function generateTripPlan(
         format: tripPlanResultJsonSchema,
         task: "trip-plan",
         timeoutMs: TRIP_PLAN_COMPOSE_TIMEOUT_MS,
-        options: { temperature: 0, top_p: 0.9, num_ctx: 32_768 },
+        options: { temperature: 0, top_p: 0.9, num_ctx: composeNumCtx },
         messages: [
           requestMessages[0],
           {
@@ -3475,7 +3497,7 @@ export async function generateTripPlan(
     try {
       const parsed = parseTripPlanResponse(retriedRaw, request);
       assertTripPlanQualityWarnings(parsed.result.warnings);
-      assertTripPlanValidatorQuality(parsed.result, request);
+      assertTripPlanValidatorQuality(parsed.result, request, { researchPlaceHits });
       if (parsed.diagnostics.parseMode === "normalized") {
         console.info("[trip-plan] normalized");
       }
@@ -3818,7 +3840,7 @@ export async function chatWithTravelAssistant(input: {
   const composeOllamaBase = {
     task: "travel-chat" as const,
     timeoutMs: perRoundTimeout,
-    options: { temperature: 0, top_p: 0.9, num_ctx: 16_384 },
+    options: { temperature: 0, top_p: 0.9, num_ctx: 12_288 },
     messages: composeMessages,
   };
 

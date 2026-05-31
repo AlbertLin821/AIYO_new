@@ -89,7 +89,7 @@ import { useToastStore } from "@/stores/useToastStore";
 import { useMapStore } from "@/stores/useMapStore";
 import { useTripStore } from "@/stores/useTripStore";
 import { useUserStore } from "@/stores/useUserStore";
-import { useVideoStore } from "@/stores/useVideoStore";
+import { useVideoStore, type VideoState } from "@/stores/useVideoStore";
 import type { SourceReference } from "@/lib/types/sources";
 import type {
   AiProposedChange,
@@ -413,8 +413,8 @@ export default function ChatPage() {
   const tripStore = useTripStore();
   const userStore = useUserStore();
   const pushToast = useToastStore((state) => state.pushToast);
-  const setSummaryDiagnostics = useVideoStore((state) => state.setSummaryDiagnostics);
-  const setIsSummarizing = useVideoStore((state) => state.setIsSummarizing);
+  const setSummaryDiagnostics = useVideoStore((state: VideoState) => state.setSummaryDiagnostics);
+  const setIsSummarizing = useVideoStore((state: VideoState) => state.setIsSummarizing);
 
   useEffect(() => {
     return () => {
@@ -488,10 +488,11 @@ export default function ChatPage() {
       });
       return;
     }
-    if (last.statusSteps?.length) {
+    const statusSteps = last.statusSteps;
+    if (statusSteps?.length) {
       setWorkflowRail((prev) => ({
         visible: true,
-        steps: last.statusSteps,
+        steps: statusSteps,
         tripProfile: last.tripProfile ?? tripProfile,
         questionMessageId: prev.questionMessageId,
         preferenceConfirmation:

@@ -44,9 +44,8 @@ test("validateTripPlanQuality reports chronological and title quality issues", (
 
   const issues = validateTripPlanQuality(plan, makeRequest());
 
-  assert.ok(issues.some((issue) => issue.message.includes("4 to 7")));
   assert.ok(issues.some((issue) => issue.message.includes("chronological")));
-  assert.ok(issues.some((issue) => issue.message.includes("one searchable place")));
+  assert.ok(issues.some((issue) => issue.message.includes("multi_place")));
   assert.ok(issues.some((issue) => issue.message.includes("Avoid term")));
   assert.ok(issues.some((issue) => issue.message.includes("coordinates")));
 });

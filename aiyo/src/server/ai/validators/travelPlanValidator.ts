@@ -1,30 +1,17 @@
-import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
+import {
+  validateItineraryQuality,
+  type ItineraryQualityIssue,
+} from "@/server/ai/planning/itineraryQualityValidator";
 import {
   TravelPlanResponseSchema,
   TripPlanResultSchema,
 } from "@/server/ai/schemas/travelPlanningSchemas";
 import type { TravelPlanResponse, TripPlanRequest, TripPlanResult } from "@/types";
 
-export type TravelPlanValidationIssue = {
-  path: string;
-  message: string;
-};
+export type TravelPlanValidationIssue = ItineraryQualityIssue;
 
 function issue(path: string, message: string): TravelPlanValidationIssue {
   return { path, message };
-}
-
-function minutesFromTime(value: string): number | null {
-  const match = value.match(/^(\d{2}):(\d{2})$/);
-  if (!match) {
-    return null;
-  }
-  const hour = Number(match[1]);
-  const minute = Number(match[2]);
-  if (hour > 23 || minute > 59) {
-    return null;
-  }
-  return hour * 60 + minute;
 }
 
 export function validateTripPlanResultShape(value: unknown): {
@@ -55,53 +42,17 @@ export function validateTravelPlanResponseShape(value: unknown): {
 
 export function validateTripPlanQuality(
   plan: TripPlanResult,
-  request?: Pick<TripPlanRequest, "days" | "preferences">,
+  request?: Pick<TripPlanRequest, "days" | "preferences" | "destination">,
 ): TravelPlanValidationIssue[] {
-  const issues: TravelPlanValidationIssue[] = [];
-
-  if (request?.days && plan.days.length !== request.days) {
-    issues.push(issue("days", `Expected ${request.days} days but got ${plan.days.length}.`));
+  if (!request?.days) {
+    return [];
   }
-
-  plan.days.forEach((day, dayIndex) => {
-    if (day.items.length < 4 || day.items.length > 7) {
-      issues.push(issue(`days.${dayIndex}.items`, "Each day should contain 4 to 7 itinerary items."));
-    }
-
-    let previousMinutes = -1;
-    day.items.forEach((item, itemIndex) => {
-      const currentMinutes = minutesFromTime(item.time);
-      if (currentMinutes === null) {
-        issues.push(issue(`days.${dayIndex}.items.${itemIndex}.time`, "Item time must be HH:MM."));
-      } else if (currentMinutes < previousMinutes) {
-        issues.push(issue(`days.${dayIndex}.items.${itemIndex}.time`, "Item times must be chronological."));
-      }
-      previousMinutes = currentMinutes ?? previousMinutes;
-
-      if (/[・、,/／]|周邊(?:午餐|晚餐)|(?:午餐|晚餐)與散步/u.test(item.title)) {
-        issues.push(
-          issue(
-            `days.${dayIndex}.items.${itemIndex}.title`,
-            "Item title must be one searchable place or venue name.",
-          ),
-        );
-      }
-
-      if (item.location && !hasUsableMapCoordinate(item.location)) {
-        issues.push(issue(`days.${dayIndex}.items.${itemIndex}.location`, "Location coordinates must be usable."));
-      }
-
-      const avoidTerms = request?.preferences.avoid || [];
-      const pollutedAvoid = avoidTerms.find(
-        (term) => term && `${item.title} ${item.notes || ""} ${item.location?.name || ""}`.includes(term),
-      );
-      if (pollutedAvoid) {
-        issues.push(issue(`days.${dayIndex}.items.${itemIndex}`, `Avoid term appeared: ${pollutedAvoid}.`));
-      }
-    });
-  });
-
-  return issues;
+  const fullRequest = {
+    destination: request.destination || "",
+    days: request.days,
+    preferences: request.preferences || { interests: [], pace: "moderate", transportPreference: "public_transport" },
+  } satisfies TripPlanRequest;
+  return validateItineraryQuality(plan, fullRequest);
 }
 
 function collectCitationIssues(

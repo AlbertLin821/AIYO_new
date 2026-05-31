@@ -25,7 +25,7 @@ test("buildItineraryPrompt includes layered constraints and memory context", () 
   assert.match(prompt, /Must visit: 神農街/);
   assert.match(prompt, /Avoid: 酒吧/);
   assert.match(prompt, /TITLE & LOCATION RULES/);
-  assert.match(prompt, /NEVER prefix item titles with interest/);
+  assert.match(prompt, /never as title prefixes/);
 });
 
 test("buildItineraryPrompt strict-format mode adds strict retry instructions", () => {

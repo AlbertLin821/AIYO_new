@@ -24,6 +24,7 @@ test("search decision keeps planning and general advice offline", () => {
   assert.equal(decideSearchIntent({ message: "你好" }).shouldSearch, false);
   assert.equal(decideSearchIntent({ message: "我想去東京玩三天" }).shouldSearch, false);
   assert.equal(decideSearchIntent({ message: "你覺得東京適合第一次自由行嗎" }).shouldSearch, false);
+  assert.equal(decideSearchIntent({ message: "大阪適合第一次自由行嗎？" }).shouldSearch, false);
 });
 
 test("search decision classifies fresh travel needs", () => {
@@ -42,6 +43,11 @@ test("search decision classifies fresh travel needs", () => {
   assert.equal(transportation.shouldSearch, true);
   assert.equal(transportation.searchNeed, "transportation");
   assert.deepEqual(transportation.providers, ["serper", "tavily"]);
+
+  const usjOpening = decideSearchIntent({ message: "大阪環球影城今天營業到幾點？" });
+  assert.equal(usjOpening.shouldSearch, true);
+  assert.equal(usjOpening.searchNeed, "opening_hours");
+  assert.match(usjOpening.query || "", /大阪環球影城/);
 });
 
 test("travel search context caps and formats safe prompt results", () => {

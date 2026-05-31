@@ -45,7 +45,7 @@ import { createNewTrip, listTripsForLibrary, setActiveTrip } from "@/services/it
 import { syncService } from "@/services/syncService";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
-import { useVideoStore, type SummaryDiagnostics } from "@/stores/useVideoStore";
+import { useVideoStore, type SummaryDiagnostics, type VideoState } from "@/stores/useVideoStore";
 import YoutubeIframePlayer from "@/components/home/YoutubeIframePlayer";
 import PlanningWaitGame from "@/components/chat/PlanningWaitGame";
 
@@ -156,8 +156,8 @@ export default function VideoSummaryDrawer({
 }: VideoSummaryDrawerProps) {
   const router = useRouter();
   const { status: sessionStatus } = useSession();
-  const summaryDiagnostics = useVideoStore((state) => state.summaryDiagnostics);
-  const isSummarizing = useVideoStore((state) => state.isSummarizing);
+  const summaryDiagnostics = useVideoStore((state: VideoState) => state.summaryDiagnostics);
+  const isSummarizing = useVideoStore((state: VideoState) => state.isSummarizing);
   const pushToast = useToastStore((state) => state.pushToast);
   const [toast, setToast] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);

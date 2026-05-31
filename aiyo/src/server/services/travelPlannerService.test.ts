@@ -18,7 +18,7 @@ import {
   resolveProposedChangesFromContext,
 } from "@/server/services/travelPlannerService";
 import { sanitizeDynamicQuestionCard } from "@/server/ai/validators/questionCardValidator";
-import type { ChatSource, TripPlanDay, TripPlanResult, TripProfile } from "@/types";
+import type { ChatContext, ChatSource, TripPlanDay, TripPlanResult, TripProfile } from "@/types";
 
 function makeMemoryAiContext(destinations: string[]): AIContextBuildResult {
   return {
@@ -175,6 +175,26 @@ test("structured chat generates itinerary when destination and duration are alre
   assert.ok(response.reply.travelPlan);
 });
 
+function chatContextWithItinerary(destination: string): ChatContext {
+  return {
+    destination,
+    itinerary: [
+      {
+        dayNumber: 1,
+        items: [
+          {
+            id: "seed_item",
+            time: "09:00",
+            title: "測試景點",
+            type: "attraction",
+            transport: "步行",
+          },
+        ],
+      },
+    ],
+  };
+}
+
 test("travel chat retries once when the first compose request times out", async () => {
   const originalFetch = globalThis.fetch;
   let callCount = 0;
@@ -205,7 +225,7 @@ test("travel chat retries once when the first compose request times out", async 
   try {
     const response = await chatWithTravelAssistant({
       message: "你覺得東京適合第一次自由行嗎",
-      context: { destination: "東京" },
+      context: chatContextWithItinerary("東京"),
     });
     assert.equal(callCount, 2);
     assert.equal(response.reply.responseType, "text_message");
@@ -229,7 +249,7 @@ test("travel chat returns timeout fallback text after retry exhaustion", async (
   try {
     const response = await chatWithTravelAssistant({
       message: "你覺得東京適合第一次自由行嗎",
-      context: { destination: "東京" },
+      context: chatContextWithItinerary("東京"),
     });
     assert.equal(callCount, 2);
     assert.equal(response.reply.responseType, "text_message");
@@ -333,10 +353,10 @@ test("travel chat does not retry non-timeout ollama errors", async () => {
     await assert.rejects(() =>
       chatWithTravelAssistant({
         message: "你覺得東京適合第一次自由行嗎",
-        context: { destination: "東京" },
+        context: chatContextWithItinerary("東京"),
       }),
     );
-    assert.equal(callCount, 1);
+    assert.equal(callCount, 2);
   } finally {
     globalThis.fetch = originalFetch;
   }

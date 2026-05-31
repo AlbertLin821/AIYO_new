@@ -1,3 +1,6 @@
+import type { TripPlanResearchPlan } from "@/server/ai/planning/tripPlanResearchPolicy";
+import { buildTripPlanResearchPlan, shouldLoadSupplementarySources } from "@/server/ai/planning/tripPlanResearchPolicy";
+import { serverConfig } from "@/server/config";
 import type {
   ChatContext,
   ChatQuestionAnswer,
@@ -47,7 +50,12 @@ export type StructuredTripWorkflowDependencies = {
   buildPlanningStatusSteps(): StatusStepPayload[];
   profileToTripPlanRequest(profile: TripProfile, context?: ChatContext): TripPlanRequest;
   generateTripPlan(request: TripPlanRequest, memoryContext?: string, progressSessionId?: string): Promise<GeneratedTripPlan>;
-  loadSupplementarySources(profile: TripProfile, progressSessionId?: string): Promise<Record<string, ChatSource>>;
+  loadSupplementarySources: (
+    profile: TripProfile,
+    progressSessionId: string | undefined,
+    generated: GeneratedTripPlan,
+    researchPlan?: TripPlanResearchPlan,
+  ) => Promise<Record<string, ChatSource>>;
   mergeSources(
     primary: Record<string, ChatSource>,
     supplementary: Record<string, ChatSource>,
@@ -146,7 +154,15 @@ export async function runStructuredTripWorkflow(
   });
 
   const generated = await deps.generateTripPlan(request, input.memoryContext, input.progressSessionId);
-  const supplementarySources = await deps.loadSupplementarySources(profile, input.progressSessionId);
+  const researchPlan = buildTripPlanResearchPlan(request);
+  const supplementarySources = (await shouldLoadSupplementarySources({
+    generatedSourceCount: Object.keys(generated.sources).length,
+    freshnessRequired: researchPlan.freshnessRequired,
+    profileNotes: profile.notes,
+    requireCitations: serverConfig.aiWebSearchRequireCitations,
+  }))
+    ? await deps.loadSupplementarySources(profile, input.progressSessionId, generated, researchPlan)
+    : {};
   const sourceDictionary = deps.mergeSources(generated.sources, supplementarySources);
   if (Object.keys(sourceDictionary).length > 0) {
     deps.registerSources(sourceDictionary);

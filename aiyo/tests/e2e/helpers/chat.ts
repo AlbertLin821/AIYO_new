@@ -96,6 +96,8 @@ export type SendChatMessageOptions = {
   };
   chatTimeoutMs?: number;
   retryOnFailure?: boolean;
+  /** Force structured travel planning flag on POST /api/ai/chat (UI usually infers this). */
+  structuredTravelPlanning?: boolean;
 };
 
 function tripPutResponseMatchesDayOrder(
@@ -158,14 +160,47 @@ export type SendChatMessageResult = {
   firstFailure?: { status: number; bodyPreview: string };
 };
 
+async function withStructuredTravelPlanningRoute<T>(
+  page: Page,
+  enabled: boolean,
+  run: () => Promise<T>,
+): Promise<T> {
+  if (!enabled) {
+    return run();
+  }
+  const handler = async (route: import("@playwright/test").Route) => {
+    if (route.request().method() !== "POST" || !route.request().url().includes("/api/ai/chat")) {
+      await route.continue();
+      return;
+    }
+    const postData = route.request().postDataJSON() as Record<string, unknown>;
+    postData.structuredTravelPlanning = true;
+    await route.continue({ postData: JSON.stringify(postData) });
+  };
+  await page.route("**/api/ai/chat", handler);
+  try {
+    return await run();
+  } finally {
+    await page.unroute("**/api/ai/chat", handler);
+  }
+}
+
 async function sendChatMessageOnce(
   page: Page,
   message: string,
   chatTimeoutMs: number,
   options?: SendChatMessageOptions,
 ): Promise<{ response: Response; payload?: ChatApiPayload }> {
+  return withStructuredTravelPlanningRoute(page, Boolean(options?.structuredTravelPlanning), async () => {
   const chatInput = page.getByTestId("chat-input");
   await expect(chatInput).toBeVisible({ timeout: 40_000 });
+
+  const stopButton = page.getByTestId("chat-stop-button");
+  if (await stopButton.isVisible().catch(() => false)) {
+    await stopButton.click();
+    await expect(page.getByTestId("chat-send-button")).toBeVisible({ timeout: 30_000 });
+  }
+
   await chatInput.click();
   await chatInput.fill(message);
   await expect(page.getByTestId("chat-send-button")).toBeEnabled({ timeout: 20_000 });
@@ -208,6 +243,7 @@ async function sendChatMessageOnce(
   }
 
   return { response: chatRes, payload };
+  });
 }
 
 export async function sendChatMessage(

@@ -24,6 +24,7 @@
     "test:e2e:phase7": "playwright test tests/e2e/phase7-travel-agent-flow.spec.ts",
     "test:e2e:phase8": "playwright test tests/e2e/phase7-travel-agent-flow.spec.ts -g \"F–H|J\\.|K\\.\"",
     "test:e2e:live-ai": "playwright test tests/e2e/live-ai-generalization.spec.ts",
+    "test:e2e:live-ai:itinerary": "playwright test tests/e2e/live-ai-itinerary-conversation.spec.ts",
     "test:e2e:live-ai:ef": "playwright test tests/e2e/live-ai-generalization.spec.ts -g \"E\\.|F\\.\"",
     "e2e:full-qa": "playwright test tests/e2e/full-user-travel-flow.spec.ts tests/e2e/video-summary-map-quality.spec.ts tests/e2e/itinerary-editor-flow.spec.ts --trace on",
     "e2e:ui": "playwright test --ui",

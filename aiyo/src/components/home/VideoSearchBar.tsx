@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { zhTW as t } from "@/locales/zh-TW";
 import { useTripStore } from "@/stores/useTripStore";
 import { useToastStore } from "@/stores/useToastStore";
-import { useVideoStore } from "@/stores/useVideoStore";
+import { useVideoStore, type VideoState } from "@/stores/useVideoStore";
 import { summarizeVideo } from "@/services/videoClient";
 
 export type VideoSearchBarMode = "video" | "itinerary";
@@ -39,7 +39,7 @@ const VideoSearchBar = forwardRef<HTMLInputElement, VideoSearchBarProps>(functio
 
   const tripDestination = useTripStore((state) => state.destination);
   const pushToast = useToastStore((state) => state.pushToast);
-  const searchBarResetNonce = useVideoStore((state) => state.searchBarResetNonce);
+  const searchBarResetNonce = useVideoStore((state: VideoState) => state.searchBarResetNonce);
   const {
     isSearching,
     isSummarizing,
@@ -53,7 +53,7 @@ const VideoSearchBar = forwardRef<HTMLInputElement, VideoSearchBarProps>(functio
     setRecommendationSource,
     setLastRecommendationRequest,
     setSummaryDiagnostics,
-  } = useVideoStore();
+  } = useVideoStore() as VideoState;
 
   useEffect(() => {
     if (searchBarResetNonce > 0) {

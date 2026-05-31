@@ -39,7 +39,7 @@ export type VideoRecommendationRequest = {
   limit?: number;
 };
 
-interface VideoState {
+export interface VideoState {
   videos: VideoRecommendation[];
   selectedVideo: VideoRecommendation | null;
   searchQuery: string;

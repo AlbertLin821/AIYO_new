@@ -166,6 +166,7 @@ async function main() {
 
   async function checkItineraryScopeFilter() {
     const plan: TripPlanResult = {
+      summary: "日本範圍過濾驗證",
       days: [
         {
           dayNumber: 1,

@@ -240,7 +240,15 @@ function hasTemplatePollution(value: string | undefined): boolean {
     normalized.includes("回答晚餐與散步") ||
     normalized.includes("ai 模型輸出格式異常") ||
     normalized.includes("已改用保底行程模板") ||
-    normalized.includes("目前無法連線到搜尋服務")
+    normalized.includes("目前無法連線到搜尋服務") ||
+    normalized.includes("代表性景點") ||
+    normalized.includes("文化體驗") ||
+    normalized.includes("特色街區") ||
+    normalized.includes("在地美食") ||
+    normalized.includes("夜景或河岸") ||
+    normalized.includes("landmark") ||
+    normalized.includes("cultural stop") ||
+    normalized.includes("neighborhood walk")
   ) {
     return true;
   }

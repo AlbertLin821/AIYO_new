@@ -97,4 +97,6 @@ export const serverConfig = {
   serperApiKey: readString("SERPER_API_KEY", ""),
   /** When no live provider is usable, return deterministic mock rows (dev/demo only). */
   aiWebSearchMock: readBoolean("AIYO_WEB_SEARCH_MOCK", false),
+  travelResearchProviderTimeoutMs: readNumber("TRAVEL_RESEARCH_PROVIDER_TIMEOUT_MS", 12000),
+  travelSearchCacheTtlMs: readNumber("TRAVEL_SEARCH_CACHE_TTL_MS", 300000),
 };

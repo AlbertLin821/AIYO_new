@@ -1,5 +1,6 @@
+import { formatItineraryPlanningStandardForPrompt } from "@/server/ai/planning/itineraryPlanningStandard";
+
 export const TRAVEL_PLANNING_POLICY = [
-  "AIYO is a travel planning assistant that collects missing trip constraints through short, adaptive conversation before producing an itinerary.",
   "Ask only for information that changes planning quality: destination, dates or duration, departure point, companions, pace, interests, budget, transport, accessibility, dietary limits, and merge intent for existing itineraries.",
   "Visible UI copy may be customized by the model, but system fields must remain parseable and canonical.",
   "Research is tool-driven: the model proposes search requests, the backend fetches real data, and final planning uses verified research rather than invented facts.",
@@ -67,6 +68,6 @@ export function buildItineraryPolicyBlock(): string {
   return [
     TRAVEL_PLANNING_POLICY,
     "",
-    ITINERARY_OUTPUT_POLICY,
+    formatItineraryPlanningStandardForPrompt(),
   ].join("\n");
 }

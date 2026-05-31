@@ -1,34 +1,41 @@
-import { describe, expect, it } from "vitest";
+import assert from "node:assert/strict";
+import test from "node:test";
+
 import {
   buildMapLabelStyles,
   DEFAULT_MAP_LABEL_VISIBILITY,
   normalizeMapLabelVisibility,
 } from "./mapLabelStyles";
 
-describe("buildMapLabelStyles", () => {
-  it("returns no rules when all labels visible", () => {
-    expect(buildMapLabelStyles(DEFAULT_MAP_LABEL_VISIBILITY)).toEqual([]);
-  });
-
-  it("hides highway labels when highway toggle off", () => {
-    const rules = buildMapLabelStyles({ ...DEFAULT_MAP_LABEL_VISIBILITY, highway: false });
-    expect(rules.some((rule) => rule.featureType === "road.highway")).toBe(true);
-  });
-
-  it("hides arterial and local labels when road toggle off", () => {
-    const rules = buildMapLabelStyles({ ...DEFAULT_MAP_LABEL_VISIBILITY, road: false });
-    expect(rules.some((rule) => rule.featureType === "road.arterial")).toBe(true);
-    expect(rules.some((rule) => rule.featureType === "road.local")).toBe(true);
-  });
+test("buildMapLabelStyles returns no rules when all labels visible", () => {
+  assert.deepEqual(buildMapLabelStyles(DEFAULT_MAP_LABEL_VISIBILITY), []);
 });
 
-describe("normalizeMapLabelVisibility", () => {
-  it("defaults missing keys to visible", () => {
-    expect(normalizeMapLabelVisibility({ highway: false })).toEqual({
-      highway: false,
-      road: true,
-      poi: true,
-      administrative: true,
-    });
+test("buildMapLabelStyles hides highway labels when highway toggle off", () => {
+  const rules = buildMapLabelStyles({ ...DEFAULT_MAP_LABEL_VISIBILITY, highway: false });
+  assert.equal(
+    rules.some((rule) => rule.featureType === "road.highway"),
+    true,
+  );
+});
+
+test("buildMapLabelStyles hides arterial and local labels when road toggle off", () => {
+  const rules = buildMapLabelStyles({ ...DEFAULT_MAP_LABEL_VISIBILITY, road: false });
+  assert.equal(
+    rules.some((rule) => rule.featureType === "road.arterial"),
+    true,
+  );
+  assert.equal(
+    rules.some((rule) => rule.featureType === "road.local"),
+    true,
+  );
+});
+
+test("normalizeMapLabelVisibility defaults missing keys to visible", () => {
+  assert.deepEqual(normalizeMapLabelVisibility({ highway: false }), {
+    highway: false,
+    road: true,
+    poi: true,
+    administrative: true,
   });
 });

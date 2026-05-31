@@ -41,7 +41,7 @@ import {
 } from "@/services/videoClient";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
-import { useVideoStore } from "@/stores/useVideoStore";
+import { useVideoStore, type VideoState } from "@/stores/useVideoStore";
 import type { VideoRecommendation } from "@/types";
 
 const VideoSummaryDrawer = dynamic(() => import("@/components/home/VideoSummaryDrawer"), {
@@ -202,7 +202,7 @@ export default function HomePage() {
     setErrorMessage,
     setSearchQuery,
     bumpSearchBarReset,
-  } = useVideoStore();
+  } = useVideoStore() as VideoState;
   const tripDestination = useTripStore((state) => state.destination);
   const tripDays = useTripStore((state) => state.days);
   const pushToast = useToastStore((state) => state.pushToast);
@@ -689,7 +689,9 @@ export default function HomePage() {
       const processId = startFrontendDebugProcess("home-video-resume", "登入後恢復影片匯入前摘要", {
         videoId: pending.videoId,
       });
-      const fromList = useVideoStore.getState().videos.find((v) => v.videoId === pending.videoId);
+      const fromList = useVideoStore
+        .getState()
+        .videos.find((v: VideoRecommendation) => v.videoId === pending.videoId);
       if (fromList) {
         updateFrontendDebugProcess(processId, "video-found-in-store", {
           title: fromList.title,

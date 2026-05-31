@@ -102,6 +102,27 @@ export async function clearE2EOwnerLiveAiState() {
   await prisma.$disconnect();
 }
 
+/** Clear stored planning prefs so Live generation skips preference-reuse gate. */
+export async function resetE2EOwnerPlanningProfile() {
+  const owner = await prisma.user.findUnique({
+    where: { email: E2E_OWNER.email },
+    select: { id: true },
+  });
+  if (!owner) {
+    await prisma.$disconnect();
+    return;
+  }
+  await prisma.profile.update({
+    where: { userId: owner.id },
+    data: {
+      destination: null,
+      budget: null,
+      preferences: {},
+    },
+  });
+  await prisma.$disconnect();
+}
+
 export async function seedAuthUsers() {
   await resetE2EData();
   const passwordHash = await bcrypt.hash(TEST_PASSWORD, 10);
