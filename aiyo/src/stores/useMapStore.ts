@@ -5,9 +5,9 @@ import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
 import type { MapPin } from "@/types";
 
 export type PendingMapPoi = {
-  placeId: string;
-  lat?: number;
-  lng?: number;
+  placeId?: string;
+  lat: number;
+  lng: number;
 };
 
 export type MapFocusLocation = {

@@ -98,6 +98,34 @@ test("structured preferences trigger natural confirmation copy", () => {
   assert.doesNotMatch(decision.userFacingGuidance || "", /user_id|provider|debug/);
 });
 
+test("東京三天 with stale 台南 profile prefers 東京 in confirm copy", () => {
+  const decision = decideTravelAgentMode({
+    message: "東京三天",
+    context: { destination: "台南", days: 3 },
+    tripProfile: {
+      destination: "台南",
+      duration_days: 3,
+      budget: null,
+      companions: null,
+      traveler_count: null,
+      transportation: null,
+      pace: null,
+      preferences: [],
+      avoid_places: [],
+      notes: null,
+    },
+    aiContext: makeAiContext({
+      budgetLevel: "medium",
+      travelStyle: ["美食", "古蹟"],
+      destination: "台南",
+    }),
+  });
+
+  assert.equal(decision.mode, "confirm_preferences");
+  assert.match(decision.preferenceConfirmation?.prompt || "", /東京/);
+  assert.doesNotMatch(decision.preferenceConfirmation?.prompt || "", /台南/);
+});
+
 test("reuse preference follow-up can generate with relaxed pace", () => {
   const decision = decideTravelAgentMode({
     message: "沿用，排輕鬆一點",

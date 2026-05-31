@@ -31,7 +31,7 @@ export function MapPinMarker({
 }: MapPinMarkerProps) {
   const reactId = useId();
   const maskId = `map-pin-mask-${reactId.replace(/:/g, "")}`;
-  const strokeW = selected ? 2.75 : 2;
+  const strokeW = selected ? 3 : 2.5;
   const baseW = selected ? 40 : 34;
   const baseH = Math.round((MAP_PIN_VIEWBOX_H / MAP_PIN_VIEWBOX_W) * baseW);
 
@@ -49,8 +49,10 @@ export function MapPinMarker({
         role={decorative ? undefined : "img"}
         style={{
           overflow: "visible",
-          filter: "drop-shadow(0 2px 4px rgba(0,0,0,.3))",
-          transform: selected ? "scale(1.08)" : undefined,
+          filter: selected
+            ? `drop-shadow(0 0 8px ${fill}) drop-shadow(0 0 4px rgba(255,255,255,0.95)) drop-shadow(0 3px 10px rgba(0,0,0,0.5))`
+            : "drop-shadow(0 0 3px rgba(255,255,255,0.9)) drop-shadow(0 2px 6px rgba(0,0,0,0.45))",
+          transform: selected ? "scale(1.12)" : undefined,
           transformOrigin: "50% 100%",
         }}
       >
@@ -61,6 +63,20 @@ export function MapPinMarker({
             <circle cx="24" cy="20" r="7.75" fill="black" />
           </mask>
         </defs>
+        <path
+          fill="none"
+          stroke="#ffffff"
+          strokeWidth={selected ? 6 : 5}
+          strokeLinejoin="round"
+          d={MAP_PIN_OUTER_PATH}
+        />
+        <path
+          fill="none"
+          stroke={selected ? "#0f172a" : "#1e293b"}
+          strokeWidth={selected ? 4 : 3.25}
+          strokeLinejoin="round"
+          d={MAP_PIN_OUTER_PATH}
+        />
         <path
           fill={fill}
           stroke="#ffffff"

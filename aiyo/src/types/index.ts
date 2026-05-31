@@ -897,6 +897,7 @@ export interface TripPlanResponse {
 
 export interface GeocodeApiResult {
   query: string;
+  name?: string;
   formattedAddress: string;
   lat: number;
   lng: number;

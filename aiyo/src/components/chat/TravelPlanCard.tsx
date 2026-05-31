@@ -111,10 +111,8 @@ export default function TravelPlanCard({
           <TravelPlanDayAccordion
             key={day.day}
             day={{ ...day, theme: cleanThemeLabel(day.theme) }}
-            sources={sources}
             expanded={Boolean(expandedDays[day.day])}
             onToggle={() => setExpandedDays((prev) => ({ ...prev, [day.day]: !prev[day.day] }))}
-            onOpenGroundedDetail={onOpenGroundedSource}
           />
         ))}
       </div>

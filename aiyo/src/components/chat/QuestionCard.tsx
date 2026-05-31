@@ -203,24 +203,20 @@ export default function QuestionCard({
     return isAnswered(question, value);
   });
 
+  const cardLabel =
+    card.questions.find((question) => question.question.trim())?.question ||
+    card.title ||
+    "請回答以下問題";
+
   return (
     <div
       className={cn(
         "w-full space-y-4 rounded-3xl border-2 bg-slate-50 p-4",
         locked ? "border-slate-200" : "question-card-attention border-primary/30",
       )}
-      aria-label={card.title}
+      aria-label={cardLabel}
       data-submitted={locked ? "true" : "false"}
     >
-      <div className="space-y-1">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
-          {card.eyebrow || "AI 動態提問"}
-        </p>
-        <h3 className="text-sm font-semibold leading-relaxed text-slate-900">{card.title}</h3>
-        {card.description ? (
-          <p className="text-xs leading-relaxed text-slate-600">{card.description}</p>
-        ) : null}
-      </div>
       <div className="space-y-4">
         {card.questions.map((question) => (
           <div key={question.slot} className="space-y-2">

@@ -49,7 +49,7 @@ import { parseTripPlanResponse, StructuredOutputError } from "@/server/ai/respon
 import { isUsableMapCoordinate } from "@/lib/geoCoordinates";
 import { enrichChatContextWithDestinationScope } from "@/lib/tripDestinationScope";
 import { resolveTripDestinationScopeWithGeocode } from "@/server/places/resolveTripDestinationScope";
-import { inferPlanningUpdateFromTexts } from "@/lib/tripPlanningSignals";
+import { extractDestinationFromPlanningText, inferPlanningUpdateFromTexts } from "@/lib/tripPlanningSignals";
 import { filterTripPlanByDestinationScope } from "@/server/services/filterTripPlanByDestinationScope";
 import {
   assistantActionToLegacyProposedChange,
@@ -187,6 +187,14 @@ function buildGuidedTravelAgentResponse(
     message: input.message,
     messages: input.messages,
   });
+
+  if (decision.mode === "confirm_preferences") {
+    return {
+      ...buildNaturalTravelAgentResponse(decision),
+      tripProfile: mergedProfile,
+    };
+  }
+
   const followUpCard = buildQuestionCard(mergedProfile, input.context);
 
   if (!followUpCard) {
@@ -1012,8 +1020,13 @@ function updateTripProfileFromText(profile: TripProfile, message: string): TripP
 
   const destination =
     message.match(/(?:想去|我要去|我想去|要去|去|到)\s*([^，。,\s]+?)(?:了|玩|旅遊|旅行|自由行|行程|[一二兩三四五六七八九十\d]+\s*天|$)/u)?.[1] ||
-    message.match(/^([^，。,\s]{2,12})(?:旅遊|旅行|自由行|行程)/u)?.[1];
-  if (destination && !/哪裡|哪邊|幾天|多久/u.test(destination)) {
+    message.match(/^([^，。,\s]{2,12})(?:旅遊|旅行|自由行|行程)/u)?.[1] ||
+    extractDestinationFromPlanningText(message);
+  if (
+    destination &&
+    !/哪裡|哪邊|幾天|多久/u.test(destination) &&
+    isPlausibleDestinationLabel(destination)
+  ) {
     next.destination = normalizeDestinationLabel(destination.trim());
   }
 
@@ -1251,6 +1264,20 @@ function buildTransportOptions(destination: string): Array<{
   ];
 }
 
+function isPlausibleDestinationLabel(label: string): boolean {
+  const trimmed = label.trim();
+  if (!trimmed || trimmed.length < 2) {
+    return false;
+  }
+  if (/[？?：:（）()]/.test(trimmed)) {
+    return false;
+  }
+  if (/^(兩人|一人|三人|四人|五人|伴侶|朋友|家人|情侶)/u.test(trimmed)) {
+    return false;
+  }
+  return true;
+}
+
 function mergeTripProfileWithContext(
   profile: TripProfile | undefined,
   context?: ChatContext,
@@ -1275,14 +1302,25 @@ function mergeTripProfileWithContext(
       extraTexts: options?.replyText ? [options.replyText] : undefined,
     }),
   );
+  const messageInferred = options?.message
+    ? inferPlanningUpdateFromTexts([options.message])
+    : ({} as ReturnType<typeof inferPlanningUpdateFromTexts>);
+  const activeDestination =
+    messageInferred.destination && isPlausibleDestinationLabel(messageInferred.destination)
+      ? normalizeDestinationLabel(messageInferred.destination)
+      : inferred.destination && isPlausibleDestinationLabel(inferred.destination)
+        ? normalizeDestinationLabel(inferred.destination)
+        : null;
 
   return normalizeTripProfile({
     ...base,
-    destination:
-      base.destination ||
-      destinationFromContext ||
-      (inferred.destination ? normalizeDestinationLabel(inferred.destination) : null),
-    duration_days: base.duration_days ?? daysFromContext ?? inferred.days ?? null,
+    destination: activeDestination || base.destination || destinationFromContext || null,
+    duration_days:
+      messageInferred.days ??
+      base.duration_days ??
+      daysFromContext ??
+      inferred.days ??
+      null,
   });
 }
 
@@ -2598,9 +2636,6 @@ export function convertTripPlanToTravelPlanWithSources(
     summary_table: plan.days.map((day) => ({
       day: `Day ${day.dayNumber}`,
       main_route: day.items.map((item) => item.title).join(" -> "),
-      citations: cite(day.items.map((item) => `${item.title} ${item.notes || ""}`).join(" "), {
-        preferredTypes: ["official", "web", "weather"],
-      }),
     })),
     days: plan.days.map((day) => {
       const foodItems = day.items.filter((item) => item.type === "restaurant");
@@ -2608,26 +2643,20 @@ export function convertTripPlanToTravelPlanWithSources(
       return {
         day: `Day ${day.dayNumber}`,
         theme: cleanDayThemeLabel(day.theme || day.summary || `第 ${day.dayNumber} 天`),
-        citations: cite(`${day.theme || ""} ${day.summary || ""}`.trim(), {
-          preferredTypes: ["official", "web", "weather"],
-        }),
         transportation: buildDayTransportationTexts(day)
           .slice(0, 4)
-          .map((text) => citeText(text, { preferredTypes: ["official", "web"] })),
+          .map((text) => ({ text })),
         spots: spotItems.map((item) => ({
           name: item.title,
-          feature: item.notes || item.sourceSnippet || "依照目前旅遊需求安排的停靠點",
-          citations: cite(`${item.title} ${item.notes || item.sourceSnippet || ""}`, { preferredTypes: ["official", "web", "youtube"] }),
+          feature: item.notes || "依照目前旅遊需求安排的停靠點",
         })),
         food_recommendations: foodItems.map((item) => ({
           name: item.title,
-          description: item.notes || item.sourceSnippet || "依照目前旅遊需求安排的用餐建議",
-          citations: cite(`${item.title} ${item.notes || item.sourceSnippet || ""}`, { preferredTypes: ["web", "youtube"] }),
+          description: item.notes || "依照目前旅遊需求安排的用餐建議",
         })),
-        tips: uniqueStrings(day.items.map((item) => item.sourceSnippet || "").filter(Boolean))
+        tips: uniqueStrings(day.items.map((item) => item.notes || "").filter(Boolean))
           .slice(0, 3)
-          .map((text) => citeText(text, { preferredTypes: ["official", "weather", "web", "youtube"] }))
-          .filter((item) => Boolean(item.citations?.length)),
+          .map((text) => ({ text })),
       };
     }),
     weather_alerts: weatherAlerts.map((alert) => ({
@@ -3563,15 +3592,14 @@ export async function chatWithTravelAssistant(input: {
   forceStructuredRevision?: boolean;
   aiContext?: AIContextBuildResult | null;
 }): Promise<ChatResponsePayload> {
-  let resolvedTripProfile = updateTripProfileFromText(
-    mergeTripProfileWithContext(input.tripProfile, input.context, {
-      message: input.message,
-      messages: input.messages,
-    }),
-    input.message,
-  );
+  let resolvedTripProfile = mergeTripProfileWithContext(input.tripProfile, input.context, {
+    message: input.questionAnswers?.length ? undefined : input.message,
+    messages: input.messages,
+  });
   if (input.questionAnswers?.length) {
     resolvedTripProfile = applyQuestionAnswers(resolvedTripProfile, input.questionAnswers);
+  } else {
+    resolvedTripProfile = updateTripProfileFromText(resolvedTripProfile, input.message);
   }
   const resolvedDestination = resolvedTripProfile.destination || input.context?.destination;
   let destinationScope = input.context?.destinationScope;

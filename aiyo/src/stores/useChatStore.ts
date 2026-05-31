@@ -38,8 +38,22 @@ interface ChatState {
   clearMessages: () => void;
 }
 
-function messageSignature(message: ChatMessage): string {
+export function messageSignature(message: ChatMessage): string {
   return `${message.role}:${message.content.trim().toLowerCase()}`;
+}
+
+function dedupeChatMessagesBySignature(messages: ChatMessage[]): ChatMessage[] {
+  const seen = new Set<string>();
+  const deduped: ChatMessage[] = [];
+  for (const message of messages) {
+    const signature = messageSignature(message);
+    if (seen.has(signature)) {
+      continue;
+    }
+    seen.add(signature);
+    deduped.push(message);
+  }
+  return deduped;
 }
 
 function isEphemeralMessage(message: ChatMessage): boolean {
@@ -97,7 +111,15 @@ function mergeRemoteWithLocalChatMessages(
       !remoteSignatures.has(messageSignature(message)),
   );
 
-  return [...mergedRemote, ...pendingLocal];
+  return dedupeChatMessagesBySignature([...mergedRemote, ...pendingLocal]);
+}
+
+/** @internal Exported for unit tests */
+export function mergeRemoteWithLocalChatMessagesForTest(
+  remoteMessages: ChatMessage[],
+  localMessages: ChatMessage[],
+): ChatMessage[] {
+  return mergeRemoteWithLocalChatMessages(remoteMessages, localMessages);
 }
 
 function nowIso(): string {
@@ -227,6 +249,9 @@ export const useChatStore = create<ChatState>((set) => ({
   },
   setMessages: (messages) =>
     set((state) => {
+      if (state.isSending) {
+        return state;
+      }
       const activeConversation = state.conversations.find(
         (conversation) => conversation.id === state.activeConversationId,
       );
@@ -251,6 +276,9 @@ export const useChatStore = create<ChatState>((set) => ({
     }),
   mergeRemoteMessages: (messages) =>
     set((state) => {
+      if (state.isSending) {
+        return state;
+      }
       const activeConversation = state.conversations.find(
         (conversation) => conversation.id === state.activeConversationId,
       );
@@ -266,20 +294,22 @@ export const useChatStore = create<ChatState>((set) => ({
       const remoteConversation = state.conversations.find(
         (conversation) => conversation.id === CHAT_REMOTE_CONVERSATION_ID,
       );
-      const mergedMessages = mergeRemoteWithLocalChatMessages(
-        messages,
-        remoteConversation?.messages || [],
-      );
+      const localMessages = dedupeChatMessagesBySignature([
+        ...(remoteConversation?.messages || []),
+        ...(state.activeConversationId === CHAT_REMOTE_CONVERSATION_ID ? state.messages : []),
+      ]);
+      const mergedMessages = mergeRemoteWithLocalChatMessages(messages, localMessages);
       const conversations = upsertRemoteConversation(state.conversations, mergedMessages);
       const nextActiveConversation = conversations.find(
         (conversation) => conversation.id === state.activeConversationId,
       );
+      const nextMessages =
+        state.activeConversationId === CHAT_REMOTE_CONVERSATION_ID
+          ? mergedMessages
+          : nextActiveConversation?.messages || state.messages;
       return {
         conversations,
-        messages:
-          state.activeConversationId === CHAT_REMOTE_CONVERSATION_ID
-            ? mergedMessages
-            : nextActiveConversation?.messages || state.messages,
+        messages: nextMessages,
       };
     }),
   appendMessage: (message) =>
@@ -293,6 +323,21 @@ export const useChatStore = create<ChatState>((set) => ({
               ...createEmptyConversation(),
               id: activeId,
             } satisfies ChatConversation);
+          const signature = messageSignature(message);
+          const isDuplicateAssistant =
+            message.role === "assistant" &&
+            existingConversation.messages.some(
+              (existingMessage) =>
+                existingMessage.role === "assistant" &&
+                messageSignature(existingMessage) === signature,
+            );
+          if (isDuplicateAssistant) {
+            return {
+              conversations: state.conversations,
+              activeConversationId: state.activeConversationId || activeId,
+              messages: state.messages,
+            };
+          }
           const messages = [...existingConversation.messages, message];
           const updatedConversation: ChatConversation = {
             ...existingConversation,

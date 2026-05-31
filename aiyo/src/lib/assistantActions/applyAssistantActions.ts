@@ -1,4 +1,5 @@
 import { dayNumberFromDayId } from "@/lib/assistantActions/converters";
+import { reorderItemsWithRetime } from "@/lib/itineraryRetime";
 import {
   collectMapFocusGeocodeTargets,
   maybeEnqueueItemGeocodeTarget,
@@ -133,24 +134,10 @@ export async function applyAssistantActions(
     }
 
     if (action.type === "itinerary.reorder_items") {
-      const order = new Map(action.payload.orderedItemIds.map((id, index) => [id, index]));
-      const originalIndex = new Map(day.items.map((item, index) => [item.id, index]));
+      const reordered = reorderItemsWithRetime(day.items, action.payload.orderedItemIds);
       useTripStore.getState().setItinerary(
         useTripStore.getState().itinerary.map((candidate) =>
-          candidate.dayNumber === dayNumber
-            ? {
-                ...candidate,
-                items: [...candidate.items].sort((a, b) => {
-                  const left = order.has(a.id)
-                    ? order.get(a.id)!
-                    : (originalIndex.get(a.id) ?? Number.MAX_SAFE_INTEGER) + order.size;
-                  const right = order.has(b.id)
-                    ? order.get(b.id)!
-                    : (originalIndex.get(b.id) ?? Number.MAX_SAFE_INTEGER) + order.size;
-                  return left - right;
-                }),
-              }
-            : candidate,
+          candidate.dayNumber === dayNumber ? { ...candidate, items: reordered } : candidate,
         ),
       );
       appliedCount += 1;

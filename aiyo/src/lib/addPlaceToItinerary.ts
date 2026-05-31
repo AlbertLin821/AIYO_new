@@ -1,3 +1,4 @@
+import { ensureItineraryDayCount } from "@/lib/ensureItineraryDays";
 import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
 import { syncService } from "@/services/syncService";
 import { useMapStore } from "@/stores/useMapStore";
@@ -42,9 +43,15 @@ export function addPlaceToItinerary(input: AddPlaceToItineraryInput): { itemId: 
     throw new Error("地點座標無效。");
   }
 
+  ensureItineraryDayCount(dayNumber);
+
   const itinerary = useTripStore.getState().itinerary;
   const day = itinerary.find((entry) => entry.dayNumber === dayNumber);
-  const activityTime = time ?? nextActivityTime(day?.items ?? []);
+  if (!day) {
+    throw new Error("無法建立行程天數，請稍後再試。");
+  }
+
+  const activityTime = time ?? nextActivityTime(day.items);
   const itemTitle = (title ?? location.name).trim() || location.name;
 
   useTripStore.getState().addItineraryItem(dayNumber, {
@@ -59,33 +66,7 @@ export function addPlaceToItinerary(input: AddPlaceToItineraryInput): { itemId: 
   });
 
   const pinId = `day_${dayNumber}_${itemId}`;
-  const mapState = useMapStore.getState();
-  mapState.setPins([
-    ...mapState.pins.filter((pin) => pin.id !== pinId),
-    {
-      id: pinId,
-      name: location.name,
-      lat: location.lat,
-      lng: location.lng,
-      description: location.description,
-      address: location.address,
-      placeId: location.placeId,
-      photoUrl: location.photoUrl,
-      thumbnail: location.thumbnail,
-      openingHours: location.openingHours,
-      phoneNumber: location.phoneNumber,
-      website: location.website,
-      googleMapsUrl: location.googleMapsUrl,
-      rating: location.rating,
-      userRatingsTotal: location.userRatingsTotal,
-      source: "itinerary",
-      linkedTripItemId: itemId,
-      dayNumber,
-      color: "#5a7ea3",
-      verified: location.verified ?? true,
-    },
-  ]);
-  mapState.setSelectedPinId(pinId);
+  useMapStore.getState().setSelectedPinId(pinId);
   void syncService.flushTripSyncNow();
 
   return { itemId, pinId };

@@ -17,6 +17,7 @@ export interface GoogleMapInstance {
   fitBounds: (bounds: GoogleLatLngBounds, padding?: number) => void;
   panTo: (coords: { lat: number; lng: number }) => void;
   setMapTypeId: (type: GoogleMapTypeId) => void;
+  setOptions?: (options: Record<string, unknown>) => void;
   addListener?: (
     eventName: string,
     handler: (event: GoogleMapClickEvent) => void,
@@ -27,15 +28,18 @@ export interface GoogleMarkerInstance {
   setMap: (map: GoogleMapInstance | null) => void;
   setIcon: (icon: Record<string, unknown>) => void;
   addListener: (eventName: string, handler: () => void) => void;
+  content?: HTMLElement;
 }
 
 export interface GoogleInfoWindowInstance {
   setContent: (content: string) => void;
   open: (input: { map: GoogleMapInstance; anchor: GoogleMarkerInstance | unknown }) => void;
+  close?: () => void;
 }
 
 export interface GooglePolylineInstance {
   setMap: (map: GoogleMapInstance | null) => void;
+  setOptions?: (options: Record<string, unknown>) => void;
   addListener?: (eventName: string, handler: () => void) => void;
 }
 

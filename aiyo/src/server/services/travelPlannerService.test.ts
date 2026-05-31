@@ -88,6 +88,82 @@ function makeStructuredProfile(): TripProfile {
   };
 }
 
+function makeTainanPreferenceAiContext(): AIContextBuildResult {
+  return {
+    text: "",
+    promptContextText: "",
+    sources: ["user_preferences"],
+    structured: {
+      preferences: {
+        budgetLevel: "medium",
+        travelStyle: ["美食", "古蹟"],
+        destination: "台南",
+      },
+      recentTripCount: 1,
+      recentVideoCount: 0,
+      appliedVideoSummaryCount: 0,
+    },
+    structuredContext: {
+      userId: "user_1",
+      preferences: {
+        destinationPreferences: ["台南"],
+        budgetLevel: "medium",
+        travelStyles: ["美食", "古蹟"],
+        pace: null,
+        transportPreference: null,
+        accommodationPreference: null,
+        avoidances: [],
+        confidence: 0.8,
+        source: "mem0",
+        updatedAt: null,
+      },
+      recentTrips: [],
+      tripChatHistory: [],
+      globalChatMemory: [],
+      videoInteractions: [],
+      appliedVideoSummaries: [],
+      memorySnippets: [],
+      contextWarnings: [],
+    },
+    debug: {
+      sources: [],
+      includedSources: [],
+      excludedSources: [],
+      counts: {},
+      limits: {},
+      vectorStore: "mem0",
+    },
+  };
+}
+
+test("東京三天 with stale 台南 context confirms preferences without question card", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "東京三天",
+    structuredTravelPlanning: true,
+    context: { destination: "台南", days: 3 },
+    tripProfile: {
+      destination: "台南",
+      duration_days: 3,
+      budget: null,
+      companions: null,
+      traveler_count: null,
+      transportation: null,
+      pace: null,
+      preferences: [],
+      avoid_places: [],
+      notes: null,
+    },
+    aiContext: makeTainanPreferenceAiContext(),
+  });
+
+  assert.equal(response.travelAgentDecision?.mode, "confirm_preferences");
+  assert.equal(response.reply.responseType, "text_message");
+  assert.equal(response.reply.questionCard, undefined);
+  assert.match(response.reply.content, /東京/);
+  assert.doesNotMatch(response.reply.content, /台南/);
+  assert.equal(response.tripProfile?.destination, "東京");
+});
+
 test("structured chat generates itinerary when destination and duration are already complete", async () => {
   const response = await chatWithTravelAssistant({
     message: "請幫我規劃熊本行程",
@@ -1099,10 +1175,10 @@ test("convertTripPlanToTravelPlanWithSources preserves multi-provider sources an
   assert.equal(response.event_alerts[0]?.citations?.[0], "official_001");
   assert.match(response.event_alerts[0]?.message || "", /官方提醒/);
   assert.equal(response.days[0]?.transportation[0]?.text, "熊本電鐵一日券可達");
-  assert.ok(response.days[0]?.spots[0]?.citations?.includes("official_001"));
-  assert.ok(response.days[0]?.food_recommendations[0]?.citations?.includes("yt_001"));
-  assert.ok(response.days[0]?.transportation[0]?.citations?.includes("web_001"));
-  assert.ok(!(response.summary_table[0]?.citations || []).includes("yt_001"));
+  assert.equal(response.days[0]?.spots[0]?.citations, undefined);
+  assert.equal(response.days[0]?.food_recommendations[0]?.citations, undefined);
+  assert.equal(response.days[0]?.transportation[0]?.citations, undefined);
+  assert.equal(response.summary_table[0]?.citations, undefined);
 });
 
 test("convertTripPlanToTravelPlanWithSources normalizes transport enum labels for display", () => {
@@ -1134,4 +1210,50 @@ test("convertTripPlanToTravelPlanWithSources normalizes transport enum labels fo
   );
 
   assert.equal(response.days[0]?.transportation[0]?.text, "大眾運輸");
+});
+
+test("question answer summary does not overwrite Tokyo destination", async () => {
+  const baseProfile: TripProfile = {
+    destination: "東京",
+    duration_days: 3,
+    duration_nights: 2,
+    departure_location: null,
+    travel_dates: null,
+    companions: null,
+    traveler_count: null,
+    budget: null,
+    special_population: {
+      has_elderly: false,
+      has_children: false,
+      mobility_issue: false,
+    },
+    preferences: [],
+    transportation: null,
+    pace: null,
+    plan_integration: null,
+  };
+
+  const response = await chatWithTravelAssistant({
+    message: "這趟東京幾個人一起去？：兩人（伴侶或朋友）",
+    structuredTravelPlanning: true,
+    tripProfile: baseProfile,
+    questionAnswers: [
+      {
+        slot: "companions",
+        question: "這趟東京幾個人一起去？",
+        value: "couple_or_friend",
+        label: "兩人（伴侶或朋友）",
+      },
+    ],
+    context: {
+      destination: "東京",
+      days: 3,
+      budget: 0,
+      itinerary: [],
+      preferences: { interests: [], pace: "moderate" },
+    },
+  });
+
+  assert.equal(response.tripProfile?.destination, "東京");
+  assert.ok(!(response.reply.questionCard?.title || "").includes("？：兩人"));
 });

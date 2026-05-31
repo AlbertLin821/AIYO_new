@@ -1,5 +1,6 @@
 import { serverConfig } from "@/server/config";
 import { isUsableMapCoordinate } from "@/lib/geoCoordinates";
+import { buildPlacePhotoProxyUrl } from "@/lib/placePhotoUrl";
 import {
   geocodeResultFailsDestinationScope,
   isGeocodeCountryInScope,
@@ -48,6 +49,8 @@ type GooglePlaceDetailsResponse = {
   error_message?: string;
   result?: {
     name?: string;
+    formatted_address?: string;
+    geometry?: { location?: { lat: number; lng: number } };
     types?: string[];
     formatted_phone_number?: string;
     international_phone_number?: string;
@@ -316,12 +319,7 @@ function buildPhotoUrl(photoReference?: string): string | undefined {
   if (!photoReference || !serverConfig.googleMapsApiKey) {
     return undefined;
   }
-  const params = new URLSearchParams({
-    maxwidth: "480",
-    photo_reference: photoReference,
-    key: serverConfig.googleMapsApiKey,
-  });
-  return `https://maps.googleapis.com/maps/api/place/photo?${params.toString()}`;
+  return buildPlacePhotoProxyUrl(photoReference, 480);
 }
 
 export async function fetchGooglePlaceDetailsByPlaceId(
@@ -332,7 +330,8 @@ export async function fetchGooglePlaceDetailsByPlaceId(
   }
   const params = new URLSearchParams({
     place_id: placeId,
-    fields: "formatted_phone_number,international_phone_number,website,url,rating,user_ratings_total,opening_hours,photos",
+    fields:
+      "name,formatted_address,geometry,formatted_phone_number,international_phone_number,website,url,rating,user_ratings_total,opening_hours,photos",
     language: "zh-TW",
     key: serverConfig.googleMapsApiKey,
   });
@@ -347,7 +346,14 @@ export async function fetchGooglePlaceDetailsByPlaceId(
       return {};
     }
     const photoUrl = buildPhotoUrl(payload.result.photos?.[0]?.photo_reference);
+    const lat = payload.result.geometry?.location?.lat;
+    const lng = payload.result.geometry?.location?.lng;
     return {
+      name: payload.result.name?.trim() || undefined,
+      address: payload.result.formatted_address?.trim() || undefined,
+      description: payload.result.formatted_address?.trim() || undefined,
+      lat: typeof lat === "number" && Number.isFinite(lat) ? lat : undefined,
+      lng: typeof lng === "number" && Number.isFinite(lng) ? lng : undefined,
       photoUrl,
       thumbnail: photoUrl,
       openingHours: payload.result.opening_hours?.weekday_text?.join("；"),
@@ -441,6 +447,110 @@ export async function geocodeWithGoogle(
       lat: loc.lat,
       lng: loc.lng,
       placeId: first.place_id,
+      types,
+      countryCode,
+    },
+  };
+}
+
+function pickBestReverseGeocodeResult(
+  results: NonNullable<GoogleGeocodeResponse["results"]>,
+): NonNullable<GoogleGeocodeResponse["results"]>[number] | null {
+  if (!results.length) {
+    return null;
+  }
+  const scored = [...results].sort((left, right) => {
+    const leftScore = scoreGeocodeTypes(left.types || []);
+    const rightScore = scoreGeocodeTypes(right.types || []);
+    return rightScore - leftScore;
+  });
+  return scored[0] ?? null;
+}
+
+export async function reverseGeocodeWithGoogle(
+  lat: number,
+  lng: number,
+  destinationScope?: TripDestinationScope | null,
+): Promise<
+  | { ok: true; result: GeocodeResult }
+  | { ok: false; reason: string; googleStatus?: string }
+> {
+  const key = process.env.GOOGLE_MAPS_API_KEY?.trim() || serverConfig.googleMapsApiKey;
+  if (!key) {
+    return { ok: false, reason: "GOOGLE_MAPS_API_KEY is not configured." };
+  }
+
+  if (!isUsableMapCoordinate(lat, lng)) {
+    return { ok: false, reason: "Invalid coordinates for reverse geocoding." };
+  }
+
+  const params = new URLSearchParams({
+    latlng: `${lat},${lng}`,
+    key,
+    language: "zh-TW",
+  });
+
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?${params.toString()}`;
+  let response: Response;
+  try {
+    response = await fetch(url, { cache: "no-store" });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Reverse geocoding request failed.";
+    return { ok: false, reason: message };
+  }
+
+  const payload = (await response.json()) as GoogleGeocodeResponse;
+  const status = payload.status;
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      reason: payload.error_message || `Reverse geocoding HTTP ${response.status}.`,
+      googleStatus: status,
+    };
+  }
+
+  if (status === "ZERO_RESULTS") {
+    return { ok: false, reason: "No results for coordinates.", googleStatus: status };
+  }
+
+  if (status !== "OK" || !payload.results?.length) {
+    return {
+      ok: false,
+      reason: payload.error_message || `Reverse geocoding failed with status ${status}.`,
+      googleStatus: status,
+    };
+  }
+
+  const best = pickBestReverseGeocodeResult(payload.results);
+  if (!best) {
+    return { ok: false, reason: "Reverse geocoding response missing results.", googleStatus: status };
+  }
+
+  const loc = best.geometry?.location;
+  if (!loc || !isUsableMapCoordinate(loc.lat, loc.lng)) {
+    return { ok: false, reason: "Reverse geocoding response missing coordinates.", googleStatus: status };
+  }
+
+  const types = best.types || [];
+  const countryCode = extractCountryCode(best.address_components);
+
+  const scopeFailure = geocodeResultFailsDestinationScope(
+    { countryCode, lat: loc.lat, lng: loc.lng },
+    destinationScope,
+  );
+  if (scopeFailure) {
+    return { ok: false, reason: scopeFailure, googleStatus: status };
+  }
+
+  return {
+    ok: true,
+    result: {
+      query: `${lat},${lng}`,
+      formattedAddress: best.formatted_address || `${lat}, ${lng}`,
+      lat: loc.lat,
+      lng: loc.lng,
+      placeId: best.place_id,
       types,
       countryCode,
     },

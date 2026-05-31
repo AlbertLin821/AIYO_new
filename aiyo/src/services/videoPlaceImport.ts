@@ -1,3 +1,4 @@
+import { ensureItineraryDayCount } from "@/lib/ensureItineraryDays";
 import { buildPinsFromLocations } from "@/services/mapSync";
 import { syncService } from "@/services/syncService";
 import { recordAppliedVideoSummary } from "@/services/videoClient";
@@ -76,30 +77,6 @@ export function getVerifiedGeocodedVideoLocations(video: Video) {
 /** 可透過「加入地圖與行程」匯入的地點（已驗證、非泛用美食名）。 */
 export function getVideoImportCandidateLocations(video: Video) {
   return getVerifiedGeocodedVideoLocations(video).filter((location) => !isGenericFoodLocation(location));
-}
-
-function ensureItineraryDayCount(targetDayNumber?: number) {
-  const normalizedTarget =
-    typeof targetDayNumber === "number" && Number.isFinite(targetDayNumber) && targetDayNumber >= 1
-      ? Math.floor(targetDayNumber)
-      : null;
-
-  if (normalizedTarget === null) {
-    if (useTripStore.getState().itinerary.length === 0) {
-      useTripStore.getState().addDay();
-    }
-    return;
-  }
-
-  const maxDay = Math.max(1, normalizedTarget);
-  let guard = 0;
-  while (!useTripStore.getState().itinerary.some((day) => day.dayNumber === normalizedTarget)) {
-    useTripStore.getState().addDay();
-    guard += 1;
-    if (guard > maxDay + 3) {
-      break;
-    }
-  }
 }
 
 /** 明確把影片摘要中已驗證的具名地點加入目前行程與地圖，並立即同步到後端。 */

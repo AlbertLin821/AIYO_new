@@ -22,8 +22,10 @@ import { getRegionalTransitOptions } from "@/lib/tripTransportRegion";
 import { cn } from "@/lib/utils";
 import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
 import { addPlaceToItinerary } from "@/lib/addPlaceToItinerary";
+import { createTripItemId } from "@/lib/tripItemIds";
 import { findLinkedPinForItem } from "@/lib/mapPinItineraryLink";
 import ConfirmDialog from "@/components/system/ConfirmDialog";
+import MapPoiAddCard from "@/components/map/MapPoiAddCard";
 import { listTripsForLibrary, setActiveTrip } from "@/services/itineraryClient";
 import { syncService } from "@/services/syncService";
 import { useMapStore } from "@/stores/useMapStore";
@@ -269,12 +271,14 @@ function SortableMapStop({
                 className="truncate text-sm font-medium text-foreground"
                 onClick={(event) => {
                   event.stopPropagation();
-                  if (item.source === "manual") {
-                    onStartTitleEdit();
-                    return;
-                  }
                   if (canSelectOnMap) {
                     onSelectPin();
+                  }
+                }}
+                onDoubleClick={(event) => {
+                  event.stopPropagation();
+                  if (item.source === "manual") {
+                    onStartTitleEdit();
                   }
                 }}
               >
@@ -347,7 +351,6 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
   const tripTitle = useTripStore((state) => state.title);
   const tripDestination = useTripStore((state) => state.destination);
   const currentTripId = useTripStore((state) => state.tripId);
-  const addItineraryItem = useTripStore((state) => state.addItineraryItem);
   const updateItineraryItem = useTripStore((state) => state.updateItineraryItem);
   const updateItineraryItemTransport = useTripStore((state) => state.updateItineraryItemTransport);
   const removeItineraryItem = useTripStore((state) => state.removeItineraryItem);
@@ -379,15 +382,11 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
   }, [enablePoiAdd, expandedDay, setPreferredPoiDay]);
 
   useEffect(() => {
-    if (!enablePoiAdd) {
-      prevPendingPoiRef.current = pendingPoi;
-      return;
-    }
     if (prevPendingPoiRef.current && !pendingPoi) {
       setExpandedDay(preferredPoiDay);
     }
     prevPendingPoiRef.current = pendingPoi;
-  }, [enablePoiAdd, pendingPoi, preferredPoiDay]);
+  }, [pendingPoi, preferredPoiDay]);
   const [deleteItemTarget, setDeleteItemTarget] = useState<{
     dayNumber: number;
     itemId: string;
@@ -395,7 +394,6 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
     linkedPinId: string | null;
   } | null>(null);
   const [editingItem, setEditingItem] = useState<{ dayNumber: number; itemId: string; title: string } | null>(null);
-  const manualItemCounter = useRef(0);
   const routeSegments = useMemo(() => buildItineraryRouteSegments(itinerary), [itinerary]);
   const transportOptions = useMemo(() => transportSelectRows(tripDestination), [tripDestination]);
 
@@ -480,8 +478,7 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
         throw new Error("找不到符合的地點。");
       }
 
-      manualItemCounter.current += 1;
-      const id = `manual_${placeSearch.dayNumber}_${manualItemCounter.current}`;
+      const id = createTripItemId("manual");
       const location: LocationReference = {
         name: result.query || query,
         lat: result.lat,
@@ -531,13 +528,17 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
   }, [editingItem, updateItineraryItem]);
 
   const handleDayDragEnd = useCallback(
-    (dayNumber: number, items: TripPlanItem[]) => (event: DragEndEvent) => {
+    (dayNumber: number) => (event: DragEndEvent) => {
       const { active, over } = event;
       if (!over || active.id === over.id) {
         return;
       }
-      const oldIndex = items.findIndex((i) => i.id === active.id);
-      const newIndex = items.findIndex((i) => i.id === over.id);
+      const day = useTripStore.getState().itinerary.find((entry) => entry.dayNumber === dayNumber);
+      if (!day) {
+        return;
+      }
+      const oldIndex = day.items.findIndex((item) => item.id === active.id);
+      const newIndex = day.items.findIndex((item) => item.id === over.id);
       if (oldIndex < 0 || newIndex < 0) {
         return;
       }
@@ -587,6 +588,13 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
               </div>
             ) : null}
           </div>
+
+          {enablePoiAdd ? (
+            <MapPoiAddCard
+              defaultDayNumber={preferredPoiDay}
+              tripDestination={tripDestination}
+            />
+          ) : null}
 
           <div className="border-b border-border-light bg-cream/30 px-5 py-3">
             <button
@@ -831,7 +839,7 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
                         <DndContext
                           sensors={sensors}
                           collisionDetection={closestCenter}
-                          onDragEnd={handleDayDragEnd(day.dayNumber, day.items)}
+                          onDragEnd={handleDayDragEnd(day.dayNumber)}
                         >
                           <SortableContext
                             items={day.items.map((i) => i.id)}

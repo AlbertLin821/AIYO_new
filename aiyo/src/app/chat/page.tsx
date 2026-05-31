@@ -113,9 +113,6 @@ const ChatContextMapView = dynamic(() => import("@/components/map/MapView"), { s
 const ChatContextItineraryPanel = dynamic(() => import("@/components/map/ItineraryPanel"), {
   ssr: false,
 });
-const ChatContextMapPoiAddSheet = dynamic(() => import("@/components/map/MapPoiAddSheet"), {
-  ssr: false,
-});
 
 type ChatSpeechRecognitionResult = {
   isFinal: boolean;
@@ -384,6 +381,7 @@ export default function ChatPage() {
   const speechBaseInputRef = useRef("");
   const speechFinalTranscriptRef = useRef("");
   const chatRequestEpochRef = useRef(0);
+  const chatSendLockRef = useRef(false);
   const planningWorkflowActiveRef = useRef(false);
   const [planningWorkflowActive, setPlanningWorkflowActive] = useState(false);
   const typingSeedRef = useRef(Math.floor(Math.random() * 10_000));
@@ -413,7 +411,6 @@ export default function ChatPage() {
     clearProposedChangesForMessage,
   } = useChatStore();
   const tripStore = useTripStore();
-  const preferredPoiDay = useMapStore((state) => state.preferredPoiDay);
   const userStore = useUserStore();
   const pushToast = useToastStore((state) => state.pushToast);
   const setSummaryDiagnostics = useVideoStore((state) => state.setSummaryDiagnostics);
@@ -900,6 +897,7 @@ export default function ChatPage() {
       steps: [],
     }));
     setIsSending(false);
+    chatSendLockRef.current = false;
     pushToast({
       variant: "info",
       title: t.chat.generationStoppedTitle,
@@ -1431,9 +1429,11 @@ export default function ChatPage() {
     const hasQuestionAnswers = Boolean(options?.questionAnswers?.length);
     const message = (rawInput || input).trim();
     const userTextForRetry = hasQuestionAnswers ? "" : message;
-    if ((!message && !hasQuestionAnswers) || isSending) {
+    if ((!message && !hasQuestionAnswers) || isSending || chatSendLockRef.current) {
       return;
     }
+
+    chatSendLockRef.current = true;
 
     stopAutoVideoSummaryQueue();
 
@@ -1793,6 +1793,7 @@ export default function ChatPage() {
         progressSessionId,
         reason: "handleSend-finally",
       });
+      chatSendLockRef.current = false;
       if (requestEpoch === chatRequestEpochRef.current) {
         if (chatAbortControllerRef.current?.signal === signal) {
           chatAbortControllerRef.current = null;
@@ -2426,42 +2427,40 @@ export default function ChatPage() {
                 </div>
 
                 <div>
-                  <div
-                    className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                      message.role === "user"
-                        ? "rounded-br-md bg-slate-900 text-white"
-                        : message.responseType === "travel_plan"
-                          ? "rounded-bl-md bg-transparent p-0 text-foreground"
-                          : "rounded-bl-md border border-slate-200 bg-white text-slate-800 shadow-none"
-                    }`}
-                  >
-                    {message.responseType === "question_card" && message.questionCard ? (
-                      <MarkdownMessage
-                        content={message.content?.trim() || "請先補充這些條件，我會接著完成規劃。"}
-                      />
-                    ) : message.responseType === "travel_plan" && message.travelPlan ? (
-                      <div
-                        data-travel-plan-message-id={message.id}
-                        className="max-w-full rounded-[28px] border border-slate-200/80 bg-white/95 p-4 shadow-md ring-1 ring-black/5 sm:p-5"
-                      >
-                        <TravelPlanCard
-                          plan={message.travelPlan}
-                          revisionDisabled={isSending}
-                          onRevise={(instruction) => void handleRevisePlan(instruction, message.tripProfile || tripProfile)}
-                          onOpenGroundedSource={handleOpenSourceDrawer}
+                  {message.responseType === "question_card" && message.questionCard ? null : (
+                    <div
+                      className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                        message.role === "user"
+                          ? "rounded-br-md bg-slate-900 text-white"
+                          : message.responseType === "travel_plan"
+                            ? "rounded-bl-md bg-transparent p-0 text-foreground"
+                            : "rounded-bl-md border border-slate-200 bg-white text-slate-800 shadow-none"
+                      }`}
+                    >
+                      {message.responseType === "travel_plan" && message.travelPlan ? (
+                        <div
+                          data-travel-plan-message-id={message.id}
+                          className="max-w-full rounded-[28px] border border-slate-200/80 bg-white/95 p-4 shadow-md ring-1 ring-black/5 sm:p-5"
+                        >
+                          <TravelPlanCard
+                            plan={message.travelPlan}
+                            revisionDisabled={isSending}
+                            onRevise={(instruction) => void handleRevisePlan(instruction, message.tripProfile || tripProfile)}
+                            onOpenGroundedSource={handleOpenSourceDrawer}
+                          />
+                        </div>
+                      ) : message.responseType === "status_step" ? (
+                        message.content?.trim() ? (
+                          <MarkdownMessage content={message.content} />
+                        ) : null
+                      ) : (
+                        <MarkdownMessage
+                          content={message.content}
+                          inverted={message.role === "user"}
                         />
-                      </div>
-                    ) : message.responseType === "status_step" ? (
-                      message.content?.trim() ? (
-                        <MarkdownMessage content={message.content} />
-                      ) : null
-                    ) : (
-                      <MarkdownMessage
-                        content={message.content}
-                        inverted={message.role === "user"}
-                      />
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  )}
                   {message.role !== "user" &&
                     message.sourceReferences &&
                     message.sourceReferences.length > 0 && (
@@ -2501,7 +2500,8 @@ export default function ChatPage() {
                   ) : null}
                   {message.role === "assistant" &&
                   index === messages.length - 1 &&
-                  workflowRail.preferenceConfirmation ? (
+                  workflowRail.preferenceConfirmation &&
+                  !message.questionCard ? (
                     <div className="mt-3 w-full min-w-[min(100%,20rem)] max-w-md">
                       <PreferenceReusePanel
                         variant="inline"
@@ -2705,7 +2705,13 @@ export default function ChatPage() {
               type="text"
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => event.key === "Enter" && void handleSend()}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" || event.nativeEvent.isComposing || event.repeat) {
+                  return;
+                }
+                event.preventDefault();
+                void handleSend();
+              }}
               placeholder={t.chat.placeholder}
               data-testid="chat-input"
               className="min-w-0 flex-1 bg-transparent py-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none sm:py-3"
@@ -2769,11 +2775,7 @@ export default function ChatPage() {
         {hasContextPanel ? (
           <div className="flex flex-col gap-2">
             <div className="relative h-72 overflow-hidden rounded-3xl border border-slate-200 bg-white">
-              <ChatContextMapView embedded allowPoiAdd />
-              <ChatContextMapPoiAddSheet
-                defaultDayNumber={preferredPoiDay}
-                tripDestination={tripStore.destination}
-              />
+              <ChatContextMapView embedded readOnly />
             </div>
             {tripStore.tripId && tripStore.itinerary.length === 0 ? (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -2781,7 +2783,7 @@ export default function ChatPage() {
               </div>
             ) : null}
             <div className="relative h-[900px] overflow-hidden rounded-3xl border border-slate-200 bg-white">
-              <ChatContextItineraryPanel embedded />
+              <ChatContextItineraryPanel embedded enablePoiAdd={false} />
             </div>
           </div>
         ) : (

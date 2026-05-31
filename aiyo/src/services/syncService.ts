@@ -62,6 +62,10 @@ class SyncService {
     void this.syncTripState("debounced");
   }, 350);
 
+  isHydrated(): boolean {
+    return this.hydrated;
+  }
+
   /** Call when session ends so guests do not reuse a prior authenticated hydrate flag. */
   resetSessionState() {
     this.debouncedTripSync.cancel();

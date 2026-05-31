@@ -5,6 +5,7 @@ import {
   formatPreferenceSummary,
   hasMeaningfulReusablePreferences,
 } from "@/lib/personalization/preferenceDisplay";
+import { extractDestinationFromPlanningText } from "@/lib/tripPlanningSignals";
 import type {
   ChatContext,
   ConversationMode,
@@ -72,6 +73,11 @@ function extractTripRequestHints(message: string): TripRequestHints {
   const daysMatch = message.match(/([\d一二兩两三四五六七八九十]+)\s*(?:天|日)(?:\s*[\d一二兩两三四五六七八九十]+\s*夜)?/u);
   if (daysMatch?.[1]) {
     hints.days = chineseNumberToInt(daysMatch[1]);
+  }
+
+  const catalogDestination = extractDestinationFromPlanningText(message);
+  if (catalogDestination) {
+    hints.destination = catalogDestination;
   }
 
   if (/高預算|豪華|奢華|預算高|住好一點|吃好一點/u.test(message)) {
@@ -350,15 +356,16 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
     if (hasMeaningfulPreferences(reusablePreferences) && !isPreferenceRejectionOrOverride(message)) {
       const reusable = reusablePreferences || {};
       const summary = formatPreferenceSummary(reusable);
+      const promptDestination = hints.destination || knownPreferences.destination || "這趟";
       return buildDecision("confirm_preferences", {
         missingRequirements,
         searchDecision,
         preferenceConfirmation: {
           summary,
           preferences: mergedPreferences,
-        prompt: `可以。我看到你之前比較偏好${summary}路線，這次${hints.destination || knownPreferences.destination || "這趟"}${hints.days || knownPreferences.days ? ` ${hints.days || knownPreferences.days} 天` : ""}也要沿用這個方向嗎？`,
+        prompt: `可以。我看到你之前比較偏好${summary}路線，這次${promptDestination}${hints.days || knownPreferences.days ? ` ${hints.days || knownPreferences.days} 天` : ""}也要沿用這個方向嗎？`,
         },
-        userFacingGuidance: `可以。我看到你之前比較偏好${summary}路線，這次${hints.destination || knownPreferences.destination || "這趟"}${hints.days || knownPreferences.days ? ` ${hints.days || knownPreferences.days} 天` : ""}也要沿用這個方向嗎？如果要，我可以直接幫你排；如果想改成更輕鬆或更高預算，也可以告訴我。`,
+        userFacingGuidance: `可以。我看到你之前比較偏好${summary}路線，這次${promptDestination}${hints.days || knownPreferences.days ? ` ${hints.days || knownPreferences.days} 天` : ""}也要沿用這個方向嗎？如果要，我可以直接幫你排；如果想改成更輕鬆或更高預算，也可以告訴我。`,
         debugReason: "planning intent with reusable known preferences",
       });
     }

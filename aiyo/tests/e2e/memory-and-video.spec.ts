@@ -150,5 +150,5 @@ test("AI planning, video indexing, and map pins workflow works end to end", asyn
   const markerPins = page.getByTestId("map-pin-marker");
   await expect(markerPins.first()).toBeVisible({ timeout: 30000 });
   await markerPins.first().click();
-  await expect(page.getByTestId("selected-map-pin")).toBeVisible({ timeout: 30000 });
+  await expect(page.getByTestId("map-pin-info-panel")).toBeVisible({ timeout: 30000 });
 });

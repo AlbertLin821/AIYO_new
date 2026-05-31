@@ -227,7 +227,7 @@ test.describe("嘉義兩天一夜完整旅人流程", () => {
     const clicks = Math.min(markerCount, 3);
     for (let i = 0; i < clicks; i += 1) {
       await markers.nth(i).click();
-      await expect(page.getByTestId("selected-map-pin")).toBeVisible({
+      await expect(page.getByTestId("map-pin-info-panel")).toBeVisible({
         timeout: 15_000,
       });
     }
