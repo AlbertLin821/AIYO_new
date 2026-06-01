@@ -1,11 +1,28 @@
 import { create } from "zustand";
 import type { SyncMutationSource } from "@/stores/syncMutationSource";
 import { withSyncMutationSource } from "@/stores/syncMutationSource";
+import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
 import type { MapPin } from "@/types";
+
+export type PendingMapPoi = {
+  placeId?: string;
+  lat: number;
+  lng: number;
+};
+
+export type MapFocusLocation = {
+  placeName: string;
+  lat?: number | null;
+  lng?: number | null;
+  zoom?: number;
+} | null;
 
 interface MapState {
   pins: MapPin[];
   selectedPinId: string | null;
+  pendingPoi: PendingMapPoi | null;
+  focusLocation: MapFocusLocation;
+  preferredPoiDay: number;
   panelOpen: boolean;
   lastSyncedAt: string | null;
   /** 行程路段 id（見 routeSegments）對應 Google Directions 換算後的分鐘數；缺鍵時 UI 退回直線估算。 */
@@ -14,6 +31,9 @@ interface MapState {
   addPins: (pins: MapPin[]) => void;
   removePin: (id: string) => void;
   setSelectedPinId: (id: string | null) => void;
+  setPendingPoi: (poi: PendingMapPoi | null) => void;
+  setFocusLocation: (focus: MapFocusLocation) => void;
+  setPreferredPoiDay: (dayNumber: number) => void;
   setPanelOpen: (open: boolean) => void;
   clearPins: () => void;
   setItinerarySegmentDurations: (minutesBySegmentId: Record<string, number>) => void;
@@ -22,16 +42,19 @@ interface MapState {
 export const useMapStore = create<MapState>((set) => ({
   pins: [],
   selectedPinId: null,
+  pendingPoi: null,
+  focusLocation: null,
+  preferredPoiDay: 1,
   panelOpen: true,
   lastSyncedAt: null,
   segmentDirectionsMinutes: {},
   setPins: (pins, source: SyncMutationSource = "local-user-edit") =>
     withSyncMutationSource(source, () =>
       set((state) => ({
-        pins,
-        selectedPinId: pins.some((pin) => pin.id === state.selectedPinId)
+        pins: pins.filter((pin) => hasUsableMapCoordinate(pin)),
+        selectedPinId: pins.some((pin) => pin.id === state.selectedPinId && hasUsableMapCoordinate(pin))
           ? state.selectedPinId
-          : (pins[0]?.id ?? null),
+          : (pins.find((pin) => hasUsableMapCoordinate(pin))?.id ?? null),
         lastSyncedAt: new Date().toISOString(),
       })),
     ),
@@ -41,7 +64,7 @@ export const useMapStore = create<MapState>((set) => ({
         const existingNames = new Set(state.pins.map((pin) => pin.name));
         const pins = [
           ...state.pins,
-          ...incomingPins.filter((pin) => !existingNames.has(pin.name)),
+          ...incomingPins.filter((pin) => hasUsableMapCoordinate(pin) && !existingNames.has(pin.name)),
         ];
         return {
           pins,
@@ -63,12 +86,17 @@ export const useMapStore = create<MapState>((set) => ({
     ),
   setSelectedPinId: (selectedPinId) =>
     withSyncMutationSource("local-user-edit", () => set({ selectedPinId })),
+  setPendingPoi: (pendingPoi) => set({ pendingPoi }),
+  setFocusLocation: (focusLocation) => set({ focusLocation }),
+  setPreferredPoiDay: (preferredPoiDay) => set({ preferredPoiDay }),
   setPanelOpen: (panelOpen) => set({ panelOpen }),
   clearPins: () =>
     withSyncMutationSource("bootstrap", () =>
       set({
         pins: [],
         selectedPinId: null,
+        pendingPoi: null,
+        focusLocation: null,
         lastSyncedAt: null,
         segmentDirectionsMinutes: {},
       }),

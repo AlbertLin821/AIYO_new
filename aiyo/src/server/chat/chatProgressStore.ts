@@ -9,12 +9,20 @@ type ChatProgressSession = {
 
 const SESSION_TTL_MS = 10 * 60 * 1000;
 const progressSessions = new Map<string, ChatProgressSession>();
+const sessionOwners = new Map<string, string>();
+
+function pruneSessionOwner(sessionId: string) {
+  if (!progressSessions.has(sessionId)) {
+    sessionOwners.delete(sessionId);
+  }
+}
 
 function pruneExpiredSessions() {
   const now = Date.now();
   for (const [sessionId, session] of progressSessions.entries()) {
     if (session.done && now - session.updatedAt > SESSION_TTL_MS) {
       progressSessions.delete(sessionId);
+      sessionOwners.delete(sessionId);
     }
   }
 }
@@ -36,8 +44,19 @@ function getOrCreateSession(sessionId: string): ChatProgressSession {
   return created;
 }
 
-export function ensureChatProgressSession(sessionId: string): void {
+export function ensureChatProgressSession(sessionId: string, ownerUserId?: string): void {
   getOrCreateSession(sessionId);
+  if (ownerUserId) {
+    sessionOwners.set(sessionId, ownerUserId);
+  }
+}
+
+export function canAccessChatProgressSession(sessionId: string, userId: string): boolean {
+  const owner = sessionOwners.get(sessionId);
+  if (!owner) {
+    return false;
+  }
+  return owner === userId;
 }
 
 export function listChatProgressEvents(sessionId: string): StatusStepPayload[] {
@@ -83,5 +102,6 @@ export function subscribeChatProgress(
   return () => {
     session.listeners.delete(listener);
     session.updatedAt = Date.now();
+    pruneSessionOwner(sessionId);
   };
 }

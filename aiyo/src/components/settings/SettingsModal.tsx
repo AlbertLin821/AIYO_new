@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import {
   Check,
   Globe,
@@ -13,8 +12,22 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { zhTW as t } from "@/locales/zh-TW";
-import { deleteMemory, listMemories, updateMemory } from "@/services/aiClient";
+import {
+  clearPersonalizationData,
+  deleteAiMemory,
+  deleteMemory,
+  listMemories,
+  resetTravelPreferences,
+  updateMemory,
+} from "@/services/aiClient";
 import { syncService } from "@/services/syncService";
 import { useProfileStore } from "@/stores/useProfileStore";
 import { useToastStore } from "@/stores/useToastStore";
@@ -75,6 +88,7 @@ export default function SettingsModal() {
   const [editingMemoryText, setEditingMemoryText] = useState("");
   const [savingMemoryId, setSavingMemoryId] = useState<string | null>(null);
   const [deletingMemoryId, setDeletingMemoryId] = useState<string | null>(null);
+  const [bulkAction, setBulkAction] = useState<"preferences" | "memory" | "all" | null>(null);
 
   const loadMemories = useCallback(async () => {
     setMemoriesLoading(true);
@@ -178,36 +192,106 @@ export default function SettingsModal() {
     }
   }
 
-  return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4"
-          onClick={() => close(false)}
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 12 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 12 }}
-            transition={{ duration: 0.2 }}
-            onClick={(e) => e.stopPropagation()}
-            className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl border border-border-light bg-surface shadow-soft-lg"
-          >
-            <div className="flex items-center justify-between border-b border-border-light px-6 py-4">
-              <h2 className="text-base font-bold text-foreground">設定</h2>
-              <button
-                type="button"
-                onClick={() => close(false)}
-                className="rounded-lg p-1.5 text-muted transition-colors hover:bg-border-light hover:text-foreground"
-              >
-                <X className="size-5" aria-hidden />
-              </button>
-            </div>
+  async function handleResetPreferences() {
+    if (!window.confirm("確定要重置旅遊偏好嗎？這會清除目的地、預算、旅遊風格與交通偏好。")) {
+      return;
+    }
+    setBulkAction("preferences");
+    try {
+      await resetTravelPreferences();
+      store.updateProfile({
+        destination: "",
+        budget: 0,
+        travelDays: 0,
+        preferredTransport: "",
+        travelPace: "",
+        travelPreferences: [],
+        interests: [],
+      });
+      setPace("");
+      setPreferences([]);
+      setInterests([]);
+      setTransport("");
+      pushToast({ variant: "success", title: "已重置旅遊偏好", description: "AI 後續不會再套用舊偏好。" });
+    } catch (error) {
+      pushToast({ variant: "error", title: "重置偏好失敗", description: error instanceof Error ? error.message : t.api.postFailed });
+    } finally {
+      setBulkAction(null);
+    }
+  }
 
-            <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
+  async function handleDeleteAiMemory() {
+    if (!window.confirm("確定要刪除 AI 記憶嗎？這會刪除聊天記憶與 Mem0 向量記憶，且無法復原。")) {
+      return;
+    }
+    setBulkAction("memory");
+    try {
+      await deleteAiMemory();
+      setMemories([]);
+      pushToast({ variant: "success", title: "已刪除 AI 記憶", description: "後續 AI context 不會再讀取舊聊天記憶。" });
+    } catch (error) {
+      pushToast({ variant: "error", title: "刪除 AI 記憶失敗", description: error instanceof Error ? error.message : t.api.postFailed });
+    } finally {
+      setBulkAction(null);
+    }
+  }
+
+  async function handleClearPersonalizationData() {
+    if (!window.confirm("確定要清除所有個人化資料嗎？這會清除偏好、聊天記憶、影片互動與套用紀錄，無法復原。歷史行程本身會保留。")) {
+      return;
+    }
+    setBulkAction("all");
+    try {
+      await clearPersonalizationData();
+      store.updateProfile({
+        destination: "",
+        budget: 0,
+        travelDays: 0,
+        preferredTransport: "",
+        travelPace: "",
+        travelPreferences: [],
+        interests: [],
+      });
+      setPace("");
+      setPreferences([]);
+      setInterests([]);
+      setTransport("");
+      setMemories([]);
+      pushToast({ variant: "success", title: "已清除個人化資料", description: "行程會保留，但個人化依據已清除。" });
+    } catch (error) {
+      pushToast({ variant: "error", title: "清除個人化資料失敗", description: error instanceof Error ? error.message : t.api.postFailed });
+    } finally {
+      setBulkAction(null);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          close(false);
+        }
+      }}
+    >
+      <DialogContent
+        showCloseButton={false}
+        className="flex max-h-[85vh] w-full max-w-lg flex-col gap-0 overflow-hidden rounded-2xl border-border-light bg-surface p-0 shadow-soft-lg sm:max-w-lg"
+      >
+        <DialogHeader className="flex-row items-center justify-between border-b border-border-light px-6 py-4">
+          <DialogTitle className="text-base font-bold">設定</DialogTitle>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => close(false)}
+            className="rounded-lg"
+          >
+            <X className="size-5" aria-hidden />
+          </Button>
+        </DialogHeader>
+
+        <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
               <section>
                 <h3 className="mb-3 font-semibold text-foreground">{t.profile.travelPace}</h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -446,10 +530,41 @@ export default function SettingsModal() {
                   </div>
                 )}
               </section>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+
+              <section className="rounded-2xl border border-danger/20 bg-danger/5 p-4">
+                <h3 className="font-semibold text-danger">隱私與資料管理</h3>
+                <p className="mt-1 text-xs text-muted">
+                  這些操作會同步呼叫後端刪除資料；AI 後續 context 不會再讀取已清除的偏好或記憶。
+                </p>
+                <div className="mt-3 grid gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleResetPreferences()}
+                    disabled={bulkAction !== null}
+                    className="rounded-xl border border-border bg-surface px-3 py-2 text-left text-sm font-medium text-foreground transition-colors hover:bg-cream/60 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {bulkAction === "preferences" ? "重置中..." : "重置旅遊偏好"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteAiMemory()}
+                    disabled={bulkAction !== null}
+                    className="rounded-xl border border-danger/30 bg-surface px-3 py-2 text-left text-sm font-medium text-danger transition-colors hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {bulkAction === "memory" ? "刪除中..." : "刪除 AI 記憶"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleClearPersonalizationData()}
+                    disabled={bulkAction !== null}
+                    className="rounded-xl bg-danger px-3 py-2 text-left text-sm font-semibold text-white transition-colors hover:bg-danger/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {bulkAction === "all" ? "清除中..." : "清除所有個人化資料"}
+                  </button>
+                </div>
+              </section>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

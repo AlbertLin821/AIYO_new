@@ -1,0 +1,550 @@
+{
+  "version": 2,
+  "generatedAt": "2026-05-30T18:51:53.118Z",
+  "source": "preloaded-destinations + supplement",
+  "entries": [
+    {
+      "canonical": "九份",
+      "aliases": [
+        "九份"
+      ],
+      "countryCode": "TW"
+    },
+    {
+      "canonical": "九州",
+      "aliases": [
+        "kyushu",
+        "九州"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "大阪",
+      "aliases": [
+        "Osaka",
+        "osaka",
+        "東北亞",
+        "大阪"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "巴塞隆納",
+      "aliases": [
+        "barcelona",
+        "巴塞隆納"
+      ],
+      "countryCode": "ES"
+    },
+    {
+      "canonical": "巴黎",
+      "aliases": [
+        "paris",
+        "巴黎"
+      ],
+      "countryCode": "FR"
+    },
+    {
+      "canonical": "日月潭",
+      "aliases": [
+        "日月潭"
+      ],
+      "countryCode": "TW"
+    },
+    {
+      "canonical": "日本",
+      "aliases": [
+        "nippon",
+        "japan",
+        "nihon",
+        "にほん",
+        "日本"
+      ],
+      "countryCode": "JP",
+      "isCountryLevel": true
+    },
+    {
+      "canonical": "仙台",
+      "aliases": [
+        "Sendai",
+        "仙台"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "北海道",
+      "aliases": [
+        "Hokkaido",
+        "Sapporo",
+        "北海道",
+        "札幌"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "台中",
+      "aliases": [
+        "臺中市",
+        "台中市",
+        "台中",
+        "臺中"
+      ],
+      "countryCode": "TW"
+    },
+    {
+      "canonical": "台北",
+      "aliases": [
+        "taipei",
+        "臺北市",
+        "台北市",
+        "華語區",
+        "台北",
+        "臺北"
+      ],
+      "countryCode": "TW"
+    },
+    {
+      "canonical": "台東",
+      "aliases": [
+        "臺東縣",
+        "台東縣",
+        "台東",
+        "臺東"
+      ],
+      "countryCode": "TW"
+    },
+    {
+      "canonical": "台南",
+      "aliases": [
+        "臺南市",
+        "台南市",
+        "台南",
+        "臺南"
+      ],
+      "countryCode": "TW"
+    },
+    {
+      "canonical": "台灣",
+      "aliases": [
+        "formosa",
+        "taiwan",
+        "台灣",
+        "臺灣"
+      ],
+      "countryCode": "TW",
+      "isCountryLevel": true
+    },
+    {
+      "canonical": "由布院",
+      "aliases": [
+        "由布院"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "伊豆",
+      "aliases": [
+        "Izu",
+        "伊豆"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "吉隆坡",
+      "aliases": [
+        "kuala-lumpur",
+        "kuala lumpur",
+        "吉隆坡"
+      ],
+      "countryCode": "MY"
+    },
+    {
+      "canonical": "名古屋",
+      "aliases": [
+        "Nagoya",
+        "名古屋"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "別府",
+      "aliases": [
+        "別府"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "杜拜",
+      "aliases": [
+        "dubai",
+        "杜拜",
+        "中東"
+      ],
+      "countryCode": "AE"
+    },
+    {
+      "canonical": "沖繩",
+      "aliases": [
+        "Okinawa",
+        "Naha",
+        "沖繩",
+        "那霸"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "京都",
+      "aliases": [
+        "Kyoto",
+        "kyoto",
+        "東北亞",
+        "京都"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "奈良",
+      "aliases": [
+        "Nara",
+        "奈良"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "宜蘭",
+      "aliases": [
+        "宜蘭縣",
+        "宜蘭"
+      ],
+      "countryCode": "TW"
+    },
+    {
+      "canonical": "東京",
+      "aliases": [
+        "Tokyo",
+        "tokyo",
+        "東京",
+        "东基",
+        "東基",
+        "東急",
+        "东京"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "河內",
+      "aliases": [
+        "hanoi",
+        "河內"
+      ],
+      "countryCode": "VN"
+    },
+    {
+      "canonical": "花蓮",
+      "aliases": [
+        "花蓮縣",
+        "花蓮"
+      ],
+      "countryCode": "TW"
+    },
+    {
+      "canonical": "金門",
+      "aliases": [
+        "金門縣",
+        "金門"
+      ],
+      "countryCode": "TW"
+    },
+    {
+      "canonical": "長崎",
+      "aliases": [
+        "長崎"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "阿里山",
+      "aliases": [
+        "阿里山"
+      ],
+      "countryCode": "TW"
+    },
+    {
+      "canonical": "阿蘇",
+      "aliases": [
+        "阿蘇"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "屏東",
+      "aliases": [
+        "屏東縣",
+        "屏東"
+      ],
+      "countryCode": "TW"
+    },
+    {
+      "canonical": "峇里島",
+      "aliases": [
+        "bali",
+        "峇里島"
+      ],
+      "countryCode": "ID"
+    },
+    {
+      "canonical": "美國",
+      "aliases": [
+        "united states",
+        "america",
+        "usa",
+        "美國",
+        "美国"
+      ],
+      "countryCode": "US",
+      "isCountryLevel": true
+    },
+    {
+      "canonical": "胡志明市",
+      "aliases": [
+        "ho-chi-minh",
+        "ho chi minh",
+        "胡志明市"
+      ],
+      "countryCode": "VN"
+    },
+    {
+      "canonical": "首爾",
+      "aliases": [
+        "Seoul",
+        "seoul",
+        "東北亞",
+        "首爾"
+      ],
+      "countryCode": "KR"
+    },
+    {
+      "canonical": "香港",
+      "aliases": [
+        "hong-kong",
+        "hong kong",
+        "華語區",
+        "香港"
+      ],
+      "countryCode": "HK"
+    },
+    {
+      "canonical": "倫敦",
+      "aliases": [
+        "london",
+        "倫敦"
+      ],
+      "countryCode": "GB"
+    },
+    {
+      "canonical": "桃園",
+      "aliases": [
+        "桃園市",
+        "桃園"
+      ],
+      "countryCode": "TW"
+    },
+    {
+      "canonical": "泰國",
+      "aliases": [
+        "thailand",
+        "泰國",
+        "泰国"
+      ],
+      "countryCode": "TH",
+      "isCountryLevel": true
+    },
+    {
+      "canonical": "神戶",
+      "aliases": [
+        "Kobe",
+        "神戶",
+        "神戸"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "紐約",
+      "aliases": [
+        "new-york",
+        "new york",
+        "紐約",
+        "美洲"
+      ],
+      "countryCode": "US"
+    },
+    {
+      "canonical": "釜山",
+      "aliases": [
+        "Busan",
+        "釜山"
+      ],
+      "countryCode": "KR"
+    },
+    {
+      "canonical": "馬祖",
+      "aliases": [
+        "連江縣",
+        "馬祖"
+      ],
+      "countryCode": "TW"
+    },
+    {
+      "canonical": "高雄",
+      "aliases": [
+        "高雄市",
+        "高雄"
+      ],
+      "countryCode": "TW"
+    },
+    {
+      "canonical": "曼谷",
+      "aliases": [
+        "bangkok",
+        "曼谷"
+      ],
+      "countryCode": "TH"
+    },
+    {
+      "canonical": "清境",
+      "aliases": [
+        "清境"
+      ],
+      "countryCode": "TW"
+    },
+    {
+      "canonical": "雪梨",
+      "aliases": [
+        "sydney",
+        "大洋洲",
+        "雪梨"
+      ],
+      "countryCode": "AU"
+    },
+    {
+      "canonical": "鹿兒島",
+      "aliases": [
+        "鹿兒島"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "新加坡",
+      "aliases": [
+        "singapore",
+        "新加坡"
+      ],
+      "countryCode": "SG"
+    },
+    {
+      "canonical": "新北",
+      "aliases": [
+        "新北市",
+        "新北"
+      ],
+      "countryCode": "TW"
+    },
+    {
+      "canonical": "嘉義",
+      "aliases": [
+        "嘉義縣",
+        "嘉義市",
+        "嘉義"
+      ],
+      "countryCode": "TW"
+    },
+    {
+      "canonical": "熊本",
+      "aliases": [
+        "Kumamoto",
+        "熊本市",
+        "熊本"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "福岡",
+      "aliases": [
+        "Fukuoka",
+        "福岡市",
+        "福岡"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "輕井澤",
+      "aliases": [
+        "Karuizawa",
+        "輕井澤",
+        "軽井沢"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "澎湖",
+      "aliases": [
+        "澎湖縣",
+        "澎湖"
+      ],
+      "countryCode": "TW"
+    },
+    {
+      "canonical": "箱根",
+      "aliases": [
+        "Hakone",
+        "箱根"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "墾丁",
+      "aliases": [
+        "墾丁"
+      ],
+      "countryCode": "TW"
+    },
+    {
+      "canonical": "橫濱",
+      "aliases": [
+        "Yokohama",
+        "橫濱",
+        "橫浜"
+      ],
+      "countryCode": "JP"
+    },
+    {
+      "canonical": "澳門",
+      "aliases": [
+        "macau",
+        "華語區",
+        "澳門"
+      ],
+      "countryCode": "MO"
+    },
+    {
+      "canonical": "韓國",
+      "aliases": [
+        "south korea",
+        "korea",
+        "首爾圈",
+        "韓國",
+        "韩国"
+      ],
+      "countryCode": "KR",
+      "isCountryLevel": true
+    },
+    {
+      "canonical": "羅馬",
+      "aliases": [
+        "rome",
+        "羅馬"
+      ],
+      "countryCode": "IT"
+    }
+  ]
+}

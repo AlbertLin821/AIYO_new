@@ -8,10 +8,15 @@ export interface OllamaMessage {
 
 interface OllamaChatOptions {
   messages: OllamaMessage[];
-  format?: "json";
+  format?: "json" | Record<string, unknown>;
   model?: string;
   /** 覆寫預設逾時（例如多輪對話單輪較短）。 */
   timeoutMs?: number;
+  options?: {
+    temperature?: number;
+    top_p?: number;
+    num_ctx?: number;
+  };
   task?:
     | "default"
     | "trip-plan"
@@ -25,9 +30,17 @@ interface OllamaChatOptions {
 }
 
 export class OllamaRequestError extends Error {
-  constructor(message: string, readonly details?: unknown) {
+  constructor(
+    message: string,
+    readonly details?: unknown,
+    readonly code: "timeout" | "http_error" | "empty_response" | "network_error" = "network_error",
+  ) {
     super(message);
     this.name = "OllamaRequestError";
+  }
+
+  get isTimeout(): boolean {
+    return this.code === "timeout";
   }
 }
 
@@ -59,7 +72,50 @@ export function resolveModelForTask(
   if (task === "trip-plan" && serverConfig.ollamaTripPlanModel) {
     return serverConfig.ollamaTripPlanModel;
   }
+  if (task === "travel-chat" && serverConfig.ollamaTravelChatModel) {
+    return serverConfig.ollamaTravelChatModel;
+  }
   return serverConfig.ollamaModel;
+}
+
+function shouldUseThinkingForTask(task: OllamaChatOptions["task"] = "default"): boolean {
+  if (
+    task === "video-summary" ||
+    task === "video-summary-fast" ||
+    task === "video-summary-final" ||
+    task === "location-filter" ||
+    task === "video-moment-polish" ||
+    task === "video-place-candidate-extract"
+  ) {
+    return serverConfig.ollamaVideoThink;
+  }
+  return serverConfig.ollamaThink;
+}
+
+export function formatOllamaErrorMessage(
+  error: OllamaRequestError,
+  task: OllamaChatOptions["task"] = "default",
+): string {
+  const model = resolveModelForTask(task);
+  let detail = "";
+  if (typeof error.details === "string" && error.details.trim()) {
+    detail = error.details.trim().slice(0, 280);
+  } else if (error.details !== undefined) {
+    try {
+      detail = JSON.stringify(error.details).slice(0, 280);
+    } catch {
+      detail = "";
+    }
+  }
+
+  const parts = [`Ollama 回應失敗（${error.message}）`];
+  if (detail) {
+    parts.push(detail);
+  }
+  if (error.code === "http_error" || error.code === "network_error") {
+    parts.push(`使用模型：${model}。請確認 Ollama 已啟動、模型已 pull，或調整 aiyo/.env 的 OLLAMA_MODEL / OLLAMA_TRAVEL_CHAT_MODEL。`);
+  }
+  return parts.join(" ");
 }
 
 export async function chatWithOllama({
@@ -67,12 +123,14 @@ export async function chatWithOllama({
   format,
   model,
   timeoutMs,
+  options,
   task = "default",
 }: OllamaChatOptions): Promise<string> {
   const controller = new AbortController();
+  const cap = Math.max(5000, serverConfig.ollamaTimeoutCapMs);
   const effectiveTimeout = Math.min(
     Math.max(5000, timeoutMs ?? serverConfig.ollamaTimeoutMs),
-    120_000,
+    cap,
   );
   const timeout = setTimeout(() => controller.abort(), effectiveTimeout);
 
@@ -85,7 +143,12 @@ export async function chatWithOllama({
       body: JSON.stringify({
         model: resolveModelForTask(task, model),
         stream: false,
+        think: shouldUseThinkingForTask(task),
         format,
+        options: {
+          ...(format ? { temperature: 0, top_p: 0.9 } : {}),
+          ...options,
+        },
         messages: [
           {
             role: "system",
@@ -104,6 +167,7 @@ export async function chatWithOllama({
       throw new OllamaRequestError(
         `Ollama request failed with status ${response.status}`,
         text,
+        "http_error",
       );
     }
 
@@ -112,7 +176,11 @@ export async function chatWithOllama({
     };
     const content = payload.message?.content?.trim();
     if (!content) {
-      throw new OllamaRequestError("Ollama response did not include message content");
+      throw new OllamaRequestError(
+        "Ollama response did not include message content",
+        undefined,
+        "empty_response",
+      );
     }
     return normalizeOllamaResponseContent(content, format);
   } catch (error) {
@@ -120,9 +188,9 @@ export async function chatWithOllama({
       throw error;
     }
     if (error instanceof Error && error.name === "AbortError") {
-      throw new OllamaRequestError("Ollama request timed out");
+      throw new OllamaRequestError("Ollama request timed out", undefined, "timeout");
     }
-    throw new OllamaRequestError("Failed to reach Ollama", error);
+    throw new OllamaRequestError("Failed to reach Ollama", error, "network_error");
   } finally {
     clearTimeout(timeout);
   }

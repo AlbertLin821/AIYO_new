@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+
+process.env.AIYO_SKIP_LLM_PATCH = "1";
+process.env.AIYO_DYNAMIC_QUESTION_CARD = "0";
+
+import type { AIContextBuildResult } from "@/server/ai/aiContextBuilder";
 import {
   applyQuestionAnswers,
   buildQuestionCard,
@@ -10,8 +15,51 @@ import {
   isExistingItineraryInquiry,
   isTripWorkflowMessage,
   needsTravelResearch,
+  resolveProposedChangesFromContext,
 } from "@/server/services/travelPlannerService";
-import type { ChatSource, TripPlanDay, TripPlanResult, TripProfile } from "@/types";
+import { sanitizeDynamicQuestionCard } from "@/server/ai/validators/questionCardValidator";
+import type { ChatContext, ChatSource, TripPlanDay, TripPlanResult, TripProfile } from "@/types";
+
+function makeMemoryAiContext(destinations: string[]): AIContextBuildResult {
+  return {
+    text: "",
+    promptContextText: "",
+    sources: ["recent_trip_history"],
+    structured: {
+      recentTripCount: destinations.length,
+      recentVideoCount: 0,
+      appliedVideoSummaryCount: 0,
+    },
+    structuredContext: {
+      userId: "user_1",
+      preferences: {
+        destinationPreferences: destinations,
+      },
+      recentTrips: destinations.map((destination, index) => ({
+        id: `trip_${index}`,
+        title: `${destination} 自由行`,
+        destination,
+        daysCount: 4,
+        representativeItems: ["市區散步"],
+        createdAt: "2026-01-01T00:00:00.000Z",
+      })),
+      tripChatHistory: [],
+      globalChatMemory: [],
+      videoInteractions: [],
+      appliedVideoSummaries: [],
+      memorySnippets: [],
+      contextWarnings: [],
+    },
+    debug: {
+      sources: [],
+      includedSources: [],
+      excludedSources: [],
+      counts: {},
+      limits: {},
+      vectorStore: "none",
+    },
+  };
+}
 
 function makeStructuredProfile(): TripProfile {
   return {
@@ -40,18 +88,278 @@ function makeStructuredProfile(): TripProfile {
   };
 }
 
-test("structured chat asks for travel_dates before itinerary generation when dates are missing", async () => {
+function makeTainanPreferenceAiContext(): AIContextBuildResult {
+  return {
+    text: "",
+    promptContextText: "",
+    sources: ["user_preferences"],
+    structured: {
+      preferences: {
+        budgetLevel: "medium",
+        travelStyle: ["美食", "古蹟"],
+        destination: "台南",
+      },
+      recentTripCount: 1,
+      recentVideoCount: 0,
+      appliedVideoSummaryCount: 0,
+    },
+    structuredContext: {
+      userId: "user_1",
+      preferences: {
+        destinationPreferences: ["台南"],
+        budgetLevel: "medium",
+        travelStyles: ["美食", "古蹟"],
+        pace: null,
+        transportPreference: null,
+        accommodationPreference: null,
+        avoidances: [],
+        confidence: 0.8,
+        source: "mem0",
+        updatedAt: null,
+      },
+      recentTrips: [],
+      tripChatHistory: [],
+      globalChatMemory: [],
+      videoInteractions: [],
+      appliedVideoSummaries: [],
+      memorySnippets: [],
+      contextWarnings: [],
+    },
+    debug: {
+      sources: [],
+      includedSources: [],
+      excludedSources: [],
+      counts: {},
+      limits: {},
+      vectorStore: "mem0",
+    },
+  };
+}
+
+test("東京三天 with stale 台南 context confirms preferences without question card", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "東京三天",
+    structuredTravelPlanning: true,
+    context: { destination: "台南", days: 3 },
+    tripProfile: {
+      destination: "台南",
+      duration_days: 3,
+      budget: null,
+      companions: null,
+      traveler_count: null,
+      transportation: null,
+      pace: null,
+      preferences: [],
+      avoid_places: [],
+      notes: null,
+    },
+    aiContext: makeTainanPreferenceAiContext(),
+  });
+
+  assert.equal(response.travelAgentDecision?.mode, "confirm_preferences");
+  assert.equal(response.reply.responseType, "text_message");
+  assert.equal(response.reply.questionCard, undefined);
+  assert.match(response.reply.content, /東京/);
+  assert.doesNotMatch(response.reply.content, /台南/);
+  assert.equal(response.tripProfile?.destination, "東京");
+});
+
+test("structured chat generates itinerary when destination and duration are already complete", async () => {
   const response = await chatWithTravelAssistant({
     message: "請幫我規劃熊本行程",
     structuredTravelPlanning: true,
     tripProfile: makeStructuredProfile(),
   });
 
-  assert.equal(response.reply.responseType, "question_card");
-  assert.equal(response.reply.questionCard?.response_type, "question_card");
-  assert.ok(response.reply.questionCard?.questions.some((question) => question.slot === "travel_dates"));
-  assert.equal(response.reply.statusSteps?.[1]?.phase, "waiting_user");
-  assert.equal(response.reply.statusSteps?.[1]?.status, "waiting_input");
+  assert.equal(response.reply.responseType, "travel_plan");
+  assert.ok(response.reply.travelPlan);
+});
+
+function chatContextWithItinerary(destination: string): ChatContext {
+  return {
+    destination,
+    itinerary: [
+      {
+        dayNumber: 1,
+        items: [
+          {
+            id: "seed_item",
+            time: "09:00",
+            title: "測試景點",
+            type: "attraction",
+            transport: "步行",
+          },
+        ],
+      },
+    ],
+  };
+}
+
+test("travel chat retries once when the first compose request times out", async () => {
+  const originalFetch = globalThis.fetch;
+  let callCount = 0;
+
+  globalThis.fetch = async () => {
+    callCount += 1;
+    if (callCount === 1) {
+      const abortError = new Error("aborted");
+      abortError.name = "AbortError";
+      throw abortError;
+    }
+    return new Response(
+      JSON.stringify({
+        message: {
+          content: JSON.stringify({
+            replyText: "已完成重試回覆",
+            proposedChanges: [],
+          }),
+        },
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  };
+
+  try {
+    const response = await chatWithTravelAssistant({
+      message: "你覺得東京適合第一次自由行嗎",
+      context: chatContextWithItinerary("東京"),
+    });
+    assert.equal(callCount, 2);
+    assert.equal(response.reply.responseType, "text_message");
+    assert.equal(response.reply.content, "已完成重試回覆");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("travel chat returns timeout fallback text after retry exhaustion", async () => {
+  const originalFetch = globalThis.fetch;
+  let callCount = 0;
+
+  globalThis.fetch = async () => {
+    callCount += 1;
+    const abortError = new Error("aborted");
+    abortError.name = "AbortError";
+    throw abortError;
+  };
+
+  try {
+    const response = await chatWithTravelAssistant({
+      message: "你覺得東京適合第一次自由行嗎",
+      context: chatContextWithItinerary("東京"),
+    });
+    assert.equal(callCount, 2);
+    assert.equal(response.reply.responseType, "text_message");
+    assert.equal(
+      response.reply.content,
+      "我先保留目前的行程脈絡；你可以再補充想調整的地點、天數或預算，我會用更精簡的查詢重新規劃。",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("personal memory recall with no stored data returns guidance without heavy compose", async () => {
+  const originalFetch = globalThis.fetch;
+  let callCount = 0;
+
+  globalThis.fetch = async () => {
+    callCount += 1;
+    return new Response(JSON.stringify({ message: { content: "should not be used" } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    const response = await chatWithTravelAssistant({
+      message: "我之前去過哪些地方啊",
+    });
+    assert.equal(callCount, 0);
+    assert.equal(response.travelAgentDecision?.debugReason, "personal memory recall");
+    assert.match(response.reply.content, /還沒有記錄/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("personal memory recall uses lightweight LLM polish when memory exists", async () => {
+  const originalFetch = globalThis.fetch;
+  let callCount = 0;
+
+  globalThis.fetch = async () => {
+    callCount += 1;
+    return new Response(JSON.stringify({ message: { content: "你過去去過京都和大阪，偏好美食與寺廟。" } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    const response = await chatWithTravelAssistant({
+      message: "我之前去過哪些地方啊",
+      aiContext: makeMemoryAiContext(["京都", "大阪"]),
+    });
+    assert.equal(callCount, 1);
+    assert.equal(response.travelAgentDecision?.debugReason, "personal memory recall");
+    assert.match(response.reply.content, /京都/);
+    assert.match(response.reply.content, /大阪/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("personal memory recall timeout falls back to deterministic destination list", async () => {
+  const originalFetch = globalThis.fetch;
+  let callCount = 0;
+
+  globalThis.fetch = async () => {
+    callCount += 1;
+    const abortError = new Error("aborted");
+    abortError.name = "AbortError";
+    throw abortError;
+  };
+
+  try {
+    const response = await chatWithTravelAssistant({
+      message: "我之前去過哪些地方啊",
+      aiContext: makeMemoryAiContext(["京都", "大阪"]),
+    });
+    assert.equal(callCount, 1);
+    assert.match(response.reply.content, /京都/);
+    assert.match(response.reply.content, /大阪/);
+    assert.doesNotMatch(response.reply.content, /重新規劃/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("travel chat does not retry non-timeout ollama errors", async () => {
+  const originalFetch = globalThis.fetch;
+  let callCount = 0;
+
+  globalThis.fetch = async () => {
+    callCount += 1;
+    return new Response("server error", {
+      status: 500,
+      headers: { "Content-Type": "text/plain" },
+    });
+  };
+
+  try {
+    await assert.rejects(() =>
+      chatWithTravelAssistant({
+        message: "你覺得東京適合第一次自由行嗎",
+        context: chatContextWithItinerary("東京"),
+      }),
+    );
+    assert.equal(callCount, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("date range derives inclusive trip days without adding extra days", () => {
@@ -95,55 +403,167 @@ test("travel_dates answers override stale duration to the actual inclusive span"
   });
 });
 
-test("existing itinerary question card asks how to merge instead of output format", () => {
+test("question card skips destination when conversation already mentions Kumamoto", () => {
   const card = buildQuestionCard(
     {
       ...makeStructuredProfile(),
-      plan_integration: null,
+      destination: null,
+      duration_days: null,
+      duration_nights: null,
+      preferences: [],
+      pace: null,
     },
+    { destination: "熊本", days: undefined },
+  );
+  assert.equal(card?.response_type, "question_card");
+  assert.ok(card?.questions.some((question) => question.slot === "duration_days"));
+  assert.equal(
+    card?.questions.some((question) => question.slot === "destination"),
+    false,
+  );
+});
+
+test("question card does not block on companions when destination and duration are known", () => {
+  const card = buildQuestionCard({
+    ...makeStructuredProfile(),
+    destination: "熊本",
+    duration_days: 5,
+    duration_nights: 4,
+    companions: null,
+    traveler_count: null,
+    preferences: [],
+    pace: null,
+  });
+  assert.equal(card, null);
+});
+
+test("question card does not block on preferences after companions are known", () => {
+  const card = buildQuestionCard({
+    ...makeStructuredProfile(),
+    destination: "熊本",
+    duration_days: 5,
+    duration_nights: 4,
+    companions: "couple_or_friend",
+    traveler_count: 2,
+    preferences: [],
+    pace: null,
+  });
+  assert.equal(card, null);
+});
+
+test("applyQuestionAnswers maps traveler_count to companions", () => {
+  const profile = applyQuestionAnswers(makeStructuredProfile(), [
+    { slot: "traveler_count", value: "3" },
+  ]);
+  assert.equal(profile.traveler_count, 3);
+  assert.equal(profile.companions, "small_group");
+});
+
+test("applyQuestionAnswers maps companions to traveler_count", () => {
+  const profile = applyQuestionAnswers(
+    { ...makeStructuredProfile(), companions: null, traveler_count: null },
+    [{ slot: "companions", value: "solo" }],
+  );
+  assert.equal(profile.companions, "solo");
+  assert.equal(profile.traveler_count, 1);
+});
+
+test("question card becomes null after core planning fields are complete", () => {
+  const card = buildQuestionCard(makeStructuredProfile());
+  assert.equal(card, null);
+});
+
+test("dynamic question card sanitizer keeps AI wording while preserving parseable values", () => {
+  const fallback = {
+    response_type: "question_card" as const,
+    title: "先幫我了解你的熊本旅遊需求，這樣行程會更貼合你",
+    questions: [
+      {
+        slot: "preferences" as const,
+        type: "multi_choice" as const,
+        question: "你想讓熊本行程更偏向哪幾種體驗？",
+        options: [
+          { label: "阿蘇自然景觀", value: "nature", recommended: true },
+          { label: "馬肉、拉麵等在地美食", value: "food" },
+        ],
+      },
+      {
+        slot: "pace" as const,
+        type: "single_choice" as const,
+        question: "每天安排要偏慢還是偏滿？",
+        options: [
+          { label: "慢慢玩，保留咖啡和休息時間", value: "relaxed", recommended: true },
+          { label: "行程排滿，景點多一點", value: "intensive" },
+        ],
+      },
+    ],
+    action: { label: "繼續", shortcut: "Enter" },
+  };
+
+  const card = sanitizeDynamicQuestionCard(
     {
-      destination: "熊本",
-      days: 2,
-      itinerary: [
+      response_type: "question_card",
+      eyebrow: "依你剛剛說的調整",
+      title: "熊本這趟先抓出你最在意的玩法",
+      description: "我會用這幾個答案決定景點密度和住宿區域。",
+      questions: [
         {
-          dayNumber: 1,
-          items: [
-            { id: "item_1", time: "09:00", title: "熊本城", type: "attraction" },
+          slot: "preferences",
+          type: "multi_choice",
+          question: "你想讓熊本行程更偏向哪幾種體驗？",
+          helperText: "可複選，之後路線會依這些偏好排序。",
+          options: [
+            { label: "阿蘇自然景觀", value: "nature", recommended: true },
+            { label: "馬肉、拉麵等在地美食", value: "food" },
+          ],
+        },
+        {
+          slot: "pace",
+          type: "single_choice",
+          question: "每天安排要偏慢還是偏滿？",
+          options: [
+            { label: "慢慢玩，保留咖啡和休息時間", value: "relaxed", recommended: true },
+            { label: "行程排滿，景點多一點", value: "intensive" },
+            { label: "不合法值會被丟掉", value: "packed" },
           ],
         },
       ],
+      action: { label: "用這樣規劃", shortcut: "Enter" },
     },
+    fallback,
   );
 
-  assert.equal(card?.response_type, "question_card");
-  assert.ok(card?.questions.some((question) => question.slot === "plan_integration"));
-  assert.ok(card?.questions.some((question) => question.question === "是否直接加入現有行程規劃呢？"));
+  assert.equal(card?.eyebrow, "依你剛剛說的調整");
+  assert.equal(card?.questions[0]?.question, "你想讓熊本行程更偏向哪幾種體驗？");
   assert.deepEqual(
-    card?.questions.find((question) => question.slot === "plan_integration")?.options?.map((option) => option.label),
-    ["直接加入", "自行加入"],
+    card?.questions.find((question) => question.slot === "pace")?.options?.map((option) => option.value),
+    ["relaxed", "intensive"],
   );
-  assert.ok(card?.questions.every((question) => !question.question.includes("最後用哪種形式呈現")));
+  assert.equal(card?.action?.label, "用這樣規劃");
 });
 
-test("budget question uses dynamic options based on trip profile instead of fixed template", () => {
+test("東基 speech typo normalizes to Tokyo in required question card copy", () => {
   const card = buildQuestionCard({
     ...makeStructuredProfile(),
-    budget: null,
-    transportation: "self_drive",
-    traveler_count: 2,
-    companions: "couple_or_friend",
-    preferences: ["food", "onsen", "shopping"],
-    departure_location: "台北",
-    travel_dates: null,
+    destination: "東基",
+    duration_days: null,
+    duration_nights: null,
   });
 
-  const budgetQuestion = card?.questions.find((question) => question.slot === "budget");
-  assert.ok(budgetQuestion);
-  assert.equal(budgetQuestion?.question, "熊本5天4夜的總預算大概抓多少比較合適？");
-  assert.ok(budgetQuestion?.options?.length === 3);
-  assert.ok(budgetQuestion?.options?.every((option) => /\d{1,3}(,\d{3})*\s*元/.test(option.label)));
-  assert.ok(budgetQuestion?.options?.some((option) => option.recommended));
-  assert.ok(budgetQuestion?.options?.every((option) => !["budget", "mid_range", "comfortable"].includes(option.value)));
+  assert.equal(card?.response_type, "question_card");
+  assert.ok(card?.questions.some((question) => question.slot === "duration_days"));
+});
+
+test("question card includes destination and duration slots when both missing", () => {
+  const card = buildQuestionCard({
+    ...makeStructuredProfile(),
+    destination: null,
+    duration_days: null,
+    duration_nights: null,
+  });
+  assert.equal(card?.response_type, "question_card");
+  assert.ok(card?.questions.some((question) => question.slot === "destination"));
+  assert.ok(card?.questions.some((question) => question.slot === "duration_days"));
 });
 
 test("needsTravelResearch stays false for current itinerary queries and modifications", () => {
@@ -182,6 +602,13 @@ test("needsTravelResearch turns on for recommendation and video inspiration requ
   assert.equal(
     needsTravelResearch({
       message: "幫我找熊本適合晚上去的地方",
+      context,
+    }),
+    true,
+  );
+  assert.equal(
+    needsTravelResearch({
+      message: "熊本三天兩夜行程可以怎麼排？",
       context,
     }),
     true,
@@ -312,7 +739,222 @@ test("existing itinerary replacement request becomes a targeted proposed change"
       source: "ai-chat",
     },
   ]);
+  assert.equal(response.assistantActions?.[0]?.type, "itinerary.update_item");
+  assert.deepEqual(response.assistantActions?.[0]?.payload, {
+    dayId: "day-3",
+    itemId: "item_d3_2",
+    patch: {
+      title: "海東龍宮寺",
+      location: "海東龍宮寺",
+      startTime: undefined,
+      notes: undefined,
+    },
+  });
   assert.equal(response.itinerarySuggestion, undefined);
+});
+
+test("assistant action updates second day Akihabara to Skytree while keeping legacy proposedChanges", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "幫我把第二天的秋葉原改成晴空塔",
+    structuredTravelPlanning: true,
+    context: {
+      destination: "東京",
+      days: 3,
+      itinerary: [
+        { dayNumber: 2, items: [{ id: "d2-a", time: "14:00", title: "秋葉原", type: "attraction" as const }] },
+      ],
+    },
+  });
+
+  assert.equal(response.assistantActions?.[0]?.type, "itinerary.update_item");
+  assert.equal(response.assistantActions?.[0]?.payload.itemId, "d2-a");
+  assert.equal(response.proposedChanges?.[0]?.type, "update_itinerary_item");
+});
+
+test("assistant action supports reordering a day", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "把第二天順序改成淺草、晴空塔、上野",
+    structuredTravelPlanning: true,
+    context: {
+      destination: "東京",
+      days: 3,
+      itinerary: [
+        {
+          dayNumber: 2,
+          items: [
+            { id: "ueno", time: "09:00", title: "上野", type: "attraction" as const },
+            { id: "asakusa", time: "11:00", title: "淺草", type: "attraction" as const },
+            { id: "skytree", time: "17:00", title: "晴空塔", type: "attraction" as const },
+          ],
+        },
+      ],
+    },
+  });
+
+  assert.equal(response.assistantActions?.[0]?.type, "itinerary.reorder_items");
+  assert.deepEqual(response.assistantActions?.[0]?.payload.orderedItemIds, ["asakusa", "skytree", "ueno"]);
+});
+
+test("assistant action keeps relaxed day changes within action limit", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "把第三天改成輕鬆一點",
+    structuredTravelPlanning: true,
+    context: {
+      destination: "東京",
+      days: 3,
+      itinerary: [
+        {
+          dayNumber: 3,
+          items: [
+            { id: "a", time: "09:00", title: "A", type: "attraction" as const },
+            { id: "b", time: "11:00", title: "B", type: "attraction" as const },
+            { id: "c", time: "13:00", title: "C", type: "attraction" as const },
+          ],
+        },
+      ],
+    },
+  });
+
+  assert.ok((response.assistantActions?.length ?? 0) > 0);
+  assert.ok((response.assistantActions?.length ?? 0) <= 6);
+  assert.equal(response.assistantActions?.[0]?.type, "itinerary.update_item");
+});
+
+test("map focus assistant action does not emit persistence proposedChanges", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "地圖幫我定位到清水寺",
+    structuredTravelPlanning: true,
+    context: { destination: "京都", days: 1, itinerary: [] },
+  });
+
+  assert.equal(response.assistantActions?.[0]?.type, "map.focus_location");
+  assert.equal(response.proposedChanges?.length ?? 0, 0);
+});
+
+test("existing itinerary delete whole day request becomes remove_itinerary_day proposed change", async () => {
+  const context = {
+    destination: "釜山",
+    days: 5,
+    itinerary: [
+      { dayNumber: 1, items: [{ id: "d1", time: "09:00", title: "海雲台", type: "attraction" as const }] },
+      { dayNumber: 2, items: [{ id: "d2", time: "09:00", title: "甘川文化村", type: "attraction" as const }] },
+      { dayNumber: 3, items: [{ id: "d3", time: "09:00", title: "札嘎其市場", type: "attraction" as const }] },
+      { dayNumber: 4, items: [{ id: "d4", time: "09:00", title: "太宗台", type: "attraction" as const }] },
+      { dayNumber: 5, items: [{ id: "d5", time: "09:00", title: "機場返程", type: "transport" as const }] },
+    ],
+  };
+
+  for (const message of [
+    "幫我刪掉第五天的行程",
+    "刪除第5天",
+    "把第五天移除",
+    "取消第五天的安排",
+    "最后一天不要了",
+  ]) {
+    const response = await chatWithTravelAssistant({
+      message,
+      structuredTravelPlanning: true,
+      context,
+    });
+
+    assert.equal(response.reply.responseType, "text_message", message);
+    assert.match(response.reply.content, /已刪除第 5 天行程/, message);
+    assert.deepEqual(
+      response.proposedChanges,
+      [
+        {
+          type: "remove_itinerary_day",
+          day: 5,
+          reason: "依照使用者要求刪除整天行程",
+          source: "ai-chat",
+        },
+      ],
+      message,
+    );
+  }
+});
+
+test("existing itinerary delete item request respects the requested day", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "幫我刪掉地7天的熊本城",
+    structuredTravelPlanning: true,
+    context: {
+      destination: "熊本",
+      days: 7,
+      itinerary: [
+        { dayNumber: 2, items: [{ id: "d2", time: "09:00", title: "熊本城", type: "attraction" as const }] },
+        { dayNumber: 7, items: [{ id: "d7", time: "10:00", title: "熊本城", type: "attraction" as const }] },
+      ],
+    },
+  });
+
+  assert.equal(response.reply.responseType, "text_message");
+  assert.match(response.reply.content, /已從第 7 天移除「熊本城」/);
+  assert.deepEqual(response.proposedChanges, [
+    {
+      type: "remove_itinerary_item",
+      day: 7,
+      itemId: "d7",
+      targetTitle: "熊本城",
+      reason: "依照使用者要求，自第 7 天移除此行程項目",
+      source: "ai-chat",
+    },
+  ]);
+});
+
+test("existing itinerary delete item request reports missing item on requested day", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "刪掉第7天的熊本城",
+    structuredTravelPlanning: true,
+    context: {
+      destination: "熊本",
+      days: 7,
+      itinerary: [
+        { dayNumber: 2, items: [{ id: "d2", time: "09:00", title: "熊本城", type: "attraction" as const }] },
+        { dayNumber: 7, items: [{ id: "d7", time: "10:00", title: "水前寺成趣園", type: "attraction" as const }] },
+      ],
+    },
+  });
+
+  assert.equal(response.reply.responseType, "text_message");
+  assert.match(response.reply.content, /第 7 天找不到「熊本城」/);
+  assert.equal(response.proposedChanges?.length ?? 0, 0);
+});
+
+test("resolveProposedChangesFromContext prefers explicit day in user message over wrong model day", () => {
+  const context = {
+    destination: "熊本",
+    days: 7,
+    itinerary: [
+      { dayNumber: 2, items: [{ id: "d2", time: "09:00", title: "熊本城", type: "attraction" as const }] },
+      { dayNumber: 7, items: [{ id: "d7", time: "10:00", title: "熊本城", type: "attraction" as const }] },
+    ],
+  };
+
+  const { resolved, issues } = resolveProposedChangesFromContext({
+    userMessage: "幫我刪掉地7天的熊本城",
+    context,
+    changes: [
+      {
+        type: "remove_itinerary_item",
+        day: 2,
+        targetTitle: "熊本城",
+        source: "ai-chat",
+      },
+    ],
+  });
+
+  assert.equal(issues.length, 0);
+  assert.deepEqual(resolved, [
+    {
+      type: "remove_itinerary_item",
+      day: 7,
+      itemId: "d7",
+      targetTitle: "熊本城",
+      reason: "依照使用者要求，自第 7 天移除此行程項目",
+      source: "ai-chat",
+    },
+  ]);
 });
 
 test("structured planning template only starts for explicit planning intent", () => {
@@ -546,10 +1188,10 @@ test("convertTripPlanToTravelPlanWithSources preserves multi-provider sources an
   assert.equal(response.event_alerts[0]?.citations?.[0], "official_001");
   assert.match(response.event_alerts[0]?.message || "", /官方提醒/);
   assert.equal(response.days[0]?.transportation[0]?.text, "熊本電鐵一日券可達");
-  assert.ok(response.days[0]?.spots[0]?.citations?.includes("official_001"));
-  assert.ok(response.days[0]?.food_recommendations[0]?.citations?.includes("yt_001"));
-  assert.ok(response.days[0]?.transportation[0]?.citations?.includes("web_001"));
-  assert.ok(!(response.summary_table[0]?.citations || []).includes("yt_001"));
+  assert.equal(response.days[0]?.spots[0]?.citations, undefined);
+  assert.equal(response.days[0]?.food_recommendations[0]?.citations, undefined);
+  assert.equal(response.days[0]?.transportation[0]?.citations, undefined);
+  assert.equal(response.summary_table[0]?.citations, undefined);
 });
 
 test("convertTripPlanToTravelPlanWithSources normalizes transport enum labels for display", () => {
@@ -581,4 +1223,50 @@ test("convertTripPlanToTravelPlanWithSources normalizes transport enum labels fo
   );
 
   assert.equal(response.days[0]?.transportation[0]?.text, "大眾運輸");
+});
+
+test("question answer summary does not overwrite Tokyo destination", async () => {
+  const baseProfile: TripProfile = {
+    destination: "東京",
+    duration_days: 3,
+    duration_nights: 2,
+    departure_location: null,
+    travel_dates: null,
+    companions: null,
+    traveler_count: null,
+    budget: null,
+    special_population: {
+      has_elderly: false,
+      has_children: false,
+      mobility_issue: false,
+    },
+    preferences: [],
+    transportation: null,
+    pace: null,
+    plan_integration: null,
+  };
+
+  const response = await chatWithTravelAssistant({
+    message: "這趟東京幾個人一起去？：兩人（伴侶或朋友）",
+    structuredTravelPlanning: true,
+    tripProfile: baseProfile,
+    questionAnswers: [
+      {
+        slot: "companions",
+        question: "這趟東京幾個人一起去？",
+        value: "couple_or_friend",
+        label: "兩人（伴侶或朋友）",
+      },
+    ],
+    context: {
+      destination: "東京",
+      days: 3,
+      budget: 0,
+      itinerary: [],
+      preferences: { interests: [], pace: "moderate" },
+    },
+  });
+
+  assert.equal(response.tripProfile?.destination, "東京");
+  assert.ok(!(response.reply.questionCard?.title || "").includes("？：兩人"));
 });

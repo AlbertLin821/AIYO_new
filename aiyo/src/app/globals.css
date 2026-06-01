@@ -1,13 +1,19 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
 
 :root {
   --background: #faf6f1;
   --foreground: #2d3748;
   --primary: #5a7ea3;
+  --primary-foreground: #ffffff;
   --primary-light: #9fb8d5;
   --primary-dark: #4a6d91;
   --secondary: #e890a8;
+  --secondary-foreground: #ffffff;
   --secondary-light: #fad4de;
   --tertiary: #8fbc91;
   --tertiary-light: #dceee0;
@@ -19,13 +25,37 @@
   --surface: #ffffff;
   --surface-elevated: #f8f9fc;
   --surface-hover: #f5f6fa;
-  --muted: #5c6578;
+  --muted: #f5f6fa;
+  --muted-foreground: #5c6578;
   --muted-light: #8b95a8;
   --border: #c9c2b8;
   --border-light: #e6e2da;
   --border-strong: #a89f92;
   --danger: #d86565;
   --shadow-color: 220 20% 55%;
+  --card: #ffffff;
+  --card-foreground: #2d3748;
+  --popover: #ffffff;
+  --popover-foreground: #2d3748;
+  --accent: #f5f6fa;
+  --accent-foreground: #2d3748;
+  --destructive: #d86565;
+  --input: #e6e2da;
+  --ring: #9fb8d5;
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.75rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
 }
 
 @theme inline {
@@ -53,6 +83,39 @@
   --color-surface-elevated: var(--surface-elevated);
   --color-danger: var(--danger);
   --font-sans: 'Inter', 'Noto Sans TC', system-ui, sans-serif;
+  --font-heading: 'Inter', 'Noto Sans TC', system-ui, sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
 * {
@@ -60,8 +123,6 @@
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
   font-family: 'Inter', 'Noto Sans TC', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -98,25 +159,8 @@ body {
   -webkit-backdrop-filter: blur(12px);
 }
 
-/* AI 對話頁：玻璃擬態與主題色（由 .chat-page-root 的 data-chat-theme 切換） */
+/* AI 對話頁：固定淺色介面變數 */
 .chat-page-root {
-  --chat-fg: 255, 255, 255;
-  --chat-fg-muted: 212, 212, 216;
-  --chat-fg-subtle: 161, 161, 170;
-  --chat-fg-soft: 244, 244, 245;
-  --chat-glass-panel-bg: rgba(12, 20, 16, 0.52);
-  --chat-glass-card-bg: rgba(255, 255, 255, 0.1);
-  --chat-glass-card-strong-bg: rgba(255, 255, 255, 0.16);
-  --chat-glass-border: rgba(255, 255, 255, 0.12);
-  --chat-glass-date-pill-bg: rgba(0, 0, 0, 0.32);
-  --chat-dash-border: rgba(255, 255, 255, 0.2);
-  --chat-hover: rgba(255, 255, 255, 0.14);
-  --chat-chip-active-bg: rgba(255, 255, 255, 0.2);
-  --chat-chip-idle-bg: rgba(255, 255, 255, 0.1);
-  --chat-placeholder: 161, 161, 170;
-}
-
-.chat-page-root[data-chat-theme="light"] {
   --chat-fg: 30, 41, 59;
   --chat-fg-muted: 71, 85, 105;
   --chat-fg-subtle: 100, 116, 139;
@@ -271,4 +315,85 @@ body {
     radial-gradient(ellipse 70% 50% at 20% 30%, rgb(232 239 247), transparent),
     radial-gradient(ellipse 60% 45% at 85% 25%, rgb(210 226 238), transparent),
     linear-gradient(165deg, rgb(226 236 246) 0%, rgb(200 218 228) 45%, rgb(205 223 206) 100%);
+}
+
+/* 對話「補齊資料」表單：微微閃爍的藍色框線 */
+@keyframes questionCardBorderPulse {
+  0%,
+  100% {
+    border-color: rgb(90 126 163 / 0.28);
+    box-shadow:
+      0 0 0 0 rgb(90 126 163 / 0),
+      0 2px 8px -2px rgb(90 126 163 / 0.06);
+  }
+  50% {
+    border-color: rgb(90 126 163 / 0.92);
+    box-shadow:
+      0 0 0 3px rgb(90 126 163 / 0.18),
+      0 4px 14px -4px rgb(90 126 163 / 0.22);
+  }
+}
+
+.question-card-attention {
+  animation: questionCardBorderPulse 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .question-card-attention {
+    animation: none;
+    border-color: rgb(90 126 163 / 0.55);
+    box-shadow: 0 0 0 2px rgb(90 126 163 / 0.12);
+  }
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@layer utilities {
+  .text-muted {
+    color: var(--muted-foreground);
+  }
 }

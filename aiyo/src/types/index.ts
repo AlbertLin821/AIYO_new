@@ -1,3 +1,7 @@
+import type { ItineraryPatch } from "@/lib/types/itinerary";
+import type { SourceReference } from "@/lib/types/sources";
+import type { ToolCallRecord } from "@/lib/types/tools";
+
 export type TravelPace = "relaxed" | "moderate" | "intensive";
 
 export type TripItemType =
@@ -43,7 +47,7 @@ export interface LocationReference {
   /**
    * 地點如何被採用並對應座標：Google 地理編碼成功，或僅依 LLM／規則抽取並以內部對照補座標。
    */
-  resolvedFrom?: "llm" | "heuristic" | "title-poi" | "google-geocode";
+  resolvedFrom?: "llm" | "heuristic" | "title-poi" | "google-geocode" | "google-place-details";
   rawQuery?: string;
   normalizedName?: string;
   /** Original transcript / query fragment before normalization. */
@@ -89,6 +93,12 @@ export interface TripPlanItem {
   title: string;
   type: TripItemType;
   transport?: string;
+  /** Minutes from the previous located item in the same day, when backed by a routing provider. */
+  transportDurationMinutes?: number;
+  /** Distance from the previous located item in meters, when backed by a routing provider. */
+  transportDistanceMeters?: number;
+  /** Provider used to resolve the transport time. */
+  transportDataSource?: "google_routes";
   notes?: string;
   location?: LocationReference;
   source?: "manual" | "ai" | "video";
@@ -160,6 +170,7 @@ export type AiProposedChange =
   time: string;
   title: string;
   locationName?: string;
+  transport?: string;
   notes?: string;
   reason?: string;
   source: "ai-chat";
@@ -184,7 +195,95 @@ export type AiProposedChange =
   targetTitle?: string;
   reason?: string;
   source: "ai-chat";
+}
+  | {
+  type: "remove_itinerary_day";
+  day: number;
+  reason?: string;
+  source: "ai-chat";
 };
+
+export type AddItineraryChange = Extract<AiProposedChange, { type: "add_itinerary_item" }>;
+export type ExistingItemChange = Extract<
+  AiProposedChange,
+  { type: "update_itinerary_item" | "remove_itinerary_item" }
+>;
+
+export type AssistantActionItemInput = {
+  title: string;
+  location?: string | null;
+  address?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  notes?: string | null;
+  category?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  source?: "assistant" | "search" | "video" | "manual";
+};
+
+export type AssistantAction =
+  | {
+      type: "itinerary.add_item";
+      payload: {
+        tripId?: string;
+        dayId: string;
+        item: AssistantActionItemInput;
+      };
+    }
+  | {
+      type: "itinerary.update_item";
+      payload: {
+        tripId?: string;
+        dayId: string;
+        itemId: string;
+        patch: Partial<Omit<AssistantActionItemInput, "source">>;
+      };
+    }
+  | {
+      type: "itinerary.remove_item";
+      payload: {
+        tripId?: string;
+        dayId: string;
+        itemId: string;
+      };
+    }
+  | {
+      type: "itinerary.reorder_items";
+      payload: {
+        tripId?: string;
+        dayId: string;
+        orderedItemIds: string[];
+      };
+    }
+  | {
+      type: "itinerary.replace_day";
+      payload: {
+        tripId?: string;
+        dayId: string;
+        items: AssistantActionItemInput[];
+      };
+    }
+  | {
+      type: "trip.update_metadata";
+      payload: {
+        tripId?: string;
+        title?: string;
+        destination?: string;
+        budgetLevel?: "low" | "medium" | "high" | string;
+        travelStyles?: string[];
+        pace?: "relaxed" | "balanced" | "intensive" | string;
+      };
+    }
+  | {
+      type: "map.focus_location";
+      payload: {
+        placeName: string;
+        lat?: number | null;
+        lng?: number | null;
+        zoom?: number;
+      };
+    };
 
 export type ChatResponseType = "text_message" | "question_card" | "status_step" | "travel_plan" | "error";
 
@@ -233,11 +332,16 @@ export type ChatQuestion = {
   type: ChatQuestionType;
   options?: ChatQuestionOption[];
   placeholder?: string;
+  helperText?: string;
+  startLabel?: string;
+  endLabel?: string;
 };
 
 export type QuestionCardPayload = {
   response_type: "question_card";
   title: string;
+  eyebrow?: string;
+  description?: string;
   questions: ChatQuestion[];
   action?: {
     label: string;
@@ -270,6 +374,8 @@ export type StatusStepProvider =
   | "tavily"
   | "youtube"
   | "searxng"
+  | "serper"
+  | "mock_web"
   | "ollama";
 
 export type StatusStepPayload = {
@@ -341,6 +447,8 @@ export type TravelPlanRevisionMeta = {
 export type TravelPlanResponse = {
   response_type: "travel_plan";
   title: string;
+  summary?: string;
+  citations?: string[];
   revision?: TravelPlanRevisionMeta;
   sources?: Record<string, ChatSource>;
   summary_table: Array<{
@@ -388,7 +496,192 @@ export interface ChatContext {
   tripStartDate?: string;
   /** ISO yyyy-mm-dd，若省略則與 tripStartDate 同日 */
   tripEndDate?: string;
+  /** Server-resolved trip destination scope for geo/video filtering */
+  destinationScope?: import("@/lib/tripDestinationScope").TripDestinationScope;
 }
+
+export type ConversationMode =
+  | "casual_chat"
+  | "collect_requirements"
+  | "confirm_preferences"
+  | "generate_itinerary"
+  | "modify_itinerary"
+  | "answer_trip_question"
+  | "search_travel_info";
+
+export type TravelSearchProvider = "serper" | "tavily";
+
+export type SearchNeed =
+  | "none"
+  | "fresh_info"
+  | "place_details"
+  | "opening_hours"
+  | "ticket_price"
+  | "events"
+  | "weather"
+  | "transportation"
+  | "official_source"
+  | "general_web_research";
+
+export type SearchDecision = {
+  shouldSearch: boolean;
+  searchNeed: SearchNeed;
+  reason: string;
+  query?: string;
+  providers: TravelSearchProvider[];
+  freshnessRequired: boolean;
+  maxResults?: number;
+};
+
+export type TravelSearchContext = {
+  provider: TravelSearchProvider;
+  query: string;
+  searchNeed: SearchNeed;
+  results: Array<{
+    title: string;
+    url?: string;
+    snippet?: string;
+    source?: string;
+    publishedAt?: string;
+  }>;
+  usedAt: string;
+};
+
+export type TravelAgentKnownPreferences = {
+  destination?: string;
+  budget?: number;
+  budgetLevel?: "low" | "medium" | "high" | string;
+  days?: number;
+  travelStyle?: string[];
+  travelStyles?: string[];
+  transportPreference?: string;
+  accommodationPreference?: string;
+  companionType?: string;
+  pace?: TravelPace | "balanced" | string;
+  mustVisit?: string[];
+  avoid?: string[];
+  avoidances?: string[];
+  foodPreferences?: string[];
+  confidence?: number;
+  source?: string[];
+  updatedAt?: string | null;
+  notes?: string;
+};
+
+export type PersonalizedAIContext = {
+  userId: string;
+  currentTrip?: {
+    id: string;
+    title?: string;
+    destination?: string;
+    startDate?: string | null;
+    endDate?: string | null;
+    days: Array<{
+      id: string;
+      dayNumber: number;
+      date?: string | null;
+      items: Array<{
+        id: string;
+        title: string;
+        location?: string | null;
+        startTime?: string | null;
+        endTime?: string | null;
+        notes?: string | null;
+        category?: string | null;
+      }>;
+    }>;
+  };
+  preferences: {
+    destinationPreferences?: string[];
+    budgetLevel?: "low" | "medium" | "high" | string;
+    travelStyles?: string[];
+    pace?: "relaxed" | "balanced" | "moderate" | "intensive" | string;
+    transportPreference?: string | null;
+    accommodationPreference?: string | null;
+    foodPreferences?: string[];
+    avoidances?: string[];
+    confidence?: number;
+    source?: string[];
+    updatedAt?: string | null;
+  };
+  recentTrips: Array<{
+    id: string;
+    title?: string;
+    destination?: string;
+    daysCount?: number;
+    summary?: string;
+    representativeItems?: string[];
+    createdAt?: string;
+  }>;
+  tripChatHistory: Array<{
+    role: "user" | "assistant" | "system";
+    content: string;
+    createdAt?: string;
+  }>;
+  globalChatMemory: Array<{
+    role: "user" | "assistant" | "system";
+    content: string;
+    createdAt?: string;
+    source?: string;
+  }>;
+  videoInteractions: Array<{
+    videoId?: string;
+    title?: string;
+    source?: string;
+    interactionType: string;
+    extractedPlaces?: string[];
+    extractedTimestamps?: Array<{
+      label?: string;
+      timestamp?: string;
+      seconds?: number;
+    }>;
+    relatedTripId?: string | null;
+    createdAt?: string;
+  }>;
+  appliedVideoSummaries: Array<{
+    videoId?: string;
+    title?: string;
+    summarySnapshot?: string;
+    appliedPlaces?: string[];
+    appliedSegments?: string[];
+    createdTripItems?: string[];
+    tripId?: string | null;
+    appliedAt?: string;
+  }>;
+  memorySnippets: Array<{
+    content: string;
+    source?: "mem0" | "profile" | "chat" | "trip" | "video";
+    relevance?: number;
+  }>;
+  travelSearchContexts?: TravelSearchContext[];
+  contextWarnings: string[];
+  debug?: {
+    includedSources: string[];
+    excludedSources: string[];
+    limits: Record<string, number>;
+  };
+};
+
+export type TravelAgentPreferenceConfirmation = {
+  summary: string;
+  preferences: TravelAgentKnownPreferences;
+  prompt: string;
+};
+
+export type TravelAgentDecision = {
+  mode: ConversationMode;
+  shouldSearch: boolean;
+  searchReason?: string;
+  requiredSearchProviders: TravelSearchProvider[];
+  shouldGenerateItinerary: boolean;
+  shouldModifyItinerary: boolean;
+  shouldAskFollowUp: boolean;
+  missingRequirements: string[];
+  searchDecision?: SearchDecision;
+  preferenceConfirmation?: TravelAgentPreferenceConfirmation;
+  userFacingGuidance?: string;
+  debugReason: string;
+};
 
 export interface ChatMessage {
   id: string;
@@ -397,19 +690,28 @@ export interface ChatMessage {
   timestamp: string;
   responseType?: ChatResponseType;
   questionCard?: QuestionCardPayload;
+  preferenceConfirmation?: TravelAgentPreferenceConfirmation;
   statusSteps?: StatusStepPayload[];
   travelPlan?: TravelPlanResponse;
   tripProfile?: TripProfile;
   suggestedAction?: SuggestedAction;
   proposedChanges?: AiProposedChange[];
+  assistantActions?: AssistantAction[];
   sources?: Array<{
     title: string;
     url: string;
   }> | Record<string, ChatSource>;
+  /** 結構化可溯源引用（Grounded Chat contract）；與 `sources` 並存時以此為主顯示 citation UI。 */
+  sourceReferences?: SourceReference[];
+  toolCalls?: ToolCallRecord[];
+  itineraryPatch?: ItineraryPatch;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ChatRequestPayload {
   message: string;
+  /** User-visible summary when `message` is empty (e.g. questionnaire submit). */
+  displayMessage?: string;
   messages?: ChatMessage[];
   context?: ChatContext;
   structuredTravelPlanning?: boolean;
@@ -422,7 +724,9 @@ export interface ChatResponsePayload {
   reply: ChatMessage;
   itinerarySuggestion?: TripPlanResult;
   proposedChanges?: AiProposedChange[];
+  assistantActions?: AssistantAction[];
   tripProfile?: TripProfile;
+  travelAgentDecision?: TravelAgentDecision;
 }
 
 export interface VideoSummarySegment {
@@ -493,7 +797,11 @@ export interface VideoRecommendation {
   extractedFoods?: string[];
   summarySegments?: VideoSummarySegment[];
   /** Batch search: whether results came from YouTube Data API or mock fallback */
-  listProvenance?: "youtube-data-api" | "mock-fallback" | "default-taiwan-cities";
+  listProvenance?:
+    | "youtube-data-api"
+    | "mock-fallback"
+    | "default-taiwan-cities"
+    | "preloaded-destination-seed";
 }
 
 export interface VideoSummaryResult {
@@ -590,6 +898,7 @@ export interface TripPlanResponse {
 
 export interface GeocodeApiResult {
   query: string;
+  name?: string;
   formattedAddress: string;
   lat: number;
   lng: number;
@@ -621,6 +930,56 @@ export interface PersistedTripPayload {
   itinerary: TripPlanDay[];
   pins: MapPin[];
   updatedAt: string;
+}
+
+export interface PublicItineraryItem {
+  id: string;
+  dayNumber?: number;
+  time: string;
+  title: string;
+  type: TripItemType;
+  transport?: string;
+  transportDurationMinutes?: number;
+  transportDistanceMeters?: number;
+  transportDataSource?: "google_routes";
+  location?: Pick<
+    LocationReference,
+    "name" | "lat" | "lng" | "address" | "placeId" | "photoUrl" | "thumbnail" | "googleMapsUrl" | "rating" | "userRatingsTotal"
+  >;
+}
+
+export interface PublicItineraryDay {
+  dayNumber: number;
+  items: PublicItineraryItem[];
+}
+
+export interface PublicItinerarySnapshot {
+  title: string;
+  destination: string;
+  days: number;
+  coverImageUrl?: string | null;
+  itinerary: PublicItineraryDay[];
+  pins: MapPin[];
+}
+
+export interface PublicItinerarySummary {
+  id: string;
+  title: string;
+  coverImageUrl?: string | null;
+  days: number;
+  destination?: string | null;
+  publishedAt: string;
+  publisherImage?: string | null;
+}
+
+export interface PublicItineraryDetail extends PublicItinerarySummary {
+  snapshot: PublicItinerarySnapshot;
+}
+
+export interface TripPublicationStatus {
+  published: boolean;
+  publicationId?: string;
+  publishedAt?: string;
 }
 
 export interface CollaborationPresenceState {

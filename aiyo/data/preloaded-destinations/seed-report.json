@@ -1,0 +1,84 @@
+{
+  "generatedAt": "2026-05-31T08:41:30.899Z",
+  "options": {
+    "only": [
+      "tokyo"
+    ],
+    "resume": false,
+    "videosPerDest": 6,
+    "delayMs": 2000,
+    "retryFailed": false,
+    "minPassPerDest": 4
+  },
+  "destinationCount": 1,
+  "totalExportedVideos": 6,
+  "targetVideos": 6,
+  "runs": [
+    {
+      "destId": "tokyo",
+      "destinationHint": "東京",
+      "videoId": "BAyQ10iPK4M",
+      "title": "東京 7 天 6 夜自由行懶人包💕｜自由行volg｜景點×美食×交通×住宿完整公開｜妮奇社長不上班 ",
+      "autoPass": true,
+      "errors": [],
+      "warnings": [
+        "no_transcript_or_fallback"
+      ]
+    },
+    {
+      "destId": "tokyo",
+      "destinationHint": "東京",
+      "videoId": "lU8_4kSdkpI",
+      "title": "【2026東京景點懶人包】新手獨旅必看！第一次一個人去日本🗼 晴空塔看富士山🗻、淺草美食、原宿逛街全攻略！",
+      "autoPass": true,
+      "errors": [],
+      "warnings": [
+        "no_transcript_or_fallback"
+      ]
+    },
+    {
+      "destId": "tokyo",
+      "destinationHint": "東京",
+      "videoId": "41hcd2TUaEY",
+      "title": "【東京自由行怎麼玩?怎麼吃?花多少?】東京20個必玩旅遊景點+美食｜東京五天四夜自由行攻略行程懶人包",
+      "autoPass": true,
+      "errors": [],
+      "warnings": [
+        "no_transcript_or_fallback"
+      ]
+    },
+    {
+      "destId": "tokyo",
+      "destinationHint": "東京",
+      "videoId": "U0cFN0WJfwc",
+      "title": "2026全新！東京上野淺草美食地圖｜東京自由行攻略必收口袋名單",
+      "autoPass": true,
+      "errors": [],
+      "warnings": [
+        "no_transcript_or_fallback"
+      ]
+    },
+    {
+      "destId": "tokyo",
+      "destinationHint": "東京",
+      "videoId": "3KMSR0F_iVY",
+      "title": "2025新東京攻略: 7大景點開箱&體驗設施｜尖叫好玩NINJA TOKYO! 玩轉IMMERSIVE FORT｜SMALL WORLDS｜豐洲無限中拖羅自助餐! 澀谷美食&酒店 #東京 #日本自由行",
+      "autoPass": true,
+      "errors": [],
+      "warnings": [
+        "no_transcript_or_fallback"
+      ]
+    },
+    {
+      "destId": "tokyo",
+      "destinationHint": "東京",
+      "videoId": "KlmI_UIRUus",
+      "title": "東京景點全攻略✨東京自由行｜交通美食景點懶人包：東京鐵塔、晴空塔、哈利波特影城、東京中城八重州、日本老街、羽田機場溫泉、淺草新列車SPACIA X、文字燒、相撲火鍋｜日本旅遊・4K Vlog",
+      "autoPass": true,
+      "errors": [],
+      "warnings": [
+        "no_transcript_or_fallback"
+      ]
+    }
+  ]
+}

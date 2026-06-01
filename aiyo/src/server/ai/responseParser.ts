@@ -1,4 +1,6 @@
 import { parseTimestampToSeconds } from "@/lib/videoTimestamp";
+import { isUsableMapCoordinate } from "@/lib/geoCoordinates";
+import { getItineraryItemTitleViolation } from "@/lib/itineraryPlaceTitle";
 import { mergeVideoSummarySegmentsByStartSeconds } from "@/server/video/momentSegmentBuilder";
 import type {
   ChatMessage,
@@ -22,7 +24,7 @@ export class StructuredOutputError extends Error {
 export interface TripPlanParseDiagnostics {
   parseMode: "direct" | "repaired" | "normalized";
   repairStage: "none" | "json_repair" | "normalized_repair";
-  issues: Array<"json_missing" | "json_invalid" | "normalized" | "must_visit_uncovered" | "avoid_pollution" | "template_pollution">;
+  issues: Array<"json_missing" | "json_invalid" | "normalized" | "must_visit_uncovered" | "avoid_pollution" | "template_pollution" | "title_format_violation">;
 }
 
 export function extractJsonBlock(raw: string): string | null {
@@ -172,7 +174,7 @@ function normalizeLocation(
   if (!location) {
     return undefined;
   }
-  if (Math.abs(location.lat) > 90 || Math.abs(location.lng) > 180) {
+  if (!isUsableMapCoordinate(location.lat, location.lng)) {
     return undefined;
   }
   return location;
@@ -238,7 +240,15 @@ function hasTemplatePollution(value: string | undefined): boolean {
     normalized.includes("回答晚餐與散步") ||
     normalized.includes("ai 模型輸出格式異常") ||
     normalized.includes("已改用保底行程模板") ||
-    normalized.includes("目前無法連線到搜尋服務")
+    normalized.includes("目前無法連線到搜尋服務") ||
+    normalized.includes("代表性景點") ||
+    normalized.includes("文化體驗") ||
+    normalized.includes("特色街區") ||
+    normalized.includes("在地美食") ||
+    normalized.includes("夜景或河岸") ||
+    normalized.includes("landmark") ||
+    normalized.includes("cultural stop") ||
+    normalized.includes("neighborhood walk")
   ) {
     return true;
   }
@@ -310,6 +320,15 @@ function parseTripPlanJson(
           title,
           type: mapItemType(String(record.type || record.category || "attraction")),
           transport: record.transport ? String(record.transport) : undefined,
+          transportDurationMinutes:
+            typeof record.transportDurationMinutes === "number" && record.transportDurationMinutes > 0
+              ? Math.round(record.transportDurationMinutes)
+              : undefined,
+          transportDistanceMeters:
+            typeof record.transportDistanceMeters === "number" && record.transportDistanceMeters > 0
+              ? Math.round(record.transportDistanceMeters)
+              : undefined,
+          transportDataSource: record.transportDataSource === "google_routes" ? "google_routes" as const : undefined,
           notes: String(record.notes || record.desc || record.description || "").trim() || undefined,
           location: normalizeLocation(
             locationInput,
@@ -385,6 +404,14 @@ function parseTripPlanJson(
   if (templatePollutionCount > 0) {
     warnings.add(`QUALITY:TEMPLATE_POLLUTION:${templatePollutionCount}`);
     issues.push("template_pollution");
+  }
+
+  const titleViolationCount = days
+    .flatMap((day) => day.items)
+    .filter((item) => getItineraryItemTitleViolation(item.title)).length;
+  if (titleViolationCount > 0) {
+    warnings.add(`QUALITY:TITLE_FORMAT_VIOLATION:${titleViolationCount}`);
+    issues.push("title_format_violation");
   }
 
   if (normalized) {

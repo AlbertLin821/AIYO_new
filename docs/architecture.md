@@ -2,156 +2,71 @@
 
 ## Repository Layout
 
-- `AIYO_new/docs/`
-  - migration and implementation documents
-- `AIYO_new/aiyo/`
-  - active Next.js app
+- `AIYO_new/docs/` — migration and implementation documents
+- `AIYO_new/aiyo/` — active Next.js 16 app (product)
+- `AIYO_new/aiyo/src/components/chat/skyDash/` — in-chat Sky Dash mini-game UI (canonical implementation)
+- `AIYO_new/docker-compose.yml` — Postgres, Redis (reserved), SearXNG, optional Mem0
 
 ## Application Structure
 
 Inside `AIYO_new/aiyo/`:
 
-- `src/app/`
-  - App Router pages
-  - route handlers in `src/app/api/*`
-- `src/components/`
-  - existing multi-page UI components
-- `src/stores/`
-  - Zustand stores for trip, map, video, and chat state
-- `src/services/`
-  - client-side fetch clients and itinerary-to-map helpers
-- `src/server/ai/`
-  - Ollama client
-  - prompt builder
-  - LLM response parser
-- `src/server/services/`
-  - travel planner service
-  - video summary service
-  - video recommendation service
-- `src/types/`
-  - shared request/response and domain schemas
-- `src/lib/`
-  - app-level utilities, mock seed data, API response helpers
+- `src/app/` — App Router pages and `src/app/api/*` route handlers
+- `src/components/` — UI (chat, map, itinerary, home)
+- `src/stores/` — Zustand (trip, map, chat, collab, video)
+- `src/services/` — client API clients, `syncService`, `mapSync`, geocode helpers
+- `src/server/` — server-only domain logic (AI, data, geo, video)
+- `src/types/` — shared domain types
+- `src/lib/` — utilities, auth, Prisma client
+- `src/proxy.ts` — auth gate for `/chat`, `/itinerary`, `/map`, `/profile`
 
 ## Runtime Flow
 
 ### 1. AI chat
 
-- UI sends a message from:
-  - `src/app/chat/page.tsx`
-  - `src/components/map/FloatingAIChat.tsx`
-- client fetches `POST /api/ai/chat`
-- route handler calls `travelPlannerService.chat`
-- service builds a travel-aware prompt
-- `ollamaClient` calls the configured Ollama model
-- parser normalizes the assistant reply into shared `ChatMessage` schema
+- UI: `src/app/chat/page.tsx`
+- Client: `POST /api/ai/chat` via `src/services/aiClient.ts`
+- Server: `travelPlannerService.chatWithTravelAssistant` (routing: inquiry → patch → structured workflow → research chat)
+- Progress: `POST /api/chat/stream/register` then SSE `GET /api/chat/stream/[sessionId]`
+- Persistence: `ChatMessage` rows with optional `metadata` JSON for structured payloads (`travelPlan`, `questionCard`, `proposedChanges`, etc.)
 
 ### 2. Trip planning
 
-- UI triggers planning from `src/components/map/VoicePlanningButton.tsx`
-- client fetches `POST /api/ai/plan`
-- route handler calls `travelPlannerService.generatePlan`
-- prompt builder requests structured itinerary JSON
-- response parser normalizes malformed or partial LLM output into stable `TripPlanResult`
-- frontend writes plan days into `useTripStore`
+- Structured flow: questionnaire in chat → `generateTripPlan` → `travel_plan` card + `itinerarySuggestion`
+- Direct plan: `POST /api/ai/plan` (saves trip + pins server-side)
+- Full revision: `POST /api/trip/revise` or alias `POST /api/trips/revise`
+- Client applies plans via `useTripStore`; `AppDataBridge` runs `reconcileTripMapState`
 
 ### 3. Video summary and recommendation
 
-- Home page search bar chooses one of two flows:
-  - keyword -> `POST /api/videos/recommendations`
-  - video URL -> `POST /api/videos/summarize`
-- `videoRecommendationService` currently returns mock-friendly recommendations with a provider boundary ready for YouTube Data API
-- `videoSummaryService` currently returns mock-friendly transcript summaries and extracted locations with a provider boundary ready for transcript APIs
-- summary drawer can:
-  - create itinerary items in `useTripStore`
-  - create map pins in `useMapStore`
+- `POST /api/videos/recommendations`, `POST /api/videos/summarize` (auth required)
+- Pipeline: transcript → Ollama extraction → geocode → itinerary / map pins
 
-### 4. Itinerary to map sync
+### 4. Sync
 
-- itinerary lives in `useTripStore`
-- explicit sync actions call `buildPinsFromTripPlan`
-- pins are written into `useMapStore`
-- `src/components/map/MapView.tsx` reads store-backed pins only
-- no hardcoded pins remain in the rendered map flow
+- Bootstrap: `GET /api/bootstrap` hydrates stores
+- Trip writes: debounced `PUT /api/trips/current`
+- Realtime: SSE `GET /api/realtime/stream` for collaboration
 
-## API Surface
+## API Surface (selected)
 
-### Real Ollama-backed
+| Route | Auth | Notes |
+|-------|------|--------|
+| `POST /api/ai/chat` | Soft (persist if logged in) | Main assistant |
+| `POST /api/ai/plan` | Required | Direct itinerary generation |
+| `POST /api/trip/revise`, `/api/trips/revise` | Required | Full replan |
+| `POST /api/videos/summarize` | Required | |
+| `POST /api/search/web` | Required | |
+| `POST /api/map/geocode` | Required | |
+| `GET /api/chat/stream/[sessionId]` | Required | Owner-bound session |
 
-- `POST /api/ai/chat`
-- `POST /api/ai/plan`
+## Environment
 
-### Mock-friendly service-backed
+- Local npm: prefer `aiyo/.env` (see root README); Prisma reads `.env`
+- Docker: `aiyo/.env` via compose `env_file`
+- `MEM0_ENABLED` defaults to `true` in `server/config.ts` (disable if Mem0 profile not used)
+- Redis is started in Compose for future use; app code does not connect yet
 
-- `POST /api/videos/recommendations`
-- `POST /api/videos/summarize`
-- `POST /api/collab/join`
-- `POST /api/map/geocode`
+## Chat progress storage
 
-### Compatibility aliases retained
-
-- `POST /api/ai/plan-trip`
-- `POST /api/youtube/analyze`
-
-## Shared Types
-
-Key types now live in `src/types/index.ts`:
-
-- `ChatMessage`
-- `TravelPreferences`
-- `TripPlanRequest`
-- `TripPlanDay`
-- `TripPlanItem`
-- `MapPin`
-- `VideoRecommendation`
-- `VideoSummarySegment`
-- `CollaborativeComment`
-- `ApiSuccess<T>`
-- `ApiError`
-
-## Environment Variables
-
-Defined in `aiyo/.env.example`:
-
-- `OLLAMA_BASE_URL`
-- `OLLAMA_MODEL`
-- `OLLAMA_TIMEOUT_MS`
-- `NEXT_PUBLIC_APP_NAME`
-- `YOUTUBE_API_KEY`
-- `GOOGLE_MAPS_API_KEY`
-- `ENABLE_MOCK_VIDEO_PROVIDER`
-- `ENABLE_MOCK_MAPS`
-
-## Current Integration Status
-
-### Real today
-
-- Next.js BFF layer
-- Ollama chat
-- Ollama itinerary generation
-- Itinerary store updates
-- Map pin sync from itinerary and video summaries
-
-### Mock but replaceable
-
-- Video recommendations
-- Transcript and summary extraction
-- Geocoding
-- Collaboration persistence/backend
-
-## Extension Points
-
-### YouTube
-
-- replace internals of `src/server/services/videoRecommendationService.ts`
-- replace internals of `src/server/services/videoSummaryService.ts`
-
-### Maps
-
-- replace map rendering in `src/components/map/MapView.tsx`
-- upgrade geocode provider in `src/app/api/map/geocode/route.ts`
-
-### Collaboration backend
-
-- keep local types and UI
-- add persistence/socket service behind current collaboration store and route boundaries
+In-process `chatProgressStore` with per-user session ownership. Multi-instance deployments should add Redis (or sticky sessions) before scaling horizontally.

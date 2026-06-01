@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "@/lib/motion";
 import { Plus, Trash2 } from "lucide-react";
 import {
   closestCenter,
@@ -70,7 +70,7 @@ function ItineraryDayCard({
   );
 
   return (
-    <motion.div
+    <m.div
       data-testid="itinerary-day-card"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
@@ -138,7 +138,7 @@ function ItineraryDayCard({
 
         <AnimatePresence>
           {addingToDay === day.dayNumber && (
-            <motion.div
+            <m.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
@@ -149,7 +149,7 @@ function ItineraryDayCard({
                 onSave={() => onSaveAddActivity(day.dayNumber)}
                 onCancel={onCancelAddActivity}
               />
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
 
@@ -183,7 +183,7 @@ function ItineraryDayCard({
           </div>
         )}
       </div>
-    </motion.div>
+    </m.div>
   );
 }
 

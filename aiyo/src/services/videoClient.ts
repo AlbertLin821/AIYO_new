@@ -30,13 +30,13 @@ export type VideoSearchDebugInfo = {
   executedQueries: string[];
   regionCode: string;
   relevanceLanguage: string;
-  selectedStrategy: "high-intent" | "literal-fallback";
+  selectedStrategy: "high-intent" | "literal-fallback" | "preloaded-seed";
   fallbackReasons: string[];
 };
 
 export type VideoRecommendationsClientResult = {
   videos: VideoRecommendation[];
-  source: "youtube-data-api" | "mock-fallback";
+  source: "youtube-data-api" | "mock-fallback" | "preloaded-destination-seed";
   fallbackReason?: string;
   debug?: VideoSearchDebugInfo;
 };
@@ -45,15 +45,18 @@ async function parseJson<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
-export async function fetchVideoRecommendations(input: {
-  destination?: string;
-  keyword?: string;
-  days?: number;
-  preferences?: string[];
-  limit?: number;
-  offset?: number;
-  excludeVideoIds?: string[];
-}): Promise<VideoRecommendationsClientResult> {
+export async function fetchVideoRecommendations(
+  input: {
+    destination?: string;
+    keyword?: string;
+    days?: number;
+    preferences?: string[];
+    limit?: number;
+    offset?: number;
+    excludeVideoIds?: string[];
+  },
+  options?: { cache?: RequestCache },
+): Promise<VideoRecommendationsClientResult> {
   const processId = startFrontendDebugProcess("video-search", "查詢旅遊影片推薦", {
     destination: input.destination,
     keyword: input.keyword,
@@ -88,7 +91,7 @@ export async function fetchVideoRecommendations(input: {
 
   const response = await fetch(`/api/videos/recommendations?${params.toString()}`, {
     method: "GET",
-    cache: "no-store",
+    cache: options?.cache ?? "no-store",
   });
   updateFrontendDebugProcess(processId, "api-response", {
     status: response.status,
@@ -132,7 +135,9 @@ export async function fetchVideoRecommendations(input: {
   const result: VideoRecommendationsClientResult = {
     videos: payload.data,
     source:
-      source === "mock-fallback" || source === "youtube-data-api"
+      source === "mock-fallback" ||
+      source === "youtube-data-api" ||
+      source === "preloaded-destination-seed"
         ? source
         : "youtube-data-api",
     fallbackReason:
@@ -221,6 +226,49 @@ export async function summarizeVideo(input: {
       extractedFoodCount: payload.data.video.extractedFoods?.length || 0,
       segmentCount: payload.data.video.summarySegments?.length || 0,
     });
+  }
+  return payload.data;
+}
+
+export async function recordVideoWatch(input: {
+  videoId: string;
+  videoUrl?: string;
+  title?: string;
+  currentTripId?: string | null;
+  watchDurationSeconds?: number;
+  progress?: number;
+}) {
+  const response = await fetch("/api/videos/interactions/watch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const payload = await parseJson<ApiResponse<{ id: string }>>(response);
+  if (!response.ok || isApiError(payload)) {
+    throw new Error(isApiError(payload) ? payload.error.message : `Request failed with status ${response.status}`);
+  }
+  return payload.data;
+}
+
+export async function recordAppliedVideoSummary(input: {
+  tripId?: string | null;
+  videoId: string;
+  summaryId?: string;
+  videoUrl?: string;
+  title?: string;
+  appliedPlaces?: unknown;
+  appliedSegments?: unknown;
+  createdTripItems?: unknown;
+  summarySnapshot?: unknown;
+}) {
+  const response = await fetch("/api/videos/summaries/apply", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const payload = await parseJson<ApiResponse<{ id: string }>>(response);
+  if (!response.ok || isApiError(payload)) {
+    throw new Error(isApiError(payload) ? payload.error.message : `Request failed with status ${response.status}`);
   }
   return payload.data;
 }

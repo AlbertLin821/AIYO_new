@@ -1,88 +1,20 @@
 import { create } from "zustand";
 import type { SyncMutationSource } from "@/stores/syncMutationSource";
 import { withSyncMutationSource } from "@/stores/syncMutationSource";
+import { retimeDayItems, toMinutes } from "@/lib/itineraryRetime";
 import type { PersistedTripPayload, TripPlanDay, TripPlanItem, TripPlanResult } from "@/types";
 
 export const EMPTY_TRIP_STATE = {
   tripId: null,
   title: "",
   destination: "",
-  days: 1,
+  days: 0,
   budget: 0,
   coverImageUrl: null as string | null,
   itinerary: [] as TripPlanDay[],
   planSummary: "",
   lastUpdatedAt: null as string | null,
 };
-
-function parseSparseDayStops(day: TripPlanDay) {
-  const themeBase = (day.theme || "")
-    .replace(/\s*(與周邊順遊|順遊)$/u, "")
-    .trim();
-  const summary = (day.summary || "").trim();
-  const pairMatch = summary.match(/第\s*\d+\s*天以\s*(.+?)、(.+?)\s*與沿線餐食安排為主/u);
-  const themedStops = themeBase
-    .split(/[・／/、]/u)
-    .map((value) => value.trim())
-    .filter(Boolean);
-  return {
-    morning: themedStops[0] || pairMatch?.[1]?.trim() || themeBase || `第 ${day.dayNumber} 天`,
-    afternoon: themedStops[1] || pairMatch?.[2]?.trim() || themedStops[0] || themeBase || `第 ${day.dayNumber} 天`,
-  };
-}
-
-function hydrateSparseDayItems(day: TripPlanDay, destination?: string): TripPlanDay {
-  if (day.items.length > 0) {
-    return day;
-  }
-  const stops = parseSparseDayStops(day);
-  const areaLabel = destination?.trim() || stops.morning;
-  return {
-    ...day,
-    items: [
-      {
-        id: `synthetic_${day.dayNumber}_1`,
-        dayNumber: day.dayNumber,
-        time: "09:00",
-        title: stops.morning,
-        type: "attraction",
-        transport: "大眾運輸",
-        notes: `依照目前摘要補齊的上午停留點：${stops.morning}`,
-        source: "ai",
-      },
-      {
-        id: `synthetic_${day.dayNumber}_2`,
-        dayNumber: day.dayNumber,
-        time: "12:00",
-        title: `${stops.morning} 周邊午餐`,
-        type: "restaurant",
-        transport: "大眾運輸",
-        notes: `依照目前摘要補齊的午餐停留點：${stops.morning} 周邊午餐`,
-        source: "ai",
-      },
-      {
-        id: `synthetic_${day.dayNumber}_3`,
-        dayNumber: day.dayNumber,
-        time: "15:00",
-        title: stops.afternoon,
-        type: "activity",
-        transport: "大眾運輸",
-        notes: `依照目前摘要補齊的下午停留點：${stops.afternoon}`,
-        source: "ai",
-      },
-      {
-        id: `synthetic_${day.dayNumber}_4`,
-        dayNumber: day.dayNumber,
-        time: "18:30",
-        title: `${stops.afternoon || areaLabel} 晚餐與散步`,
-        type: "restaurant",
-        transport: "大眾運輸",
-        notes: `依照目前摘要補齊的晚餐停留點：${stops.afternoon || areaLabel} 晚餐與散步`,
-        source: "ai",
-      },
-    ],
-  };
-}
 
 interface TripState {
   tripId: string | null;
@@ -97,6 +29,7 @@ interface TripState {
   setDestination: (destination: string) => void;
   setDays: (days: number) => void;
   setBudget: (budget: number) => void;
+  resizeItineraryToDayCount: (targetDayCount: number) => void;
   setCoverImageUrl: (url: string | null) => void;
   setItinerary: (itinerary: TripPlanDay[]) => void;
   setRemoteTrip: (trip: PersistedTripPayload, budget?: number, source?: SyncMutationSource) => void;
@@ -123,11 +56,52 @@ export const useTripStore = create<TripState>((set) => ({
     }),
   setDays: (days) =>
     withSyncMutationSource("local-user-edit", () => {
-      set({ days: Math.max(1, days) });
+      set({ days: Math.max(0, days) });
     }),
   setBudget: (budget) =>
     withSyncMutationSource("local-user-edit", () => {
       set({ budget: Math.max(0, budget) });
+    }),
+  resizeItineraryToDayCount: (targetDayCount) =>
+    withSyncMutationSource("local-user-edit", () => {
+      set((state) => {
+        const target = Math.max(1, Math.min(30, Math.floor(targetDayCount)));
+        let itinerary = [...state.itinerary];
+
+        if (itinerary.length === 0) {
+          itinerary = Array.from({ length: target }, (_, index) => ({
+            dayNumber: index + 1,
+            theme: `Day ${index + 1}`,
+            summary: "尚未安排內容",
+            items: [],
+          }));
+        } else {
+          while (itinerary.length < target) {
+            const nextDay = itinerary.length + 1;
+            itinerary.push({
+              dayNumber: nextDay,
+              theme: `Day ${nextDay}`,
+              summary: "尚未安排內容",
+              items: [],
+            });
+          }
+          while (itinerary.length > target) {
+            itinerary.pop();
+          }
+          itinerary = itinerary.map((day, index) => ({
+            ...day,
+            dayNumber: index + 1,
+            theme: day.theme?.trim() ? day.theme : `Day ${index + 1}`,
+            items: day.items.map((item) => ({ ...item, dayNumber: index + 1 })),
+          }));
+        }
+
+        return {
+          itinerary,
+          days: target,
+          lastUpdatedAt: new Date().toISOString(),
+        };
+      });
     }),
   setCoverImageUrl: (url) =>
     withSyncMutationSource("local-user-edit", () => {
@@ -161,7 +135,7 @@ export const useTripStore = create<TripState>((set) => ({
   replaceTripPlan: (plan, details) =>
     withSyncMutationSource("local-user-edit", () => {
       const destination = details?.destination;
-      const normalizedDays = plan.days.map((day) => hydrateSparseDayItems(day, destination));
+      const normalizedDays = plan.days;
       set((state) => ({
         itinerary: normalizedDays,
         days: details?.days ?? normalizedDays.length,
@@ -211,8 +185,22 @@ export const useTripStore = create<TripState>((set) => ({
           day.dayNumber === dayNumber
             ? {
                 ...day,
-                items: day.items.map((item) =>
-                  item.id === itemId ? { ...item, transport: nextTransport } : item,
+                items: retimeDayItems(
+                  day.items.map((item) =>
+                    item.id === itemId
+                      ? {
+                          ...item,
+                          transport: nextTransport,
+                          transportDurationMinutes: undefined,
+                          transportDistanceMeters: undefined,
+                          transportDataSource: undefined,
+                        }
+                      : item,
+                  ),
+                  {
+                    dayStartMinutes: toMinutes(day.items[0]?.time),
+                    previousItems: day.items,
+                  },
                 ),
               }
             : day,
@@ -308,10 +296,17 @@ export const useTripStore = create<TripState>((set) => ({
           if (day.dayNumber !== dayNumber) {
             return day;
           }
-          const items = [...day.items];
+          const previousItems = day.items;
+          const items = [...previousItems];
           const [moved] = items.splice(oldIndex, 1);
           items.splice(newIndex, 0, moved);
-          return { ...day, items };
+          return {
+            ...day,
+            items: retimeDayItems(items, {
+              dayStartMinutes: toMinutes(previousItems[0]?.time),
+              previousItems,
+            }),
+          };
         }),
         lastUpdatedAt: new Date().toISOString(),
       }));

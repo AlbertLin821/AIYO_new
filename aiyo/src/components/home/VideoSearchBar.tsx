@@ -1,34 +1,51 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { Link2, Loader2, Search } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   failFrontendDebugProcess,
   finishFrontendDebugProcess,
   startFrontendDebugProcess,
   updateFrontendDebugProcess,
 } from "@/lib/frontendDebug";
+import { mergeVideosWithStoredSummaries } from "@/lib/mergeVideoSummaries";
+import { fetchRecommendationsWithClientCache } from "@/lib/fetchRecommendationsWithClientCache";
 import { enqueueVideoSummaries } from "@/lib/videoSummaryQueue";
+import { buildRecommendationQueryKey } from "@/lib/videoRecommendationCache";
+import { cn } from "@/lib/utils";
 import { zhTW as t } from "@/locales/zh-TW";
 import { useTripStore } from "@/stores/useTripStore";
 import { useToastStore } from "@/stores/useToastStore";
-import { useVideoStore } from "@/stores/useVideoStore";
-import { fetchVideoRecommendations, summarizeVideo } from "@/services/videoClient";
+import { useVideoStore, type VideoState } from "@/stores/useVideoStore";
+import { summarizeVideo } from "@/services/videoClient";
 
-const VideoSearchBar = forwardRef<HTMLInputElement>(function VideoSearchBar(_, ref) {
+export type VideoSearchBarMode = "video" | "itinerary";
+
+type VideoSearchBarProps = {
+  mode?: VideoSearchBarMode;
+  onItinerarySearch?: (query: string) => void;
+  isItinerarySearching?: boolean;
+};
+
+const VideoSearchBar = forwardRef<HTMLInputElement, VideoSearchBarProps>(function VideoSearchBar(
+  { mode = "video", onItinerarySearch, isItinerarySearching = false },
+  ref,
+) {
   const [input, setInput] = useState("");
   const innerRef = useRef<HTMLInputElement>(null);
   useImperativeHandle(ref, () => innerRef.current as HTMLInputElement, []);
 
   const tripDestination = useTripStore((state) => state.destination);
   const pushToast = useToastStore((state) => state.pushToast);
-  const searchBarResetNonce = useVideoStore((state) => state.searchBarResetNonce);
+  const searchBarResetNonce = useVideoStore((state: VideoState) => state.searchBarResetNonce);
   const {
     isSearching,
     isSummarizing,
     setIsSearching,
     setIsSummarizing,
-    setVideos,
+    setInitialVideoList,
     upsertVideo,
     setSelectedVideo,
     setErrorMessage,
@@ -36,7 +53,7 @@ const VideoSearchBar = forwardRef<HTMLInputElement>(function VideoSearchBar(_, r
     setRecommendationSource,
     setLastRecommendationRequest,
     setSummaryDiagnostics,
-  } = useVideoStore();
+  } = useVideoStore() as VideoState;
 
   useEffect(() => {
     if (searchBarResetNonce > 0) {
@@ -52,9 +69,15 @@ const VideoSearchBar = forwardRef<HTMLInputElement>(function VideoSearchBar(_, r
     trimmed.includes("youtu.be");
 
   async function handleSearch() {
+    if (mode === "itinerary") {
+      onItinerarySearch?.(trimmed);
+      return;
+    }
+
     if (!trimmed) {
       return;
     }
+
     const processId = startFrontendDebugProcess("video-search-ui", "手動搜尋影片或摘要單支影片", {
       query: trimmed,
       isUrl,
@@ -74,7 +97,7 @@ const VideoSearchBar = forwardRef<HTMLInputElement>(function VideoSearchBar(_, r
           url: trimmed,
           destination: tripDestination,
         });
-        setVideos([result.video]);
+        setInitialVideoList([result.video]);
         setRecommendationSource("single-video-url");
         upsertVideo(result.video);
         setSelectedVideo(result.video);
@@ -126,24 +149,52 @@ const VideoSearchBar = forwardRef<HTMLInputElement>(function VideoSearchBar(_, r
           keyword: trimmed,
           limit: 6,
         };
-        const outcome = await fetchVideoRecommendations(request);
-        setVideos(outcome.videos);
-        setRecommendationSource(outcome.source);
-        setLastRecommendationRequest(request);
-        enqueueVideoSummaries(outcome.videos, {
-          destination: tripDestination,
-        });
-        if (outcome.source === "mock-fallback") {
-          pushToast({
-            variant: "warning",
-            title: t.video.mockVideosTitle,
-            description: outcome.fallbackReason || t.video.mockVideosDesc,
+        const applyRecommendationOutcome = (
+          outcome: Awaited<ReturnType<typeof fetchRecommendationsWithClientCache>>,
+        ) => {
+          const nextVideos = mergeVideosWithStoredSummaries(
+            outcome.videos,
+            useVideoStore.getState().videos,
+          );
+          setInitialVideoList(nextVideos);
+          setRecommendationSource(outcome.source);
+          setLastRecommendationRequest(request);
+          enqueueVideoSummaries(nextVideos, {
+            destination: tripDestination,
           });
+          if (outcome.source === "mock-fallback") {
+            pushToast({
+              variant: "warning",
+              title: t.video.mockVideosTitle,
+              description: outcome.fallbackReason || t.video.mockVideosDesc,
+            });
+          }
+        };
+
+        const cacheBeforeFetch = useVideoStore
+          .getState()
+          .getCachedRecommendations(buildRecommendationQueryKey(request));
+        const hasImmediateCache = Boolean(cacheBeforeFetch);
+
+        if (!hasImmediateCache) {
+          setIsSearching(true);
         }
+
+        const outcome = await fetchRecommendationsWithClientCache(request, {
+          onBackgroundUpdate: (refreshed) => {
+            applyRecommendationOutcome({
+              ...refreshed,
+              servedFromCache: false,
+              cacheStatus: "miss",
+            });
+          },
+        });
+        applyRecommendationOutcome(outcome);
         finishFrontendDebugProcess(processId, {
           mode: "recommendation-search",
           resultCount: outcome.videos.length,
           source: outcome.source,
+          cacheStatus: outcome.cacheStatus,
         });
       }
     } catch (error) {
@@ -167,45 +218,45 @@ const VideoSearchBar = forwardRef<HTMLInputElement>(function VideoSearchBar(_, r
     }
   }
 
-  const isBusy = isSearching || isSummarizing;
+  const isBusy = mode === "itinerary" ? isItinerarySearching : isSearching || isSummarizing;
+  const placeholder =
+    mode === "itinerary" ? t.home.itinerarySearchPlaceholder : "搜尋";
+  const submitAria = mode === "itinerary" ? t.home.recommendedItineraries : isUrl ? t.video.summarize : t.video.search;
 
   return (
-    <div className="w-full max-w-2xl mx-auto">
-      <div className="relative flex items-center gap-2">
-        <div className="relative flex-1">
-          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted">
-            {isUrl ? <Link2 className="size-4" /> : <Search className="size-4" />}
-          </div>
-          <input
-            ref={innerRef}
-            type="text"
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={(event) => event.key === "Enter" && void handleSearch()}
-            placeholder={t.video.searchPlaceholder}
-            data-testid="video-search-input"
-            className="w-full pl-11 pr-4 py-3.5 rounded-2xl border border-border bg-surface text-foreground placeholder:text-muted-light focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all text-sm shadow-soft"
-          />
-        </div>
-        <button
+    <div className="mx-auto w-full max-w-2xl">
+      <div
+        className={cn(
+          "flex min-h-[50px] items-stretch overflow-hidden rounded-full border border-border bg-surface shadow-soft transition-colors",
+          "focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/25",
+        )}
+      >
+        <Input
+          ref={innerRef}
+          type="text"
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          onInput={(event) => setInput(event.currentTarget.value)}
+          onKeyDown={(event) => event.key === "Enter" && void handleSearch()}
+          data-testid="video-search-input"
+          placeholder={placeholder}
+          className="h-auto min-h-[50px] flex-1 rounded-none border-0 bg-transparent px-5 py-2.5 text-base font-medium shadow-none ring-0 focus-visible:ring-0 sm:px-6"
+        />
+        <Button
+          type="button"
           onClick={() => void handleSearch()}
           disabled={isBusy || !trimmed}
+          aria-label={submitAria}
           data-testid="video-search-submit"
-          className="px-5 py-3.5 bg-gradient-to-r from-primary to-primary-dark text-white rounded-2xl font-medium text-sm hover:shadow-md transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2"
+          className="h-auto min-h-[50px] w-16 shrink-0 rounded-none rounded-r-full border-0 border-l border-border bg-primary px-0 text-white hover:bg-primary-dark sm:w-18"
         >
           {isBusy ? (
-            <>
-              <Loader2 className="size-4 animate-spin" />
-              {isUrl ? t.video.summarizing : t.video.searching}
-            </>
-          ) : isUrl ? (
-            t.video.summarize
+            <Loader2 className="size-6 animate-spin" aria-hidden />
           ) : (
-            t.video.search
+            <Search className="size-6" strokeWidth={2.25} aria-hidden />
           )}
-        </button>
+        </Button>
       </div>
-      <p className="text-xs text-muted mt-2 text-center">{t.video.searchHelper}</p>
     </div>
   );
 });

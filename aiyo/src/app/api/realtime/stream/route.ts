@@ -14,6 +14,7 @@ export async function GET(request: Request) {
     const roomId = searchParams.get("roomId") || undefined;
 
     let tickHandle: ReturnType<typeof setTimeout> | null = null;
+    let lifetimeHandle: ReturnType<typeof setTimeout> | null = null;
     let closed = false;
     let lastSnapshotKey: string | null = null;
     let pumpInFlight = false;
@@ -41,6 +42,10 @@ export async function GET(request: Request) {
           if (tickHandle !== null) {
             clearTimeout(tickHandle);
             tickHandle = null;
+          }
+          if (lifetimeHandle !== null) {
+            clearTimeout(lifetimeHandle);
+            lifetimeHandle = null;
           }
           try {
             controller.close();
@@ -102,6 +107,7 @@ export async function GET(request: Request) {
         };
 
         request.signal.addEventListener("abort", closeStream);
+        lifetimeHandle = setTimeout(closeStream, 5 * 60_000);
 
         send("connected", { ok: true });
         await pump();
@@ -112,6 +118,10 @@ export async function GET(request: Request) {
         if (tickHandle !== null) {
           clearTimeout(tickHandle);
           tickHandle = null;
+        }
+        if (lifetimeHandle !== null) {
+          clearTimeout(lifetimeHandle);
+          lifetimeHandle = null;
         }
       },
     });

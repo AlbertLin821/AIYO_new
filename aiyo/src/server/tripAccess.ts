@@ -59,7 +59,11 @@ export async function requireTripAccess(
 ): Promise<TripAccess> {
   const access = await getTripAccess(userId, tripId);
   if (!access) {
-    throw new Error("forbidden");
+    const exists = await prisma.trip.findUnique({
+      where: { id: tripId },
+      select: { id: true },
+    });
+    throw new Error(exists ? "forbidden" : "not_found");
   }
   if (!canCollaborator(access.role, permission)) {
     throw new Error("forbidden");

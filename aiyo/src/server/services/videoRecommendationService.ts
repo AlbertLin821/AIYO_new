@@ -4,11 +4,18 @@ import {
   type UserTravelPreference,
   type VideoCandidate,
 } from "@/lib/recommendation";
+import {
+  isTextInTripDestinationScope,
+  resolveTripDestinationScope,
+  type TripDestinationScope,
+} from "@/lib/tripDestinationScope";
 import { serverConfig } from "@/server/config";
 import {
   buildVideoRecommendationSearchQuery,
   isTravelRelatedVideo,
 } from "@/server/providers/travelVideoFilter";
+import { getPreloadedDestinationVideos, resolvePreloadedDestinationHint } from "@/server/data/preloadedDestinations";
+import { resolveTripDestinationScopeWithGeocode } from "@/server/places/resolveTripDestinationScope";
 import { searchYouTubeVideos, type VideoSearchDebugInfo } from "@/server/providers/youtubeProvider";
 import type { VideoRecommendation } from "@/types";
 
@@ -27,7 +34,7 @@ interface RecommendationInput {
 
 export type VideoRecommendationOutcome = {
   videos: VideoRecommendation[];
-  source: "youtube-data-api" | "mock-fallback";
+  source: "youtube-data-api" | "mock-fallback" | "preloaded-destination-seed";
   fallbackReason?: string;
   debug?: VideoSearchDebugInfo;
 };
@@ -651,21 +658,104 @@ function getRelevantFallbackVideos(input: RecommendationInput): VideoRecommendat
   return rankFallbackVideos(input);
 }
 
+async function resolveDestinationScopeForRecommendation(
+  destination?: string,
+): Promise<TripDestinationScope | null> {
+  const fromCatalog = resolveTripDestinationScope(destination);
+  if (fromCatalog?.countryCodes.length) {
+    return fromCatalog;
+  }
+  const trimmed = destination?.trim();
+  if (!trimmed) {
+    return fromCatalog;
+  }
+  return (await resolveTripDestinationScopeWithGeocode(trimmed)) ?? fromCatalog;
+}
+
+function filterPreloadedVideosByScope(
+  videos: VideoRecommendation[],
+  scope: TripDestinationScope | null,
+): VideoRecommendation[] {
+  if (!scope?.countryCodes.length) {
+    return videos;
+  }
+  return videos.filter((video) =>
+    isTextInTripDestinationScope(
+      [video.title, video.description || ""].filter(Boolean).join(" "),
+      scope,
+    ),
+  );
+}
+
+async function normalizeRecommendationInput(input: RecommendationInput): Promise<RecommendationInput> {
+  const explicitDestination = input.destination?.trim();
+  if (explicitDestination) {
+    return input;
+  }
+  const resolvedDestination = await resolvePreloadedDestinationHint({
+    destination: input.destination,
+    keyword: input.keyword,
+  });
+  if (!resolvedDestination) {
+    return input;
+  }
+  return { ...input, destination: resolvedDestination };
+}
+
 export async function getVideoRecommendations(
   input: RecommendationInput,
 ): Promise<VideoRecommendationOutcome> {
+  const effectiveInput = await normalizeRecommendationInput(input);
+
+  if (process.env.DISABLE_PRELOADED_DESTINATION_VIDEOS !== "true") {
+    const preloaded = await getPreloadedDestinationVideos({
+      destination: effectiveInput.destination,
+      keyword: effectiveInput.keyword,
+      limit: effectiveInput.limit,
+      offset: effectiveInput.offset,
+      excludeVideoIds: effectiveInput.excludeVideoIds,
+    });
+    if (preloaded && preloaded.length > 0) {
+      const destinationScope = await resolveDestinationScopeForRecommendation(effectiveInput.destination);
+      const scopedPreloaded = filterPreloadedVideosByScope(preloaded, destinationScope);
+      if (scopedPreloaded.length > 0) {
+        return {
+          videos: scopedPreloaded.map((video) => ({
+            ...video,
+            listProvenance: "preloaded-destination-seed",
+          })),
+          source: "preloaded-destination-seed",
+          debug: {
+            rawInput:
+              buildVideoRecommendationSearchQuery({
+                keyword: effectiveInput.keyword,
+                destination: effectiveInput.destination,
+              }) || "",
+            searchQueries: [],
+            executedQueries: [],
+            regionCode: "TW",
+            relevanceLanguage: "zh-Hant",
+            selectedStrategy: "preloaded-seed",
+            fallbackReasons: [],
+            cacheStatus: "preloaded-hit",
+          },
+        };
+      }
+    }
+  }
+
   if (serverConfig.enableMockVideoProvider) {
     const reason = "ENABLE_MOCK_VIDEO_PROVIDER is true; using local catalog.";
     console.warn(`[videoRecommendationService] ${reason}`);
     return {
-      videos: getRelevantFallbackVideos(input),
+      videos: getRelevantFallbackVideos(effectiveInput),
       source: "mock-fallback",
       fallbackReason: reason,
       debug: {
         rawInput:
           buildVideoRecommendationSearchQuery({
-            keyword: input.keyword,
-            destination: input.destination,
+            keyword: effectiveInput.keyword,
+            destination: effectiveInput.destination,
           }) || "",
         searchQueries: [],
         executedQueries: [],
@@ -678,7 +768,11 @@ export async function getVideoRecommendations(
   }
 
   try {
-    const providerResult = await searchYouTubeVideos(input);
+    const destinationScope = await resolveDestinationScopeForRecommendation(effectiveInput.destination);
+    const providerResult = await searchYouTubeVideos({
+      ...effectiveInput,
+      destinationScope,
+    });
     if (providerResult.provider === "youtube-data-api" && providerResult.videos.length > 0) {
       const ranked = rankRecommendedVideos(
         providerResult.videos.map((video): VideoCandidate => ({
@@ -686,13 +780,13 @@ export async function getVideoRecommendations(
           title: video.title,
           description: video.description,
           publishedAt: video.publishedAt,
-          city: input.destination,
-          tags: [input.destination || "", input.keyword || "", ...(input.preferences || [])].filter(Boolean),
+          city: effectiveInput.destination,
+          tags: [effectiveInput.destination || "", effectiveInput.keyword || "", ...(effectiveInput.preferences || [])].filter(Boolean),
           duration: video.duration,
           channelTitle: video.channelTitle,
         })),
-        toPreference(input),
-        input.limit || 6,
+        toPreference(effectiveInput),
+        effectiveInput.limit || 6,
       );
       const byId = new Map(providerResult.videos.map((video) => [video.videoId || video.id, video]));
       return {
@@ -705,9 +799,9 @@ export async function getVideoRecommendations(
     const reason =
       providerResult.fallbackReason || "YouTube Data API 未回傳可用結果。";
     console.info(`[videoRecommendationService] No YouTube results: ${reason}`);
-    if (serverConfig.enableMockVideoProvider || providerResult.provider === "mock") {
+    if (serverConfig.enableMockVideoProvider) {
       return {
-        videos: getRelevantFallbackVideos(input),
+        videos: getRelevantFallbackVideos(effectiveInput),
         source: "mock-fallback",
         fallbackReason: reason,
         debug: providerResult.debug,
@@ -722,15 +816,35 @@ export async function getVideoRecommendations(
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown YouTube API error.";
     console.warn(`[videoRecommendationService] YouTube API error: ${message}`);
+    if (serverConfig.enableMockVideoProvider) {
+      return {
+        videos: getRelevantFallbackVideos(effectiveInput),
+        source: "mock-fallback",
+        fallbackReason: message,
+        debug: {
+          rawInput:
+            buildVideoRecommendationSearchQuery({
+              keyword: effectiveInput.keyword,
+              destination: effectiveInput.destination,
+            }) || "",
+          searchQueries: [],
+          executedQueries: [],
+          regionCode: "TW",
+          relevanceLanguage: "zh-Hant",
+          selectedStrategy: "high-intent",
+          fallbackReasons: [message],
+        },
+      };
+    }
     return {
-      videos: getRelevantFallbackVideos(input),
-      source: "mock-fallback",
+      videos: [],
+      source: "youtube-data-api",
       fallbackReason: message,
       debug: {
         rawInput:
           buildVideoRecommendationSearchQuery({
-            keyword: input.keyword,
-            destination: input.destination,
+            keyword: effectiveInput.keyword,
+            destination: effectiveInput.destination,
           }) || "",
         searchQueries: [],
         executedQueries: [],

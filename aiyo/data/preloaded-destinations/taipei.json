@@ -1,0 +1,1215 @@
+{
+  "id": "taipei",
+  "destinationHint": "台北",
+  "searchKeyword": "台北自由行 台北101 九份 美食",
+  "aliases": [
+    "台北",
+    "taipei",
+    "華語區"
+  ],
+  "preferences": [
+    "美食",
+    "景點",
+    "懶人包"
+  ],
+  "generatedAt": "2026-05-29T07:15:49.690Z",
+  "pipelineVersion": "preloaded-seed-v1",
+  "videos": [
+    {
+      "id": "youtube_2WMegkMUOTs",
+      "url": "https://www.youtube.com/watch?v=2WMegkMUOTs",
+      "title": "EP3最新2025四日三夜玩轉台北💥台北大同區💥迪化街💥人氣美食💥必試甜品💥景點介紹💥打卡點💢大公開💢",
+      "source": "youtube-data-api",
+      "summary": "影片提到迪化街、大稻埕、西門町等地點，以及脆皮蚵仔煎、豬血湯、滷肉飯等食物。",
+      "videoId": "2WMegkMUOTs",
+      "duration": "11:28",
+      "thumbnail": "https://i.ytimg.com/vi/2WMegkMUOTs/hqdefault.jpg",
+      "timestamps": [
+        {
+          "time": "0:00",
+          "label": "西門町"
+        },
+        {
+          "time": "0:00",
+          "label": "龍山寺"
+        },
+        {
+          "time": "0:00",
+          "label": "舊日昭和風情"
+        },
+        {
+          "time": "1:00",
+          "label": "迪化街"
+        },
+        {
+          "time": "1:00",
+          "label": "大稻埕"
+        }
+      ],
+      "description": "【台北大同區】台北迪化街位於大同區大稻埕，是一條始建於清朝咸豐年間（約1850年代）的歷史老街，長久以來是台北最重要的南北貨、茶葉、中藥材及布匹批發集散中心。迪化街不僅見證了台北商業從傳統到現代的演變，也保留了豐富的歷史建築風貌與文化底蘊，例如有許多帶有巴洛克風格裝飾的古老連棟街屋，成為台北保存最完整的老街區之一。\n\n00:00 介紹\n01:35 行程介紹 \n01:43 第一站\n02:21 第二站\n02:54 第三站 \n03:31 第四站 \n04:31 第五站\n07:12 第六站\n07:30 第七站\n09:04 第八站\n09:40 總括介紹 \n09:45 下集預告\n\n👉你也可以在 facebook 上追蹤，即可查看更多內容\n👉想要文字版地址＋交通，去我 Facebook 專頁嗰篇攻略貼文\nhttps://www.facebook.com/profile.php?id=61584035662427\n\n#旅遊#自由行#住宿推薦#旅遊景點#旅行攻略#美食旅行#美食#景點#酒店#台北#台灣#必吃推薦#必吃#必玩#酒店開箱#台北凱撒大飯店#台北凱撒大飯店台北車站#西門町#西門紅樓#台北旅遊新景點#台北交通#台北夜景#台北美食#台北一日遊#台北自助餐#6號彩虹#西門紅樓#彩虹斑馬線#萬年大樓#美式嘻哈街頭彩繪#美國街#日本藥妝店#唐吉訶德#dondondonki#donki#年輕潮流時尚#多元美食#特色咖啡館#小吃#日藥本舖#IG打卡熱點#文化歷史融合#西本願寺#舊日昭和風情#拍照打卡熱門地#彩虹地景#台北酒店#台北四日三夜晚#台北好去處#台北旅遊攻略#台北自由行#台北美食攻略#台北景點介紹#台北行程安排#西門町#台北博物館#萬年大樓#台北文化歷史#台北兩日遊#台北自然風光#台北夜市#台北餐廳#夜市#台北車站#剝皮寮歷史街區#新富町文化市場#萬華世界下午酒場#tokyobike Cafe#馬蹄形天井#龍山寺#艋舺夜市#東港旗魚黑輪#甜不辣#愛玉冰#脆皮蚵仔煎#豬血湯#滷肉飯#地瓜球#華西街觀光夜市#小王煮瓜#源芳刈包#阿義魯肉飯#蒸好吃佛跳牆#北港甜湯#台北萬華區#台北迪化街#大稻埕老街#迪化街年貨大街#台北老街#台北文創商店#迪化街美食#大稻埕景點#永樂市場#霞海城隍廟#台北文青景點#台北南北貨#迪化街百年老店#台北旅遊必去#大稻埕一日遊#迪化街伴手禮#台北特色咖啡館#迪化街文化體驗#台北歷史街區#台北古蹟巡禮#台北特色市集#迪化街必訪景點#迪化街文創#迪化街商圈#草莓大福#永樂市場美食#迪化街白糖粿#迪化街傳統小吃#迪化街油飯#台北古早味小吃#台北特色早餐#迪化街甜點小吃",
+      "publishedAt": "2025-11-08T03:00:03Z",
+      "channelTitle": "旅遊通",
+      "extractedFoods": [
+        "脆皮蚵仔煎",
+        "豬血湯",
+        "滷肉飯",
+        "地瓜球",
+        "白糖粿",
+        "草莓大福"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "timestamp": "0:00",
+          "startLabel": "0:00",
+          "startSeconds": 0,
+          "endSeconds": 30,
+          "title": "西門町",
+          "text": "#西門町#",
+          "summary": "#西門町#",
+          "locationHints": [
+            "西門町"
+          ],
+          "foods": [
+            "豬血湯",
+            "滷肉飯",
+            "地瓜球",
+            "白糖粿"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_2",
+          "timestamp": "0:00",
+          "startLabel": "0:00",
+          "startSeconds": 0,
+          "endSeconds": 30,
+          "title": "龍山寺",
+          "text": "#龍山寺#",
+          "summary": "#龍山寺#",
+          "locationHints": [
+            "龍山寺"
+          ],
+          "foods": [
+            "豬血湯",
+            "滷肉飯",
+            "地瓜球",
+            "白糖粿"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_3",
+          "timestamp": "0:00",
+          "startLabel": "0:00",
+          "startSeconds": 0,
+          "endSeconds": 30,
+          "title": "舊日昭和風情",
+          "text": "#舊日昭和風情#",
+          "summary": "#舊日昭和風情#",
+          "locationHints": [
+            "舊日昭和風情"
+          ],
+          "foods": [
+            "豬血湯",
+            "滷肉飯",
+            "地瓜球",
+            "白糖粿"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_4",
+          "timestamp": "1:00",
+          "startLabel": "1:00",
+          "startSeconds": 60,
+          "endSeconds": 90,
+          "title": "迪化街",
+          "text": "台北迪化街位於大同區大稻埕，是一條始建於清朝咸豐年間（約1850年代）的歷史老街。",
+          "summary": "台北迪化街位於大同區大稻埕，是一條始建於清朝咸豐年間（約1850年代）的歷史老街。",
+          "locationHints": [
+            "迪化街"
+          ],
+          "foods": [
+            "豬血湯",
+            "滷肉飯",
+            "地瓜球",
+            "白糖粿"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_5",
+          "timestamp": "1:00",
+          "startLabel": "1:00",
+          "startSeconds": 60,
+          "endSeconds": 90,
+          "title": "大稻埕",
+          "text": "台北迪化街位於大同區大稻埕。",
+          "summary": "台北迪化街位於大同區大稻埕。",
+          "locationHints": [
+            "大稻埕"
+          ],
+          "foods": [
+            "豬血湯",
+            "滷肉飯",
+            "地瓜球",
+            "白糖粿"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "name": "迪化街",
+          "lat": 25.0585055,
+          "lng": 121.5095956,
+          "description": "台北迪化街位於大同區大稻埕，是一條始建於清朝咸豐年間（約1850年代）的歷史老街。",
+          "address": "Section 1, Dihua St, Datong District, Taipei City, Taiwan 103",
+          "placeId": "ChIJuT3XxxWpQjQR6mzP60yqMbA",
+          "rawQuery": "迪化街",
+          "raw": "迪化街",
+          "normalized": "迪化街",
+          "normalizedName": "迪化街",
+          "cleanedName": "迪化街",
+          "rawMention": "迪化街",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "大稻埕",
+          "lat": 25.0329636,
+          "lng": 121.5654268,
+          "description": "台北迪化街位於大同區大稻埕。",
+          "address": "Taipei City, Taiwan",
+          "placeId": "ChIJi73bYWusQjQRgqQGXK260bw",
+          "rawQuery": "大稻埕",
+          "raw": "大稻埕",
+          "normalized": "大稻埕",
+          "normalizedName": "大稻埕",
+          "cleanedName": "大稻埕",
+          "rawMention": "大稻埕",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "西門町",
+          "lat": 25.0446664,
+          "lng": 121.5063096,
+          "description": "#西門町#",
+          "address": "Shi-men Ting, Wanhua District, Taipei City, Taiwan 108",
+          "placeId": "ChIJKyaoGAmpQjQR99RS3zrx9Ms",
+          "rawQuery": "西門町",
+          "raw": "西門町",
+          "normalized": "西門町",
+          "normalizedName": "西門町",
+          "cleanedName": "西門町",
+          "rawMention": "西門町",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "龍山寺",
+          "lat": 25.0373106,
+          "lng": 121.4998654,
+          "description": "#龍山寺#",
+          "address": "No. 211, Guangzhou St, Wanhua District, Taipei City, Taiwan 10853",
+          "placeId": "ChIJCd7n16ipQjQRihzEWF4z6Pg",
+          "rawQuery": "龍山寺",
+          "raw": "龍山寺",
+          "normalized": "龍山寺",
+          "normalizedName": "龍山寺",
+          "cleanedName": "龍山寺",
+          "rawMention": "龍山寺",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "舊日昭和風情",
+          "lat": 25.0329636,
+          "lng": 121.5654268,
+          "description": "#舊日昭和風情#",
+          "address": "Taipei City, Taiwan",
+          "placeId": "ChIJi73bYWusQjQRgqQGXK260bw",
+          "rawQuery": "舊日昭和風情",
+          "raw": "舊日昭和風情",
+          "normalized": "舊日昭和風情",
+          "normalizedName": "舊日昭和風情",
+          "cleanedName": "舊日昭和風情",
+          "rawMention": "舊日昭和風情",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的台北旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_hYtDUQYhL8o",
+      "url": "https://www.youtube.com/watch?v=hYtDUQYhL8o",
+      "title": "【台灣旅遊包車超值】和台北司機聊天瞭解真實台灣🔥新北超靈驗最大土地公廟~九份老街必吃芋圓~為了連珍芋泥超強伴手禮我來了基隆！台北包車一日游行程太划算啦！│台北自由行VLOG Ep2│Kodootv",
+      "source": "youtube-data-api",
+      "summary": "影片提到南山福德宮、九份、基隆等地點，以及芋泥、芋圓等食物。",
+      "videoId": "hYtDUQYhL8o",
+      "duration": "20:21",
+      "thumbnail": "https://i.ytimg.com/vi/hYtDUQYhL8o/hqdefault.jpg",
+      "timestamps": [
+        {
+          "time": "4:00",
+          "label": "南山福德宮"
+        },
+        {
+          "time": "5:00",
+          "label": "九份"
+        },
+        {
+          "time": "7:00",
+          "label": "基隆"
+        },
+        {
+          "time": "8:00",
+          "label": "周處除三害秘密基地"
+        }
+      ],
+      "description": "台北遠程必去清單，終於實現！(✔️趕緊滑下領乘車金喲)\n非常感謝台北司機載我去到台灣一般遊客去不到的景區❤️\n來到台灣人必拜的台北烘爐地南山福德宮，特意過來求平安求財啊！發財了肯定回來還願(￣y▽￣)╭ Ohohoho.....\n這次回去九份感受夜景！真的越夜越美麗~\n連珍糕餅店，簡直就是芋泥控天堂！全台灣就只有基隆有門市~\n我真的為了芋泥球奔去一次基隆市！\n也踩點了「周處除三害」秘密基地？這行程太珍貴了\n還去了好多地方~這樣8小時包車遊台北真的超方便！\n\n🔎【Tripool旅步】全台長途接送服務  ~\n現在立刻點擊下載tripool旅步APP並註冊，就送3張100元乘車金！\n下載後APP註冊頁面輸入我的專屬推薦碼:【ko2024041】\n推薦碼有效期限至 2024/7/28  ‼️‼️‼️\n系統就會把乘車金的折扣碼寄到你的電子信箱喔！趕快把握優惠搭車！\n\n✨iOS  https://tripool.pse.is/5vc3bw\n✨Android  https://tripool.pse.is/5vc39j\n✨旅步網頁查價格 https://tripool.pse.is/5vk2ma\n\n無論你計劃在台灣環島旅遊/機場接送/計時包車/登山接駁/家族旅行/商務用車等，需要用到車立刻叫它就是！\n服務近24小時專業、無菸司機準時從門口接您出發直達目的地。\n即時估算車費，價格最優， 大大力推薦！\n我下次來台灣，去偏郊區地方肯定會再安排上！    \n\n*感謝影片由Tripool旅步特別贊助*\n\n🔥相關【台灣旅游篇】~\n台灣我來啦！體驗入住西門町夜總會旅館，台灣住宿怎麼比日本貴？！\nhttps://youtu.be/Aup2HwcF9OI\n\n———————————————————————\n\n拜託拜託，訂閲後一定要開啓小鈴鐺哦🔔🔔🔔\n順便追蹤我的IG與FB，不要錯過我的最新動態！\n\n📣歡迎各位追蹤追蹤我:\n✅【INSTAGRAM】 （@kodootv) :   https://www.instagram.com/kodootv/\n✅【FACEBOOK】（@kodootv) :    https://www.facebook.com/Kodootv/\n\n⚠⚠⚠\n*請善用訂閱分享並尊重著作權\n*視頻無授權與嚴禁任何搬運至其他平台\n*絕不寬貸任何侵權行為\n*嚴禁任何賣場截圖販售\n\n-   關於我   ----\n\n⭐皆さんこんにちは！ \n我是住在日本的Ko醬!\n在這頻道不僅會分享我在日的日常生活之外， \n還是個專屬推薦「平價」日本的~旅遊行程/酒店/探店美食/好物開箱等, \n喜歡走透透進入日本省錢生活圈子的你就趕緊訂閱我 @KoDoo TV 哦~ \n不定期會更新最新影片！ \n記得開啟訂閱⬇+旁邊小鈴鐺🔔\n感謝支持與觀看哦！🤗\n----------------------------------------------------------------------\n謝謝你們的觀看 我們很快下個影片見!❤ \n---------------------------------------------------------------------- \n訂閱-留言-按贊更多影片 \n\n⭐人氣影片⭐ \n【日本必買藥妝】25款推薦清單！來日本買這些就對了🔥\n https://www.youtube.com/watch?v=TwhuU1HzEHc&t=413s\n\n來日必逛【東京站一番街】好吃好買全都在這！\n https://www.youtube.com/watch?v=df5I4O7358M&t=193s\n\n日本省錢必看!【東京站↔成田機場】完整巴士攻略，方便又便宜🔥\nhttps://www.youtube.com/watch?v=C2Dxm0_3v0E&t=106s\n\n【新加坡樟宜機場】9小時轉機不出境太好玩！不愧是\"全球最佳機場\"！\n https://www.youtube.com/watch?v=SjBSfQTsf0o&t=451s\n\n⭐最新影片⭐\n最新來日旅游注意🔥麻布台Hills「東京鐵塔」不再免費！\nhttps://www.youtube.com/watch?v=r3cp3GF-bO0&t=19s\n\n長崎自由行Ep2｜體驗九州最高級全新「萬豪飯店Marriott Hotel」\n  https://www.youtube.com/watch?v=cQwVRD8N8eQ\n\n【日本旅遊•長崎Ep1】我來到日本二戰原爆後的長崎市！\nhttps://www.youtube.com/watch?v=CdaYSgu5QRg&t=29s\n\n【我在日本鄉下真實生活】2024日本関東第一場大雪❄️比城市更美！\n  https://www.youtube.com/watch?v=Rc9Mele0g1E&t=41s\n\n--------------------------------------------------------------------- \n🎥拍攝使用器材:\nGoPro 10 \nSony A6400\nMic RODE\n---------------------------------------------------------------------\n\n商務合作邀約歡迎電郵 (For Business inquiries)📧 \n\nE-MAIL郵件 : kodootv@gmail.com\n\n#台灣 #九份 #新北 #台灣旅遊 #台灣包車 #基隆 #台灣伴手禮 #台灣美食 #kodootv",
+      "publishedAt": "2024-05-08T11:52:51Z",
+      "channelTitle": "KoDoo TV",
+      "extractedFoods": [
+        "芋泥",
+        "芋圓"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "timestamp": "4:00",
+          "startLabel": "4:00",
+          "startSeconds": 240,
+          "endSeconds": 270,
+          "title": "南山福德宮",
+          "text": "來到台灣人必拜的台北烘爐地南山福德宮，特意過來求平安求財啊！",
+          "summary": "來到台灣人必拜的台北烘爐地南山福德宮，特意過來求平安求財啊！",
+          "locationHints": [
+            "南山福德宮"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_2",
+          "timestamp": "5:00",
+          "startLabel": "5:00",
+          "startSeconds": 300,
+          "endSeconds": 330,
+          "title": "九份",
+          "text": "這次回去九份感受夜景！",
+          "summary": "這次回去九份感受夜景！",
+          "locationHints": [
+            "九份"
+          ],
+          "foods": [
+            "芋泥"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_3",
+          "timestamp": "7:00",
+          "startLabel": "7:00",
+          "startSeconds": 420,
+          "endSeconds": 450,
+          "title": "基隆",
+          "text": "我真的為了芋泥球奔去一次基隆市！",
+          "summary": "我真的為了芋泥球奔去一次基隆市！",
+          "locationHints": [
+            "基隆"
+          ],
+          "foods": [
+            "芋泥",
+            "芋圓"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_4",
+          "timestamp": "8:00",
+          "startLabel": "8:00",
+          "startSeconds": 480,
+          "endSeconds": 510,
+          "title": "周處除三害秘密基地",
+          "text": "也踩點了「周處除三害」秘密基地？",
+          "summary": "也踩點了「周處除三害」秘密基地？",
+          "locationHints": [
+            "周處除三害秘密基地"
+          ],
+          "foods": [
+            "芋圓"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "name": "南山福德宮",
+          "lat": 24.9717902,
+          "lng": 121.497645,
+          "description": "來到台灣人必拜的台北烘爐地南山福德宮，特意過來求平安求財啊！",
+          "address": "No. 160-1號, Lane 399, Section 2, Xingnan Rd, Neinan Village, Zhonghe District, New Taipei City, Taiwan 235",
+          "placeId": "ChIJGwKL-VsCaDQRdL-5PNoFWhw",
+          "rawQuery": "南山福德宮",
+          "raw": "南山福德宮",
+          "normalized": "南山福德宮",
+          "normalizedName": "南山福德宮",
+          "cleanedName": "南山福德宮",
+          "rawMention": "南山福德宮",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "九份",
+          "lat": 25.109187,
+          "lng": 121.8462979,
+          "description": "這次回去九份感受夜景！",
+          "address": "Jioufen, Ruifang District, New Taipei City, Taiwan 224",
+          "placeId": "ChIJeWdTBRhFXTQRhDuVjIM6uCk",
+          "rawQuery": "九份",
+          "raw": "九份",
+          "normalized": "九份",
+          "normalizedName": "九份",
+          "cleanedName": "九份",
+          "rawMention": "九份",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "基隆",
+          "lat": 25.0329636,
+          "lng": 121.5654268,
+          "description": "我真的為了芋泥球奔去一次基隆市！",
+          "address": "Taipei City, Taiwan",
+          "placeId": "ChIJi73bYWusQjQRgqQGXK260bw",
+          "rawQuery": "基隆",
+          "raw": "基隆",
+          "normalized": "基隆",
+          "normalizedName": "基隆",
+          "cleanedName": "基隆",
+          "rawMention": "基隆",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "周處除三害秘密基地",
+          "lat": 25.0535641,
+          "lng": 121.592393,
+          "description": "也踩點了「周處除三害」秘密基地？",
+          "address": "No. 14號, Kunyang St, Xixin Village, Nangang District, Taipei City, Taiwan 115",
+          "placeId": "ChIJSy0U5nqrQjQRBL73uaJAzLM",
+          "rawQuery": "周處除三害秘密基地",
+          "raw": "周處除三害秘密基地",
+          "normalized": "周處除三害秘密基地",
+          "normalizedName": "周處除三害秘密基地",
+          "cleanedName": "周處除三害秘密基地",
+          "rawMention": "周處除三害秘密基地",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的台北旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_JjxRp7q-Woc",
+      "url": "https://www.youtube.com/watch?v=JjxRp7q-Woc",
+      "title": "【台北自由行】EP1台北站周邊：😋試火鍋界天花板！超好逛文青區🔥｜貨櫃碼頭市集日落📸 松山酒店房間超寬敞！饒河夜市掃街🍗｜大稻埕｜橘色｜60年滷肉飯名店｜台北宜蘭遊｜台北景點｜台北美食",
+      "source": "youtube-data-api",
+      "summary": "影片提到台北車站、大稻埕、貨櫃碼頭市集等地點，以及滷肉飯、涮涮鍋、黃金爆漿雞腿捲等食物。",
+      "videoId": "JjxRp7q-Woc",
+      "duration": "17:31",
+      "thumbnail": "https://i.ytimg.com/vi/JjxRp7q-Woc/hqdefault.jpg",
+      "timestamps": [
+        {
+          "time": "4:00",
+          "label": "台北車站"
+        },
+        {
+          "time": "6:00",
+          "label": "大稻埕"
+        },
+        {
+          "time": "7:00",
+          "label": "貨櫃碼頭市集"
+        },
+        {
+          "time": "7:00",
+          "label": "松山站"
+        },
+        {
+          "time": "9:00",
+          "label": "饒河街夜市"
+        }
+      ],
+      "description": "#台北 #台灣自由行 #台北美食\n久遺的台灣我來喇！ 第一天到埗台北，先去台北車站周邊景點和品嘗台北美食！想吃心心念念的滷肉飯必去最就腳之60年滷肉飯名店-大稻埕魯肉飯！再前往去超好逛的文青區大稻埕～ 文化藝術創意禮品、 街頭小吃、手信特產、職人作品逛足一整天也逛不完。 傍晚到淡水河邊貨櫃碼頭市集吃小食散步看日落打卡～ 必訪近年人氣急升的火鍋店-橘色，體驗超優質服務＋豐富新鮮日本台灣食材， 難怪明星名人也大愛～不住市中心選擇遠一點的松山站？ 原來這間酒店配套超級好！ 5分鐘更可到饒河街夜市掃街！\n\n00:00  今集預告\n00:25  桃園機場金福氣大抽獎\n01:16  到台北市中心交通、悠遊卡\n02:01  行李寄存問題\n02:33  60年黑金滷肉飯人氣店\n04:38  必去文青區-大稻埕\n07:54  大稻埕貨櫃碼頭市集\n09:04  橋色涮涮鍋（火鍋店）\n14:13  回東京日本橋夜遊\n12:54  松山區半新酒店RoomTour\n14:34  饒河街夜市\n16:07  下集介紹及今集地圖\n16:36   購買行程表及成為會員\n﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎\n【完整旅行影片】https://www.youtube.com/playlist?list=PLU7-BehoKBXmjw4LwJTLkvTF3IJ2LtKew\n【成為會員】可獲得福利：https://www.youtube.com/channel/UCqCBJM3puCG_3-B8F1UlpXQ/join\n\n﹎﹎﹎﹎﹎【台北旅遊實用資訊】﹎﹎﹎﹎﹎﹎﹎﹎\n🌟機場直達車: https://www.tymetro.com.tw/tymetro-new/tw/_pages/travel-guide/timetable.php?station=A13&godate=2023-09-09#station  \n🌟行李寄存：https://www.metro.taipei/cp.aspx?n=074C9E96AEC24806  (行李托運中心寄放時間只到晚上八點) \n﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎\n\n📍 大稻埕魯肉飯\n　地址：台灣台北市大同區長安西路220巷17號　營業時間11:30–19:50\n　預約：https://lin.ee/VesA0Sk\n　交通： 台北車站步行6分鐘\n\n📍職人巷\n　地址：103台灣台北市大同區迪化街一段14巷\n\n📍永樂市場\n　地址：台灣台北市大同區迪化街一段21號\n　營業時間：10:00–18:00\n\n📍民藝埕\n　地址：台灣台北市大同區迪化街一段67號\n　營業時間：10:00–19:00\n\n打卡位：屈臣氏大藥房、李亭香\n\n📍大稻埕碼頭貨櫃市集\n　地址：台灣台北市大同區民生西路底五號水門, 大稻埕碼頭貨櫃市集\n　營業時間：周六日-12:00–22:00；周一至五16:00–22:00\n\n📍橘色涮涮屋一館\n　官網及預約：https://orangeshabushabu.com/zh-TW\n地址：台灣台北市大安區大安路一段135號B1\n營業時間：11:30-23:00 （需要預約及跟時段）\n電話號碼： +886 2 2776 1658\n交通： 捷運忠孝復興站 步行5分鐘\nRemarks： 建議最少提早三個月去預約， 預約不到可以嘗試用電話預訂。\n📍 台北松山意舍酒店\n　官網：https://www.amba-hotels.com/tc/songshan/\n　交通： 松山站 步行6分鐘\n　是次住宿費用：TWD$4800/2人（~HK$1200晚)\n\n📍 饒河街觀光夜市\n　地址：台灣台北市松山區饒河街\n　營業時間：17:00-23:00\n　交通： 松山捷運站步行1分鐘\n　推薦美食：\n　　✅阿剛黃金爆漿雞腿捲\n　　✅侏儸紀啤酒螺\n　　✅瀑布起司香蕉煎餅\n　　名物： 胡椒餅（莎朗沒有吃）\n﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎\n\n\n🌟 拍攝器材：Nikon Z30 , iPhone 11Pro Max\n💪成為我地嘅航拍機金主（好想買黎影靚景😭😭） \n➡️PayMe資助！https://payme.hsbc/travela\n\n﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎﹎\n🪖頭盔：個人口味．食物評價以當日味道為準．非專業食家．不喜勿插\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n【🇯🇵🇯🇵 ʕ•ᴥ•ʔ #日本自由行Vlog 】\n○　【關西5天深度遊】1人Vlog：https://www.youtube.com/playlist?list=PLU7-BehoKBXmc3UvUTKe2sVb9qudhKSKm\n○　【九州11天蜜月生日旅行】Vlog：https://www.youtube.com/playlist?list=PLU7-BehoKBXn2zL2Zej-OwXsXVkYdWXgn\n○　【箱根伊豆４日遊】1人Vlog：https://www.youtube.com/playlist?list=PLU7-BehoKBXn3wWMlIzrMvj-GOFumepxB\n○　【日本中部北陸9天遊】1人Vlog：https://www.youtube.com/playlist?list=PLU7-BehoKBXn447GQG8_k_uRwgyhoG9bV\n○　【和歌山．德島．淡路．神戶】1人5天自由行Vlog - https://youtube.com/playlist?list=PLU7-BehoKBXlmVbHb4rMHE9SwqTJf32Zt\n○　【東京】快閃3日1人旅行 - https://youtube.com/playlist?list=PLU7-BehoKBXlMNN3kacZzA2dSsj6V1Ef1\n○　【北海道．道南】情侶8天自駕遊 - https://youtube.com/playlist?list=PLU7-BehoKBXkXTLEkbBw6499FI7RHglCz",
+      "publishedAt": "2024-04-21T04:00:07Z",
+      "channelTitle": "TraveLa 莎朗",
+      "extractedFoods": [
+        "滷肉飯",
+        "涮涮鍋",
+        "黃金爆漿雞腿捲",
+        "啤酒螺",
+        "瀑布起司香蕉煎餅"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "timestamp": "4:00",
+          "startLabel": "4:00",
+          "startSeconds": 240,
+          "endSeconds": 270,
+          "title": "台北車站",
+          "text": "先去台北車站周邊景點和品嘗台北美食",
+          "summary": "先去台北車站周邊景點和品嘗台北美食",
+          "locationHints": [
+            "台北車站"
+          ],
+          "foods": [
+            "滷肉飯"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_2",
+          "timestamp": "6:00",
+          "startLabel": "6:00",
+          "startSeconds": 360,
+          "endSeconds": 390,
+          "title": "大稻埕",
+          "text": "再前往去超好逛的文青區大稻埕",
+          "summary": "再前往去超好逛的文青區大稻埕",
+          "locationHints": [
+            "大稻埕"
+          ],
+          "foods": [
+            "滷肉飯",
+            "涮涮鍋"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_3",
+          "timestamp": "7:00",
+          "startLabel": "7:00",
+          "startSeconds": 420,
+          "endSeconds": 450,
+          "title": "貨櫃碼頭市集",
+          "text": "傍晚到淡水河邊貨櫃碼頭市集吃小食散步看日落打卡",
+          "summary": "傍晚到淡水河邊貨櫃碼頭市集吃小食散步看日落打卡",
+          "locationHints": [
+            "貨櫃碼頭市集"
+          ],
+          "foods": [
+            "涮涮鍋"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_4",
+          "timestamp": "7:00",
+          "startLabel": "7:00",
+          "startSeconds": 420,
+          "endSeconds": 450,
+          "title": "松山站",
+          "text": "不住市中心選擇遠一點的松山站",
+          "summary": "不住市中心選擇遠一點的松山站",
+          "locationHints": [
+            "松山站"
+          ],
+          "foods": [
+            "涮涮鍋"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_5",
+          "timestamp": "9:00",
+          "startLabel": "9:00",
+          "startSeconds": 540,
+          "endSeconds": 570,
+          "title": "饒河街夜市",
+          "text": "5分鐘更可到饒河街夜市掃街",
+          "summary": "5分鐘更可到饒河街夜市掃街",
+          "locationHints": [
+            "饒河街夜市"
+          ],
+          "foods": [
+            "黃金爆漿雞腿捲",
+            "啤酒螺",
+            "瀑布起司香蕉煎餅"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "name": "台北車站",
+          "lat": 25.0474428,
+          "lng": 121.5170955,
+          "description": "先去台北車站周邊景點和品嘗台北美食",
+          "address": "Taipei Main Station, Liming Village, Zhongzheng District, Taipei City, Taiwan 100",
+          "placeId": "ChIJcYy0Y3KpQjQRXiW_s2lGln8",
+          "rawQuery": "台北車站",
+          "raw": "台北車站",
+          "normalized": "台北車站",
+          "normalizedName": "台北車站",
+          "cleanedName": "台北車站",
+          "rawMention": "台北車站",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "大稻埕",
+          "lat": 25.0329636,
+          "lng": 121.5654268,
+          "description": "再前往去超好逛的文青區大稻埕",
+          "address": "Taipei City, Taiwan",
+          "placeId": "ChIJi73bYWusQjQRgqQGXK260bw",
+          "rawQuery": "大稻埕",
+          "raw": "大稻埕",
+          "normalized": "大稻埕",
+          "normalizedName": "大稻埕",
+          "cleanedName": "大稻埕",
+          "rawMention": "大稻埕",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "貨櫃碼頭市集",
+          "lat": 25.0561135,
+          "lng": 121.5074769,
+          "description": "傍晚到淡水河邊貨櫃碼頭市集吃小食散步看日落打卡",
+          "address": "底，五號水門, Minsheng W Rd, Yongle Village, Datong District, Taipei City, Taiwan 103",
+          "placeId": "ChIJIWBDRhGpQjQRvziv5q6gr20",
+          "rawQuery": "貨櫃碼頭市集",
+          "raw": "貨櫃碼頭市集",
+          "normalized": "貨櫃碼頭市集",
+          "normalizedName": "貨櫃碼頭市集",
+          "cleanedName": "貨櫃碼頭市集",
+          "rawMention": "貨櫃碼頭市集",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "松山站",
+          "lat": 25.049831,
+          "lng": 121.5775002,
+          "description": "不住市中心選擇遠一點的松山站",
+          "address": "Songshan, No. 105, Section 4, Bade Rd, Songshan District, Taipei City, Taiwan 105",
+          "placeId": "ChIJvwx2J5yrQjQRt_9-mJyEX6Q",
+          "rawQuery": "松山站",
+          "raw": "松山站",
+          "normalized": "松山站",
+          "normalizedName": "松山站",
+          "cleanedName": "松山站",
+          "rawMention": "松山站",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "饒河街夜市",
+          "lat": 25.0508854,
+          "lng": 121.5774891,
+          "description": "5分鐘更可到饒河街夜市掃街",
+          "address": "Raohe St, Ciyou Village, Songshan District, Taipei City, Taiwan 105",
+          "placeId": "ChIJg6W0DZyrQjQR9vZdgYMRoj0",
+          "rawQuery": "饒河街夜市",
+          "raw": "饒河街夜市",
+          "normalized": "饒河街夜市",
+          "normalizedName": "饒河街夜市",
+          "cleanedName": "饒河街夜市",
+          "rawMention": "饒河街夜市",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的台北旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_ykSHce1y3xQ",
+      "url": "https://www.youtube.com/watch?v=ykSHce1y3xQ",
+      "title": "【台湾旅行全记录】大陆情侣第一次台湾旅游什么体验？台湾自由行攻略 | 台北 | 九份 | 花莲 | 太鲁阁 | 阿里山 | Taiwan Couple Trip Travel Film",
+      "source": "youtube-data-api",
+      "summary": "影片提到台北101天空與波咖啡SIMPLE KAFFA、西門町的台灣小吃、艋岬龍山寺抽到上上签等地點，以及刘山东牛肉面、豆花、臭豆腐等食物。",
+      "videoId": "ykSHce1y3xQ",
+      "duration": "2:17:34",
+      "thumbnail": "https://i.ytimg.com/vi/ykSHce1y3xQ/hqdefault.jpg",
+      "timestamps": [
+        {
+          "time": "2:03",
+          "label": "西門町的台灣小吃"
+        },
+        {
+          "time": "20:43",
+          "label": "台北101天空與波咖啡SIMPLE KAFFA"
+        },
+        {
+          "time": "27:21",
+          "label": "艋岬龍山寺抽到上上签"
+        },
+        {
+          "time": "33:57",
+          "label": "瑞芳车站"
+        },
+        {
+          "time": "39:10",
+          "label": "九份老街"
+        },
+        {
+          "time": "79:03",
+          "label": "花莲东大门夜市"
+        },
+        {
+          "time": "91:49",
+          "label": "太鲁阁国家公园"
+        },
+        {
+          "time": "97:01",
+          "label": "清水断崖"
+        }
+      ],
+      "description": "这份大陆人来台湾旅行的视频全记录，是上五集内容的集合，影片全长2小时17分，从桃园机场落地开始，到离开台湾，一共8晚9天，我们用影像的方式详细记录了到访的每一个景点，以及相关的开支，更分享了我们真实的台湾自由行的感受，影片内容涵盖了台湾的美食+人文+风光+体验...如果您正准备去台湾，这集视频绝对会很有价值的台湾旅游攻略，如果您只是对台湾有一点点好奇，希望看完这集视频您会爱上台湾！\n\n00:00 片头\n00:58 在台湾的第一天\n01:59 刘山东牛肉面\n05:05 新加坡理发店\n10:32 台北101天空與波咖啡SIMPLE KAFFA\n12:43 西门町的台湾小吃\n16:41 艋岬龙山寺抽到上上签\n20:37 乘坐台铁，从台北到瑞芳车站\n23:50 九份老街\n25:20 九份豆花\n26:30 九份第一家现烤臭豆腐\n28:00 鱼丸伯仔\n29:50 九份红豆饼\n30:41 赖阿婆芋圆\n33:10 年代客栈牛肉面\n34:22 阿妹茶楼\n35:50 回台北搭错车\n37:56 台北夜归人\n39:53 台铁便当\n44:25 花莲\n47:43 花莲东大门夜市\n55:10 花莲租车\n58:21 启程清水断崖\n55:09 太鲁阁国家公园\n1:02:10 九曲洞\n1:06:00 白杨步道\n1:12:44 白杨双瀑\n1:15:25 水帘洞\n1:19:21 花莲乘坐台铁，到达嘉义\n1:22:47 阿里山林业铁路\n1:29:00 阿里山奋起湖站，吃台铁便当\n1:33:50 入住阿里山登山别馆\n1:36:50 傍晚阿里山大雾\n1:38:57 在小镇吃小火锅\n1:42:35 阿里山看日出\n1:47:14 阿里山水山步道\n1:53:00 台湾高铁什么样？\n1:57:44 世界豆浆大王\n2:05:12 中正纪念堂\n2:08:03 迪化街/夜市\n2:14:48 一些心里话\n\n👉【2024台湾旅行第一集】👈\n大陆情侣第一次来台湾自由行，惊讶台湾美食小吃好吃不贵！\n https://www.youtube.com/watch?v=nSQyFtuz1Q8&t=964s\n👉【2024台湾旅行第二集】👈\n在雨中的九份老街，走入千与千寻的童话世界，台北郊外一日逛吃\nhttps://youtu.be/5X4BHcfVkkQ\n👉【2024台湾旅行第三集】👈\n大陆情侣台湾旅行vlog，2天1夜探索花莲，惊叹好吃又好玩\nhttps://www.youtube.com/watch?v=QKVzbBzHsK8\n👉【2024台湾旅行第四集】👈\n在阿里山旅游2天1夜没玩够？\nhttps://www.youtube.com/watch?v=hExrGB-oQ6I&t=634s\n👉【2024台湾旅行第五集】👈\n乘台湾高铁游台北，尝到永和豆浆原始店\nhttps://youtu.be/Y4oANhiFwDw?si=eIB4oO9LpZkmybwt\n\n👉我们的人气影片👈\n雨中露营 | 如何在没有信号的山谷里悠闲的度过两天？https://youtu.be/vnniKRWoOR4?si=HR1lF_EK0WPGkRMR\n第一次改造露营车，在沙漠度过一天一夜\nhttps://youtu.be/T_WH-tHtBZE?si=aAyvq1XfzbHL4bvr\n秋天在暴雨中露营，自制云南腊排骨火锅！\nhttps://youtu.be/M0kl9aqe5tc?si=RA6s7-7I9DvRyPIL\n秋天的最後一場露營 | 篝火煎菲力牛排 | 咖喱牛肉飯\nhttps://youtu.be/zLjoVh11jXA?si=cQ_eXCviHOSCSwbW\n\n👉关注我们其他的小窝👈\nIG：https://www.instagram.com/baiandyu610\nbilibili：https://space.bilibili.com/320263129",
+      "publishedAt": "2024-03-15T10:00:55Z",
+      "channelTitle": "大白小宇看世界",
+      "extractedFoods": [
+        "刘山东牛肉面",
+        "豆花",
+        "臭豆腐",
+        "鱼丸伯仔",
+        "红豆饼",
+        "芋圓",
+        "牛肉面"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "timestamp": "2:03",
+          "startLabel": "2:03",
+          "startSeconds": 123,
+          "endSeconds": 153,
+          "title": "西門町的台灣小吃",
+          "text": "12:43 西門町的台灣小吃",
+          "summary": "12:43 西門町的台灣小吃",
+          "locationHints": [
+            "西門町的台灣小吃"
+          ],
+          "foods": [
+            "刘山东牛肉面"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_2",
+          "timestamp": "20:43",
+          "startLabel": "20:43",
+          "startSeconds": 1243,
+          "endSeconds": 1273,
+          "title": "台北101天空與波咖啡SIMPLE KAFFA",
+          "text": "12:43 台北101天空與波咖啡SIMPLE KAFFA",
+          "summary": "12:43 台北101天空與波咖啡SIMPLE KAFFA",
+          "locationHints": [
+            "台北101天空與波咖啡SIMPLE KAFFA"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_3",
+          "timestamp": "27:21",
+          "startLabel": "27:21",
+          "startSeconds": 1641,
+          "endSeconds": 1671,
+          "title": "艋岬龍山寺抽到上上签",
+          "text": "16:41 艋岬龍山寺抽到上上签",
+          "summary": "16:41 艋岬龍山寺抽到上上签",
+          "locationHints": [
+            "艋岬龍山寺抽到上上签"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_4",
+          "timestamp": "33:57",
+          "startLabel": "33:57",
+          "startSeconds": 2037,
+          "endSeconds": 2067,
+          "title": "瑞芳车站",
+          "text": "20:37 乘坐台铁，从台北到瑞芳车站",
+          "summary": "20:37 乘坐台铁，从台北到瑞芳车站",
+          "locationHints": [
+            "瑞芳车站"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_5",
+          "timestamp": "39:10",
+          "startLabel": "39:10",
+          "startSeconds": 2350,
+          "endSeconds": 2380,
+          "title": "九份老街",
+          "text": "23:50 九份老街",
+          "summary": "23:50 九份老街",
+          "locationHints": [
+            "九份老街"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_6",
+          "timestamp": "79:03",
+          "startLabel": "79:03",
+          "startSeconds": 4743,
+          "endSeconds": 4773,
+          "title": "花莲东大门夜市",
+          "text": "47:43 花莲东大门夜市",
+          "summary": "47:43 花莲东大门夜市",
+          "locationHints": [
+            "花莲东大门夜市"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_7",
+          "timestamp": "91:49",
+          "startLabel": "91:49",
+          "startSeconds": 5509,
+          "endSeconds": 5539,
+          "title": "太鲁阁国家公园",
+          "text": "55:09 太鲁阁国家公园",
+          "summary": "55:09 太鲁阁国家公园",
+          "locationHints": [
+            "太鲁阁国家公园"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_8",
+          "timestamp": "97:01",
+          "startLabel": "97:01",
+          "startSeconds": 5821,
+          "endSeconds": 5851,
+          "title": "清水断崖",
+          "text": "58:21 启程清水断崖",
+          "summary": "58:21 启程清水断崖",
+          "locationHints": [
+            "清水断崖"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "name": "台北101天空與波咖啡SIMPLE KAFFA",
+          "lat": 25.033976,
+          "lng": 121.5645389,
+          "description": "12:43 台北101天空與波咖啡SIMPLE KAFFA",
+          "address": "110, Taiwan, Taipei City, Xinyi District, Xicun Village, Section 5, Xinyi Rd, 7號88樓",
+          "placeId": "ChIJP5CF7pmrQjQRY1MyLg_GRrw",
+          "rawQuery": "台北101天空與波咖啡SIMPLE KAFFA",
+          "raw": "台北101天空與波咖啡SIMPLE KAFFA",
+          "normalized": "台北101天空與波咖啡SIMPLE KAFFA",
+          "normalizedName": "台北101天空與波咖啡SIMPLE KAFFA",
+          "cleanedName": "台北101天空與波咖啡SIMPLE KAFFA",
+          "rawMention": "台北101天空與波咖啡SIMPLE KAFFA",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "西門町的台灣小吃",
+          "lat": 25.0446664,
+          "lng": 121.5063096,
+          "description": "12:43 西門町的台灣小吃",
+          "address": "Shi-men Ting, Wanhua District, Taipei City, Taiwan 108",
+          "placeId": "ChIJKyaoGAmpQjQR99RS3zrx9Ms",
+          "rawQuery": "西門町的台灣小吃",
+          "raw": "西門町的台灣小吃",
+          "normalized": "西門町的台灣小吃",
+          "normalizedName": "西門町的台灣小吃",
+          "cleanedName": "西門町的台灣小吃",
+          "rawMention": "西門町的台灣小吃",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "艋岬龍山寺抽到上上签",
+          "lat": 25.0329636,
+          "lng": 121.5654268,
+          "description": "16:41 艋岬龍山寺抽到上上签",
+          "address": "Taipei City, Taiwan",
+          "placeId": "ChIJi73bYWusQjQRgqQGXK260bw",
+          "rawQuery": "艋岬龍山寺抽到上上签",
+          "raw": "艋岬龍山寺抽到上上签",
+          "normalized": "艋岬龍山寺抽到上上签",
+          "normalizedName": "艋岬龍山寺抽到上上签",
+          "cleanedName": "艋岬龍山寺抽到上上签",
+          "rawMention": "艋岬龍山寺抽到上上签",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "瑞芳车站",
+          "lat": 25.1087356,
+          "lng": 121.8059692,
+          "description": "20:37 乘坐台铁，从台北到瑞芳车站",
+          "address": "Rueifang, No. 82, Section 3, Mingdeng Rd, Longtan Village, Ruifang District, New Taipei City, Taiwan 224",
+          "placeId": "ChIJ3SZqI_dPXTQRcB1sJ7PwCTM",
+          "rawQuery": "瑞芳车站",
+          "raw": "瑞芳车站",
+          "normalized": "瑞芳车站",
+          "normalizedName": "瑞芳车站",
+          "cleanedName": "瑞芳车站",
+          "rawMention": "瑞芳车站",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "九份老街",
+          "lat": 25.0329636,
+          "lng": 121.5654268,
+          "description": "23:50 九份老街",
+          "address": "Taipei City, Taiwan",
+          "placeId": "ChIJi73bYWusQjQRgqQGXK260bw",
+          "rawQuery": "九份老街",
+          "raw": "九份老街",
+          "normalized": "九份老街",
+          "normalizedName": "九份老街",
+          "cleanedName": "九份老街",
+          "rawMention": "九份老街",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "花莲东大门夜市",
+          "lat": 25.0329636,
+          "lng": 121.5654268,
+          "description": "47:43 花莲东大门夜市",
+          "address": "Taipei City, Taiwan",
+          "placeId": "ChIJi73bYWusQjQRgqQGXK260bw",
+          "rawQuery": "花莲东大门夜市",
+          "raw": "花莲东大门夜市",
+          "normalized": "花莲东大门夜市",
+          "normalizedName": "花莲东大门夜市",
+          "cleanedName": "花莲东大门夜市",
+          "rawMention": "花莲东大门夜市",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "清水断崖",
+          "lat": 24.983648,
+          "lng": 121.459242,
+          "description": "58:21 启程清水断崖",
+          "address": "236, Taiwan, 新北市土城區清溪里清水",
+          "placeId": "ChIJG4PHXMYCaDQRsfzZ5gj3dwk",
+          "rawQuery": "清水断崖",
+          "raw": "清水断崖",
+          "normalized": "清水断崖",
+          "normalizedName": "清水断崖",
+          "cleanedName": "清水断崖",
+          "rawMention": "清水断崖",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "太鲁阁国家公园",
+          "lat": 25.0329694,
+          "lng": 121.5654177,
+          "description": "55:09 太鲁阁国家公园",
+          "address": "Taipei, Taiwan",
+          "placeId": "ChIJmQrivHKsQjQR4MIK3c41aj8",
+          "rawQuery": "太鲁阁国家公园",
+          "raw": "太鲁阁国家公园",
+          "normalized": "太鲁阁国家公园",
+          "normalizedName": "太鲁阁国家公园",
+          "cleanedName": "太鲁阁国家公园",
+          "rawMention": "太鲁阁国家公园",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "阿里山林业铁路",
+          "lat": 25.0329636,
+          "lng": 121.5654268,
+          "description": "1:22:47 阿里山林业铁路",
+          "address": "Taipei City, Taiwan",
+          "placeId": "ChIJi73bYWusQjQRgqQGXK260bw",
+          "rawQuery": "阿里山林业铁路",
+          "raw": "阿里山林业铁路",
+          "normalized": "阿里山林业铁路",
+          "normalizedName": "阿里山林业铁路",
+          "cleanedName": "阿里山林业铁路",
+          "rawMention": "阿里山林业铁路",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "阿里山登山别馆",
+          "lat": 23.4354677,
+          "lng": 120.7809676,
+          "description": "1:36:50 入住阿里山登山别馆",
+          "address": "Alishan Township, Chiayi County, Taiwan 605",
+          "placeId": "ChIJKxKvSVTnbjQR7LSozO_p2ZE",
+          "rawQuery": "阿里山登山别馆",
+          "raw": "阿里山登山别馆",
+          "normalized": "阿里山登山别馆",
+          "normalizedName": "阿里山登山别馆",
+          "cleanedName": "阿里山登山别馆",
+          "rawMention": "阿里山登山别馆",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的台北旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_yONFCGQmKfU",
+      "url": "https://www.youtube.com/watch?v=yONFCGQmKfU",
+      "title": "EP4最新2025四日三夜玩轉台北💥台北中山區💥台北信義區💥人氣美食💥赤峰街💥必試甜品💥景點介紹💥打卡點💢大公開💢",
+      "source": "youtube-data-api",
+      "summary": "影片提到赤峰街、國家鐵道博物館（臺北機廠、星巴克亞洲旗艦店等地點。",
+      "videoId": "yONFCGQmKfU",
+      "duration": "11:52",
+      "thumbnail": "https://i.ytimg.com/vi/yONFCGQmKfU/hqdefault.jpg",
+      "timestamps": [
+        {
+          "time": "1:00",
+          "label": "赤峰街"
+        },
+        {
+          "time": "3:00",
+          "label": "國家鐵道博物館（臺北機廠"
+        },
+        {
+          "time": "6:00",
+          "label": "星巴克亞洲旗艦店"
+        }
+      ],
+      "description": "【台北中山區】赤峰街是台北市大同區一條充滿歷史與現代文藝氣息的街道，曾經是典型的打鐵街、五金與汽車零件商店聚集地。隨著時代變遷，赤峰街出現了顯著的蛻變，老舊的工業氣息逐漸被文創店鋪、特色咖啡館、獨立書店、復古唱片行及設計品牌所取代，成為台北知名的文青聚集地。\n\n📌小小補充說明：🚆 影片中介紹的是國家鐵道博物館（臺北機廠），並非國立臺灣博物館鐵道部園區，兩個景點不同，還請大家留意。\n\n00:00 介紹\n01:38 行程介紹 \n01:45 第一站\n02:31 第二站\n03:20 第三站 \n03:38 第四站 \n05:20 第五站\n08:14 第六站\n10:04 總括介紹 \n10:09 下集預告\n\n👉你也可以在 facebook 上追蹤，即可查看更多內容\n👉想要文字版地址＋交通，去我 Facebook 專頁嗰篇攻略貼文\nhttps://www.facebook.com/profile.php?id=61584035662427\n\n#旅遊#自由行#住宿推薦#旅遊景點#旅行攻略#美食旅行#美食#景點#酒店#台北#台灣#必吃推薦#必吃#必玩#酒店開箱#台北凱撒大飯店#台北凱撒大飯店台北車站#西門町#西門紅樓#台北旅遊新景點#台北交通#台北夜景#台北美食#台北一日遊#台北自助餐#6號彩虹#西門紅樓#彩虹斑馬線#萬年大樓#美式嘻哈街頭彩繪#美國街#日本藥妝店#唐吉訶德#dondondonki#donki#年輕潮流時尚#多元美食#特色咖啡館#小吃#日藥本舖#IG打卡熱點#文化歷史融合#西本願寺#舊日昭和風情#拍照打卡熱門地#彩虹地景#台北酒店#台北四日三夜晚#台北好去處#台北旅遊攻略#台北自由行#台北美食攻略#台北景點介紹#台北行程安排#西門町#台北博物館#萬年大樓#台北文化歷史#台北兩日遊#台北自然風光#台北夜市#台北餐廳#夜市#台北車站#剝皮寮歷史街區#新富町文化市場#萬華世界下午酒場#tokyobike Cafe#馬蹄形天井#龍山寺#艋舺夜市#東港旗魚黑輪#甜不辣#愛玉冰#脆皮蚵仔煎#豬血湯#滷肉飯#地瓜球#華西街觀光夜市#小王煮瓜#源芳刈包#阿義魯肉飯#蒸好吃佛跳牆#北港甜湯#台北萬華區#台北迪化街#大稻埕老街#迪化街年貨大街#台北老街#台北文創商店#迪化街美食#大稻埕景點#永樂市場#霞海城隍廟#台北文青景點#台北南北貨#迪化街百年老店#台北旅遊必去#大稻埕一日遊#迪化街伴手禮#台北特色咖啡館#迪化街文化體驗#台北歷史街區#台北古蹟巡禮#台北特色市集#迪化街必訪景點#迪化街文創#迪化街商圈#草莓大福#永樂市場美食#迪化街白糖粿#迪化街傳統小吃#迪化街油飯#台北古早味小吃#台北特色早餐#迪化街甜點小吃#赤峰街#赤峰街文青景點#赤峰街特色小店#赤峰街美食#赤峰街咖啡館#赤峰街古著店#中山站赤峰街#赤峰街網美店#赤峰街潮流特色#台北赤峰街探索#赤峰街創意市集#赤峰街藝術街#赤峰街必吃美食#赤峰街特色小吃#赤峰街下午茶#赤峰街甜點推薦#赤峰街手作甜點#赤峰街美味餐廳#赤峰街肉桂捲#赤峰街美食地圖#全台最大星巴克#星巴克亞洲旗艦店#Dream Plaza星巴克#信義區星巴克#台北最大星巴克#星巴克台北旅遊景點",
+      "publishedAt": "2025-11-15T03:01:21Z",
+      "channelTitle": "旅遊通",
+      "extractedFoods": [],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "timestamp": "1:00",
+          "startLabel": "1:00",
+          "startSeconds": 60,
+          "endSeconds": 90,
+          "title": "赤峰街",
+          "text": "台北中山區】赤峰街是台北市大同區一條充滿歷史與現代文藝氣息的街道。",
+          "summary": "台北中山區】赤峰街是台北市大同區一條充滿歷史與現代文藝氣息的街道。",
+          "locationHints": [
+            "赤峰街"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_2",
+          "timestamp": "3:00",
+          "startLabel": "3:00",
+          "startSeconds": 180,
+          "endSeconds": 210,
+          "title": "國家鐵道博物館（臺北機廠",
+          "text": "📌小小補充說明：🚆 影片中介紹的是國家鐵道博物館（臺北機廠）。",
+          "summary": "📌小小補充說明：🚆 影片中介紹的是國家鐵道博物館（臺北機廠）。",
+          "locationHints": [
+            "國家鐵道博物館（臺北機廠"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_3",
+          "timestamp": "6:00",
+          "startLabel": "6:00",
+          "startSeconds": 360,
+          "endSeconds": 390,
+          "title": "星巴克亞洲旗艦店",
+          "text": "Cafe Plaza星巴克",
+          "summary": "Cafe Plaza星巴克",
+          "locationHints": [
+            "星巴克亞洲旗艦店"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "name": "赤峰街",
+          "lat": 25.0553262,
+          "lng": 121.519628,
+          "description": "台北中山區】赤峰街是台北市大同區一條充滿歷史與現代文藝氣息的街道。",
+          "address": "Chifeng St, Guangneng Village, Datong District, Taipei City, Taiwan 103",
+          "placeId": "ChIJTZ-x02upQjQR-DecmBEnFcw",
+          "rawQuery": "赤峰街",
+          "raw": "赤峰街",
+          "normalized": "赤峰街",
+          "normalizedName": "赤峰街",
+          "cleanedName": "赤峰街",
+          "rawMention": "赤峰街",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "國家鐵道博物館（臺北機廠",
+          "lat": 25.0474346,
+          "lng": 121.5647175,
+          "description": "📌小小補充說明：🚆 影片中介紹的是國家鐵道博物館（臺北機廠）。",
+          "address": "No. 50號, Section 5, Civic Blvd, Xinren Village, Xinyi District, Taipei City, Taiwan 110",
+          "placeId": "ChIJ2QQNMb6rQjQRA85vrPDJtEU",
+          "rawQuery": "國家鐵道博物館（臺北機廠",
+          "raw": "國家鐵道博物館（臺北機廠",
+          "normalized": "國家鐵道博物館（臺北機廠",
+          "normalizedName": "國家鐵道博物館（臺北機廠",
+          "cleanedName": "國家鐵道博物館（臺北機廠",
+          "rawMention": "國家鐵道博物館（臺北機廠",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "星巴克亞洲旗艦店",
+          "lat": 25.0329636,
+          "lng": 121.5654268,
+          "description": "Cafe Plaza星巴克",
+          "address": "Taipei City, Taiwan",
+          "placeId": "ChIJi73bYWusQjQRgqQGXK260bw",
+          "rawQuery": "星巴克亞洲旗艦店",
+          "raw": "星巴克亞洲旗艦店",
+          "normalized": "星巴克亞洲旗艦店",
+          "normalizedName": "星巴克亞洲旗艦店",
+          "cleanedName": "星巴克亞洲旗艦店",
+          "rawMention": "星巴克亞洲旗艦店",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的台北旅遊影片，含重點片段與地圖標點。"
+    }
+  ],
+  "validation": {
+    "requestedCount": 6,
+    "exportedCount": 5
+  }
+}

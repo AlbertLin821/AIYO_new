@@ -1,5 +1,6 @@
 import { serverConfig } from "@/server/config";
 import { fetchGooglePlaceDetailsByPlaceId } from "@/server/geo/geocodeService";
+import { isUsableMapCoordinate } from "@/lib/geoCoordinates";
 
 export type PlaceSearchHit = {
   name: string;
@@ -44,6 +45,9 @@ function regionFromHint(locationHint?: string): string | undefined {
   }
   if (/taiwan|台灣|臺灣|chiayi|kaohsiung|taipei|taichung|tainan|嘉義|高雄|台北|臺北|台中|台南/.test(h)) {
     return "tw";
+  }
+  if (/australia|australian|澳洲|澳大利亞|澳大利亚|sydney|melbourne|brisbane|cairns|gold coast|雪梨|悉尼|墨爾本|墨尔本|布里斯本|凱恩斯|凯恩斯/.test(h)) {
+    return "au";
   }
   return undefined;
 }
@@ -128,12 +132,15 @@ export async function searchPlacesByText(
   const raw = payload.results || [];
   const sliced = raw.slice(0, maxResults);
 
-  const enriched: PlaceSearchHit[] = await Promise.all(
+  const enriched = await Promise.all(
     sliced.map(async (row) => {
       const placeId = row.place_id || "";
       const loc = row.geometry?.location;
-      const lat = loc?.lat ?? 0;
-      const lng = loc?.lng ?? 0;
+      const lat = loc?.lat;
+      const lng = loc?.lng;
+      if (lat == null || lng == null || !isUsableMapCoordinate(lat, lng)) {
+        return null;
+      }
       const base: PlaceSearchHit = {
         name: row.name || textQuery,
         formattedAddress: row.formatted_address || "",
@@ -161,5 +168,5 @@ export async function searchPlacesByText(
     }),
   );
 
-  return { ok: true, places: enriched.filter((p) => p.placeId && Number.isFinite(p.lat) && Number.isFinite(p.lng)) };
+  return { ok: true, places: enriched.filter((p): p is PlaceSearchHit => Boolean(p)) };
 }

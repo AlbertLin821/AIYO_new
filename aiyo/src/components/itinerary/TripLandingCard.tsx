@@ -2,8 +2,9 @@
 
 import { memo } from "react";
 import Image from "next/image";
-import { motion } from "framer-motion";
-import { CalendarDays, Copy, MapPin, Folder, PencilLine, Trash2, Users } from "lucide-react";
+import Link from "next/link";
+import { m } from "@/lib/motion";
+import { CalendarDays, Copy, MapPinned, MapPin, PencilLine, Trash2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { zhTW as t } from "@/locales/zh-TW";
 import type { ItineraryListItem } from "@/lib/itinerary-sort";
@@ -13,15 +14,26 @@ type Props = {
   index: number;
   disabled?: boolean;
   duplicating?: boolean;
+  tripMapHref?: string;
   onClick: (item: ItineraryListItem) => void;
   onEdit?: (item: ItineraryListItem) => void;
   onDuplicate?: (item: ItineraryListItem) => void;
   onDelete?: (item: ItineraryListItem) => void;
 };
 
-function TripLandingCard({ item, index, disabled, duplicating, onClick, onEdit, onDuplicate, onDelete }: Props) {
+function TripLandingCard({
+  item,
+  index,
+  disabled,
+  duplicating,
+  tripMapHref,
+  onClick,
+  onEdit,
+  onDuplicate,
+  onDelete,
+}: Props) {
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05, duration: 0.3 }}
@@ -35,6 +47,7 @@ function TripLandingCard({ item, index, disabled, duplicating, onClick, onEdit, 
         type="button"
         onClick={() => onClick(item)}
         disabled={disabled}
+        aria-label={t.itineraryPage.editTripAria.replace("{title}", item.title)}
         data-testid="trip-landing-card"
         className="flex w-full flex-col text-left"
       >
@@ -49,10 +62,10 @@ function TripLandingCard({ item, index, disabled, duplicating, onClick, onEdit, 
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             />
           ) : (
-            <div className="flex h-full items-center justify-center bg-gradient-to-br from-primary/5 to-lavender/10">
-              <Folder
-                className="size-16 text-border-strong transition-colors group-hover:text-primary"
-                strokeWidth={1}
+            <div className="flex h-full items-center justify-center bg-gradient-to-br from-primary/8 via-lavender/10 to-cream/40">
+              <CalendarDays
+                className="size-16 text-primary/35 transition-colors group-hover:text-primary/55"
+                strokeWidth={1.2}
               />
             </div>
           )}
@@ -79,15 +92,34 @@ function TripLandingCard({ item, index, disabled, duplicating, onClick, onEdit, 
             </span>
           </div>
           <p className="mt-auto truncate text-[11px] text-muted">
-            {item.folderName || t.itineraryPage.unfiledFolder} ·{" "}
             {t.itineraryPage.folderMetaUpdated}{" "}
             {new Date(item.updatedAt).toLocaleDateString("zh-TW")}
           </p>
         </div>
       </button>
 
-      {(onEdit || onDuplicate || onDelete) && (
-        <div className="absolute right-2 top-2 z-20 flex gap-1 rounded-lg bg-surface/95 p-1 opacity-0 shadow-soft transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+      {(tripMapHref || onEdit || onDuplicate || onDelete) && (
+        <div
+          className="absolute right-2 top-2 z-20 flex gap-1 rounded-lg bg-surface/95 p-1 opacity-0 shadow-soft transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          {tripMapHref && (
+            <Link
+              href={tripMapHref}
+              aria-label={t.tripMapPage.openTripMapAria.replace("{title}", item.title)}
+              title={t.tripMapPage.openTripMapTitle}
+              aria-disabled={disabled ? true : undefined}
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
+              className={cn(
+                "rounded-lg p-2 text-muted transition-colors hover:bg-cream/70 hover:text-primary",
+                disabled && "pointer-events-none opacity-40",
+              )}
+            >
+              <MapPinned className="size-4" aria-hidden />
+            </Link>
+          )}
           {onEdit && (
             <button
               type="button"
@@ -138,7 +170,7 @@ function TripLandingCard({ item, index, disabled, duplicating, onClick, onEdit, 
           )}
         </div>
       )}
-    </motion.div>
+    </m.div>
   );
 }
 

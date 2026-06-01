@@ -58,6 +58,28 @@ test("parseTripPlanResponse repairs alias keys and malformed times", () => {
   assert.equal(parsed.diagnostics.parseMode, "normalized");
 });
 
+test("parseTripPlanResponse drops null-island placeholder locations", () => {
+  const raw = JSON.stringify({
+    summary: "Trip",
+    days: [
+      {
+        dayNumber: 1,
+        items: [
+          {
+            title: "神農街",
+            time: "09:00",
+            type: "attraction",
+            location: { name: "神農街", lat: 0, lng: 0, description: "placeholder" },
+          },
+        ],
+      },
+    ],
+  });
+
+  const parsed = parseTripPlanResponse(raw, request);
+  assert.equal(parsed.result.days[0].items[0].location, undefined);
+});
+
 test("parseTripPlanResponse reports avoid pollution and must-visit issues in warnings", () => {
   const raw = JSON.stringify({
     summary: "Trip",
@@ -96,6 +118,28 @@ test("parseTripPlanResponse reports template pollution when placeholder text lea
   const warnings = parsed.result.warnings || [];
   assert.ok(warnings.some((warning) => warning.startsWith("QUALITY:TEMPLATE_POLLUTION")));
   assert.ok(parsed.diagnostics.issues.includes("template_pollution"));
+});
+
+test("parseTripPlanResponse reports title format violations for composite item titles", () => {
+  const raw = JSON.stringify({
+    summary: "熊本行程",
+    days: [
+      {
+        dayNumber: 7,
+        theme: "歷史文化體驗",
+        items: [
+          { time: "09:00", title: "歷史文化體驗 湧湧座", type: "attraction" },
+          { time: "12:00", title: "歷史文化體驗 湧湧座 周邊午餐", type: "restaurant" },
+        ],
+      },
+    ],
+  });
+
+  const parsed = parseTripPlanResponse(raw, request);
+  const warnings = parsed.result.warnings || [];
+  assert.ok(warnings.some((warning) => warning.startsWith("QUALITY:TITLE_FORMAT_VIOLATION")));
+  assert.ok(parsed.diagnostics.issues.includes("title_format_violation"));
+  assert.equal(parsed.result.days[0].items[0].title, "歷史文化體驗 湧湧座");
 });
 
 test("parseTripPlanResponse throws when JSON block is missing", () => {

@@ -204,8 +204,6 @@ function resetInMemoryStores(): void {
   });
   useUIStore.setState({
     showOnboarding: false,
-    voiceState: "idle",
-    chatBubbleOpen: false,
     activeVideoDrawer: null,
   });
   useVideoStore.setState({

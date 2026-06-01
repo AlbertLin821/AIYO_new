@@ -1,8 +1,16 @@
 "use client";
 
 import { memo } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type Props = {
   open: boolean;
@@ -32,84 +40,66 @@ function PromptDialog({
   onConfirm,
 }: Props) {
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          role="presentation"
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/25 p-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={() => !pending && onCancel()}
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !pending) {
+          onCancel();
+        }
+      }}
+    >
+      <DialogContent
+        showCloseButton={!pending}
+        className="overflow-hidden rounded-2xl border-border-light bg-surface p-5 shadow-soft-lg sm:max-w-md"
+      >
+        <DialogHeader className="pr-10">
+          <DialogTitle id="site-prompt-heading" className="font-semibold">
+            {title}
+          </DialogTitle>
+        </DialogHeader>
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onConfirm();
+          }}
         >
-          <motion.div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="site-prompt-heading"
-            className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-soft-lg"
-            initial={{ scale: 0.96, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.96, opacity: 0 }}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mb-4 flex items-center justify-between gap-4">
-              <h2 id="site-prompt-heading" className="font-semibold text-foreground">
-                {title}
-              </h2>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={onCancel}
-                className="rounded-lg p-1 text-muted hover:bg-border-light disabled:opacity-50"
-                aria-label={cancelLabel}
-              >
-                <X className="size-4" aria-hidden />
-              </button>
-            </div>
-            <form
-              className="space-y-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                onConfirm();
-              }}
+          <div>
+            <Label htmlFor="site-prompt-input" className="mb-2 block text-xs text-muted">
+              {label}
+            </Label>
+            <Input
+              id="site-prompt-input"
+              value={value}
+              onChange={(event) => onValueChange(event.target.value)}
+              placeholder={placeholder}
+              disabled={pending}
+              autoComplete="off"
+              autoFocus
+              className="rounded-xl border-border-light bg-cream/40"
+            />
+          </div>
+          <DialogFooter className="flex flex-col-reverse gap-2 border-0 bg-transparent p-0 sm:flex-row sm:flex-wrap sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={onCancel}
+              className="w-full min-w-0 rounded-xl border-border-light sm:w-auto"
             >
-              <div>
-                <label htmlFor="site-prompt-input" className="mb-2 block text-xs text-muted">
-                  {label}
-                </label>
-                <input
-                  id="site-prompt-input"
-                  value={value}
-                  onChange={(event) => onValueChange(event.target.value)}
-                  placeholder={placeholder}
-                  disabled={pending}
-                  className="w-full rounded-xl border border-border-light bg-cream/40 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/40 disabled:opacity-60"
-                  autoComplete="off"
-                  autoFocus
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={onCancel}
-                  className="rounded-xl border border-border-light bg-surface px-4 py-2 text-xs font-medium text-muted hover:bg-cream/50 disabled:opacity-50"
-                >
-                  {cancelLabel}
-                </button>
-                <button
-                  type="submit"
-                  disabled={pending || !value.trim()}
-                  className="rounded-xl bg-primary px-4 py-2 text-xs font-medium text-white hover:bg-primary-dark disabled:opacity-50"
-                >
-                  {confirmLabel}
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+              {cancelLabel}
+            </Button>
+            <Button
+              type="submit"
+              disabled={pending || !value.trim()}
+              className="w-full min-w-0 rounded-xl bg-primary text-primary-foreground hover:bg-primary-dark sm:w-auto"
+            >
+              {confirmLabel}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

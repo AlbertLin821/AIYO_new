@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
+import { buildPersonalizedAIContext, type AIContextBuildResult } from "@/server/ai/aiContextBuilder";
 import { OllamaRequestError } from "@/server/ai/ollamaClient";
 import { completeChatProgress, ensureChatProgressSession } from "@/server/chat/chatProgressStore";
-import { addMemories, formatMemoryContext, searchMemories } from "@/server/memory/mem0Client";
+import { addMemories, formatMemoryContext } from "@/server/memory/mem0Client";
+import { retrieveRelevantMemoriesForUser } from "@/server/memory/memoryRetrieval";
 import { requireSessionUser } from "@/server/auth";
 import { resolveSessionTrip, saveChatMessage } from "@/server/data/appStateService";
 import { chatWithTravelAssistant } from "@/server/services/travelPlannerService";
@@ -36,11 +38,9 @@ export async function POST(request: Request) {
     }
 
     progressSessionId = body.progressSessionId?.trim() || undefined;
-    if (progressSessionId) {
-      ensureChatProgressSession(progressSessionId);
-    }
 
     let memoryContext: string | undefined;
+    let personalizedContext: AIContextBuildResult | null = null;
     let persistedUserId: string | null = null;
     let persistedTripId: string | undefined;
     try {
@@ -48,12 +48,26 @@ export async function POST(request: Request) {
       const trip = await resolveSessionTrip(userId);
       persistedUserId = userId;
       persistedTripId = trip?.id;
+      if (progressSessionId) {
+        ensureChatProgressSession(progressSessionId, userId);
+      }
       await saveChatMessage(userId, "user", body.instruction.trim(), persistedTripId);
-      const memories = await searchMemories({
+      const { memories } = await retrieveRelevantMemoriesForUser({
         userId,
         query: [body.tripProfile.destination || "", body.instruction.trim()].filter(Boolean).join(" "),
       });
-      memoryContext = formatMemoryContext(memories);
+      personalizedContext = await buildPersonalizedAIContext({
+        userId,
+        currentUserInput: body.instruction.trim(),
+        chatContext: body.context,
+        tripId: persistedTripId,
+        memorySnippets: memories.map((memory) => ({
+          content: memory.memory,
+          source: "mem0",
+          relevance: memory.score,
+        })),
+      });
+      memoryContext = personalizedContext.promptContextText || formatMemoryContext(memories);
     } catch {
       // Revision still works without an authenticated memory lookup.
     }
@@ -66,6 +80,7 @@ export async function POST(request: Request) {
       progressSessionId,
       memoryContext,
       forceStructuredRevision: true,
+      aiContext: personalizedContext,
     });
 
     if (persistedUserId) {
@@ -75,6 +90,7 @@ export async function POST(request: Request) {
           response.reply.role,
           response.reply.content,
           persistedTripId,
+          response.reply,
         );
       } catch {
         // Assistant reply persistence should not block the response.
@@ -101,7 +117,14 @@ export async function POST(request: Request) {
       completeChatProgress(progressSessionId);
     }
 
-    return NextResponse.json(createSuccess(response));
+    return NextResponse.json(
+      createSuccess(
+        response,
+        process.env.NODE_ENV !== "production" && personalizedContext
+          ? { aiContextDebug: personalizedContext.debug }
+          : undefined,
+      ),
+    );
   } catch (error) {
     if (progressSessionId) {
       completeChatProgress(progressSessionId);

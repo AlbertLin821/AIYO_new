@@ -1,7 +1,7 @@
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/services/apiClient";
 import type { ItineraryListItem } from "@/lib/itinerary-sort";
 import type { CollaboratorRole } from "@/lib/permissions";
-import type { CollaborationPresenceState, PersistedTripPayload } from "@/types";
+import type { ChatMessage, CollaborationPresenceState, PersistedTripPayload } from "@/types";
 
 export type ItineraryFolderDto = {
   id: string;
@@ -25,6 +25,7 @@ export type TripCollaboratorDto = {
 
 export type TripSwitchPayload = {
   trip: PersistedTripPayload;
+  chatMessages: ChatMessage[];
   collaboration: CollaborationPresenceState | null;
 };
 
@@ -120,14 +121,19 @@ export function joinCollabTrip(inviteCode: string) {
   return apiPost<{ inviteCode: string }, JoinCollabResult>("/api/collab/join", { inviteCode });
 }
 
-export function createNewTrip() {
+export function createNewTrip(input?: {
+  title?: string;
+  destination?: string;
+  days?: number;
+  coverImageUrl?: string | null;
+}) {
   const payload: PersistedTripPayload = {
     tripId: "",
-    title: "",
-    destination: "",
-    days: 0,
+    title: input?.title?.trim() || "",
+    destination: input?.destination?.trim() || "",
+    days: Math.max(0, Math.floor(input?.days ?? 0)),
     budget: 0,
-    coverImageUrl: null,
+    coverImageUrl: input?.coverImageUrl ?? null,
     itinerary: [],
     pins: [],
     updatedAt: new Date().toISOString(),

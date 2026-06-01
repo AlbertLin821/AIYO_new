@@ -47,7 +47,7 @@ export function filterProposedChangesByVerifiedPlaces(
   places: PlaceSearchHit[],
 ): AiProposedChange[] {
   if (!places.length) {
-    return changes.filter((change) => change.type !== "add_itinerary_item");
+    return changes;
   }
   return changes.filter((c) => proposedChangeMatchesAnyPlace(c, places));
 }

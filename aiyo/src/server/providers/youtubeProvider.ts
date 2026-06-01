@@ -1,10 +1,13 @@
 import { serverConfig } from "@/server/config";
+import type { TripDestinationScope } from "@/lib/tripDestinationScope";
 import {
   buildExpandedTravelSearchQueries,
   buildVideoRecommendationSearchQuery,
+  isInTripDestinationScope,
   isLowIntentShortFormVideo,
   isLoosePlaceRelatedVideo,
   isTravelRelatedVideo,
+  resolveVideoDestinationScope,
   scoreSearchResultQuality,
 } from "@/server/providers/travelVideoFilter";
 import type { VideoRecommendation } from "@/types";
@@ -15,9 +18,9 @@ export interface VideoSearchDebugInfo {
   executedQueries: string[];
   regionCode: string;
   relevanceLanguage: string;
-  selectedStrategy: "high-intent" | "literal-fallback";
+  selectedStrategy: "high-intent" | "literal-fallback" | "preloaded-seed";
   fallbackReasons: string[];
-  cacheStatus?: "memory-hit" | "miss";
+  cacheStatus?: "memory-hit" | "miss" | "preloaded-hit";
   cacheKey?: string;
 }
 
@@ -52,6 +55,7 @@ interface SearchInput {
   limit?: number;
   offset?: number;
   excludeVideoIds?: string[];
+  destinationScope?: TripDestinationScope | null;
 }
 
 interface YouTubeMetadata {
@@ -306,6 +310,8 @@ async function fetchMappedVideosForQuery(
     regionCode: opts?.regionCode ?? "TW",
     relevanceLanguage: opts?.relevanceLanguage ?? "zh-Hant",
     videoCaption: opts?.videoCaption === "closedCaption" ? "closedCaption" : undefined,
+    /** 僅搜尋允許嵌入的影片，避免推薦無法在站內 iframe 播放的結果 */
+    videoEmbeddable: "true",
   })}`;
 
   const searchResult = await fetchGoogleJson<{
@@ -334,7 +340,7 @@ async function fetchMappedVideosForQuery(
   }
 
   const detailsUrl = `https://www.googleapis.com/youtube/v3/videos?${toQuery({
-    part: "snippet,contentDetails",
+    part: "snippet,contentDetails,status",
     id: videoIds.join(","),
     key: serverConfig.youtubeApiKey,
   })}`;
@@ -342,6 +348,7 @@ async function fetchMappedVideosForQuery(
   const detailsResult = await fetchGoogleJson<{
     items?: Array<{
       id: string;
+      status?: { embeddable?: boolean };
       contentDetails?: { duration?: string };
       snippet?: {
         title?: string;
@@ -357,7 +364,9 @@ async function fetchMappedVideosForQuery(
     return { ok: false, message: detailsResult.message };
   }
 
-  const videos: VideoRecommendation[] = (detailsResult.data.items || []).map((item) => ({
+  const videos: VideoRecommendation[] = (detailsResult.data.items || [])
+    .filter((item) => item.status?.embeddable !== false)
+    .map((item) => ({
     id: `youtube_${item.id}`,
     videoId: item.id,
     title: item.snippet?.title || "YouTube video",
@@ -379,6 +388,10 @@ async function fetchMappedVideosForQuery(
     summarySegments: [],
     listProvenance: "youtube-data-api",
   }));
+
+  if (videos.length === 0) {
+    return { ok: false, message: "YouTube search returned no embeddable videos." };
+  }
 
   return { ok: true, videos };
 }
@@ -451,6 +464,11 @@ export async function searchYouTubeVideos(input: SearchInput): Promise<{
     };
   }
 
+  const destinationScope = resolveVideoDestinationScope({
+    destination: input.destination,
+    destinationScope: input.destinationScope,
+  });
+
   const rawUserQuery = buildVideoRecommendationSearchQuery({
     keyword: input.keyword,
     destination: input.destination,
@@ -513,16 +531,41 @@ export async function searchYouTubeVideos(input: SearchInput): Promise<{
     channelTitle: v.channelTitle,
   });
 
+  const passesScope = (video: VideoRecommendation) =>
+    isInTripDestinationScope(metaFor(video), destinationScope, rawUserQuery);
+
   const buildPool = (mapped: VideoRecommendation[]): VideoRecommendation[] => {
     const strictFiltered = mapped.filter((video) =>
       !isLowIntentShortFormVideo({
         ...metaFor(video),
         durationSeconds: parseDisplayDurationToSeconds(video.duration),
       }) &&
-      isTravelRelatedVideo(metaFor(video), rawUserQuery),
+      isTravelRelatedVideo(metaFor(video), rawUserQuery, destinationScope) &&
+      passesScope(video),
     );
     if (strictFiltered.length > 0) {
       return strictFiltered;
+    }
+    const looseFiltered = mapped.filter(
+      (video) =>
+        !isLowIntentShortFormVideo({
+          ...metaFor(video),
+          durationSeconds: parseDisplayDurationToSeconds(video.duration),
+        }) &&
+        isLoosePlaceRelatedVideo(metaFor(video), rawUserQuery, destinationScope) &&
+        passesScope(video),
+    );
+    if (looseFiltered.length > 0) {
+      fallbackReasons.push(
+        "Strict travel filter produced too few results; falling back to loose place filter.",
+      );
+      return looseFiltered;
+    }
+    if (destinationScope?.countryCodes.length) {
+      fallbackReasons.push(
+        "No videos matched trip destination scope; not returning out-of-scope results.",
+      );
+      return [];
     }
     fallbackReasons.push("Strict travel filter produced too few results; falling back to loose place filter.");
     return mapped.filter(
@@ -530,7 +573,7 @@ export async function searchYouTubeVideos(input: SearchInput): Promise<{
         !isLowIntentShortFormVideo({
           ...metaFor(video),
           durationSeconds: parseDisplayDurationToSeconds(video.duration),
-        }) && isLoosePlaceRelatedVideo(metaFor(video), rawUserQuery),
+        }) && isLoosePlaceRelatedVideo(metaFor(video), rawUserQuery, destinationScope),
     );
   };
 
@@ -835,6 +878,10 @@ function getLanguagePriority(code?: string): number {
   return CAPTION_LANGUAGE_PRIORITY.length + 10;
 }
 
+function isSupportedCaptionLanguage(code?: string): boolean {
+  return getLanguagePriority(code) < CAPTION_LANGUAGE_PRIORITY.length + 10;
+}
+
 function isAsrTrack(track: CaptionTrack): boolean {
   return track.kind === "asr" || /a\./i.test(track.vssId || "") || /auto/i.test(readCaptionTrackName(track));
 }
@@ -844,7 +891,12 @@ function selectCaptionTrack(tracks: CaptionTrack[]): CaptionTrack | null {
     return null;
   }
 
-  const ranked = [...tracks].sort((left, right) => {
+  const supportedTracks = tracks.filter((track) => isSupportedCaptionLanguage(track.languageCode));
+  if (supportedTracks.length === 0) {
+    return null;
+  }
+
+  const ranked = [...supportedTracks].sort((left, right) => {
     const languageDiff = getLanguagePriority(left.languageCode) - getLanguagePriority(right.languageCode);
     if (languageDiff !== 0) {
       return languageDiff;
@@ -902,7 +954,8 @@ async function tryFetchTimedTextXml(
   kind?: "manual" | "asr";
   source?: "timedtext";
 }> {
-  const candidateTracks = tracks.length > 0 ? [...tracks].sort((left, right) => {
+  const supportedTracks = tracks.filter((track) => isSupportedCaptionLanguage(track.languageCode));
+  const candidateTracks = supportedTracks.length > 0 ? [...supportedTracks].sort((left, right) => {
     const languageDiff = getLanguagePriority(left.languageCode) - getLanguagePriority(right.languageCode);
     if (languageDiff !== 0) {
       return languageDiff;
@@ -1067,9 +1120,9 @@ export async function fetchYouTubeTranscript(videoId: string): Promise<Transcrip
       entries: [],
       source: "none",
       fallbackReason: "No usable caption track was available for this video.",
-      captionLanguage: normalizeLanguageCode(selectedTrack?.languageCode) || undefined,
-      captionKind: selectedTrack ? (isAsrTrack(selectedTrack) ? "asr" : "manual") : undefined,
-      captionSource: selectedTrack ? "watch-page-captions" : undefined,
+      captionLanguage: undefined,
+      captionKind: undefined,
+      captionSource: undefined,
     };
   } catch (error) {
     return {

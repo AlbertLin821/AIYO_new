@@ -1,30 +1,40 @@
 "use client";
+"use memo";
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import type { DragEndEvent } from "@dnd-kit/core";
+import { isFolderNameDuplicate } from "@/lib/itinerary-folder-names";
+import { groupItinerariesForLanding } from "@/lib/itinerary-grouping";
 import {
   filterItineraries,
   sortItineraries,
   type ItineraryListItem,
 } from "@/lib/itinerary-sort";
 import { canCollaborator } from "@/lib/permissions";
+import {
+  commitTripDaysAndBudget,
+  summarizeShrinkDaysImpact,
+} from "@/lib/tripMetaEdit";
 import { zhTW as t } from "@/locales/zh-TW";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, m } from "@/lib/motion";
 import { ArrowLeft, ArrowUpDown, CalendarDays, LinkIcon, Plus, Search } from "lucide-react";
 import DeleteTripDialog from "@/components/itinerary/DeleteTripDialog";
 import ItineraryEditorSection from "@/components/itinerary/ItineraryEditorSection";
-import type { TripLibrarySort } from "@/components/itinerary/ItineraryLibraryPanel";
+import ItineraryLibraryPanel, { type TripLibrarySort } from "@/components/itinerary/ItineraryLibraryPanel";
 import ItineraryPageHeader from "@/components/itinerary/ItineraryPageHeader";
 import ItineraryShareDialog from "@/components/itinerary/ItineraryShareDialog";
+import JoinTripDialog from "@/components/itinerary/JoinTripDialog";
+import PublishItineraryDialog from "@/components/itinerary/PublishItineraryDialog";
 import RenameTripDialog from "@/components/itinerary/RenameTripDialog";
-import TripLandingCard from "@/components/itinerary/TripLandingCard";
+import ItineraryLandingFolderView from "@/components/itinerary/ItineraryLandingFolderView";
 import type { AddActivityDraft } from "@/components/itinerary/AddActivityForm";
 import ConfirmDialog from "@/components/system/ConfirmDialog";
 import PromptDialog from "@/components/system/PromptDialog";
 import {
   addTripCollaborator,
+  createItineraryFolder,
   createNewTrip,
   deleteItineraryFolder,
   joinCollabTrip,
@@ -33,6 +43,7 @@ import {
   listItineraryFolders,
   listTripsForLibrary,
   listTripCollaborators,
+  moveTripToFolder,
   patchTripDetails,
   removeTripCollaborator,
   setActiveTrip,
@@ -41,12 +52,17 @@ import {
   type ItineraryFolderDto,
   type TripCollaboratorDto,
 } from "@/services/itineraryClient";
+import {
+  getTripPublicationStatus,
+  publishTrip,
+  unpublishTrip,
+} from "@/services/publicItineraryClient";
 import { syncService } from "@/services/syncService";
 import { useCollabStore } from "@/stores/useCollabStore";
 import { withSyncMutationSource } from "@/stores/syncMutationSource";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
-import type { BootstrapPayload, TripPlanItem } from "@/types";
+import type { BootstrapPayload, TripPlanItem, TripPublicationStatus } from "@/types";
 
 const MAX_COVER_DATA_URL_CHARS = 850_000;
 
@@ -92,6 +108,7 @@ async function compressImageFileToDataUrl(
 
 export default function ItineraryPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { status, data: session } = useSession();
   const {
     itinerary,
@@ -116,12 +133,21 @@ export default function ItineraryPage() {
   const [addingToDay, setAddingToDay] = useState<number | null>(null);
   const [addDraft, setAddDraft] = useState<AddActivityDraft>(EMPTY_ADD_DRAFT);
   const [shareOpen, setShareOpen] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publicationStatus, setPublicationStatus] = useState<TripPublicationStatus>({
+    published: false,
+  });
+  const [isPublishingPublication, setIsPublishingPublication] = useState(false);
   const [isInteractive, setIsInteractive] = useState(false);
   const [tripLibrarySort, setTripLibrarySort] = useState<TripLibrarySort>("createdAt_desc");
+  const [scopeTab, setScopeTab] = useState<"myTrips" | "sharedTrips">("myTrips");
+  const [libraryViewMode, setLibraryViewMode] = useState<"grid" | "list">("list");
   const [itinerarySearch, setItinerarySearch] = useState("");
   const deferredItinerarySearch = useDeferredValue(itinerarySearch);
   const [fabOpen, setFabOpen] = useState(false);
-  const [, setFolders] = useState<ItineraryFolderDto[]>([]);
+  const [folders, setFolders] = useState<ItineraryFolderDto[]>([]);
+  const [folderFormOpen, setFolderFormOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [folderError, setFolderError] = useState<string | null>(null);
   const [tripLibrary, setTripLibrary] = useState<ItineraryListItem[]>([]);
@@ -136,6 +162,12 @@ export default function ItineraryPage() {
   const [renameSaving, setRenameSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ItineraryListItem | null>(null);
   const [deleteDayTarget, setDeleteDayTarget] = useState<{ dayNumber: number; displayOrdinal: number } | null>(null);
+  const [deleteItemTarget, setDeleteItemTarget] = useState<{
+    dayNumber: number;
+    itemId: string;
+    title: string;
+  } | null>(null);
+  const [shrinkDaysTarget, setShrinkDaysTarget] = useState<number | null>(null);
   const [renameFolderTarget, setRenameFolderTarget] = useState<ItineraryFolderDto | null>(null);
   const [renameFolderDraft, setRenameFolderDraft] = useState("");
   const [deleteFolderTarget, setDeleteFolderTarget] = useState<ItineraryFolderDto | null>(null);
@@ -151,6 +183,25 @@ export default function ItineraryPage() {
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [joinLoading, setJoinLoading] = useState(false);
+
+  useEffect(() => {
+    const requestedTripId = searchParams.get("tripId")?.trim();
+    if (status !== "authenticated" || !requestedTripId || requestedTripId === useTripStore.getState().tripId) {
+      return;
+    }
+    void setActiveTrip(requestedTripId)
+      .then((snapshot) => {
+        syncService.applyTripSwitch(snapshot);
+        syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
+      })
+      .catch(() => {
+        pushToast({
+          variant: "warning",
+          title: "載入指定行程失敗",
+          description: "找不到指定行程，已保留目前內容。",
+        });
+      });
+  }, [pushToast, searchParams, status]);
   const itemIdCounter = useRef(0);
   const lastCursorSentAt = useRef(0);
 
@@ -176,7 +227,7 @@ export default function ItineraryPage() {
     setLibraryLoading(true);
     setLibraryError(null);
     try {
-      const rows = await listTripsForLibrary("recent");
+      const rows = await listTripsForLibrary(scopeTab === "sharedTrips" ? "shared" : "mine");
       setTripLibrary(rows);
     } catch (error) {
       setLibraryError(error instanceof Error ? error.message : t.itineraryPage.libraryLoadFailed);
@@ -184,7 +235,7 @@ export default function ItineraryPage() {
     } finally {
       setLibraryLoading(false);
     }
-  }, [status]);
+  }, [scopeTab, status]);
 
   const refreshFolders = useCallback(async () => {
     if (status !== "authenticated") {
@@ -266,6 +317,77 @@ export default function ItineraryPage() {
 
     addDay();
   }, [addDay, pushToast, requireAuthenticated]);
+
+  const handleDaysCommit = useCallback(
+    async (nextDays: number) => {
+      if (!requireAuthenticated("/itinerary")) {
+        return;
+      }
+      const impact = summarizeShrinkDaysImpact(itinerary, days, nextDays);
+      if (impact.willShrink) {
+        setShrinkDaysTarget(nextDays);
+        return;
+      }
+      await commitTripDaysAndBudget({ days: nextDays });
+    },
+    [days, itinerary, requireAuthenticated],
+  );
+
+  const handleConfirmShrinkDays = useCallback(async () => {
+    if (shrinkDaysTarget === null) {
+      return;
+    }
+    if (!requireAuthenticated("/itinerary")) {
+      setShrinkDaysTarget(null);
+      return;
+    }
+    const target = shrinkDaysTarget;
+    setShrinkDaysTarget(null);
+    await commitTripDaysAndBudget({ days: target });
+  }, [requireAuthenticated, shrinkDaysTarget]);
+
+  const shrinkDaysDialogDescription = useMemo(() => {
+    if (shrinkDaysTarget === null) {
+      return "";
+    }
+    const impact = summarizeShrinkDaysImpact(itinerary, days, shrinkDaysTarget);
+    const rangeStart = impact.toDays + 1;
+    const rangeEnd = impact.fromDays;
+    const range =
+      rangeStart === rangeEnd
+        ? t.itineraryPage.shrinkDaysRangeSingle.replace("{n}", String(rangeStart))
+        : t.itineraryPage.shrinkDaysRangeMulti
+            .replace("{start}", String(rangeStart))
+            .replace("{end}", String(rangeEnd));
+    if (impact.removedActivityCount > 0) {
+      return t.itineraryPage.shrinkDaysConfirmWithActivities
+        .replace("{from}", String(impact.fromDays))
+        .replace("{to}", String(impact.toDays))
+        .replace("{range}", range)
+        .replace("{n}", String(impact.removedActivityCount));
+    }
+    return t.itineraryPage.shrinkDaysConfirmDaysOnly
+      .replace("{from}", String(impact.fromDays))
+      .replace("{to}", String(impact.toDays))
+      .replace("{range}", range);
+  }, [days, itinerary, shrinkDaysTarget]);
+
+  const shrinkDaysRemovesActivities = useMemo(() => {
+    if (shrinkDaysTarget === null) {
+      return false;
+    }
+    return summarizeShrinkDaysImpact(itinerary, days, shrinkDaysTarget).removedActivityCount > 0;
+  }, [days, itinerary, shrinkDaysTarget]);
+
+  const handleBudgetCommit = useCallback(
+    async (nextBudget: number) => {
+      if (!requireAuthenticated("/itinerary")) {
+        return;
+      }
+      await commitTripDaysAndBudget({ budget: nextBudget });
+    },
+    [requireAuthenticated],
+  );
 
   const handleCreateNewTrip = useCallback(async () => {
     if (!requireAuthenticated("/itinerary")) return;
@@ -349,7 +471,7 @@ export default function ItineraryPage() {
           : undefined,
         source: "manual",
       });
-      void syncService.flushTripSyncNow();
+      void syncService.flushTripSyncNow({ force: true });
       setAddDraft(EMPTY_ADD_DRAFT);
       setAddingToDay(null);
     },
@@ -423,10 +545,24 @@ export default function ItineraryPage() {
       if (!requireAuthenticated("/itinerary")) {
         return;
       }
-      removeItineraryItem(dayNumber, itemId);
+      const day = useTripStore.getState().itinerary.find((entry) => entry.dayNumber === dayNumber);
+      const item = day?.items.find((entry) => entry.id === itemId);
+      setDeleteItemTarget({
+        dayNumber,
+        itemId,
+        title: item?.title?.trim() || t.itineraryPanel.newActivityTitle,
+      });
     },
-    [removeItineraryItem, requireAuthenticated],
+    [requireAuthenticated],
   );
+
+  const handleConfirmDeleteItem = useCallback(() => {
+    if (!deleteItemTarget) {
+      return;
+    }
+    removeItineraryItem(deleteItemTarget.dayNumber, deleteItemTarget.itemId);
+    setDeleteItemTarget(null);
+  }, [deleteItemTarget, removeItineraryItem]);
 
   const handleUpdateItem = useCallback(
     (dayNumber: number, itemId: string, patch: Partial<TripPlanItem>) => {
@@ -455,20 +591,33 @@ export default function ItineraryPage() {
       closeRenameFolderDialog();
       return;
     }
+    if (isFolderNameDuplicate(folders, name, renameFolderTarget.id)) {
+      setFolderError(t.itineraryPage.folderNameDuplicate);
+      return;
+    }
     setFolderDialogSaving(true);
     setFolderError(null);
     try {
       const updated = await updateItineraryFolder(renameFolderTarget.id, { name });
       setFolders((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+      setTripLibrary((items) =>
+        items.map((item) =>
+          item.folderId === updated.id ? { ...item, folderName: updated.name } : item,
+        ),
+      );
       setRenameFolderTarget(null);
       setRenameFolderDraft("");
-      void loadTripLibrary();
     } catch (error) {
-      setFolderError(error instanceof Error ? error.message : t.itineraryPage.renameFolderFailed);
+      const message = error instanceof Error ? error.message : "";
+      if (message.toLowerCase().includes("already exists")) {
+        setFolderError(t.itineraryPage.folderNameDuplicate);
+        return;
+      }
+      setFolderError(message.trim() || t.itineraryPage.renameFolderFailed);
     } finally {
       setFolderDialogSaving(false);
     }
-  }, [closeRenameFolderDialog, loadTripLibrary, renameFolderDraft, renameFolderTarget]);
+  }, [closeRenameFolderDialog, folders, renameFolderDraft, renameFolderTarget]);
 
   const closeDeleteFolderDialog = useCallback(() => {
     if (folderDialogSaving) {
@@ -487,17 +636,99 @@ export default function ItineraryPage() {
     try {
       await deleteItineraryFolder(folder.id);
       setFolders((items) => items.filter((item) => item.id !== folder.id));
+      setTripLibrary((items) =>
+        items.map((item) =>
+          item.folderId === folder.id ? { ...item, folderId: null, folderName: null } : item,
+        ),
+      );
       if (currentFolderId === folder.id) {
         setCurrentFolderId(null);
       }
       setDeleteFolderTarget(null);
-      void loadTripLibrary();
     } catch (error) {
       setFolderError(error instanceof Error ? error.message : t.itineraryPage.deleteFolderFailed);
     } finally {
       setFolderDialogSaving(false);
     }
-  }, [currentFolderId, deleteFolderTarget, loadTripLibrary]);
+  }, [currentFolderId, deleteFolderTarget]);
+
+  const handleCreateFolder = useCallback(async () => {
+    if (!requireAuthenticated("/itinerary")) {
+      return;
+    }
+    const name = newFolderName.trim();
+    if (!name) {
+      return;
+    }
+    if (isFolderNameDuplicate(folders, name)) {
+      setFolderError(t.itineraryPage.folderNameDuplicate);
+      return;
+    }
+    setFolderError(null);
+    try {
+      const created = await createItineraryFolder({ name });
+      setFolders((items) => [...items, created]);
+      setNewFolderName("");
+      setFolderFormOpen(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message.toLowerCase().includes("already exists")) {
+        setFolderError(t.itineraryPage.folderNameDuplicate);
+        return;
+      }
+      setFolderError(message.trim() || "無法建立資料夾。");
+    }
+  }, [folders, newFolderName, requireAuthenticated]);
+
+  const handleMoveTripToFolder = useCallback(
+    async (targetTripId: string, folderId: string | null) => {
+      if (!requireAuthenticated("/itinerary")) {
+        return;
+      }
+      const trip = tripLibrary.find((item) => item.id === targetTripId);
+      if (!trip || trip.isOwner === false) {
+        return;
+      }
+      const folderName = folderId
+        ? folders.find((folder) => folder.id === folderId)?.name ?? null
+        : null;
+      const previousLibrary = tripLibrary;
+      const previousCurrentFolderId = currentFolderId;
+
+      setTripLibrary((items) =>
+        items.map((item) =>
+          item.id === targetTripId ? { ...item, folderId, folderName } : item,
+        ),
+      );
+      if (targetTripId === tripId) {
+        setCurrentFolderId(folderId);
+      }
+      setFolderError(null);
+      try {
+        await moveTripToFolder(targetTripId, folderId);
+      } catch (error) {
+        setTripLibrary(previousLibrary);
+        if (targetTripId === tripId) {
+          setCurrentFolderId(previousCurrentFolderId);
+        }
+        setFolderError(
+          error instanceof Error ? error.message : t.itineraryPage.landingMoveTripFailed,
+        );
+        void loadTripLibrary();
+      }
+    },
+    [currentFolderId, folders, loadTripLibrary, requireAuthenticated, tripId, tripLibrary],
+  );
+
+  const handleMoveCurrentTripToFolder = useCallback(
+    async (folderId: string | null) => {
+      if (!tripId) {
+        return;
+      }
+      await handleMoveTripToFolder(tripId, folderId);
+    },
+    [handleMoveTripToFolder, tripId],
+  );
 
   const handleSelectTripFromLibrary = useCallback(
     async (item: ItineraryListItem) => {
@@ -717,6 +948,58 @@ export default function ItineraryPage() {
     setCollaborators((items) => items.filter((item) => item.userId !== userId));
   }, []);
 
+  const handleConfirmPublish = useCallback(async () => {
+    if (!tripId || !requireAuthenticated("/itinerary")) {
+      return;
+    }
+    setIsPublishingPublication(true);
+    try {
+      const result = await publishTrip(tripId);
+      setPublicationStatus({
+        published: true,
+        publicationId: result.publicationId,
+        publishedAt: result.publishedAt,
+      });
+      setPublishOpen(false);
+      pushToast({
+        variant: "success",
+        title: t.itineraryPage.publishSuccessTitle,
+        description: t.itineraryPage.publishSuccessDesc,
+      });
+    } catch (error) {
+      pushToast({
+        variant: "error",
+        title: t.itineraryPage.publishFailedTitle,
+        description: error instanceof Error ? error.message : t.itineraryPage.publishFailedTitle,
+      });
+    } finally {
+      setIsPublishingPublication(false);
+    }
+  }, [pushToast, requireAuthenticated, tripId]);
+
+  const handleUnpublish = useCallback(async () => {
+    if (!tripId || !requireAuthenticated("/itinerary")) {
+      return;
+    }
+    setIsPublishingPublication(true);
+    try {
+      await unpublishTrip(tripId);
+      setPublicationStatus({ published: false });
+      pushToast({
+        variant: "success",
+        title: t.itineraryPage.unpublishSuccessTitle,
+      });
+    } catch (error) {
+      pushToast({
+        variant: "error",
+        title: t.itineraryPage.unpublishFailedTitle,
+        description: error instanceof Error ? error.message : t.itineraryPage.unpublishFailedTitle,
+      });
+    } finally {
+      setIsPublishingPublication(false);
+    }
+  }, [pushToast, requireAuthenticated, tripId]);
+
   const sendSharedTripCursor = useCallback(
     (clientX: number, clientY: number, rect: DOMRect) => {
       if (!roomId || !tripId) {
@@ -745,6 +1028,11 @@ export default function ItineraryPage() {
     [deferredItinerarySearch, tripLibrary, tripLibrarySort],
   );
 
+  const landingGroups = useMemo(
+    () => groupItinerariesForLanding(visibleItineraries, folders),
+    [folders, visibleItineraries],
+  );
+
   const myId = session?.user?.id;
   const othersEditorPresence = useMemo(
     () =>
@@ -766,10 +1054,37 @@ export default function ItineraryPage() {
     (status === "authenticated" && currentLibraryItem?.isOwner !== false ? "owner" : "viewer");
   const canEdit = canCollaborator(currentRole, "edit");
   const canManageShare = canCollaborator(currentRole, "managePermissions");
+  const isTripOwner = !isCurrentTripShared;
+  const canPublishTrip =
+    isTripOwner &&
+    itinerary.length > 0 &&
+    itinerary.some((day) => day.items.length > 0);
   const emptyTripLibraryHint =
     !deferredItinerarySearch.trim() && tripLibrary.length === 0
       ? t.itineraryPage.noOwnedTripsInLibrary
       : t.itineraryPage.emptyLibrary;
+
+  useEffect(() => {
+    if (!tripId || status !== "authenticated" || !isTripOwner) {
+      setPublicationStatus({ published: false });
+      return;
+    }
+    let cancelled = false;
+    void getTripPublicationStatus(tripId)
+      .then((next) => {
+        if (!cancelled) {
+          setPublicationStatus(next);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPublicationStatus({ published: false });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isTripOwner, status, tripId]);
 
   useEffect(() => {
     void refreshFolders();
@@ -849,7 +1164,7 @@ export default function ItineraryPage() {
     <div className="min-h-screen bg-background text-foreground">
       <AnimatePresence mode="wait">
         {!showEditor ? (
-          <motion.div
+          <m.div
             key="landing"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -920,21 +1235,31 @@ export default function ItineraryPage() {
                 {emptyTripLibraryHint}
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {visibleItineraries.map((item, index) => (
-                  <TripLandingCard
-                    key={item.id}
-                    item={item}
-                    index={index}
-                    disabled={tripSwitching || tripDeletingId !== null}
-                    duplicating={tripDuplicatingId === item.id}
-                    onClick={(selected) => void handleSelectTripFromLibrary(selected)}
-                    onEdit={handleEditTripFromLibrary}
-                    onDuplicate={(selected) => void handleDuplicateTrip(selected)}
-                    onDelete={handleRequestDeleteTrip}
-                  />
-                ))}
-              </div>
+              <ItineraryLandingFolderView
+                unfiled={landingGroups.unfiled}
+                folderGroups={landingGroups.folderGroups}
+                folders={folders}
+                dragEnabled={status === "authenticated" && scopeTab === "myTrips"}
+                folderFormOpen={folderFormOpen}
+                newFolderName={newFolderName}
+                onToggleFolderForm={() => setFolderFormOpen((value) => !value)}
+                onNewFolderNameChange={setNewFolderName}
+                onCreateFolder={() => void handleCreateFolder()}
+                onRenameFolder={(folder) => {
+                  setRenameFolderTarget(folder);
+                  setRenameFolderDraft(folder.name);
+                }}
+                onDeleteFolder={setDeleteFolderTarget}
+                onMoveTripToFolder={(targetTripId, folderId) =>
+                  void handleMoveTripToFolder(targetTripId, folderId)
+                }
+                disabled={tripSwitching || tripDeletingId !== null}
+                tripDuplicatingId={tripDuplicatingId}
+                onSelectTrip={(selected) => void handleSelectTripFromLibrary(selected)}
+                onEdit={handleEditTripFromLibrary}
+                onDuplicate={(selected) => void handleDuplicateTrip(selected)}
+                onDelete={handleRequestDeleteTrip}
+              />
             )}
 
             {(libraryError || folderError) && (
@@ -953,7 +1278,7 @@ export default function ItineraryPage() {
               <AnimatePresence>
                 {fabOpen && (
                   <>
-                    <motion.div
+                    <m.div
                       initial={{ opacity: 0, y: 16, scale: 0.8 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 16, scale: 0.8 }}
@@ -970,9 +1295,9 @@ export default function ItineraryPage() {
                       >
                         <LinkIcon className="size-5" />
                       </button>
-                    </motion.div>
+                    </m.div>
 
-                    <motion.div
+                    <m.div
                       initial={{ opacity: 0, y: 16, scale: 0.8 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 16, scale: 0.8 }}
@@ -990,7 +1315,7 @@ export default function ItineraryPage() {
                       >
                         <CalendarDays className="size-5" />
                       </button>
-                    </motion.div>
+                    </m.div>
                   </>
                 )}
               </AnimatePresence>
@@ -1008,59 +1333,20 @@ export default function ItineraryPage() {
               </button>
             </div>
 
-            <AnimatePresence>
-              {joinDialogOpen && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4"
-                  onClick={() => { if (!joinLoading) { setJoinDialogOpen(false); setJoinCode(""); } }}
-                >
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95, y: 12 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95, y: 12 }}
-                    transition={{ duration: 0.2 }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="w-full max-w-sm rounded-2xl border border-border-light bg-surface p-6 shadow-soft-lg"
-                  >
-                    <h3 className="mb-1 text-base font-bold text-foreground">加入別人的行程</h3>
-                    <p className="mb-4 text-xs text-muted">輸入邀請碼或貼上邀請連結來加入他人的共用行程</p>
-                    <input
-                      value={joinCode}
-                      onChange={(e) => setJoinCode(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter" && joinCode.trim()) void handleJoinCollab(); }}
-                      placeholder="邀請碼 或 邀請連結"
-                      autoFocus
-                      disabled={joinLoading}
-                      className="mb-4 w-full rounded-xl border border-border-light bg-cream/30 px-4 py-3 text-sm text-foreground placeholder:text-muted-light focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
-                    />
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => { setJoinDialogOpen(false); setJoinCode(""); }}
-                        disabled={joinLoading}
-                        className="rounded-xl px-4 py-2.5 text-sm font-medium text-muted transition-colors hover:text-foreground disabled:opacity-60"
-                      >
-                        取消
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!joinCode.trim() || joinLoading}
-                        onClick={() => void handleJoinCollab()}
-                        className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-60"
-                      >
-                        {joinLoading ? "加入中..." : "加入"}
-                      </button>
-                    </div>
-                  </motion.div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
+            <JoinTripDialog
+              open={joinDialogOpen}
+              joinCode={joinCode}
+              joinLoading={joinLoading}
+              onJoinCodeChange={setJoinCode}
+              onClose={() => {
+                setJoinDialogOpen(false);
+                setJoinCode("");
+              }}
+              onJoin={() => void handleJoinCollab()}
+            />
+          </m.div>
         ) : (
-          <motion.div
+          <m.div
             key="editor"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1079,46 +1365,125 @@ export default function ItineraryPage() {
                 </button>
               </div>
 
-              <ItineraryPageHeader
-                title={title}
-                destination={destination}
-                days={days}
-                budget={budget}
-                coverImageUrl={coverImageUrl}
-                lastUpdatedAt={lastUpdatedAt}
-                session={session}
-                isInteractive={isInteractive}
-                showTripSummaryRow={showTripSummaryRow}
-                onShare={() => setShareOpen(true)}
-                onOpenMap={() => router.push("/map")}
-              />
+              <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+                <ItineraryLibraryPanel
+                  status={status}
+                  activeTripId={tripId}
+                  currentFolderId={currentFolderId}
+                  scopeTab={scopeTab}
+                  search={itinerarySearch}
+                  sort={tripLibrarySort}
+                  viewMode={libraryViewMode}
+                  folderFormOpen={folderFormOpen}
+                  folders={folders}
+                  newFolderName={newFolderName}
+                  visibleItineraries={visibleItineraries}
+                  libraryLoading={libraryLoading}
+                  tripSwitching={tripSwitching}
+                  tripDeletingId={tripDeletingId}
+                  tripDuplicatingId={tripDuplicatingId}
+                  folderError={folderError}
+                  libraryError={libraryError}
+                  emptyHint={emptyTripLibraryHint}
+                  canEdit={canEdit}
+                  onScopeTabChange={setScopeTab}
+                  onSearchChange={setItinerarySearch}
+                  onSortChange={setTripLibrarySort}
+                  onViewModeChange={setLibraryViewMode}
+                  onToggleFolderForm={() => setFolderFormOpen((value) => !value)}
+                  onNewFolderNameChange={setNewFolderName}
+                  onCreateFolder={() => void handleCreateFolder()}
+                  onRenameFolder={(folder) => {
+                    setRenameFolderTarget(folder);
+                    setRenameFolderDraft(folder.name);
+                  }}
+                  onDeleteFolder={setDeleteFolderTarget}
+                  onMoveCurrentTripToFolder={(folderId) => void handleMoveCurrentTripToFolder(folderId)}
+                  onMoveTripToFolder={(targetTripId, folderId) =>
+                    void handleMoveTripToFolder(targetTripId, folderId)
+                  }
+                  onSelectTrip={(item) => void handleSelectTripFromLibrary(item)}
+                  onEditTrip={handleEditTripFromLibrary}
+                  onDuplicateTrip={(item) => void handleDuplicateTrip(item)}
+                  onDeleteTrip={handleRequestDeleteTrip}
+                />
 
-              <ItineraryEditorSection
-                itinerary={itinerary}
-                tripId={tripId}
-                isAuthenticated={status === "authenticated"}
-                isSharedTrips={isCurrentTripShared}
-                canEdit={canEdit}
-                recoveringTrip={recoveringTrip}
-                addingToDay={addingToDay}
-                addDraft={addDraft}
-                othersEditorPresence={othersEditorPresence}
-                onMouseMove={sendSharedTripCursor}
-                onAddDay={() => void handleAddDay()}
-                onAddDraftChange={setAddDraft}
-                onStartAddActivity={handleStartAddActivity}
-                onCancelAddActivity={() => setAddingToDay(null)}
-                onSaveAddActivity={handleAddItem}
-                onInsertDayAfter={handleInsertDayAfter}
-                onRemoveDay={handleRemoveDay}
-                onRemoveItem={handleRemoveItem}
-                onUpdateItem={handleUpdateItem}
-                onReorderItem={handleDragEnd}
-              />
+                <div className="min-w-0 space-y-6">
+                  <ItineraryPageHeader
+                    title={title}
+                    destination={destination}
+                    days={days}
+                    budget={budget}
+                    coverImageUrl={coverImageUrl}
+                    session={session}
+                    isInteractive={isInteractive}
+                    metaEditable={isInteractive && canEdit}
+                    showTripSummaryRow={showTripSummaryRow}
+                    onDaysCommit={handleDaysCommit}
+                    onBudgetCommit={handleBudgetCommit}
+                    onShare={() => setShareOpen(true)}
+                    onOpenMap={() => router.push("/map")}
+                    onPublish={
+                      isTripOwner && status === "authenticated"
+                        ? () => {
+                            if (!canPublishTrip) {
+                              pushToast({
+                                variant: "info",
+                                title: t.itineraryPage.publishFailedTitle,
+                                description: t.itineraryPage.publishNotReadyHint,
+                              });
+                              return;
+                            }
+                            setPublishOpen(true);
+                          }
+                        : undefined
+                    }
+                    isPublished={publicationStatus.published}
+                    isPublishing={isPublishingPublication}
+                    canPublish={canPublishTrip}
+                    onUnpublish={
+                      isTripOwner && publicationStatus.published
+                        ? () => void handleUnpublish()
+                        : undefined
+                    }
+                  />
+
+                  <ItineraryEditorSection
+                    itinerary={itinerary}
+                    tripId={tripId}
+                    isAuthenticated={status === "authenticated"}
+                    isSharedTrips={isCurrentTripShared}
+                    canEdit={canEdit}
+                    recoveringTrip={recoveringTrip}
+                    addingToDay={addingToDay}
+                    addDraft={addDraft}
+                    othersEditorPresence={othersEditorPresence}
+                    onMouseMove={sendSharedTripCursor}
+                    onAddDay={() => void handleAddDay()}
+                    onAddDraftChange={setAddDraft}
+                    onStartAddActivity={handleStartAddActivity}
+                    onCancelAddActivity={() => setAddingToDay(null)}
+                    onSaveAddActivity={handleAddItem}
+                    onInsertDayAfter={handleInsertDayAfter}
+                    onRemoveDay={handleRemoveDay}
+                    onRemoveItem={handleRemoveItem}
+                    onUpdateItem={handleUpdateItem}
+                    onReorderItem={handleDragEnd}
+                  />
+                </div>
+              </div>
             </div>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
+
+      <PublishItineraryDialog
+        open={publishOpen}
+        isPublished={publicationStatus.published}
+        isPublishing={isPublishingPublication}
+        onClose={() => setPublishOpen(false)}
+        onConfirm={() => void handleConfirmPublish()}
+      />
 
       <ItineraryShareDialog
         open={shareOpen}
@@ -1164,6 +1529,32 @@ export default function ItineraryPage() {
         variant="danger"
         onCancel={() => setDeleteDayTarget(null)}
         onConfirm={handleConfirmDeleteDay}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteItemTarget)}
+        title={t.itineraryPage.deleteItemDialogTitle}
+        description={
+          deleteItemTarget
+            ? t.itineraryPage.deleteItemConfirm.replace("{name}", deleteItemTarget.title)
+            : ""
+        }
+        confirmLabel={t.itineraryPage.deleteItemConfirmAction}
+        cancelLabel={t.itineraryPage.deleteItemCancel}
+        variant="danger"
+        onCancel={() => setDeleteItemTarget(null)}
+        onConfirm={handleConfirmDeleteItem}
+      />
+
+      <ConfirmDialog
+        open={shrinkDaysTarget !== null}
+        title={t.itineraryPage.shrinkDaysDialogTitle}
+        description={shrinkDaysDialogDescription}
+        confirmLabel={t.itineraryPage.shrinkDaysConfirmAction}
+        cancelLabel={t.itineraryPage.shrinkDaysCancel}
+        variant={shrinkDaysRemovesActivities ? "danger" : "primary"}
+        onCancel={() => setShrinkDaysTarget(null)}
+        onConfirm={() => void handleConfirmShrinkDays()}
       />
 
       <PromptDialog

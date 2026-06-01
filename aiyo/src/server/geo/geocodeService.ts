@@ -1,4 +1,13 @@
 import { serverConfig } from "@/server/config";
+import { isUsableMapCoordinate } from "@/lib/geoCoordinates";
+import { buildPlacePhotoProxyUrl } from "@/lib/placePhotoUrl";
+import {
+  geocodeResultFailsDestinationScope,
+  isGeocodeCountryInScope,
+  isGeocodePointInScope,
+  resolveTripDestinationScope,
+  type TripDestinationScope,
+} from "@/lib/tripDestinationScope";
 import {
   mergeAndDedupeExtractions,
   type PlaceCandidate,
@@ -40,6 +49,8 @@ type GooglePlaceDetailsResponse = {
   error_message?: string;
   result?: {
     name?: string;
+    formatted_address?: string;
+    geometry?: { location?: { lat: number; lng: number } };
     types?: string[];
     formatted_phone_number?: string;
     international_phone_number?: string;
@@ -78,69 +89,8 @@ function normalizeToken(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-/** 依使用者目的地粗判預期國碼（僅在明顯可判時）。 */
-function expectedCountryFromDestination(hint?: string): string | null {
-  if (!hint?.trim()) {
-    return null;
-  }
-  const n = normalizeToken(hint);
-  const japanHints = [
-    "tokyo",
-    "osaka",
-    "kyoto",
-    "japan",
-    "日本",
-    "東京",
-    "大阪",
-    "京都",
-    "沖繩",
-    "okinawa",
-    "hokkaido",
-    "北海道",
-    "福岡",
-    "fukuoka",
-    "名古屋",
-    "nagoya",
-    "廣島",
-    "hiroshima",
-  ];
-  if (japanHints.some((h) => n.includes(h))) {
-    return "JP";
-  }
-  const korea = ["seoul", "korea", "首爾", "韓國", "韩国", "busan", "釜山"];
-  if (korea.some((h) => n.includes(h))) {
-    return "KR";
-  }
-  const taiwan = [
-    "taiwan",
-    "台灣",
-    "臺灣",
-    "台北",
-    "臺北",
-    "新北",
-    "桃園",
-    "台中",
-    "臺中",
-    "台南",
-    "臺南",
-    "高雄",
-    "嘉義",
-    "苗栗",
-    "彰化",
-    "南投",
-    "雲林",
-    "屏東",
-    "宜蘭",
-    "花蓮",
-    "台東",
-    "臺東",
-    "基隆",
-    "新竹",
-  ];
-  if (taiwan.some((h) => n.includes(h))) {
-    return "TW";
-  }
-  return null;
+function destinationScopeFromHint(hint?: string): TripDestinationScope | null {
+  return resolveTripDestinationScope(hint);
 }
 
 function scoreGeocodeTypes(types: string[]): number {
@@ -369,12 +319,7 @@ function buildPhotoUrl(photoReference?: string): string | undefined {
   if (!photoReference || !serverConfig.googleMapsApiKey) {
     return undefined;
   }
-  const params = new URLSearchParams({
-    maxwidth: "480",
-    photo_reference: photoReference,
-    key: serverConfig.googleMapsApiKey,
-  });
-  return `https://maps.googleapis.com/maps/api/place/photo?${params.toString()}`;
+  return buildPlacePhotoProxyUrl(photoReference, 480);
 }
 
 export async function fetchGooglePlaceDetailsByPlaceId(
@@ -385,7 +330,8 @@ export async function fetchGooglePlaceDetailsByPlaceId(
   }
   const params = new URLSearchParams({
     place_id: placeId,
-    fields: "formatted_phone_number,international_phone_number,website,url,rating,user_ratings_total,opening_hours,photos",
+    fields:
+      "name,formatted_address,geometry,formatted_phone_number,international_phone_number,website,url,rating,user_ratings_total,opening_hours,photos",
     language: "zh-TW",
     key: serverConfig.googleMapsApiKey,
   });
@@ -400,7 +346,14 @@ export async function fetchGooglePlaceDetailsByPlaceId(
       return {};
     }
     const photoUrl = buildPhotoUrl(payload.result.photos?.[0]?.photo_reference);
+    const lat = payload.result.geometry?.location?.lat;
+    const lng = payload.result.geometry?.location?.lng;
     return {
+      name: payload.result.name?.trim() || undefined,
+      address: payload.result.formatted_address?.trim() || undefined,
+      description: payload.result.formatted_address?.trim() || undefined,
+      lat: typeof lat === "number" && Number.isFinite(lat) ? lat : undefined,
+      lng: typeof lng === "number" && Number.isFinite(lng) ? lng : undefined,
       photoUrl,
       thumbnail: photoUrl,
       openingHours: payload.result.opening_hours?.weekday_text?.join("；"),
@@ -421,11 +374,12 @@ export async function fetchGooglePlaceDetailsByPlaceId(
 export async function geocodeWithGoogle(
   rawQuery: string,
   regionBias?: string,
+  destinationScope?: TripDestinationScope | null,
 ): Promise<
   | { ok: true; result: GeocodeResult }
   | { ok: false; reason: string; googleStatus?: string }
 > {
-  const key = serverConfig.googleMapsApiKey;
+  const key = process.env.GOOGLE_MAPS_API_KEY?.trim() || serverConfig.googleMapsApiKey;
   if (!key) {
     return { ok: false, reason: "GOOGLE_MAPS_API_KEY is not configured." };
   }
@@ -470,12 +424,20 @@ export async function geocodeWithGoogle(
 
   const first = payload.results[0];
   const loc = first.geometry?.location;
-  if (!loc || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lng)) {
+  if (!loc || !isUsableMapCoordinate(loc.lat, loc.lng)) {
     return { ok: false, reason: "Geocoding response missing coordinates.", googleStatus: status };
   }
 
   const types = first.types || [];
   const countryCode = extractCountryCode(first.address_components);
+
+  const scopeFailure = geocodeResultFailsDestinationScope(
+    { countryCode, lat: loc.lat, lng: loc.lng },
+    destinationScope,
+  );
+  if (scopeFailure) {
+    return { ok: false, reason: scopeFailure, googleStatus: status };
+  }
 
   return {
     ok: true,
@@ -485,6 +447,110 @@ export async function geocodeWithGoogle(
       lat: loc.lat,
       lng: loc.lng,
       placeId: first.place_id,
+      types,
+      countryCode,
+    },
+  };
+}
+
+function pickBestReverseGeocodeResult(
+  results: NonNullable<GoogleGeocodeResponse["results"]>,
+): NonNullable<GoogleGeocodeResponse["results"]>[number] | null {
+  if (!results.length) {
+    return null;
+  }
+  const scored = [...results].sort((left, right) => {
+    const leftScore = scoreGeocodeTypes(left.types || []);
+    const rightScore = scoreGeocodeTypes(right.types || []);
+    return rightScore - leftScore;
+  });
+  return scored[0] ?? null;
+}
+
+export async function reverseGeocodeWithGoogle(
+  lat: number,
+  lng: number,
+  destinationScope?: TripDestinationScope | null,
+): Promise<
+  | { ok: true; result: GeocodeResult }
+  | { ok: false; reason: string; googleStatus?: string }
+> {
+  const key = process.env.GOOGLE_MAPS_API_KEY?.trim() || serverConfig.googleMapsApiKey;
+  if (!key) {
+    return { ok: false, reason: "GOOGLE_MAPS_API_KEY is not configured." };
+  }
+
+  if (!isUsableMapCoordinate(lat, lng)) {
+    return { ok: false, reason: "Invalid coordinates for reverse geocoding." };
+  }
+
+  const params = new URLSearchParams({
+    latlng: `${lat},${lng}`,
+    key,
+    language: "zh-TW",
+  });
+
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?${params.toString()}`;
+  let response: Response;
+  try {
+    response = await fetch(url, { cache: "no-store" });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Reverse geocoding request failed.";
+    return { ok: false, reason: message };
+  }
+
+  const payload = (await response.json()) as GoogleGeocodeResponse;
+  const status = payload.status;
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      reason: payload.error_message || `Reverse geocoding HTTP ${response.status}.`,
+      googleStatus: status,
+    };
+  }
+
+  if (status === "ZERO_RESULTS") {
+    return { ok: false, reason: "No results for coordinates.", googleStatus: status };
+  }
+
+  if (status !== "OK" || !payload.results?.length) {
+    return {
+      ok: false,
+      reason: payload.error_message || `Reverse geocoding failed with status ${status}.`,
+      googleStatus: status,
+    };
+  }
+
+  const best = pickBestReverseGeocodeResult(payload.results);
+  if (!best) {
+    return { ok: false, reason: "Reverse geocoding response missing results.", googleStatus: status };
+  }
+
+  const loc = best.geometry?.location;
+  if (!loc || !isUsableMapCoordinate(loc.lat, loc.lng)) {
+    return { ok: false, reason: "Reverse geocoding response missing coordinates.", googleStatus: status };
+  }
+
+  const types = best.types || [];
+  const countryCode = extractCountryCode(best.address_components);
+
+  const scopeFailure = geocodeResultFailsDestinationScope(
+    { countryCode, lat: loc.lat, lng: loc.lng },
+    destinationScope,
+  );
+  if (scopeFailure) {
+    return { ok: false, reason: scopeFailure, googleStatus: status };
+  }
+
+  return {
+    ok: true,
+    result: {
+      query: `${lat},${lng}`,
+      formattedAddress: best.formatted_address || `${lat}, ${lng}`,
+      lat: loc.lat,
+      lng: loc.lng,
+      placeId: best.place_id,
       types,
       countryCode,
     },
@@ -509,14 +575,19 @@ function sortLocationsForMap(locations: LocationReference[]): LocationReference[
  */
 export async function resolvePlaceExtractionsHybrid(
   candidates: PlaceCandidate[],
-  options: { destinationHint?: string; transcriptContext?: string },
+  options: {
+    destinationHint?: string;
+    transcriptContext?: string;
+    destinationScope?: TripDestinationScope | null;
+  },
 ): Promise<{
   locations: LocationReference[];
   failures: string[];
   mapsProvenance: "google-geocoding" | "catalog-fallback" | "mixed";
 }> {
   const destinationHint = options.destinationHint;
-  const expectedCountry = expectedCountryFromDestination(destinationHint);
+  const destinationScope =
+    options.destinationScope ?? destinationScopeFromHint(destinationHint);
   const locations: LocationReference[] = [];
   const failures: string[] = [];
   let googleCount = 0;
@@ -549,14 +620,26 @@ export async function resolvePlaceExtractionsHybrid(
     if (resolved.ok) {
       const { result } = resolved;
       const typeScore = scoreGeocodeTypes(result.types);
-      const countryMatch =
-        !expectedCountry ||
-        !result.countryCode ||
-        result.countryCode === expectedCountry;
+      const countryInScope = isGeocodeCountryInScope(result.countryCode, destinationScope);
+      const pointInScope = isGeocodePointInScope(result.lat, result.lng, destinationScope);
+      const countryMatch = countryInScope && pointInScope;
       const addressMatch = formattedAddressMentionsCandidate(
         result.formattedAddress,
         extraction.displayName,
       );
+
+      if (destinationScope?.countryCodes.length && result.countryCode && !countryInScope) {
+        failures.push(
+          `${extraction.displayName}：地理編碼國家（${result.countryCode}）與行程目的地不符，已略過。`,
+        );
+        continue;
+      }
+      if (destinationScope?.center && destinationScope.radiusKm && !pointInScope) {
+        failures.push(
+          `${extraction.displayName}：地理編碼座標超出目的地範圍，已略過。`,
+        );
+        continue;
+      }
 
       let confidence = combineConfidence({
         rerankScore: cand.rerankScore,
@@ -564,10 +647,6 @@ export async function resolvePlaceExtractionsHybrid(
         countryMatch,
         addressMatch,
       });
-
-      if (!countryMatch && cand.source === "heuristic") {
-        confidence *= 0.35;
-      }
 
       const gate = evaluateGeocodeConfidenceGate({
         rawMention: extraction.raw,
@@ -704,9 +783,11 @@ export async function resolvePlaceMentionsWithGeocode(input: {
     return { locations: [], failures: [], mapsProvenance: "catalog-fallback" };
   }
 
+  const destinationScope = destinationScopeFromHint(input.destinationHint);
   const resolved = await resolvePlaceExtractionsHybrid(candidates, {
     destinationHint: input.destinationHint,
     transcriptContext: input.mentions.map((mention) => mention.context).join("\n"),
+    destinationScope,
   });
 
   const enriched = resolved.locations.map((location) => {

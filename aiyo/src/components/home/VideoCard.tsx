@@ -2,8 +2,10 @@
 
 import { memo, useState, type KeyboardEvent } from "react";
 import Image from "next/image";
-import { motion } from "framer-motion";
-import { AlertCircle, Clock, ExternalLink, Play } from "lucide-react";
+import { m } from "@/lib/motion";
+import { AlertCircle, Clock, ExternalLink, Play, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import type { Video } from "@/types";
 import { zhTW as t } from "@/locales/zh-TW";
 
@@ -11,6 +13,7 @@ interface VideoCardProps {
   video: Video;
   index: number;
   onClick: () => void;
+  onDismiss?: () => void;
 }
 
 const gradients = [
@@ -35,7 +38,7 @@ function sourceLabel(source: string) {
   return source;
 }
 
-function VideoCard({ video, index, onClick }: VideoCardProps) {
+function VideoCard({ video, index, onClick, onDismiss }: VideoCardProps) {
   const thumbLabels = t.videoCard.thumbLabels;
   const [imageFailed, setImageFailed] = useState(false);
   const showThumbnail = Boolean(video.thumbnail) && !imageFailed;
@@ -51,18 +54,20 @@ function VideoCard({ video, index, onClick }: VideoCardProps) {
   }
 
   return (
-    <motion.div
-      role="button"
-      tabIndex={0}
-      aria-label={`${t.videoCard.openVideoSummary}：${video.title}`}
-      data-testid="video-card"
+    <m.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.08 }}
-      onClick={handleActivate}
-      onKeyDown={handleKeyDown}
-      className="group cursor-pointer overflow-hidden rounded-2xl bg-surface shadow-soft transition-all duration-300 hover:-translate-y-1 hover:shadow-soft-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
     >
+      <Card
+        role="button"
+        tabIndex={0}
+        aria-label={`${t.videoCard.openVideoSummary}：${video.title}`}
+        data-testid="video-card"
+        onClick={handleActivate}
+        onKeyDown={handleKeyDown}
+        className="group cursor-pointer overflow-hidden rounded-2xl border-0 bg-surface py-0 shadow-soft ring-0 transition-all duration-300 hover:-translate-y-1 hover:shadow-soft-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      >
       <div
         className={`relative aspect-video bg-gradient-to-br ${gradients[index % gradients.length]} flex items-center justify-center`}
       >
@@ -90,6 +95,21 @@ function VideoCard({ video, index, onClick }: VideoCardProps) {
           {video.duration}
         </div>
 
+        {onDismiss ? (
+          <button
+            type="button"
+            aria-label={t.videoCard.removeVideo}
+            title={t.videoCard.removeVideo}
+            onClick={(event) => {
+              event.stopPropagation();
+              onDismiss();
+            }}
+            className="absolute right-2 top-2 z-10 flex size-7 cursor-pointer items-center justify-center rounded-full bg-foreground/75 text-white opacity-0 shadow-md transition-opacity duration-200 hover:bg-foreground/90 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 group-hover:opacity-100"
+          >
+            <X className="size-3.5" aria-hidden />
+          </button>
+        ) : null}
+
         <div className="absolute inset-0 flex items-center justify-center bg-foreground/0 transition-all duration-300 group-hover:bg-foreground/10 motion-reduce:group-hover:bg-foreground/0">
           <div className="flex size-12 scale-75 items-center justify-center rounded-full bg-white/90 opacity-0 shadow-lg transition-all duration-300 group-hover:scale-100 group-hover:opacity-100 group-focus-within:scale-100 group-focus-within:opacity-100 motion-reduce:group-hover:scale-75 motion-reduce:group-hover:opacity-0">
             <Play className="size-5 text-primary ml-0.5" fill="currentColor" />
@@ -97,34 +117,35 @@ function VideoCard({ video, index, onClick }: VideoCardProps) {
         </div>
       </div>
 
-      <div className="p-4">
-        <h3 className="font-semibold text-sm text-foreground leading-snug line-clamp-2 mb-1.5 group-hover:text-primary transition-colors">
+      <CardContent className="p-4">
+        <h3 className="mb-1.5 line-clamp-2 text-sm font-semibold leading-snug text-foreground transition-colors group-hover:text-primary">
           {video.title}
         </h3>
 
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-muted flex items-center gap-1">
+          <span className="flex items-center gap-1 text-xs text-muted">
             <ExternalLink className="size-3" />
             {sourceLabel(video.source)}
           </span>
-          <div className="flex items-center gap-1 flex-wrap justify-end">
+          <div className="flex flex-wrap items-center justify-end gap-1">
             {video.listProvenance === "default-taiwan-cities" && (
-              <span className="text-[9px] uppercase tracking-wide rounded-full bg-primary/15 px-1.5 py-0.5 text-foreground/70">
+              <Badge variant="secondary" className="bg-primary/15 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-foreground/70 hover:bg-primary/15">
                 {t.home.sourceDefault}
-              </span>
+              </Badge>
             )}
             {video.listProvenance === "mock-fallback" && (
-              <span className="text-[9px] uppercase tracking-wide rounded-full bg-secondary/20 px-1.5 py-0.5 text-foreground/70">
+              <Badge variant="secondary" className="bg-secondary/20 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-foreground/70 hover:bg-secondary/20">
                 {t.home.sourceFallback}
-              </span>
+              </Badge>
             )}
             {video.extractedLocations.slice(0, 2).map((location, locIdx) => (
-              <span
+              <Badge
                 key={`${video.id}_loc_${locIdx}_${location.name}`}
-                className="text-[10px] px-1.5 py-0.5 bg-tertiary/20 text-foreground/70 rounded-full"
+                variant="secondary"
+                className="bg-tertiary/20 px-1.5 py-0.5 text-[10px] text-foreground/70 hover:bg-tertiary/20"
               >
                 {location.name}
-              </span>
+              </Badge>
             ))}
             {video.extractedLocations.length > 2 && (
               <span className="text-[10px] text-muted">
@@ -133,8 +154,9 @@ function VideoCard({ video, index, onClick }: VideoCardProps) {
             )}
           </div>
         </div>
-      </div>
-    </motion.div>
+      </CardContent>
+      </Card>
+    </m.div>
   );
 }
 

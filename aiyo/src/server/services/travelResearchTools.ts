@@ -1,3 +1,4 @@
+import { enrichChatContextWithDestinationScope } from "@/lib/tripDestinationScope";
 import type { ChatContext, ChatSource, TripPlanRequest } from "@/types";
 import { serverConfig } from "@/server/config";
 import {
@@ -17,6 +18,12 @@ import {
   normalizeYouTubeSources,
 } from "@/server/chat/sourceNormalization";
 import { publishChatProgress } from "@/server/chat/chatProgressStore";
+import { decideSearchIntent } from "@/server/search/searchIntent";
+import { buildTripPlanResearchPlan } from "@/server/ai/planning/tripPlanResearchPolicy";
+import {
+  buildTravelSearchCacheKey,
+  withTravelSearchCache,
+} from "@/server/search/travelSearchCache";
 import type { StatusStepPayload } from "@/types";
 
 export type TravelToolRequest =
@@ -109,7 +116,18 @@ export function buildDefaultTravelToolRequests(
   context?: ChatContext,
 ): TravelToolRequest[] {
   const requests: TravelToolRequest[] = [];
-  const dest = context?.destination?.trim();
+  const searchDecision = decideSearchIntent({ message, context });
+  if (!searchDecision.shouldSearch) {
+    const wantsVideo = /影片|youtube|YouTube|vlog|靈感|參考影片|旅遊影片/u.test(message.trim());
+    if (!wantsVideo) {
+      return requests;
+    }
+  }
+  const scopedContext = enrichChatContextWithDestinationScope(context);
+  const dest =
+    scopedContext?.destinationScope?.canonicalLabel?.trim() ||
+    scopedContext?.destination?.trim() ||
+    context?.destination?.trim();
   const trimmed = message.trim();
   const wantsVideo = /影片|youtube|YouTube|vlog|靈感|參考影片|旅遊影片/u.test(trimmed);
   const wantsPoi =
@@ -152,102 +170,109 @@ export function buildDefaultTravelToolRequests(
   return requests;
 }
 
-/** 行程產生前：依目的地與偏好組一組保守查詢。 */
+/** 行程產生前：依目的地與偏好組一組保守查詢（完整行程專用，不受聊天 decideSearchIntent 限制）。 */
 export function buildTripPlanResearchRequests(request: TripPlanRequest): TravelToolRequest[] {
-  const dest = request.destination?.trim();
-  if (!dest) {
-    return [];
-  }
-  const interest = request.preferences.interests.join(" ").trim();
-  const q = `${dest} 景點 美食 ${interest}`.replace(/\s+/g, " ").slice(0, 120);
-  const requests: TravelToolRequest[] = [
-    { type: "search_place", query: q, locationHint: dest },
-    {
-      type: "weather_forecast",
-      destination: dest,
-      startDate: request.tripStartDate,
-      endDate: request.tripEndDate || request.tripStartDate,
-    },
-  ];
-  const shouldSearchYouTube = /影片|youtube|YouTube|vlog/i.test(request.preferences.notes || "");
-  if (shouldSearchYouTube) {
-    requests.push({
-      type: "youtube_search",
-      destination: dest,
-      keyword: interest || dest,
-      limit: 3,
-    });
-  }
-  if (serverConfig.tavilyApiKey.trim()) {
-    requests.push({
-      type: "tavily_search",
-      query: `${dest} 旅遊 活動 展覽 市集 ${request.tripStartDate || ""}`.replace(/\s+/g, " ").trim(),
-    });
-  }
-  return requests;
+  return buildTripPlanResearchPlan(request).toolRequests;
 }
 
-export async function executeTravelToolRequests(
-  requests: TravelToolRequest[],
-  context?: ChatContext,
-  progressSessionId?: string,
-): Promise<TravelResearchDigest> {
-  const placeHits: PlaceSearchHit[] = [];
-  const sections: string[] = [];
-  let sources: Record<string, ChatSource> = {};
-  const slice = requests.slice(0, 8);
+async function withProviderTimeout<T>(work: Promise<T>): Promise<T> {
+  const timeoutMs = serverConfig.travelResearchProviderTimeoutMs;
+  return Promise.race([
+    work,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(`provider_timeout_${timeoutMs}ms`)), timeoutMs);
+    }),
+  ]);
+}
 
-  for (const req of slice) {
-    if (req.type === "search_place") {
-      publishResearchProgress(progressSessionId, {
-        phase: "research",
-        label: "查詢景點與地點資料",
-        detail: `正在查詢：${req.query}`,
-        provider: "google_places",
-        query: req.query,
-        status: "running",
-      });
-      const hint = req.locationHint?.trim() || context?.destination?.trim();
-      const res = await searchPlacesByText(req.query, hint, { maxResults: 6 });
+async function executeSingleTravelToolRequest(
+  req: TravelToolRequest,
+  context: ChatContext | undefined,
+  progressSessionId: string | undefined,
+): Promise<{
+  placeHits: PlaceSearchHit[];
+  section?: string;
+  sources: Record<string, ChatSource>;
+}> {
+  const cacheTtlMs = serverConfig.travelSearchCacheTtlMs;
+
+  if (req.type === "search_place") {
+    publishResearchProgress(progressSessionId, {
+      phase: "research",
+      label: "查詢地點候選",
+      detail: `正在查詢：${req.query}`,
+      provider: "google_places",
+      query: req.query,
+      status: "running",
+    });
+    const hint = req.locationHint?.trim() || context?.destination?.trim();
+    const cacheKey = buildTravelSearchCacheKey({
+      provider: "google_places",
+      query: req.query,
+      destination: hint,
+    });
+    try {
+      const res = await withTravelSearchCache(cacheKey, cacheTtlMs, () =>
+        withProviderTimeout(searchPlacesByText(req.query, hint, { maxResults: 6 })),
+      );
       if (res.ok) {
-        placeHits.push(...res.places);
-        sections.push(`### 地點搜尋（${req.query}）\n${formatPlacesForPrompt(res.places)}`);
         publishResearchProgress(progressSessionId, {
           phase: "research",
-          label: "查詢景點與地點資料",
+          label: "查詢地點候選",
           detail: `找到 ${res.places.length} 筆地點資料。`,
           provider: "google_places",
           query: req.query,
           status: "completed",
         });
-      } else {
-        sections.push(`### 地點搜尋（${req.query}）\n查詢失敗：${res.reason}`);
-        publishResearchProgress(progressSessionId, {
-          phase: "research",
-          label: "查詢景點與地點資料",
-          detail: `查詢失敗：${res.reason}`,
-          provider: "google_places",
-          query: req.query,
-          status: "failed",
-        });
+        return {
+          placeHits: res.places,
+          section: `### 地點搜尋（${req.query}）\n${formatPlacesForPrompt(res.places)}`,
+          sources: {},
+        };
       }
-      continue;
-    }
-
-    if (req.type === "tavily_search") {
       publishResearchProgress(progressSessionId, {
         phase: "research",
-        label: "查詢活動與網路摘要",
-        detail: `正在查詢：${req.query}`,
-        provider: "tavily",
+        label: "查詢地點候選",
+        detail: `查詢失敗：${res.reason}`,
+        provider: "google_places",
         query: req.query,
-        status: "running",
+        status: "failed",
       });
-      const res = await tavilySearch({ query: req.query, maxResults: 5 });
+      return {
+        placeHits: [],
+        section: `### 地點搜尋（${req.query}）\n查詢失敗：${res.reason}`,
+        sources: {},
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "unknown_error";
+      publishResearchProgress(progressSessionId, {
+        phase: "research",
+        label: "查詢地點候選",
+        detail: `查詢失敗：${reason}`,
+        provider: "google_places",
+        query: req.query,
+        status: "failed",
+      });
+      return { placeHits: [], section: `### 地點搜尋（${req.query}）\n查詢失敗：${reason}`, sources: {} };
+    }
+  }
+
+  if (req.type === "tavily_search") {
+    publishResearchProgress(progressSessionId, {
+      phase: "research",
+      label: "查詢活動與網路摘要",
+      detail: `正在查詢：${req.query}`,
+      provider: "tavily",
+      query: req.query,
+      status: "running",
+    });
+    const cacheKey = buildTravelSearchCacheKey({ provider: "tavily", query: req.query });
+    try {
+      const res = await withTravelSearchCache(cacheKey, cacheTtlMs, () =>
+        withProviderTimeout(tavilySearch({ query: req.query, maxResults: 5 })),
+      );
       if (res.ok) {
-        sections.push(`### 網路摘要（${req.query}）\n${formatTavilyForPrompt(res)}`);
         const normalizedSources = normalizeTavilySources(res.results);
-        sources = mergeChatSources(sources, normalizedSources);
         publishResearchProgress(progressSessionId, {
           phase: "research",
           label: "查詢活動與網路摘要",
@@ -257,124 +282,219 @@ export async function executeTravelToolRequests(
           sourceIds: Object.keys(normalizedSources),
           status: "completed",
         });
-      } else {
-        sections.push(`### 網路摘要（${req.query}）\n略過：${res.reason}`);
-        publishResearchProgress(progressSessionId, {
-          phase: "research",
-          label: "查詢活動與網路摘要",
-          detail: `略過：${res.reason}`,
-          provider: "tavily",
-          query: req.query,
-          status: "failed",
-        });
-      }
-      continue;
-    }
-
-    if (req.type === "weather_forecast") {
-      const destination =
-        req.destination?.trim() || context?.destination?.trim() || "";
-      if (!destination) {
-        sections.push("### 天氣\n略過：無目的地。");
-        publishResearchProgress(progressSessionId, {
-          phase: "research",
-          label: "查詢天氣條件",
-          detail: "略過：無目的地。",
-          provider: "open_meteo",
-          status: "failed",
-        });
-        continue;
+        return {
+          placeHits: [],
+          section: `### 網路摘要（${req.query}）\n${formatTavilyForPrompt(res)}`,
+          sources: normalizedSources,
+        };
       }
       publishResearchProgress(progressSessionId, {
         phase: "research",
-        label: "查詢天氣條件",
-        detail: `正在查詢 ${destination} 的旅遊日期天氣。`,
+        label: "查詢活動與網路摘要",
+        detail: `略過：${res.reason}`,
+        provider: "tavily",
+        query: req.query,
+        status: "failed",
+      });
+      return { placeHits: [], section: `### 網路摘要（${req.query}）\n略過：${res.reason}`, sources: {} };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "unknown_error";
+      publishResearchProgress(progressSessionId, {
+        phase: "research",
+        label: "查詢活動與網路摘要",
+        detail: `略過：${reason}`,
+        provider: "tavily",
+        query: req.query,
+        status: "failed",
+      });
+      return { placeHits: [], section: `### 網路摘要（${req.query}）\n略過：${reason}`, sources: {} };
+    }
+  }
+
+  if (req.type === "weather_forecast") {
+    const destination = req.destination?.trim() || context?.destination?.trim() || "";
+    if (!destination) {
+      publishResearchProgress(progressSessionId, {
+        phase: "research",
+        label: "查詢天氣／活動",
+        detail: "略過：無目的地。",
         provider: "open_meteo",
-        query: `${destination} ${req.startDate || context?.tripStartDate || ""} weather`.trim(),
-        status: "running",
+        status: "failed",
       });
-      const res = await fetchDestinationWeatherSummary({
-        destination,
-        startDate: req.startDate || context?.tripStartDate,
-        endDate: req.endDate || context?.tripEndDate || req.startDate || context?.tripStartDate,
-      });
+      return { placeHits: [], section: "### 天氣\n略過：無目的地。", sources: {} };
+    }
+    publishResearchProgress(progressSessionId, {
+      phase: "research",
+      label: "查詢天氣／活動",
+      detail: `正在查詢 ${destination} 的旅遊日期天氣。`,
+      provider: "open_meteo",
+      query: `${destination} ${req.startDate || context?.tripStartDate || ""} weather`.trim(),
+      status: "running",
+    });
+    const cacheKey = buildTravelSearchCacheKey({
+      provider: "open_meteo",
+      destination,
+      startDate: req.startDate || context?.tripStartDate,
+      endDate: req.endDate || context?.tripEndDate || req.startDate || context?.tripStartDate,
+    });
+    try {
+      const res = await withTravelSearchCache(cacheKey, cacheTtlMs, () =>
+        withProviderTimeout(
+          fetchDestinationWeatherSummary({
+            destination,
+            startDate: req.startDate || context?.tripStartDate,
+            endDate: req.endDate || context?.tripEndDate || req.startDate || context?.tripStartDate,
+          }),
+        ),
+      );
       if (res.ok) {
-        sections.push(`### 天氣預報（${destination}）\n${formatWeatherForPrompt(res)}`);
         const normalizedSources = normalizeWeatherSources({
           destination,
           startDate: req.startDate || context?.tripStartDate,
           endDate: req.endDate || context?.tripEndDate || req.startDate || context?.tripStartDate,
           lines: res.lines,
         });
-        sources = mergeChatSources(sources, normalizedSources);
         publishResearchProgress(progressSessionId, {
           phase: "research",
-          label: "查詢天氣條件",
+          label: "查詢天氣／活動",
           detail: `已整理 ${res.lines.length} 筆天氣摘要。`,
           provider: "open_meteo",
           query: `${destination} ${req.startDate || context?.tripStartDate || ""} weather`.trim(),
           sourceIds: Object.keys(normalizedSources),
           status: "completed",
         });
-      } else {
-        sections.push(`### 天氣預報（${destination}）\n略過：${res.reason}`);
-        publishResearchProgress(progressSessionId, {
-          phase: "research",
-          label: "查詢天氣條件",
-          detail: `略過：${res.reason}`,
-          provider: "open_meteo",
-          query: `${destination} ${req.startDate || context?.tripStartDate || ""} weather`.trim(),
-          status: "failed",
-        });
+        return {
+          placeHits: [],
+          section: `### 天氣預報（${destination}）\n${formatWeatherForPrompt(res)}`,
+          sources: normalizedSources,
+        };
       }
-      continue;
+      publishResearchProgress(progressSessionId, {
+        phase: "research",
+        label: "查詢天氣／活動",
+        detail: `略過：${res.reason}`,
+        provider: "open_meteo",
+        query: `${destination} ${req.startDate || context?.tripStartDate || ""} weather`.trim(),
+        status: "failed",
+      });
+      return {
+        placeHits: [],
+        section: `### 天氣預報（${destination}）\n略過：${res.reason}`,
+        sources: {},
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "unknown_error";
+      publishResearchProgress(progressSessionId, {
+        phase: "research",
+        label: "查詢天氣／活動",
+        detail: `略過：${reason}`,
+        provider: "open_meteo",
+        status: "failed",
+      });
+      return { placeHits: [], section: `### 天氣預報（${destination}）\n略過：${reason}`, sources: {} };
     }
+  }
 
-    if (req.type === "youtube_search") {
-      const youtubeQuery = [req.destination || context?.destination, req.keyword].filter(Boolean).join(" ").trim();
+  const youtubeQuery = [req.destination || context?.destination, req.keyword].filter(Boolean).join(" ").trim();
+  publishResearchProgress(progressSessionId, {
+    phase: "research",
+    label: "查詢旅遊影片",
+    detail: `正在查詢：${youtubeQuery || "travel vlog"}`,
+    provider: "youtube",
+    query: youtubeQuery || "travel vlog",
+    status: "running",
+  });
+  const videoDest = req.destination || context?.destination;
+  const cacheKey = buildTravelSearchCacheKey({
+    provider: "youtube",
+    destination: videoDest,
+    query: req.keyword,
+  });
+  try {
+    const res = await withTravelSearchCache(cacheKey, cacheTtlMs, () =>
+      withProviderTimeout(
+        searchYouTubeVideos({
+          destination: videoDest,
+          keyword: req.keyword,
+          limit: Math.min(3, Math.max(1, req.limit ?? 2)),
+          destinationScope: enrichChatContextWithDestinationScope({
+            destination: videoDest,
+            destinationScope: context?.destinationScope,
+          })?.destinationScope,
+        }),
+      ),
+    );
+    if (res.videos.length > 0) {
+      const normalizedSources = normalizeYouTubeSources(res.videos.slice(0, 3));
       publishResearchProgress(progressSessionId, {
         phase: "research",
         label: "查詢旅遊影片",
-        detail: `正在查詢：${youtubeQuery || "travel vlog"}`,
+        detail: `找到 ${Math.min(3, res.videos.length)} 支旅遊影片。`,
         provider: "youtube",
         query: youtubeQuery || "travel vlog",
-        status: "running",
+        sourceIds: Object.keys(normalizedSources),
+        status: "completed",
       });
-      const res = await searchYouTubeVideos({
-        destination: req.destination || context?.destination,
-        keyword: req.keyword,
-        limit: Math.min(3, Math.max(1, req.limit ?? 2)),
-      });
-      if (res.videos.length > 0) {
-        sections.push(
-          `### YouTube 旅遊影片（${req.destination || context?.destination || req.keyword || "travel"}）\n${res.videos
-            .slice(0, 3)
-            .map((video, index) => `${index + 1}. ${video.title}：${video.summary || video.description || video.url}`)
-            .join("\n")}`,
-        );
-        const normalizedSources = normalizeYouTubeSources(res.videos.slice(0, 3));
-        sources = mergeChatSources(sources, normalizedSources);
-        publishResearchProgress(progressSessionId, {
-          phase: "research",
-          label: "查詢旅遊影片",
-          detail: `找到 ${Math.min(3, res.videos.length)} 支旅遊影片。`,
-          provider: "youtube",
-          query: youtubeQuery || "travel vlog",
-          sourceIds: Object.keys(normalizedSources),
-          status: "completed",
-        });
-      } else if (res.fallbackReason) {
-        sections.push(`### YouTube 旅遊影片\n略過：${res.fallbackReason}`);
-        publishResearchProgress(progressSessionId, {
-          phase: "research",
-          label: "查詢旅遊影片",
-          detail: `略過：${res.fallbackReason}`,
-          provider: "youtube",
-          query: youtubeQuery || "travel vlog",
-          status: "failed",
-        });
-      }
+      return {
+        placeHits: [],
+        section: `### YouTube 旅遊影片（${req.destination || context?.destination || req.keyword || "travel"}）\n${res.videos
+          .slice(0, 3)
+          .map((video, index) => `${index + 1}. ${video.title}：${video.summary || video.description || video.url}`)
+          .join("\n")}`,
+        sources: normalizedSources,
+      };
     }
+    if (res.fallbackReason) {
+      publishResearchProgress(progressSessionId, {
+        phase: "research",
+        label: "查詢旅遊影片",
+        detail: `略過：${res.fallbackReason}`,
+        provider: "youtube",
+        query: youtubeQuery || "travel vlog",
+        status: "failed",
+      });
+      return { placeHits: [], section: `### YouTube 旅遊影片\n略過：${res.fallbackReason}`, sources: {} };
+    }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "unknown_error";
+    publishResearchProgress(progressSessionId, {
+      phase: "research",
+      label: "查詢旅遊影片",
+      detail: `略過：${reason}`,
+      provider: "youtube",
+      query: youtubeQuery || "travel vlog",
+      status: "failed",
+    });
+    return { placeHits: [], section: `### YouTube 旅遊影片\n略過：${reason}`, sources: {} };
+  }
+
+  return { placeHits: [], sources: {} };
+}
+
+export async function executeTravelToolRequests(
+  requests: TravelToolRequest[],
+  context?: ChatContext,
+  progressSessionId?: string,
+): Promise<TravelResearchDigest> {
+  const slice = requests.slice(0, 8);
+  const settled = await Promise.allSettled(
+    slice.map((req) => executeSingleTravelToolRequest(req, context, progressSessionId)),
+  );
+
+  const placeHits: PlaceSearchHit[] = [];
+  const sections: string[] = [];
+  let sources: Record<string, ChatSource> = {};
+
+  for (const result of settled) {
+    if (result.status !== "fulfilled") {
+      console.warn("[travel-research] provider_failed", result.reason);
+      continue;
+    }
+    placeHits.push(...result.value.placeHits);
+    if (result.value.section) {
+      sections.push(result.value.section);
+    }
+    sources = mergeChatSources(sources, result.value.sources);
   }
 
   return {

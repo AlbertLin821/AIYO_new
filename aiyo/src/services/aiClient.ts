@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPost, apiPostWithMeta, apiPut } from "@/services/apiClient";
+import { apiDelete, apiGet, apiPost, apiPut } from "@/services/apiClient";
 import {
   failFrontendDebugProcess,
   finishFrontendDebugProcess,
@@ -16,28 +16,48 @@ import type {
   TripPlanResult,
 } from "@/types";
 
-/**
- * 語音／逐字稿行程規劃會觸發網搜、Mem0 與一或多輪 Ollama JSON（伺服端單輪最高約 120s）。
- * 28s 過短易誤判逾時；與 `OLLAMA_TIMEOUT_MS`、重試疊加後須留足緩衝。
- */
-export const VOICE_PLAN_CLIENT_TIMEOUT_MS = 300_000;
+export type TravelPreferenceSuggestion = {
+  has_previous_preferences: boolean;
+  preferences: {
+    destination?: string;
+    budget?: number;
+    budgetLevel?: "low" | "medium" | "high";
+    days?: number;
+    travelStyle?: string[];
+    transportPreference?: string;
+    accommodationPreference?: string;
+    companionType?: string;
+    mustVisit?: string[];
+    avoid?: string[];
+    notes?: string;
+  };
+  source: string[];
+  updated_at?: string;
+  confidence?: number;
+};
 
-export async function sendChatMessage(input: {
-  message: string;
-  messages?: ChatMessage[];
-  context?: ChatContext;
-  structuredTravelPlanning?: boolean;
-  tripProfile?: TripProfile;
-  questionAnswers?: ChatQuestionAnswer[];
-  progressSessionId?: string;
-}) {
+export async function sendChatMessage(
+  input: {
+    message: string;
+    displayMessage?: string;
+    messages?: ChatMessage[];
+    context?: ChatContext;
+    structuredTravelPlanning?: boolean;
+    tripProfile?: TripProfile;
+    questionAnswers?: ChatQuestionAnswer[];
+    progressSessionId?: string;
+  },
+  options?: { signal?: AbortSignal },
+) {
   const processId = startFrontendDebugProcess("chat-message", "送出聊天訊息", {
     progressSessionId: input.progressSessionId,
     structuredTravelPlanning: Boolean(input.structuredTravelPlanning),
     messagePreview: input.message.slice(0, 80),
   });
   try {
-    const response = await apiPost<typeof input, ChatResponsePayload>("/api/ai/chat", input);
+    const response = await apiPost<typeof input, ChatResponsePayload>("/api/ai/chat", input, {
+      signal: options?.signal,
+    });
     finishFrontendDebugProcess(processId, {
       replyType: response.reply.responseType || "unknown",
       replyId: response.reply.id,
@@ -51,19 +71,24 @@ export async function sendChatMessage(input: {
   }
 }
 
-export async function reviseTripPlan(input: {
-  instruction: string;
-  tripProfile: TripProfile;
-  context?: ChatContext;
-  progressSessionId?: string;
-}) {
+export async function reviseTripPlan(
+  input: {
+    instruction: string;
+    tripProfile: TripProfile;
+    context?: ChatContext;
+    progressSessionId?: string;
+  },
+  options?: { signal?: AbortSignal },
+) {
   const processId = startFrontendDebugProcess("trip-revise", "修改既有行程", {
     progressSessionId: input.progressSessionId,
     instruction: input.instruction,
     destination: input.tripProfile.destination,
   });
   try {
-    const response = await apiPost<typeof input, ChatResponsePayload>("/api/trip/revise", input);
+    const response = await apiPost<typeof input, ChatResponsePayload>("/api/trip/revise", input, {
+      signal: options?.signal,
+    });
     finishFrontendDebugProcess(processId, {
       replyType: response.reply.responseType || "unknown",
       replyId: response.reply.id,
@@ -85,40 +110,6 @@ export async function generatePlan(request: TripPlanRequest) {
   return apiPost<TripPlanRequest, TripPlanResult>("/api/ai/plan", request);
 }
 
-export async function generatePlanFromVoice(
-  input: {
-    transcript: string;
-    destination?: string;
-    days?: number;
-    budget?: number;
-    interests?: string[];
-    transportPreference?: string;
-  },
-  options?: { signal?: AbortSignal; timeoutMs?: number },
-): Promise<{ plan: TripPlanResult; meta?: Record<string, unknown> }> {
-  const processId = startFrontendDebugProcess("voice-plan", "語音行程規劃", {
-    destination: input.destination,
-    days: input.days,
-    transcriptPreview: input.transcript.slice(0, 80),
-  });
-  try {
-    const { data, meta } = await apiPostWithMeta<typeof input, TripPlanResult>("/api/ai/plan", input, {
-      timeoutMs: options?.timeoutMs ?? VOICE_PLAN_CLIENT_TIMEOUT_MS,
-      signal: options?.signal,
-    });
-    finishFrontendDebugProcess(processId, {
-      days: data.days.length,
-      meta,
-    });
-    return { plan: data, meta };
-  } catch (error) {
-    failFrontendDebugProcess(processId, error, {
-      destination: input.destination,
-    });
-    throw error;
-  }
-}
-
 export async function fetchOllamaStatusForVoicePlan(): Promise<Record<string, unknown>> {
   try {
     return await apiGet<Record<string, unknown>>("/api/ai/ollama-status");
@@ -137,4 +128,40 @@ export async function updateMemory(memoryId: string, text: string) {
 
 export async function deleteMemory(memoryId: string) {
   return apiDelete<{ id: string }>(`/api/memories/${memoryId}`);
+}
+
+export async function fetchTravelPreferenceSuggestion() {
+  return apiGet<TravelPreferenceSuggestion>("/api/users/me/travel-preferences/suggestion");
+}
+
+export async function applyTravelPreferences(input: {
+  preferences?: TravelPreferenceSuggestion["preferences"];
+  savePreferences?: boolean;
+}) {
+  return apiPost<typeof input, {
+    tripId: string;
+    plan: TripPlanResult;
+    appliedPreferences: TravelPreferenceSuggestion["preferences"];
+    diagnostics: Record<string, unknown>;
+  }>("/api/trips/apply-preferences", input);
+}
+
+export async function resetTravelPreferences() {
+  return apiDelete<{ cleared: string[] }>("/api/users/me/preferences");
+}
+
+export async function deleteAiMemory() {
+  return apiDelete<{ chatMessages: number; externalMemories: number; vectorStore: string }>(
+    "/api/users/me/memory",
+  );
+}
+
+export async function clearPersonalizationData() {
+  return apiDelete<{
+    chatMessages: number;
+    videoInteractions: number;
+    appliedSummaries: number;
+    externalMemories: number;
+    vectorStore: string;
+  }>("/api/users/me/personalization-data");
 }

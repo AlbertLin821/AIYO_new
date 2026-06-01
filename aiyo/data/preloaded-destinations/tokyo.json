@@ -1,0 +1,1894 @@
+{
+  "id": "tokyo",
+  "destinationHint": "東京",
+  "searchKeyword": "東京自由行 淺草寺 晴空塔 澀谷 美食",
+  "aliases": [
+    "東京",
+    "tokyo",
+    "東北亞"
+  ],
+  "preferences": [
+    "美食",
+    "景點",
+    "懶人包"
+  ],
+  "generatedAt": "2026-05-31T08:41:30.881Z",
+  "pipelineVersion": "preloaded-seed-v1",
+  "videos": [
+    {
+      "id": "youtube_BAyQ10iPK4M",
+      "videoId": "BAyQ10iPK4M",
+      "title": "東京 7 天 6 夜自由行懶人包💕｜自由行volg｜景點×美食×交通×住宿完整公開｜妮奇社長不上班 ",
+      "thumbnail": "https://i.ytimg.com/vi/BAyQ10iPK4M/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=BAyQ10iPK4M",
+      "duration": "1:22:26",
+      "summary": "影片提到機場、PLAVE快閃店、銀座等地點。",
+      "description": "這次就當作一起去東京旅行吧！\n每天吃什麼、走去哪、逛了什麼，\n都幫你拍好放進這支 Vlog 裡了🤲 \n\n📌東京自由行｜7天6夜行程懶人包\n00:00 精彩預告\n00:58 Day1—機場+住宿開箱1\n07:53 Day2—3coins+PLAVE快閃店\n14:08 Day3—網咖初體驗+銀座買精品包\n18:40 Day4—澀谷逛街+住宿開箱2+夜間超市\n32:22 Day5—淺草寺+晴空塔\n52:52 Day6—日本美髮+GU\n01:00:59  Day7—鎌倉\n\n#niki妮奇 #妮奇社長不上班 #travel #japan #東京旅行 #東京自由行 #vlog #鎌倉 #澀谷 #銀座#淺草寺 #晴空塔 #獨旅 #美髮 #日本\n\n☘ Music \nEbony Loren - Work In Progress  - https://thmatc.co/?l=993A9A5F\nEbony Loren - Childish  - https://thmatc.co/?l=070A0375\n\n【日本自由行｜旅行前必看系列】\n1. 日本旅行前準備：https://youtu.be/GjrUJ7GmQZQ\n2. 入境日本（Vist Web Japan申請教學｜2024新版）：https://youtu.be/JyWB8SMrnLk\n3. 國外上網卡比較：https://youtu.be/lfWx7JtYV8s\n4. 出國行李打包清單：https://youtu.be/i44yzZzF_OE\n5. 出國保險怎麼買？https://youtu.be/CO8nd60R1rM\n\n✈️日本東京一人旅行｜自由行系列\n① 東京池袋住宿開箱：https://youtu.be/5BKHJiQ8ZAw\n② 星宇航空A350-900 飛行體驗：https://youtu.be/p1KqU2zhYgo\n③ 日本成田機場T2航廈貴賓休息室：https://youtu.be/8qo4g8ITzUY\n④ 台日麥當勞大PK：https://youtu.be/ZK3GsN90QlA\n⑤ 全日本最大扭蛋店：https://youtu.be/5ESqdeyNzF0\n⑥ 日本大創必買：https://youtu.be/gyoWf5lIkLk\n⑦ 東京必拜神社（開運招財）：https://youtu.be/LiAWGMnRd0A\n-\n\nHi，我是Niki妮奇🌱\n這裡頻道分享了我的日常生活／國外旅行／開箱等美好日常事物，\n期待能用影片陪伴大家每一個365天！\n\nInstagram（旅遊日常） 🔍 https://www.instagram.com/helloniki.world\nInstagram（ACG動漫） 🔍 https://www.instagram.com/nikichennn\nFACEBOOK 🔍 https://www.facebook.com/nikichennn\n合作邀約📩 niki@rching.net",
+      "source": "youtube-data-api",
+      "channelTitle": "妮奇社長不上班",
+      "publishedAt": "2026-02-03T12:00:32Z",
+      "timestamps": [
+        {
+          "time": "0:07",
+          "label": "機場"
+        },
+        {
+          "time": "0:07",
+          "label": "PLAVE快閃店"
+        },
+        {
+          "time": "0:14",
+          "label": "銀座"
+        },
+        {
+          "time": "0:18",
+          "label": "澀谷"
+        },
+        {
+          "time": "0:32",
+          "label": "淺草寺"
+        },
+        {
+          "time": "0:32",
+          "label": "晴空塔"
+        },
+        {
+          "time": "0:52",
+          "label": "鎌倉"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 35.5482964,
+          "lng": 139.7779951,
+          "raw": "機場",
+          "name": "機場",
+          "address": "Haneda Airport (HND), Hanedakūkō, Ota City, Tokyo 144-0041, Japan",
+          "placeId": "ChIJ45IxpAtkGGAR3_hG0anDMg0",
+          "rawQuery": "機場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "機場",
+          "rawMention": "機場",
+          "cleanedName": "機場",
+          "description": "Day1—機場+住宿開箱1",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "機場",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6764225,
+          "lng": 139.650027,
+          "raw": "PLAVE快閃店",
+          "name": "PLAVE快閃店",
+          "address": "Tokyo, Japan",
+          "placeId": "ChIJ51cu8IcbXWARiRtXIothAS4",
+          "rawQuery": "PLAVE快閃店",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "PLAVE快閃店",
+          "rawMention": "PLAVE快閃店",
+          "cleanedName": "PLAVE快閃店",
+          "description": "Day2—3coins+PLAVE快閃店",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "PLAVE快閃店",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6712228,
+          "lng": 139.7664859,
+          "raw": "銀座",
+          "name": "銀座",
+          "address": "Ginza, Chuo City, Tokyo 104-0061, Japan",
+          "placeId": "ChIJu2-DAeeLGGARUZipC7OFRmA",
+          "rawQuery": "銀座",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "銀座",
+          "rawMention": "銀座",
+          "cleanedName": "銀座",
+          "description": "Day3—網咖初體驗+銀座買精品包",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "銀座",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6619707,
+          "lng": 139.703795,
+          "raw": "澀谷",
+          "name": "澀谷",
+          "address": "Shibuya, Tokyo, Japan",
+          "placeId": "ChIJ0Qgx67KMGGARd2ZbObLZHPE",
+          "rawQuery": "澀谷",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "澀谷",
+          "rawMention": "澀谷",
+          "cleanedName": "澀谷",
+          "description": "Day4—澀谷逛街+住宿開箱2+夜間超市",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "澀谷",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.7147651,
+          "lng": 139.7966553,
+          "raw": "淺草寺",
+          "name": "淺草寺",
+          "address": "2-chōme-3-1 Asakusa, Taito City, Tokyo 111-0032, Japan",
+          "placeId": "ChIJ8T1GpMGOGGARDYGSgpooDWw",
+          "rawQuery": "淺草寺",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "淺草寺",
+          "rawMention": "淺草寺",
+          "cleanedName": "淺草寺",
+          "description": "Day5—淺草寺+晴空塔",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "淺草寺",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.7100627,
+          "lng": 139.8107004,
+          "raw": "晴空塔",
+          "name": "晴空塔",
+          "address": "1-chōme-1-2 Oshiage, Sumida City, Tokyo 131-0045, Japan",
+          "placeId": "ChIJ35ov0dCOGGARKvdDH7NPHX0",
+          "rawQuery": "晴空塔",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "晴空塔",
+          "rawMention": "晴空塔",
+          "cleanedName": "晴空塔",
+          "description": "Day5—淺草寺+晴空塔",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "晴空塔",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.7461183,
+          "lng": 139.8790478,
+          "raw": "鎌倉",
+          "name": "鎌倉",
+          "address": "Kamakura, Katsushika City, Tokyo 125-0053, Japan",
+          "placeId": "ChIJd1EXQMGFGGARMloFni7O8n8",
+          "rawQuery": "鎌倉",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "鎌倉",
+          "rawMention": "鎌倉",
+          "cleanedName": "鎌倉",
+          "description": "Day7—鎌倉",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "鎌倉",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "Day1—機場+住宿開箱1",
+          "foods": [],
+          "title": "機場",
+          "summary": "Day1—機場+住宿開箱1",
+          "timestamp": "0:07",
+          "endSeconds": 37,
+          "startLabel": "0:07",
+          "startSeconds": 7,
+          "locationHints": [
+            "機場"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "Day2—3coins+PLAVE快閃店",
+          "foods": [],
+          "title": "PLAVE快閃店",
+          "summary": "Day2—3coins+PLAVE快閃店",
+          "timestamp": "0:07",
+          "endSeconds": 37,
+          "startLabel": "0:07",
+          "startSeconds": 7,
+          "locationHints": [
+            "PLAVE快閃店"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "Day3—網咖初體驗+銀座買精品包",
+          "foods": [],
+          "title": "銀座",
+          "summary": "Day3—網咖初體驗+銀座買精品包",
+          "timestamp": "0:14",
+          "endSeconds": 44,
+          "startLabel": "0:14",
+          "startSeconds": 14,
+          "locationHints": [
+            "銀座"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_4",
+          "text": "Day4—澀谷逛街+住宿開箱2+夜間超市",
+          "foods": [],
+          "title": "澀谷",
+          "summary": "Day4—澀谷逛街+住宿開箱2+夜間超市",
+          "timestamp": "0:18",
+          "endSeconds": 48,
+          "startLabel": "0:18",
+          "startSeconds": 18,
+          "locationHints": [
+            "澀谷"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_5",
+          "text": "Day5—淺草寺+晴空塔",
+          "foods": [],
+          "title": "淺草寺",
+          "summary": "Day5—淺草寺+晴空塔",
+          "timestamp": "0:32",
+          "endSeconds": 62,
+          "startLabel": "0:32",
+          "startSeconds": 32,
+          "locationHints": [
+            "淺草寺"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_6",
+          "text": "Day5—淺草寺+晴空塔",
+          "foods": [],
+          "title": "晴空塔",
+          "summary": "Day5—淺草寺+晴空塔",
+          "timestamp": "0:32",
+          "endSeconds": 62,
+          "startLabel": "0:32",
+          "startSeconds": 32,
+          "locationHints": [
+            "晴空塔"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_7",
+          "text": "Day7—鎌倉",
+          "foods": [],
+          "title": "鎌倉",
+          "summary": "Day7—鎌倉",
+          "timestamp": "0:52",
+          "endSeconds": 82,
+          "startLabel": "0:52",
+          "startSeconds": 52,
+          "locationHints": [
+            "鎌倉"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的東京旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_lU8_4kSdkpI",
+      "videoId": "lU8_4kSdkpI",
+      "title": "【2026東京景點懶人包】新手獨旅必看！第一次一個人去日本🗼 晴空塔看富士山🗻、淺草美食、原宿逛街全攻略！",
+      "thumbnail": "https://i.ytimg.com/vi/lU8_4kSdkpI/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=lU8_4kSdkpI",
+      "duration": "40:47",
+      "summary": "影片提到晴空塔、富士山、淺草等地點，以及神級炸肉餅、濃郁抹茶等食物。",
+      "description": "【2026東京景點懶人包】第一次一個人獨旅！晴空塔看富士山🗻、淺草、原宿逛街全攻略！\n\n第一次一個人來日本獨旅！🇯🇵 雖然沒有老媽在身邊，但我這次可是玩得超級充實！😎\n從新宿的超迷你 APA 飯店，一路住到東銀座超豪華的 AC Hotel (那個浴缸真的太爽了🛁)！\n\n這趟不僅去淺草狂嗑神級炸肉餅跟濃郁抹茶，還在晴空塔幸運解鎖了有富士山的絕美夕陽🌇！\n當然也少不了原宿爆買、明治神宮求好運⛩️，最後還跑去台場看超巨大的獨角獸鋼彈🦄！\n東京真的是一個人來也絕對不會無聊的地方啊～\n\n🔥 本集贊助神隊友：翔翼通訊 Aerobile 🔥\n這次在日本上網全靠它！使用 KDDI 原生卡，網速真的跟新幹線一樣快🚄\n查地圖、滑短影音、甚至用 ChatGPT 即時翻譯都超順暢，完全不卡頓！\n👉 結帳輸入丹牛專屬折扣碼「IMDAN」即可享有 5% 優惠喔！\n\n\n🔗 購買連結：https://www.aerobile.com/eshop/index.php\n\n\n🧳 出國必備好物推薦：Acer 哥本哈根前開式行李箱 (第2代) 🧳\n日本飯店通常都很小，這個前開式的設計真的超省空間！\n不用整個攤開就能拿東西，走道再也不會被塞滿，真心推爆！\n\n\n🔗 詳細資訊：https://unii-ud.vip/7jyBd\n\n晴空塔門票購買🎫\n\n🔗 詳細資訊：https://affiliate.klook.com/redirect?aid=103884&aff_adid=1234210&k_site=https%3A%2F%2Fwww.klook.com%2Fzh-TW%2Factivity%2F41352-tokyo-skytree%2F\n\n\n\n✨ 時間軸 TIMELINE ✨\n\n00:00 Intro：\n\n01:44 新宿APA 飯店住宿開箱\n\n03:20 出國上網推薦：翔翼通訊 KDDI 原生網卡實測！📱\n\n04:33 淺草寺\n\n07:28 解鎖晴空塔夕陽與 106 公里外的富士山🗻\n\n16:48 原宿 & 明治神宮\n\n27:40 好物推推\n\n28:31 新宿介紹\n\n33:50 新飯店住宿開箱：東銀座萬豪 AC Hotel (超大雙床房！)🏨\n\n35:06 鎌倉特輯預告\n\n35:47 Gala滑雪特輯預告\n\n36:30 台場夜景：超巨大獨角獸鋼彈 & 東京灣🦄\n\n如果喜歡這支影片，別忘了按讚、訂閱，開啟小鈴鐺🔔\n你覺得一個人出國旅遊最爽/最崩潰的事情是什麼？ 歡迎在留言區跟我分享喔～👇\n\n🎉 成為「丹牛出來玩」頻道會員，解鎖更多小福利！\n👉 https://www.youtube.com/channel/UCKWaowJ112Z4zSQ8EuW9DRw/join🙏 支持我一下！\n\n這些影片是我用生命和肝指數換來的（笑）\n覺得不錯的話，請幫我點個喜歡 👍\n也別忘了訂閱我的頻道 🔔，才不會錯過更多（可能一樣ㄎㄧㄤ）但誠意滿滿的影片！\n📣 也請分享給你那個也一樣愛挑戰極限、說走就走的朋友吧！\n\n🔗 找到我更多旅遊日常：\n✦ Instagram｜https://www.instagram.com/im_dannew\n✦ Facebook｜https://www.facebook.com/share/16mMTgYF9h/\n\n#東京獨旅 #東京自由行 #淺草美食 #晴空塔 #富士山 #明治神宮 #台場鋼彈 #翔翼通訊 #網卡推薦 #Acer行李箱 #丹牛出來玩 #Vlog #日本旅遊 #東京景點懶人包 #2026東京",
+      "source": "youtube-data-api",
+      "channelTitle": "丹牛出來玩",
+      "publishedAt": "2026-03-11T13:00:06Z",
+      "timestamps": [
+        {
+          "time": "7:00",
+          "label": "晴空塔"
+        },
+        {
+          "time": "7:00",
+          "label": "富士山"
+        },
+        {
+          "time": "7:00",
+          "label": "淺草"
+        },
+        {
+          "time": "8:00",
+          "label": "原宿"
+        },
+        {
+          "time": "8:00",
+          "label": "明治神宮"
+        },
+        {
+          "time": "8:00",
+          "label": "台場"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 35.7100627,
+          "lng": 139.8107004,
+          "raw": "晴空塔",
+          "name": "晴空塔",
+          "address": "1-chōme-1-2 Oshiage, Sumida City, Tokyo 131-0045, Japan",
+          "placeId": "ChIJ35ov0dCOGGARKvdDH7NPHX0",
+          "rawQuery": "晴空塔",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "晴空塔",
+          "rawMention": "晴空塔",
+          "cleanedName": "晴空塔",
+          "description": "這趟不僅去淺草狂嗑神級炸肉餅跟濃郁抹茶，還在晴空塔幸運解鎖了有富士山的絕美夕陽",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "晴空塔",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.3606255,
+          "lng": 138.7273634,
+          "raw": "富士山",
+          "name": "富士山",
+          "address": "Mount Fuji, Kitayama, Fujinomiya, Shizuoka 418-0112, Japan",
+          "placeId": "ChIJmcj9QppiGWAR36TzFsn8oaY",
+          "rawQuery": "富士山",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "富士山",
+          "rawMention": "富士山",
+          "cleanedName": "富士山",
+          "description": "在晴空塔幸運解鎖了有富士山的絕美夕陽",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "富士山",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.7185858,
+          "lng": 139.7958849,
+          "raw": "淺草",
+          "name": "淺草",
+          "address": "Asakusa, Taito City, Tokyo 111-0032, Japan",
+          "placeId": "ChIJM1N_BMKOGGARZ0DHgTj9hHw",
+          "rawQuery": "淺草",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "淺草",
+          "rawMention": "淺草",
+          "cleanedName": "淺草",
+          "description": "不僅去淺草狂嗑神級炸肉餅跟濃郁抹茶",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "淺草",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6699682,
+          "lng": 139.709008,
+          "raw": "原宿",
+          "name": "原宿",
+          "address": "Harajuku, Jingumae, Shibuya, Tokyo 150-0001, Japan",
+          "placeId": "ChIJ5V1T5KKMGGARlTLiBrjIGUg",
+          "rawQuery": "原宿",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "原宿",
+          "rawMention": "原宿",
+          "cleanedName": "原宿",
+          "description": "當然也少不了原宿爆買",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "原宿",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6763976,
+          "lng": 139.6993259,
+          "raw": "明治神宮",
+          "name": "明治神宮",
+          "address": "1-1 Yoyogikamizonochō, Shibuya, Tokyo 151-8557, Japan",
+          "placeId": "ChIJ5SZMmreMGGARcz8QSTiJyo8",
+          "rawQuery": "明治神宮",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "明治神宮",
+          "rawMention": "明治神宮",
+          "cleanedName": "明治神宮",
+          "description": "少不了原宿爆買、明治神宮求好運",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "明治神宮",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.62058340000001,
+          "lng": 139.7805445,
+          "raw": "台場",
+          "name": "台場",
+          "address": "Odaiba, Tokyo, Japan",
+          "placeId": "ChIJy9RVLPiJGGARuRAgHSGL_nk",
+          "rawQuery": "台場",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "台場",
+          "rawMention": "台場",
+          "cleanedName": "台場",
+          "description": "最後還跑去台場看超巨大的獨角獸鋼彈",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "台場",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [
+        "神級炸肉餅",
+        "濃郁抹茶"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "這趟不僅去淺草狂嗑神級炸肉餅跟濃郁抹茶，還在晴空塔幸運解鎖了有富士山的絕美夕陽",
+          "foods": [
+            "神級炸肉餅",
+            "濃郁抹茶"
+          ],
+          "title": "晴空塔",
+          "summary": "這趟不僅去淺草狂嗑神級炸肉餅跟濃郁抹茶，還在晴空塔幸運解鎖了有富士山的絕美夕陽",
+          "timestamp": "7:00",
+          "endSeconds": 450,
+          "startLabel": "7:00",
+          "startSeconds": 420,
+          "locationHints": [
+            "晴空塔"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "在晴空塔幸運解鎖了有富士山的絕美夕陽",
+          "foods": [
+            "神級炸肉餅",
+            "濃郁抹茶"
+          ],
+          "title": "富士山",
+          "summary": "在晴空塔幸運解鎖了有富士山的絕美夕陽",
+          "timestamp": "7:00",
+          "endSeconds": 450,
+          "startLabel": "7:00",
+          "startSeconds": 420,
+          "locationHints": [
+            "富士山"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "不僅去淺草狂嗑神級炸肉餅跟濃郁抹茶",
+          "foods": [
+            "神級炸肉餅",
+            "濃郁抹茶"
+          ],
+          "title": "淺草",
+          "summary": "不僅去淺草狂嗑神級炸肉餅跟濃郁抹茶",
+          "timestamp": "7:00",
+          "endSeconds": 450,
+          "startLabel": "7:00",
+          "startSeconds": 420,
+          "locationHints": [
+            "淺草"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_4",
+          "text": "當然也少不了原宿爆買",
+          "foods": [
+            "神級炸肉餅",
+            "濃郁抹茶"
+          ],
+          "title": "原宿",
+          "summary": "當然也少不了原宿爆買",
+          "timestamp": "8:00",
+          "endSeconds": 510,
+          "startLabel": "8:00",
+          "startSeconds": 480,
+          "locationHints": [
+            "原宿"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_5",
+          "text": "少不了原宿爆買、明治神宮求好運",
+          "foods": [
+            "神級炸肉餅",
+            "濃郁抹茶"
+          ],
+          "title": "明治神宮",
+          "summary": "少不了原宿爆買、明治神宮求好運",
+          "timestamp": "8:00",
+          "endSeconds": 510,
+          "startLabel": "8:00",
+          "startSeconds": 480,
+          "locationHints": [
+            "明治神宮"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_6",
+          "text": "最後還跑去台場看超巨大的獨角獸鋼彈",
+          "foods": [
+            "神級炸肉餅",
+            "濃郁抹茶"
+          ],
+          "title": "台場",
+          "summary": "最後還跑去台場看超巨大的獨角獸鋼彈",
+          "timestamp": "8:00",
+          "endSeconds": 510,
+          "startLabel": "8:00",
+          "startSeconds": 480,
+          "locationHints": [
+            "台場"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的東京旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_41hcd2TUaEY",
+      "videoId": "41hcd2TUaEY",
+      "title": "【東京自由行怎麼玩?怎麼吃?花多少?】東京20個必玩旅遊景點+美食｜東京五天四夜自由行攻略行程懶人包",
+      "thumbnail": "https://i.ytimg.com/vi/41hcd2TUaEY/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=41hcd2TUaEY",
+      "duration": "43:00",
+      "summary": "影片提到五代目花山烏冬、澀谷十字路口、日光東照宮等地點，以及炸湯波饅頭、炸豬排等食物。",
+      "description": "#東京旅遊景點  #東京美食 #東京自由行\n\n🚁東京20個必玩旅遊景點+美食：\n📍五代目花山烏冬📍澀谷十字路口📍日光東照宮\n📍二荒山神社📍神橋📍Meguri Coffee\n📍三福茶屋📍日光炸湯波饅頭📍明智平纜車\n📍 炸豬排長谷川📍teamLab Planets TOKYO\n📍月島もんじゃ もへじ 総本店📍銀座Akebono 銀座本店\n📍HARBS LUMINE有樂町店📍梅丘壽司美登利 銀座店\n📍明治神宮📍Tas Yard📍表參道、原宿📍Butasama📍東京鐵塔\n————————————————————\n🏡東京住宿推薦優惠訂房連結：\n📍 VIA INN PRIME 日本橋人形町飯店(這次住的)：https://reurl.cc/Dbg9LE\n📍 Asakusa Tobu Hotel(淺草站旁)：https://reurl.cc/yKvQd8\n📍銀座五丁目三井花園飯店：https://reurl.cc/nlvEe8\n📍相鐵FRESA INN - 上野御徒町：https://reurl.cc/XaR4oa\n📍東急Stay新宿：https://reurl.cc/aMdkQQ\n————————————————————\n🚁東京必玩旅遊景點優惠門票：\n-KKDAY\n📍teamLab Planets TOKYO：https://reurl.cc/4bd42Y\n📍澀谷SHIBUYA SKY：https://reurl.cc/6bdEpk\n📍Skyliner京成電鐵車票：https://reurl.cc/bNYkZr\n📍東京迪士尼：https://reurl.cc/pKvWqr\n📍日光周遊券：https://reurl.cc/VmE6on\n📍東照宮門票：https://reurl.cc/eVExgx\n📍日光一日遊：https://reurl.cc/laRV2Y\n📍首次購票透過我的連結註冊，可獲得NT$100優惠回饋\n👉https://reurl.cc/nLj8kn\n✨里歐專屬折扣碼：KKLEO66 (滿NT$1,500享94折)\n\n-KLOOK\n📍teamLab Planets TOKYO：https://lurl.cc/6k18DQ\n📍澀谷SHIBUYA SKY：https://lurl.cc/U8HBXS\n📍Skyliner京成電鐵車票：https://lurl.cc/MdReSY\n📍東京迪士尼：https://lurl.cc/lhgVwq\n📍日光周遊券：https://lurl.cc/SvG8V8\n📍日光東武特急列車：https://lurl.cc/UUyEjO\n📍東照宮門票：https://lurl.cc/LLurRB\n📍日光一日遊：https://lurl.cc/oUZomX\n📍全球租車(可異地還車)：https://reurl.cc/nDQbZ2\n📍首次購票透過我的連結註冊，可獲得NT$100優惠回饋\n👉https://reurl.cc/QX0zDZ\n✨里歐專屬折扣碼：LEO6666 (全站商品95折)\n————————————————————\n✈機票比價： https://skyscanner.pxf.io/rQJBNG\n📱網路SIM卡(一定要買有送通話的很重要)：\n📍4G上網通話SIM卡（台灣宅配到府）：https://lurl.cc/ZOMHiM\n📍eSIM：https://reurl.cc/R9043n\n✨ IG：leolovetravel FB：里歐愛旅遊\n————————————————————\n新的防水背包：#GastonLuga\n官方網站：gastonluga.com\n里歐折扣碼：leolovetravel",
+      "source": "youtube-data-api",
+      "channelTitle": "里歐愛旅遊 leolovetravel",
+      "publishedAt": "2025-12-07T10:00:06Z",
+      "timestamps": [
+        {
+          "time": "5:00",
+          "label": "五代目花山烏冬"
+        },
+        {
+          "time": "6:00",
+          "label": "澀谷十字路口"
+        },
+        {
+          "time": "7:00",
+          "label": "日光東照宮"
+        },
+        {
+          "time": "8:00",
+          "label": "二荒山神社"
+        },
+        {
+          "time": "9:00",
+          "label": "Meguri Coffee"
+        },
+        {
+          "time": "10:00",
+          "label": "三福茶屋"
+        },
+        {
+          "time": "11:00",
+          "label": "日光炸湯波饅頭"
+        },
+        {
+          "time": "12:00",
+          "label": "明智平纜車"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 35.6699002,
+          "lng": 139.7691376,
+          "raw": "五代目花山烏冬",
+          "name": "五代目花山烏冬",
+          "address": "3-chōme-14-13 Ginza, Chuo City, Tokyo 104-0061, Japan",
+          "placeId": "ChIJ3Q5zleCLGGARnuvHr-FOgMM",
+          "rawQuery": "五代目花山烏冬",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "五代目花山烏冬",
+          "rawMention": "五代目花山烏冬",
+          "cleanedName": "五代目花山烏冬",
+          "description": "五代目花山烏冬",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "五代目花山烏冬",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6603981,
+          "lng": 139.7051782,
+          "raw": "澀谷十字路口",
+          "name": "澀谷十字路口",
+          "address": "1 Chome-8 Shibuya, Tokyo 150-0002, Japan",
+          "placeId": "ChIJ5SgsDQCLGGAR47gin0IWUPw",
+          "rawQuery": "澀谷十字路口",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "澀谷十字路口",
+          "rawMention": "澀谷十字路口",
+          "cleanedName": "澀谷十字路口",
+          "description": "澀谷十字路口",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "澀谷十字路口",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6764225,
+          "lng": 139.650027,
+          "raw": "日光東照宮",
+          "name": "日光東照宮",
+          "address": "Tokyo, Japan",
+          "placeId": "ChIJ51cu8IcbXWARiRtXIothAS4",
+          "rawQuery": "日光東照宮",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "日光東照宮",
+          "rawMention": "日光東照宮",
+          "cleanedName": "日光東照宮",
+          "description": "日光東照宮",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "日光東照宮",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6764225,
+          "lng": 139.650027,
+          "raw": "二荒山神社",
+          "name": "二荒山神社",
+          "address": "Tokyo, Japan",
+          "placeId": "ChIJ51cu8IcbXWARiRtXIothAS4",
+          "rawQuery": "二荒山神社",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "二荒山神社",
+          "rawMention": "二荒山神社",
+          "cleanedName": "二荒山神社",
+          "description": "二荒山神社",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "二荒山神社",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.7279691,
+          "lng": 139.8198723,
+          "raw": "Meguri Coffee",
+          "name": "Meguri Coffee",
+          "address": "3-chōme-1-6 Sumida, Sumida City, Tokyo 131-0031, Japan",
+          "placeId": "ChIJpUsluYCPGGARTsdbQ2DjVvg",
+          "rawQuery": "Meguri Coffee",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "Meguri Coffee",
+          "rawMention": "Meguri Coffee",
+          "cleanedName": "Meguri Coffee",
+          "description": "Meguri Coffee",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "Meguri Coffee",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6764225,
+          "lng": 139.650027,
+          "raw": "三福茶屋",
+          "name": "三福茶屋",
+          "address": "Tokyo, Japan",
+          "placeId": "ChIJ51cu8IcbXWARiRtXIothAS4",
+          "rawQuery": "三福茶屋",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "三福茶屋",
+          "rawMention": "三福茶屋",
+          "cleanedName": "三福茶屋",
+          "description": "三福茶屋",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "三福茶屋",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6764225,
+          "lng": 139.650027,
+          "raw": "日光炸湯波饅頭",
+          "name": "日光炸湯波饅頭",
+          "address": "Tokyo, Japan",
+          "placeId": "ChIJ51cu8IcbXWARiRtXIothAS4",
+          "rawQuery": "日光炸湯波饅頭",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "日光炸湯波饅頭",
+          "rawMention": "日光炸湯波饅頭",
+          "cleanedName": "日光炸湯波饅頭",
+          "description": "日光炸湯波饅頭",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "日光炸湯波饅頭",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6764225,
+          "lng": 139.650027,
+          "raw": "明智平纜車",
+          "name": "明智平纜車",
+          "address": "Tokyo, Japan",
+          "placeId": "ChIJ51cu8IcbXWARiRtXIothAS4",
+          "rawQuery": "明智平纜車",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "明智平纜車",
+          "rawMention": "明智平纜車",
+          "cleanedName": "明智平纜車",
+          "description": "明智平纜車",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "明智平纜車",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6764225,
+          "lng": 139.650027,
+          "raw": "炸豬排長谷川",
+          "name": "炸豬排長谷川",
+          "address": "Tokyo, Japan",
+          "placeId": "ChIJ51cu8IcbXWARiRtXIothAS4",
+          "rawQuery": "炸豬排長谷川",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "炸豬排長谷川",
+          "rawMention": "炸豬排長谷川",
+          "cleanedName": "炸豬排長谷川",
+          "description": "炸豬排長谷川",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "炸豬排長谷川",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6491207,
+          "lng": 139.7897739,
+          "raw": "teamLab Planets TOKYO",
+          "name": "teamLab Planets TOKYO",
+          "address": "6-chōme-1-16 Toyosu, Koto City, Tokyo 135-0061, Japan",
+          "placeId": "ChIJSeco5wiJGGARItbTS8lQ5G0",
+          "rawQuery": "teamLab Planets TOKYO",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "teamLab Planets TOKYO",
+          "rawMention": "teamLab Planets TOKYO",
+          "cleanedName": "teamLab Planets TOKYO",
+          "description": "teamLab Planets TOKYO",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "teamLab Planets TOKYO",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.663165,
+          "lng": 139.7806944,
+          "raw": "月島もんじゃ もへじ 総本店",
+          "name": "月島もんじゃ もへじ 総本店",
+          "address": "3-chōme-5-5 Tsukishima, Chuo City, Tokyo 104-0052, Japan",
+          "placeId": "ChIJAcWODXmJGGARyXHltkbgfoI",
+          "rawQuery": "月島もんじゃ もへじ 総本店",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "月島もんじゃ もへじ 総本店",
+          "rawMention": "月島もんじゃ もへじ 総本店",
+          "cleanedName": "月島もんじゃ もへじ 総本店",
+          "description": "月島もんじゃ もへじ 総本店",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "月島もんじゃ もへじ 総本店",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6714099,
+          "lng": 139.7645218,
+          "raw": "銀座Akebono 銀座本店",
+          "name": "銀座Akebono 銀座本店",
+          "address": "5-chōme-7-19 Ginza, Chuo City, Tokyo 104-0061, Japan",
+          "placeId": "ChIJiX41d-aLGGARWod2xAFWsrs",
+          "rawQuery": "銀座Akebono 銀座本店",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "銀座Akebono 銀座本店",
+          "rawMention": "銀座Akebono 銀座本店",
+          "cleanedName": "銀座Akebono 銀座本店",
+          "description": "銀座Akebono 銀座本店",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "銀座Akebono 銀座本店",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6735982,
+          "lng": 139.7628443,
+          "raw": "HARBS LUMINE有樂町店",
+          "name": "HARBS LUMINE有樂町店",
+          "address": "Japan, 〒100-0006 Tokyo, Chiyoda City, Yūrakuchō, 2-chōme−5−１ ルミネ有楽町店 ルミネ1 二階",
+          "placeId": "ChIJ8yCSe-WLGGARAR2zuO1ArSY",
+          "rawQuery": "HARBS LUMINE有樂町店",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "HARBS LUMINE有樂町店",
+          "rawMention": "HARBS LUMINE有樂町店",
+          "cleanedName": "HARBS LUMINE有樂町店",
+          "description": "HARBS LUMINE有樂町店",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "HARBS LUMINE有樂町店",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [
+        "炸湯波饅頭",
+        "炸豬排"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "五代目花山烏冬",
+          "foods": [],
+          "title": "五代目花山烏冬",
+          "summary": "五代目花山烏冬",
+          "timestamp": "5:00",
+          "endSeconds": 330,
+          "startLabel": "5:00",
+          "startSeconds": 300,
+          "locationHints": [
+            "五代目花山烏冬"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "澀谷十字路口",
+          "foods": [],
+          "title": "澀谷十字路口",
+          "summary": "澀谷十字路口",
+          "timestamp": "6:00",
+          "endSeconds": 390,
+          "startLabel": "6:00",
+          "startSeconds": 360,
+          "locationHints": [
+            "澀谷十字路口"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "日光東照宮",
+          "foods": [],
+          "title": "日光東照宮",
+          "summary": "日光東照宮",
+          "timestamp": "7:00",
+          "endSeconds": 450,
+          "startLabel": "7:00",
+          "startSeconds": 420,
+          "locationHints": [
+            "日光東照宮"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_4",
+          "text": "二荒山神社",
+          "foods": [],
+          "title": "二荒山神社",
+          "summary": "二荒山神社",
+          "timestamp": "8:00",
+          "endSeconds": 510,
+          "startLabel": "8:00",
+          "startSeconds": 480,
+          "locationHints": [
+            "二荒山神社"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_5",
+          "text": "Meguri Coffee",
+          "foods": [],
+          "title": "Meguri Coffee",
+          "summary": "Meguri Coffee",
+          "timestamp": "9:00",
+          "endSeconds": 570,
+          "startLabel": "9:00",
+          "startSeconds": 540,
+          "locationHints": [
+            "Meguri Coffee"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_6",
+          "text": "三福茶屋",
+          "foods": [
+            "炸湯波饅頭"
+          ],
+          "title": "三福茶屋",
+          "summary": "三福茶屋",
+          "timestamp": "10:00",
+          "endSeconds": 630,
+          "startLabel": "10:00",
+          "startSeconds": 600,
+          "locationHints": [
+            "三福茶屋"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_7",
+          "text": "日光炸湯波饅頭",
+          "foods": [
+            "炸湯波饅頭"
+          ],
+          "title": "日光炸湯波饅頭",
+          "summary": "日光炸湯波饅頭",
+          "timestamp": "11:00",
+          "endSeconds": 690,
+          "startLabel": "11:00",
+          "startSeconds": 660,
+          "locationHints": [
+            "日光炸湯波饅頭"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_8",
+          "text": "明智平纜車",
+          "foods": [
+            "炸湯波饅頭",
+            "炸豬排"
+          ],
+          "title": "明智平纜車",
+          "summary": "明智平纜車",
+          "timestamp": "12:00",
+          "endSeconds": 750,
+          "startLabel": "12:00",
+          "startSeconds": 720,
+          "locationHints": [
+            "明智平纜車"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的東京旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_U0cFN0WJfwc",
+      "videoId": "U0cFN0WJfwc",
+      "title": "2026全新！東京上野淺草美食地圖｜東京自由行攻略必收口袋名單",
+      "thumbnail": "https://i.ytimg.com/vi/U0cFN0WJfwc/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=U0cFN0WJfwc",
+      "duration": "28:22",
+      "summary": "影片提到上野、淺草、晴空塔等地點，以及燒肉、拉麵等食物。",
+      "description": "上野淺草到底有什麼新的美食？\n東京最經典又好逛的美食地區你一定不能錯過 🍡\n從巷弄間的平價燒肉、拉麵，到滿滿人情味的商店街！\n所有你來東京應該要品嘗的美味都在這集啦~\n\n另外也別錯過你的最強旅伴💡SANBOO小山包💡\n✔️可分離式設計＋多種背帶\n✔️從白天旅行到晚上逛街都能自由切換風格～\n✔️大容量不變形、YKK雙拉鍊滑順\n✔️後側快取層放手機超實用📱\n✔️護照、現金、房卡、車票都乖乖歸位\n\n把握醉旅宿的專屬折扣碼\n⭐️結帳輸入：「merryjourney」享95折~\nhttps://bit.ly/48E0qph \n\n\n#東京自由行 #上野美食 #淺草美食 #東京景點 #東京購物 #日本旅遊 #日本自由行 #SANBOO #小山包 #日本旅行穿搭 #東京旅行攻略 #上野淺草 #東京散步地圖 #女生包包推薦 #旅行包推薦 #日本包包品牌 #東京必吃 #東京好逛 #醉旅宿 #晴空塔 #東京美食",
+      "source": "youtube-data-api",
+      "channelTitle": "醉旅宿 Merry Journey",
+      "publishedAt": "2025-11-28T10:12:02Z",
+      "timestamps": [
+        {
+          "time": "0:00",
+          "label": "上野"
+        },
+        {
+          "time": "0:00",
+          "label": "淺草"
+        },
+        {
+          "time": "11:00",
+          "label": "晴空塔"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 35.7087296,
+          "lng": 139.7741538,
+          "raw": "上野",
+          "name": "上野",
+          "address": "Ueno, Taito City, Tokyo 110-0005, Japan",
+          "placeId": "ChIJs-soi56OGGARvvSyPcqIups",
+          "rawQuery": "上野",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "上野",
+          "rawMention": "上野",
+          "cleanedName": "上野",
+          "description": "東京上野淺草美食地圖",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "上野",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.7185858,
+          "lng": 139.7958849,
+          "raw": "淺草",
+          "name": "淺草",
+          "address": "Asakusa, Taito City, Tokyo 111-0032, Japan",
+          "placeId": "ChIJM1N_BMKOGGARZ0DHgTj9hHw",
+          "rawQuery": "淺草",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "淺草",
+          "rawMention": "淺草",
+          "cleanedName": "淺草",
+          "description": "東京上野淺草美食地圖",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "淺草",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.7100627,
+          "lng": 139.8107004,
+          "raw": "晴空塔",
+          "name": "晴空塔",
+          "address": "1-chōme-1-2 Oshiage, Sumida City, Tokyo 131-0045, Japan",
+          "placeId": "ChIJ35ov0dCOGGARKvdDH7NPHX0",
+          "rawQuery": "晴空塔",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "晴空塔",
+          "rawMention": "晴空塔",
+          "cleanedName": "晴空塔",
+          "description": "醉旅宿的專屬折扣碼 ⭐️結帳輸入：「merryjourney」享95折~",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "晴空塔",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [
+        "燒肉",
+        "拉麵"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "東京上野淺草美食地圖",
+          "foods": [],
+          "title": "上野",
+          "summary": "東京上野淺草美食地圖",
+          "timestamp": "0:00",
+          "endSeconds": 30,
+          "startLabel": "0:00",
+          "startSeconds": 0,
+          "locationHints": [
+            "上野"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "東京上野淺草美食地圖",
+          "foods": [],
+          "title": "淺草",
+          "summary": "東京上野淺草美食地圖",
+          "timestamp": "0:00",
+          "endSeconds": 30,
+          "startLabel": "0:00",
+          "startSeconds": 0,
+          "locationHints": [
+            "淺草"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "醉旅宿的專屬折扣碼 ⭐️結帳輸入：「merryjourney」享95折~",
+          "foods": [],
+          "title": "晴空塔",
+          "summary": "醉旅宿的專屬折扣碼 ⭐️結帳輸入：「merryjourney」享95折~",
+          "timestamp": "11:00",
+          "endSeconds": 690,
+          "startLabel": "11:00",
+          "startSeconds": 660,
+          "locationHints": [
+            "晴空塔"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的東京旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_3KMSR0F_iVY",
+      "videoId": "3KMSR0F_iVY",
+      "title": "2025新東京攻略: 7大景點開箱&體驗設施｜尖叫好玩NINJA TOKYO! 玩轉IMMERSIVE FORT｜SMALL WORLDS｜豐洲無限中拖羅自助餐! 澀谷美食&酒店 #東京 #日本自由行",
+      "thumbnail": "https://i.ytimg.com/vi/3KMSR0F_iVY/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=3KMSR0F_iVY",
+      "duration": "25:41",
+      "summary": "影片提到有明 SMALL WORLDS Miniature Museum、台場 IMMERSIVE FORT TOKYO、大手町 NINJA TOKYO等地點，以及海鮮自助餐IROHA等食物。",
+      "description": "2025年來東京，一定要先看這部影片！\n無論去幾多次東京，總會有再去的理由！\n\n📍NINJA TOKYO \nhttps://ninja-tokyo.jp/\n預約：https://www.tablecheck.com/en/shops/ninjaakasaka/reserve\n\n📍IMMERSIVE FORT東京\nhttps://www.immersivefort.com/\n門票：https://bit.ly/3QujXyy\n\n📍SMALL WORLDS Miniature Museum\nhttps://smallworlds.jp/en/\n\n📍豐洲 千客萬來\nhttps://www.toyosu-senkyakubanrai.jp/languages/tw/\n\n📍東京豐洲 萬葉俱樂部\nhttps://tokyo-toyosu.manyo.co.jp/languages/tw/\n\n📍京都 瓢斗 澀谷店\nhttps://hyoto.jp/shop/shibuya/\n\n📍EN HOTEL Shibuya\nhttps://www.shibuyahotel.jp/en/\n\n💖希望大家喜歡這次的分享。各位的支持是我創作的動力，敬請追蹤 Subscribe 及按下訂閱的提示小鈴噹，謝謝。💖\n\n★*\"`'*-.,_,.-*'`\"*-.,_☆\n\n節錄：\n00:00 2025新東京攻略: 7大景點開箱&體驗設施\n00:44 有明 SMALL WORLDS Miniature Museum\n04:05 台場 IMMERSIVE FORT TOKYO\n07:50 大手町 NINJA TOKYO\n16:18 豐洲 千客萬來 海鮮自助餐IROHA\n19:16 東京豐洲 萬葉俱樂部\n21:20 京都 瓢斗 澀谷店\n24:43 EN HOTEL Shibuya 酒店開箱\n\n★*\"`'*-.,_,.-*'`\"*-.,_☆\n\nFB每天更新、IG有更多日本風景～\n▶我的頻道\nfb page: https://www.facebook.com/a.life.traveler\n風信子ig : http://instagram.com/lifetravelogue\n旦那ig: https://www.instagram.com/dannasan777/\nWebsite: http://www.mshya.com\nPatreon: https://www.patreon.com/mshya\nPodcast節目: https://spoti.fi/39RWYY5\n\n★*\"`'*-.,_,.-*'`\"*-.,_☆\n#pr #tokyo #japan \n#日本文化 #日本生活 #在日港人 #日本 #香港人 #日本旅遊 #風信子 #日本人 #在日生活 #學日文 #日語 #在日本 #在日香港人 #日本 #日本生活 #東京 #日本旅行 #日本自由行 #東京酒店 #東京美食 #東京好去處",
+      "source": "youtube-data-api",
+      "channelTitle": "風信子與旦那・日本旅行及生活頻道",
+      "publishedAt": "2025-02-21T13:30:06Z",
+      "timestamps": [
+        {
+          "time": "0:44",
+          "label": "有明 SMALL WORLDS Miniature Museum"
+        },
+        {
+          "time": "4:05",
+          "label": "台場 IMMERSIVE FORT TOKYO"
+        },
+        {
+          "time": "11:50",
+          "label": "大手町 NINJA TOKYO"
+        },
+        {
+          "time": "16:18",
+          "label": "豐洲 千客萬來"
+        },
+        {
+          "time": "19:16",
+          "label": "東京豐洲 萬葉俱樂部"
+        },
+        {
+          "time": "22:00",
+          "label": "京都 瓢斗 澀谷店"
+        },
+        {
+          "time": "27:15",
+          "label": "EN HOTEL Shibuya"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "lat": 35.6379228,
+          "lng": 139.7883556,
+          "raw": "有明 SMALL WORLDS Miniature Museum",
+          "name": "有明 SMALL WORLDS Miniature Museum",
+          "address": "Japan, 〒135-0063 Tokyo, Koto City, Ariake, 1-chōme−3−３３ 有明物流センター",
+          "placeId": "ChIJZRKFm-eJGGARglEoaF4NcC8",
+          "rawQuery": "有明 SMALL WORLDS Miniature Museum",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "有明 SMALL WORLDS Miniature Museum",
+          "rawMention": "有明 SMALL WORLDS Miniature Museum",
+          "cleanedName": "有明 SMALL WORLDS Miniature Museum",
+          "description": "00:44 有明 SMALL WORLDS Miniature Museum",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "有明 SMALL WORLDS Miniature Museum",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6250127,
+          "lng": 139.779916,
+          "raw": "台場 IMMERSIVE FORT TOKYO",
+          "name": "台場 IMMERSIVE FORT TOKYO",
+          "address": "1-chōme-3-15 Aomi, Koto City, Tokyo 135-0064, Japan",
+          "placeId": "ChIJb47T7XuJGGAR6wlfsD9t4wg",
+          "rawQuery": "台場 IMMERSIVE FORT TOKYO",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "台場 IMMERSIVE FORT TOKYO",
+          "rawMention": "台場 IMMERSIVE FORT TOKYO",
+          "cleanedName": "台場 IMMERSIVE FORT TOKYO",
+          "description": "04:05 台場 IMMERSIVE FORT TOKYO",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "台場 IMMERSIVE FORT TOKYO",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6845764,
+          "lng": 139.7675608,
+          "raw": "大手町 NINJA TOKYO",
+          "name": "大手町 NINJA TOKYO",
+          "address": "Japan, 〒100-0004 Tokyo, Chiyoda City, Ōtemachi, 2-chōme−2−１ 新大手町ビル地下1階",
+          "placeId": "ChIJTWMULnmMGGARNNsNKxPR_Uk",
+          "rawQuery": "大手町 NINJA TOKYO",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "大手町 NINJA TOKYO",
+          "rawMention": "大手町 NINJA TOKYO",
+          "cleanedName": "大手町 NINJA TOKYO",
+          "description": "07:50 大手町 NINJA TOKYO",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "大手町 NINJA TOKYO",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6457275,
+          "lng": 139.7836383,
+          "raw": "豐洲 千客萬來",
+          "name": "豐洲 千客萬來",
+          "address": "6-chōme-5-1 Toyosu, Koto City, Tokyo 135-0061, Japan",
+          "placeId": "ChIJJ1XphGeJGGARK0BhX9lYd7Y",
+          "rawQuery": "豐洲 千客萬來",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "豐洲 千客萬來",
+          "rawMention": "豐洲 千客萬來",
+          "cleanedName": "豐洲 千客萬來",
+          "description": "16:18 豐洲 千客萬來 海鮮自助餐IROHA",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "豐洲 千客萬來",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6461872,
+          "lng": 139.7831588,
+          "raw": "東京豐洲 萬葉俱樂部",
+          "name": "東京豐洲 萬葉俱樂部",
+          "address": "6-chōme-5-1 Toyosu, Koto City, Tokyo 135-0061, Japan",
+          "placeId": "ChIJs6J_JaeJGGAR6Johmle1Fk8",
+          "rawQuery": "東京豐洲 萬葉俱樂部",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "東京豐洲 萬葉俱樂部",
+          "rawMention": "東京豐洲 萬葉俱樂部",
+          "cleanedName": "東京豐洲 萬葉俱樂部",
+          "description": "19:16 東京豐洲 萬葉俱樂部",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "東京豐洲 萬葉俱樂部",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6576545,
+          "lng": 139.7003114,
+          "raw": "京都 瓢斗 澀谷店",
+          "name": "京都 瓢斗 澀谷店",
+          "address": "Japan, 〒150-0043 Tokyo, Shibuya, Dōgenzaka, 1-chōme−2−３ 東急プラザ渋谷（渋谷フクラス 7F",
+          "placeId": "ChIJqex5fgiLGGARre_RH6RKQl0",
+          "rawQuery": "京都 瓢斗 澀谷店",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "京都 瓢斗 澀谷店",
+          "rawMention": "京都 瓢斗 澀谷店",
+          "cleanedName": "京都 瓢斗 澀谷店",
+          "description": "21:20 京都 瓢斗 澀谷店",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "京都 瓢斗 澀谷店",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "lat": 35.6598332,
+          "lng": 139.6954358,
+          "raw": "EN HOTEL Shibuya",
+          "name": "EN HOTEL Shibuya",
+          "address": "1-1 Maruyamachō, Shibuya, Tokyo 150-0044, Japan",
+          "placeId": "ChIJBSsXM6qMGGAR4uLcF1VIs2U",
+          "rawQuery": "EN HOTEL Shibuya",
+          "verified": true,
+          "confidence": 0.78,
+          "normalized": "EN HOTEL Shibuya",
+          "rawMention": "EN HOTEL Shibuya",
+          "cleanedName": "EN HOTEL Shibuya",
+          "description": "24:43 EN HOTEL Shibuya 酒店開箱",
+          "resolvedFrom": "google-geocode",
+          "normalizedName": "EN HOTEL Shibuya",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [
+        "海鮮自助餐IROHA"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "text": "00:44 有明 SMALL WORLDS Miniature Museum",
+          "foods": [],
+          "title": "有明 SMALL WORLDS Miniature Museum",
+          "summary": "00:44 有明 SMALL WORLDS Miniature Museum",
+          "timestamp": "0:44",
+          "endSeconds": 74,
+          "startLabel": "0:44",
+          "startSeconds": 44,
+          "locationHints": [
+            "有明 SMALL WORLDS Miniature Museum"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_2",
+          "text": "04:05 台場 IMMERSIVE FORT TOKYO",
+          "foods": [],
+          "title": "台場 IMMERSIVE FORT TOKYO",
+          "summary": "04:05 台場 IMMERSIVE FORT TOKYO",
+          "timestamp": "4:05",
+          "endSeconds": 275,
+          "startLabel": "4:05",
+          "startSeconds": 245,
+          "locationHints": [
+            "台場 IMMERSIVE FORT TOKYO"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_3",
+          "text": "07:50 大手町 NINJA TOKYO",
+          "foods": [],
+          "title": "大手町 NINJA TOKYO",
+          "summary": "07:50 大手町 NINJA TOKYO",
+          "timestamp": "11:50",
+          "endSeconds": 740,
+          "startLabel": "11:50",
+          "startSeconds": 710,
+          "locationHints": [
+            "大手町 NINJA TOKYO"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_4",
+          "text": "16:18 豐洲 千客萬來 海鮮自助餐IROHA",
+          "foods": [
+            "海鮮自助餐IROHA"
+          ],
+          "title": "豐洲 千客萬來",
+          "summary": "16:18 豐洲 千客萬來 海鮮自助餐IROHA",
+          "timestamp": "16:18",
+          "endSeconds": 1008,
+          "startLabel": "16:18",
+          "startSeconds": 978,
+          "locationHints": [
+            "豐洲 千客萬來"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_5",
+          "text": "19:16 東京豐洲 萬葉俱樂部",
+          "foods": [],
+          "title": "東京豐洲 萬葉俱樂部",
+          "summary": "19:16 東京豐洲 萬葉俱樂部",
+          "timestamp": "19:16",
+          "endSeconds": 1186,
+          "startLabel": "19:16",
+          "startSeconds": 1156,
+          "locationHints": [
+            "東京豐洲 萬葉俱樂部"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_6",
+          "text": "21:20 京都 瓢斗 澀谷店",
+          "foods": [],
+          "title": "京都 瓢斗 澀谷店",
+          "summary": "21:20 京都 瓢斗 澀谷店",
+          "timestamp": "22:00",
+          "endSeconds": 1350,
+          "startLabel": "22:00",
+          "startSeconds": 1320,
+          "locationHints": [
+            "京都 瓢斗 澀谷店"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        },
+        {
+          "id": "simple_segment_7",
+          "text": "24:43 EN HOTEL Shibuya 酒店開箱",
+          "foods": [],
+          "title": "EN HOTEL Shibuya",
+          "summary": "24:43 EN HOTEL Shibuya 酒店開箱",
+          "timestamp": "27:15",
+          "endSeconds": 1665,
+          "startLabel": "27:15",
+          "startSeconds": 1635,
+          "locationHints": [
+            "EN HOTEL Shibuya"
+          ],
+          "timestampSource": "youtube-transcript",
+          "extractionSource": "ai-polished",
+          "timestampConfidence": "high"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的東京旅遊影片，含重點片段與地圖標點。"
+    },
+    {
+      "id": "youtube_KlmI_UIRUus",
+      "videoId": "KlmI_UIRUus",
+      "title": "東京景點全攻略✨東京自由行｜交通美食景點懶人包：東京鐵塔、晴空塔、哈利波特影城、東京中城八重州、日本老街、羽田機場溫泉、淺草新列車SPACIA X、文字燒、相撲火鍋｜日本旅遊・4K Vlog",
+      "thumbnail": "https://i.ytimg.com/vi/KlmI_UIRUus/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=KlmI_UIRUus",
+      "duration": "39:10",
+      "summary": "影片提到東京鐵塔、晴空塔、東京哈利波特影城等地點，以及人形燒、ちゃんこ鍋、文字燒等食物。",
+      "description": "【訂正啟示】\n04:08-04:20的店名為「東京ミッドタウン八重洲 STÁLOGY」\n\n【お詫びと訂正】\n04:08-04:20のお店の名前は「東京ミッドタウン八重洲 STÁLOGY」\n\n00:00 請開啟CC字幕\n00:05 精彩畫面\n00:35 影片開場(東京車站前)\n01:57 東京必買交通票券\n03:08 東京ミッドタウン八重洲\n04:08 東京ミッドタウン八重洲 STÁLOGY\n05:30 東京ミッドタウン八重洲 YAESU PUBLIC\n06:37 東京哈利波特影城\n07:30 東武鐵道：特急列車SPICIA X\n08:37 人形町\n08:45 重盛の人形燒\n10:21 ちゃんこ鍋 相撲茶屋ちゃんこ江戶澤\n11:58 月島文字燒もんじゃ藏\n16:20 東京鐵塔\n16:57 晴空塔\n17:52 都電荒川線\n18:43 巢鴨商店街\n20:50 千成最中\n22:32 門前仲町\n23:57 富岡八幡宮\n24:26 深川不動堂\n25:00 深川宿 富岡八幡店\n26:51 深大寺\n29:45 鬼太郎茶屋\n32:32 羽田機場花園\n33:32 天然溫泉 泉天空の湯 羽田機場\n36:17 羽田機場 HANEDA AIRPORT GARDEN\n36:50 結尾(東京車站前)\n＿＿＿\n \n🔔 訂閱「吉田社長 Japan TV」YouTube\nhttps://www.youtube.com/channel/UCzfNj5-UEvxOBErW2S3_bSg\n👉 最新旅遊情報 FB 粉專「日本人の日本旅遊指南」\nhttps://www.facebook.com/letsgojp/\n🛍️ MiCHi SHOP 日本選物社團\nhttps://www.facebook.com/groups/339425473734121\n👉 我的日常 IG「@yoshidagakusei」\nhttps://www.instagram.com/yoshidagakusei/\n👉 我的個人 FB 粉專「吉田皓一」\nhttps://www.facebook.com/jitianhaoyi/\n✍️ 我的部落格「吉田皓一的一體兩面，不搞笑搞什麼」\nhttps://yoshidakoichi.letsgojp.com/\n \n#東京 #東京自由行 #東京景點\n#日本旅遊 #日本旅行 #日本生活 #日本自由行 #日本美食 #日本必吃 #日本必去 #日本散步 #日本觀光列車 #4K",
+      "source": "youtube-data-api",
+      "channelTitle": "吉田社長 Japan TV",
+      "publishedAt": "2023-11-04T13:00:10Z",
+      "timestamps": [
+        {
+          "time": "4:08",
+          "label": "東京ミッドタウン八重洲 STÁLOGY"
+        },
+        {
+          "time": "5:30",
+          "label": "東京ミッドタウン八重洲 YAESU PUBLIC"
+        },
+        {
+          "time": "6:37",
+          "label": "東京哈利波特影城"
+        },
+        {
+          "time": "7:30",
+          "label": "東武鐵道：特急列車SPICIA X"
+        },
+        {
+          "time": "7:30",
+          "label": "淺草新列車SPACIA X"
+        },
+        {
+          "time": "8:37",
+          "label": "人形町"
+        },
+        {
+          "time": "8:45",
+          "label": "相撲火鍋"
+        },
+        {
+          "time": "11:38",
+          "label": "文字燒もんじゃ藏"
+        }
+      ],
+      "extractedLocations": [
+        {
+          "name": "東京鐵塔",
+          "lat": 35.6585805,
+          "lng": 139.7454329,
+          "description": "16:20 東京鐵塔",
+          "address": "4-chōme-2-8 Shibakōen, Minato City, Tokyo 105-0011, Japan",
+          "placeId": "ChIJCewJkL2LGGAR3Qmk0vCTGkg",
+          "rawQuery": "東京鐵塔",
+          "raw": "東京鐵塔",
+          "normalized": "東京鐵塔",
+          "normalizedName": "東京鐵塔",
+          "cleanedName": "東京鐵塔",
+          "rawMention": "東京鐵塔",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "晴空塔",
+          "lat": 35.7100627,
+          "lng": 139.8107004,
+          "description": "16:57 晴空塔",
+          "address": "1-chōme-1-2 Oshiage, Sumida City, Tokyo 131-0045, Japan",
+          "placeId": "ChIJ35ov0dCOGGARKvdDH7NPHX0",
+          "rawQuery": "晴空塔",
+          "raw": "晴空塔",
+          "normalized": "晴空塔",
+          "normalizedName": "晴空塔",
+          "cleanedName": "晴空塔",
+          "rawMention": "晴空塔",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "東京哈利波特影城",
+          "lat": 35.745183,
+          "lng": 139.6460909,
+          "description": "06:37 東京哈利波特影城",
+          "address": "1-chōme-1-7 Kasugachō, Nerima City, Tokyo 179-0074, Japan",
+          "placeId": "ChIJZzjXkvLtGGARm2YFfi26zoU",
+          "rawQuery": "東京哈利波特影城",
+          "raw": "東京哈利波特影城",
+          "normalized": "東京哈利波特影城",
+          "normalizedName": "東京哈利波特影城",
+          "cleanedName": "東京哈利波特影城",
+          "rawMention": "東京哈利波特影城",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "東京ミッドタウン八重洲 STÁLOGY",
+          "lat": 35.6794084,
+          "lng": 139.7689311,
+          "description": "04:08 東京ミッドタウン八重洲 STÁLOGY",
+          "address": "Japan, 〒104-0028 Tokyo, Chuo City, Yaesu, 2-chōme−2−番 1号 東京ミッドタウン八重洲 2階",
+          "placeId": "ChIJXfrGNk6LGGARIDprn0bYkmc",
+          "rawQuery": "東京ミッドタウン八重洲 STÁLOGY",
+          "raw": "東京ミッドタウン八重洲 STÁLOGY",
+          "normalized": "東京ミッドタウン八重洲 STÁLOGY",
+          "normalizedName": "東京ミッドタウン八重洲 STÁLOGY",
+          "cleanedName": "東京ミッドタウン八重洲 STÁLOGY",
+          "rawMention": "東京ミッドタウン八重洲 STÁLOGY",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "東京ミッドタウン八重洲 YAESU PUBLIC",
+          "lat": 35.67894260000001,
+          "lng": 139.7688543,
+          "description": "05:30 東京ミッドタウン八重洲 YAESU PUBLIC",
+          "address": "2 階, 2-chōme-2-1 Yaesu, Chuo City, Tokyo 104-0028, Japan",
+          "placeId": "ChIJgZxuMiSLGGARq_-Pu_wXCjo",
+          "rawQuery": "東京ミッドタウン八重洲 YAESU PUBLIC",
+          "raw": "東京ミッドタウン八重洲 YAESU PUBLIC",
+          "normalized": "東京ミッドタウン八重洲 YAESU PUBLIC",
+          "normalizedName": "東京ミッドタウン八重洲 YAESU PUBLIC",
+          "cleanedName": "東京ミッドタウン八重洲 YAESU PUBLIC",
+          "rawMention": "東京ミッドタウン八重洲 YAESU PUBLIC",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "文字燒もんじゃ藏",
+          "lat": 35.6634258,
+          "lng": 139.7813679,
+          "description": "11:58 月島文字燒もんじゃ藏",
+          "address": "3-chōme-9-9 Tsukishima, Chuo City, Tokyo 104-0052, Japan",
+          "placeId": "ChIJsz7b6XqJGGAR829u2i7d1hQ",
+          "rawQuery": "文字燒もんじゃ藏",
+          "raw": "文字燒もんじゃ藏",
+          "normalized": "文字燒もんじゃ藏",
+          "normalizedName": "文字燒もんじゃ藏",
+          "cleanedName": "文字燒もんじゃ藏",
+          "rawMention": "文字燒もんじゃ藏",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "巢鴨商店街",
+          "lat": 35.7348647,
+          "lng": 139.7364525,
+          "description": "18:43 巢鴨商店街",
+          "address": "4-chōme-22-8 Sugamo, Toshima City, Tokyo 170-0002, Japan",
+          "placeId": "ChIJkYbVMJ2NGGAROsREgUFhIv4",
+          "rawQuery": "巢鴨商店街",
+          "raw": "巢鴨商店街",
+          "normalized": "巢鴨商店街",
+          "normalizedName": "巢鴨商店街",
+          "cleanedName": "巢鴨商店街",
+          "rawMention": "巢鴨商店街",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "羽田機場花園",
+          "lat": 35.5445614,
+          "lng": 139.7643416,
+          "description": "32:32 羽田機場花園",
+          "address": "Japan, 〒144-0041 Tokyo, Ota City, Hanedakūkō, 2-chōme−7−１ 羽田エアポートガーデン",
+          "placeId": "ChIJM_5E6hdhGGARLlvJzk4IWsE",
+          "rawQuery": "羽田機場花園",
+          "raw": "羽田機場花園",
+          "normalized": "羽田機場花園",
+          "normalizedName": "羽田機場花園",
+          "cleanedName": "羽田機場花園",
+          "rawMention": "羽田機場花園",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "天然溫泉 泉天空の湯 羽田機場",
+          "lat": 35.5434277,
+          "lng": 139.7662127,
+          "description": "33:32 天然溫泉 泉天空の湯 羽田機場",
+          "address": "2-chōme-7-1 Hanedakūkō, Ota City, Tokyo 144-0041, Japan",
+          "placeId": "ChIJ7chGg41hGGARwbETrH5qzBQ",
+          "rawQuery": "天然溫泉 泉天空の湯 羽田機場",
+          "raw": "天然溫泉 泉天空の湯 羽田機場",
+          "normalized": "天然溫泉 泉天空の湯 羽田機場",
+          "normalizedName": "天然溫泉 泉天空の湯 羽田機場",
+          "cleanedName": "天然溫泉 泉天空の湯 羽田機場",
+          "rawMention": "天然溫泉 泉天空の湯 羽田機場",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "深川不動堂",
+          "lat": 35.6728891,
+          "lng": 139.7983222,
+          "description": "24:26 深川不動堂",
+          "address": "1-chōme-17-13 Tomioka, Koto City, Tokyo 135-0047, Japan",
+          "placeId": "ChIJAQAQJxKJGGAR-CTitlawD5Q",
+          "rawQuery": "深川不動堂",
+          "raw": "深川不動堂",
+          "normalized": "深川不動堂",
+          "normalizedName": "深川不動堂",
+          "cleanedName": "深川不動堂",
+          "rawMention": "深川不動堂",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "深大寺",
+          "lat": 35.6675048,
+          "lng": 139.5503942,
+          "description": "26:51 深大寺",
+          "address": "Japan, 〒182-0017 Tokyo, Chofu, Jindaiji Motomachi, 5-chōme−１５−１",
+          "placeId": "ChIJgfU5LiLwGGARCeLsYGYXInI",
+          "rawQuery": "深大寺",
+          "raw": "深大寺",
+          "normalized": "深大寺",
+          "normalizedName": "深大寺",
+          "cleanedName": "深大寺",
+          "rawMention": "深大寺",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "name": "鬼太郎茶屋",
+          "lat": 35.6540568,
+          "lng": 139.5447684,
+          "description": "29:45 鬼太郎茶屋",
+          "address": "Japan, 〒182-0024 Tokyo, Chofu, Fuda, 1-chōme−３４−１ 1F",
+          "placeId": "ChIJtwpRFiLwGGAR10QJ6ZTSRFQ",
+          "rawQuery": "鬼太郎茶屋",
+          "raw": "鬼太郎茶屋",
+          "normalized": "鬼太郎茶屋",
+          "normalizedName": "鬼太郎茶屋",
+          "cleanedName": "鬼太郎茶屋",
+          "rawMention": "鬼太郎茶屋",
+          "confidence": 0.78,
+          "verified": true,
+          "resolvedFrom": "google-geocode",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "extractedFoods": [
+        "人形燒",
+        "ちゃんこ鍋",
+        "文字燒"
+      ],
+      "summarySegments": [
+        {
+          "id": "simple_segment_1",
+          "timestamp": "4:08",
+          "startLabel": "4:08",
+          "startSeconds": 248,
+          "endSeconds": 278,
+          "title": "東京ミッドタウン八重洲 STÁLOGY",
+          "text": "04:08 東京ミッドタウン八重洲 STÁLOGY",
+          "summary": "04:08 東京ミッドタウン八重洲 STÁLOGY",
+          "locationHints": [
+            "東京ミッドタウン八重洲 STÁLOGY"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_2",
+          "timestamp": "5:30",
+          "startLabel": "5:30",
+          "startSeconds": 330,
+          "endSeconds": 360,
+          "title": "東京ミッドタウン八重洲 YAESU PUBLIC",
+          "text": "05:30 東京ミッドタウン八重洲 YAESU PUBLIC",
+          "summary": "05:30 東京ミッドタウン八重洲 YAESU PUBLIC",
+          "locationHints": [
+            "東京ミッドタウン八重洲 YAESU PUBLIC"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_3",
+          "timestamp": "6:37",
+          "startLabel": "6:37",
+          "startSeconds": 397,
+          "endSeconds": 427,
+          "title": "東京哈利波特影城",
+          "text": "06:37 東京哈利波特影城",
+          "summary": "06:37 東京哈利波特影城",
+          "locationHints": [
+            "東京哈利波特影城"
+          ],
+          "foods": [],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_4",
+          "timestamp": "7:30",
+          "startLabel": "7:30",
+          "startSeconds": 450,
+          "endSeconds": 480,
+          "title": "東武鐵道：特急列車SPICIA X",
+          "text": "07:30 東武鐵道：特急列車SPICIA X",
+          "summary": "07:30 東武鐵道：特急列車SPICIA X",
+          "locationHints": [
+            "東武鐵道：特急列車SPICIA X"
+          ],
+          "foods": [
+            "人形燒"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_5",
+          "timestamp": "7:30",
+          "startLabel": "7:30",
+          "startSeconds": 450,
+          "endSeconds": 480,
+          "title": "淺草新列車SPACIA X",
+          "text": "07:30 人形町 08:45 重盛の人形燒 10:21 ちゃんこ鍋 相撲茶屋ちゃんこ江戶澤",
+          "summary": "07:30 人形町 08:45 重盛の人形燒 10:21 ちゃんこ鍋 相撲茶屋ちゃんこ江戶澤",
+          "locationHints": [
+            "淺草新列車SPACIA X"
+          ],
+          "foods": [
+            "人形燒"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_6",
+          "timestamp": "8:37",
+          "startLabel": "8:37",
+          "startSeconds": 517,
+          "endSeconds": 547,
+          "title": "人形町",
+          "text": "08:37 人形町",
+          "summary": "08:37 人形町",
+          "locationHints": [
+            "人形町"
+          ],
+          "foods": [
+            "人形燒"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_7",
+          "timestamp": "8:45",
+          "startLabel": "8:45",
+          "startSeconds": 525,
+          "endSeconds": 555,
+          "title": "相撲火鍋",
+          "text": "08:45 重盛の人形燒 10:21 ちゃんこ鍋 相撲茶屋ちゃんこ江戶澤",
+          "summary": "08:45 重盛の人形燒 10:21 ちゃんこ鍋 相撲茶屋ちゃんこ江戶澤",
+          "locationHints": [
+            "相撲火鍋"
+          ],
+          "foods": [
+            "人形燒"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        },
+        {
+          "id": "simple_segment_8",
+          "timestamp": "11:38",
+          "startLabel": "11:38",
+          "startSeconds": 698,
+          "endSeconds": 728,
+          "title": "文字燒もんじゃ藏",
+          "text": "11:58 月島文字燒もんじゃ藏",
+          "summary": "11:58 月島文字燒もんじゃ藏",
+          "locationHints": [
+            "文字燒もんじゃ藏"
+          ],
+          "foods": [
+            "ちゃんこ鍋",
+            "文字燒"
+          ],
+          "timestampSource": "youtube-transcript",
+          "timestampConfidence": "high",
+          "extractionSource": "ai-polished"
+        }
+      ],
+      "listProvenance": "preloaded-destination-seed",
+      "relevanceReason": "預先驗證的東京旅遊影片，含重點片段與地圖標點。"
+    }
+  ],
+  "validation": {
+    "requestedCount": 6,
+    "exportedCount": 6,
+    "passCount": 6,
+    "failCount": 0,
+    "errorCount": 0
+  }
+}

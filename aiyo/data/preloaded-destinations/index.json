@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "generatedAt": "2026-05-31T08:41:30.898Z",
+  "pipelineVersion": "preloaded-seed-v1",
+  "destinations": [
+    {
+      "id": "bali",
+      "destinationHint": "峇里島",
+      "file": "bali.json",
+      "videoCount": 3
+    },
+    {
+      "id": "bangkok",
+      "destinationHint": "曼谷",
+      "file": "bangkok.json",
+      "videoCount": 4
+    },
+    {
+      "id": "barcelona",
+      "destinationHint": "巴塞隆納",
+      "file": "barcelona.json",
+      "videoCount": 6
+    },
+    {
+      "id": "dubai",
+      "destinationHint": "杜拜",
+      "file": "dubai.json",
+      "videoCount": 5
+    },
+    {
+      "id": "hanoi",
+      "destinationHint": "河內",
+      "file": "hanoi.json",
+      "videoCount": 3
+    },
+    {
+      "id": "ho-chi-minh",
+      "destinationHint": "胡志明市",
+      "file": "ho-chi-minh.json",
+      "videoCount": 6
+    },
+    {
+      "id": "hong-kong",
+      "destinationHint": "香港",
+      "file": "hong-kong.json",
+      "videoCount": 4
+    },
+    {
+      "id": "kuala-lumpur",
+      "destinationHint": "吉隆坡",
+      "file": "kuala-lumpur.json",
+      "videoCount": 5
+    },
+    {
+      "id": "kyoto",
+      "destinationHint": "京都",
+      "file": "kyoto.json",
+      "videoCount": 4
+    },
+    {
+      "id": "london",
+      "destinationHint": "倫敦",
+      "file": "london.json",
+      "videoCount": 5
+    },
+    {
+      "id": "macau",
+      "destinationHint": "澳門",
+      "file": "macau.json",
+      "videoCount": 4
+    },
+    {
+      "id": "new-york",
+      "destinationHint": "紐約",
+      "file": "new-york.json",
+      "videoCount": 4
+    },
+    {
+      "id": "osaka",
+      "destinationHint": "大阪",
+      "file": "osaka.json",
+      "videoCount": 6
+    },
+    {
+      "id": "paris",
+      "destinationHint": "巴黎",
+      "file": "paris.json",
+      "videoCount": 4
+    },
+    {
+      "id": "rome",
+      "destinationHint": "羅馬",
+      "file": "rome.json",
+      "videoCount": 6
+    },
+    {
+      "id": "seoul",
+      "destinationHint": "首爾",
+      "file": "seoul.json",
+      "videoCount": 6
+    },
+    {
+      "id": "singapore",
+      "destinationHint": "新加坡",
+      "file": "singapore.json",
+      "videoCount": 4
+    },
+    {
+      "id": "sydney",
+      "destinationHint": "雪梨",
+      "file": "sydney.json",
+      "videoCount": 5
+    },
+    {
+      "id": "taipei",
+      "destinationHint": "台北",
+      "file": "taipei.json",
+      "videoCount": 5
+    },
+    {
+      "id": "tokyo",
+      "destinationHint": "東京",
+      "file": "tokyo.json",
+      "videoCount": 6
+    }
+  ]
+}

@@ -1,5 +1,15 @@
 export type GoogleMapTypeId = "roadmap" | "satellite" | "hybrid" | "terrain";
 
+export interface GoogleMapClickEvent {
+  placeId?: string;
+  stop?: () => void;
+  latLng?: { lat: () => number; lng: () => number };
+}
+
+export interface GoogleMapListenerHandle {
+  remove?: () => void;
+}
+
 export interface GoogleMapInstance {
   setCenter: (coords: { lat: number; lng: number }) => void;
   setZoom: (zoom: number) => void;
@@ -7,21 +17,29 @@ export interface GoogleMapInstance {
   fitBounds: (bounds: GoogleLatLngBounds, padding?: number) => void;
   panTo: (coords: { lat: number; lng: number }) => void;
   setMapTypeId: (type: GoogleMapTypeId) => void;
+  setOptions?: (options: Record<string, unknown>) => void;
+  addListener?: (
+    eventName: string,
+    handler: (event: GoogleMapClickEvent) => void,
+  ) => GoogleMapListenerHandle | void;
 }
 
 export interface GoogleMarkerInstance {
   setMap: (map: GoogleMapInstance | null) => void;
   setIcon: (icon: Record<string, unknown>) => void;
   addListener: (eventName: string, handler: () => void) => void;
+  content?: HTMLElement;
 }
 
 export interface GoogleInfoWindowInstance {
   setContent: (content: string) => void;
   open: (input: { map: GoogleMapInstance; anchor: GoogleMarkerInstance | unknown }) => void;
+  close?: () => void;
 }
 
 export interface GooglePolylineInstance {
   setMap: (map: GoogleMapInstance | null) => void;
+  setOptions?: (options: Record<string, unknown>) => void;
   addListener?: (eventName: string, handler: () => void) => void;
 }
 
@@ -31,6 +49,26 @@ export interface GoogleMapLayerInstance {
 
 export interface GoogleLatLngBounds {
   extend: (coords: { lat: number; lng: number }) => void;
+}
+
+export interface GoogleLatLng {
+  lat: () => number;
+  lng: () => number;
+}
+
+export interface GoogleMapProjection {
+  fromLatLngToDivPixel: (latLng: GoogleLatLng) => { x: number; y: number } | null;
+}
+
+export interface GoogleMapPanes {
+  floatPane: HTMLElement;
+}
+
+export interface GoogleOverlayViewInstance {
+  setMap(map: GoogleMapInstance | null): void;
+  draw(): void;
+  getPanes(): GoogleMapPanes | null;
+  getProjection(): GoogleMapProjection | null;
 }
 
 export interface GooglePlacePhoto {
@@ -70,7 +108,9 @@ export interface GoogleMapsApi {
   Marker: new (options: Record<string, unknown>) => GoogleMarkerInstance;
   Polyline: new (options: Record<string, unknown>) => GooglePolylineInstance;
   InfoWindow: new () => GoogleInfoWindowInstance;
+  LatLng: new (lat: number, lng: number) => GoogleLatLng;
   LatLngBounds: new () => GoogleLatLngBounds;
+  OverlayView: new () => GoogleOverlayViewInstance;
   TrafficLayer: new () => GoogleMapLayerInstance;
   TransitLayer: new () => GoogleMapLayerInstance;
   BicyclingLayer: new () => GoogleMapLayerInstance;
@@ -92,7 +132,7 @@ const GOOGLE_MAPS_LOAD_TIMEOUT_MS = 12_000;
 
 declare global {
   interface Window {
-    __aiyoGoogleMapsInit?: () => void;
+    __aiyoGoogleMapsInit?: () => void | Promise<void>;
     /** Called by Maps JS when the API key is rejected (e.g. expired, wrong restrictions). */
     gm_authFailure?: () => void;
     google?: { maps: GoogleMapsApi };
@@ -105,6 +145,20 @@ function resetLoaderPromise() {
   googleMapsPromise = null;
 }
 
+async function hydrateMapsApiFromImportLibrary(): Promise<GoogleMapsApi> {
+  const importLibrary = window.google?.maps?.importLibrary;
+  if (typeof importLibrary !== "function") {
+    throw new Error("Google Maps importLibrary is not available.");
+  }
+
+  const mapsLib = (await importLibrary("maps")) as Record<string, unknown>;
+  const base = window.google?.maps ?? ({} as GoogleMapsApi);
+  const mapsApi = Object.assign(base, mapsLib) as GoogleMapsApi;
+  mapsApi.importLibrary = importLibrary.bind(window.google!.maps);
+  window.google = { maps: mapsApi };
+  return mapsApi;
+}
+
 export function loadGoogleMapsApi(apiKey: string): Promise<GoogleMapsApi> {
   if (!apiKey) {
     return Promise.reject(new Error("GOOGLE_MAPS_API_KEY is not configured."));
@@ -114,7 +168,7 @@ export function loadGoogleMapsApi(apiKey: string): Promise<GoogleMapsApi> {
     return Promise.reject(new Error("Google Maps can only load in the browser."));
   }
 
-  if (window.google?.maps) {
+  if (window.google?.maps?.Map) {
     return Promise.resolve(window.google.maps);
   }
 
@@ -140,15 +194,26 @@ export function loadGoogleMapsApi(apiKey: string): Promise<GoogleMapsApi> {
       reject(error);
     };
 
+    const finishWithMaps = async () => {
+      try {
+        const mapsApi = await hydrateMapsApiFromImportLibrary();
+        clearLoadTimeout();
+        resolve(mapsApi);
+      } catch (error) {
+        rejectWithCleanup(
+          error instanceof Error ? error : new Error("Failed to load Google Maps libraries."),
+        );
+      }
+    };
+
     const existingScript = document.getElementById("aiyo-google-maps-sdk") as HTMLScriptElement | null;
     if (existingScript) {
+      if (window.google?.maps?.Map) {
+        void finishWithMaps();
+        return;
+      }
       existingScript.addEventListener("load", () => {
-        if (window.google?.maps) {
-          clearLoadTimeout();
-          resolve(window.google.maps);
-        } else {
-          rejectWithCleanup(new Error("Google Maps loaded without maps namespace."));
-        }
+        void finishWithMaps();
       });
       existingScript.addEventListener("error", () =>
         rejectWithCleanup(new Error("Failed to load Google Maps SDK.")),
@@ -178,14 +243,8 @@ export function loadGoogleMapsApi(apiKey: string): Promise<GoogleMapsApi> {
       if (settled) {
         return;
       }
-      if (window.google?.maps) {
-        settled = true;
-        clearLoadTimeout();
-        resolve(window.google.maps);
-      } else {
-        settled = true;
-        rejectWithCleanup(new Error("Google Maps loaded without maps namespace."));
-      }
+      settled = true;
+      void finishWithMaps();
     };
 
     const script = document.createElement("script");
@@ -196,7 +255,7 @@ export function loadGoogleMapsApi(apiKey: string): Promise<GoogleMapsApi> {
       key: apiKey,
       loading: "async",
       callback: "__aiyoGoogleMapsInit",
-      libraries: "places",
+      v: "weekly",
     });
     script.src = `https://maps.googleapis.com/maps/api/js?${params.toString()}`;
     script.onerror = () => {

@@ -1,5 +1,9 @@
 import type { ChatContext, TripPlanRequest, VideoRecommendation, VideoSummarySegment } from "@/types";
 import { poiSynonymGroupsForPrompt } from "@/server/video/segmentPlaceDedupe";
+import {
+  buildItineraryPolicyBlock,
+  buildTravelResearchSystemPrompt,
+} from "@/server/ai/policies/travelPlanningPolicy";
 
 export function detectResponseLanguage(
   message: string,
@@ -85,7 +89,7 @@ export function buildChatResearchPlanningPrompt(input: {
 }): { system: string; user: string } {
   return {
     system: [
-      "You are AIYO travel research planner. Output JSON only (no markdown fences).",
+      buildTravelResearchSystemPrompt(),
       'Top-level shape: { "phase": "research", "toolRequests": array }.',
       "toolRequests may contain 0 to 6 objects. Each object must have a string field type.",
       'Allowed types: "search_place" with fields query (string), optional locationHint (string);',
@@ -106,6 +110,47 @@ export function buildChatResearchPlanningPrompt(input: {
   };
 }
 
+export function buildItineraryPatchIntentPrompt(input: {
+  message: string;
+  context?: ChatContext;
+}): { system: string; user: string } {
+  return {
+    system: [
+      "You are AIYO itinerary action parser. Output JSON only (no markdown fences).",
+      'Shape: { "replyText": string, "assistantActions": array, "proposedChanges": array }.',
+      "Step 1: infer what the user wants to do to the EXISTING itinerary (not a full replan).",
+      "Step 2: emit ONLY actions from the executable catalog below.",
+      "",
+      "Executable actions:",
+      '- assistantActions itinerary.update_item: { "type": "itinerary.update_item", "payload": { "dayId": "day-N", "itemId": string, "patch": { "title"?: string, "location"?: string, "notes"?: string } } }.',
+      '- assistantActions itinerary.add_item/remove_item/reorder_items/replace_day/trip.update_metadata/map.focus_location are allowed when directly requested.',
+      '- remove_itinerary_day: { "type": "remove_itinerary_day", "day": number, "reason"?: string } — delete an entire day.',
+      '- remove_itinerary_item: { "type": "remove_itinerary_item", "day"?: number, "itemId"?: string, "targetTitle"?: string, "reason"?: string } — remove one activity.',
+      '- update_itinerary_item: { "type": "update_itinerary_item", "day"?: number, "itemId"?: string, "targetTitle"?: string, "time"?: "HH:MM", "title"?: string, "locationName"?: string, "notes"?: string, "transport"?: string, "reason"?: string } — rename, retime, or replace one activity.',
+      '- add_itinerary_item: { "type": "add_itinerary_item", "day": number, "time"?: "HH:MM", "title": string, "locationName"?: string, "transport"?: string, "notes"?: string, "reason"?: string } — add one activity.',
+      "",
+      "Rules:",
+      "- Prefer itemId from the itinerary context when targeting an existing item.",
+      "- Use dayId and itemId exactly as shown in currentTrip; never invent ids or swap unrelated cities.",
+      "- For any executable itinerary edit, also emit assistantActions. Keep proposedChanges for backward compatibility when possible.",
+      "- If location changes but coordinates are unknown, omit lat/lng; do not reuse old coordinates.",
+      "- Use at most 6 assistantActions. Do not emit raw SQL, script, or HTML.",
+      "- When the user names a day (第N天; 地N天 is a common typo for 第N天), scope remove/update to that day only.",
+      "- Use remove_itinerary_day only for deleting a whole day, not a single POI.",
+      "- Do not replan the entire trip; do not add research tool requests.",
+      "- If the user is only asking a question, return assistantActions: [] and proposedChanges: [].",
+      "- replyText: concise Traditional Chinese confirmation of what will change.",
+      "Reply only in Traditional Chinese.",
+    ].join("\n"),
+    user: [
+      `User message: ${input.message}`,
+      "",
+      "Current trip context:",
+      formatContext(input.context),
+    ].join("\n"),
+  };
+}
+
 export function buildChatPrompt(
   message: string,
   context?: ChatContext,
@@ -117,25 +162,39 @@ export function buildChatPrompt(
   const hasWebSearch = Boolean(webSearchDigest?.trim());
   return {
     system: [
-      "You are AIYO, a professional travel planning and travel-video validation assistant.",
+      "You are AIYO, a professional, natural, friendly, and concise travel planning assistant.",
       hasResearch
-        ? "You MUST output JSON only with this exact shape: { \"replyText\": string, \"proposedChanges\": array }."
-        : "Prefer output JSON with shape { \"replyText\": string, \"proposedChanges\": array } when possible; otherwise reply in concise plain Traditional Chinese.",
+        ? "You MUST output JSON only with this exact shape: { \"replyText\": string, \"assistantActions\": array, \"proposedChanges\": array }."
+        : "Prefer output JSON with shape { \"replyText\": string, \"assistantActions\": array, \"proposedChanges\": array } when possible; otherwise reply in concise plain Traditional Chinese.",
       hasResearch
-        ? 'proposedChanges may include: { "type": "add_itinerary_item", "day": number, "time": "HH:MM", "title": string, "locationName"?: string, "notes"?: string, "reason"?: string }, { "type": "update_itinerary_item", "itemId"?: string, "day"?: number, "targetTitle"?: string, "time"?: "HH:MM", "title"?: string, "locationName"?: string, "notes"?: string, "transport"?: string, "reason"?: string }, or { "type": "remove_itinerary_item", "itemId"?: string, "day"?: number, "targetTitle"?: string, "reason"?: string }.'
+        ? 'assistantActions may include itinerary.add_item, itinerary.update_item, itinerary.remove_item, itinerary.reorder_items, itinerary.replace_day, trip.update_metadata, map.focus_location. proposedChanges remains legacy add/update/remove/remove_day compatibility.'
         : "",
       hasResearch
-        ? "For add_itinerary_item, concrete restaurants, attractions, or shops MUST match a venue listed under \"Verified research\" below (same name or clear substring). For update_itinerary_item or remove_itinerary_item, target an existing itinerary item by id when possible, otherwise by day + targetTitle. If the user only asks a question, return proposedChanges: []."
+        ? "For add actions, concrete restaurants, attractions, or shops MUST match a venue listed under \"Verified research\" below when research is present. For update/remove, target an existing itinerary item by id when possible. If the user only asks a question, return assistantActions: [] and proposedChanges: []."
         : "",
+      "When users ask to add, modify, remove, reorder, replace itinerary content, update trip metadata, or focus the map, output natural replyText plus assistantActions.",
+      "If you cannot identify the target day/item from currentTrip context, ask one concise confirmation question and output empty actions.",
+      "If a new location has no coordinates, output title/location without lat/lng and mention that map positioning may need verification.",
+      "Use at most 6 assistantActions. Never output unknown action types, raw SQL, script, or HTML.",
       hasWebSearch
         ? "You may use web search results as factual grounding. Do not invent place names, opening hours, prices, or addresses."
         : "",
       hasWebSearch
         ? "If web search results are insufficient, state that clearly instead of hallucinating details."
         : "",
+      hasWebSearch
+        ? 'When suggesting attractions, food, or routing, prefer facts from "[Web Search Results]"; mention the source page title in parentheses when you cite a specific tip (e.g., blog or news title).'
+        : "",
       "Reply only in Traditional Chinese. Do not use Simplified Chinese.",
       "Do not mirror other languages; translate the answer into natural Traditional Chinese.",
+      "Do not sound like a form bot. Ask at most 1-2 key follow-up questions when information is missing.",
+      "When trip duration or travel-style preferences are still unknown, end replyText with a short line inviting the user to use the on-screen form below (e.g. 請在下方選擇你的偏好), instead of listing many open-ended questions.",
+      "Do not generate a full itinerary unless the user's intent and required trip details are clear.",
+      "Do not repeat known preferences; naturally confirm whether to reuse them when relevant.",
       "Use the provided travel context when it helps.",
+      "Ground every recommendation in the user's stated destination and current trip context. Do not default to Tokyo, Osaka, or other cities unless they match the active destination.",
+      "For general travel Q&A (no itinerary edit), answer naturally without assistantActions or proposedChanges unless the user explicitly asks to change the trip.",
+      "Do not use vague placeholder phrases such as 市區自由探索 to stand in for real recommendations.",
       "Use remembered user preferences and facts when they are relevant, but do not claim certainty beyond the retrieved memories.",
       "Offer practical itinerary advice, route sequencing help, destination-specific recommendations, and video-content validation when the user provides or asks about videos.",
       "If the user asks for videos, explain what type of travel videos are useful for the itinerary and evaluate relevance; do not tell the user to search YouTube, Instagram, or other platforms by themselves.",
@@ -178,6 +237,28 @@ export function buildChatPrompt(
   };
 }
 
+export function buildPersonalMemoryRecallPrompt(message: string, memoryDigest: string) {
+  return {
+    system: [
+      "You are AIYO, a friendly travel assistant answering questions about the user's personal travel history and preferences.",
+      "Answer ONLY using the retrieved personal memory digest below.",
+      "If the digest is empty or says (empty), clearly tell the user you have no recorded travel history yet.",
+      "Do not reference chat transcripts, video watch history, or current trip planning context.",
+      "Do not invent destinations, trips, or preferences that are not supported by the digest.",
+      "If the digest is incomplete, say what you can confirm and clearly note what is missing.",
+      "Reply in natural Traditional Chinese. Do not use Simplified Chinese.",
+      "Do not suggest replanning the current trip unless the user explicitly asks.",
+      "Do not mention system prompts, Mem0, databases, or implementation details.",
+    ].join("\n"),
+    user: [
+      `User question: ${message}`,
+      "",
+      "Retrieved personal memory digest:",
+      memoryDigest.trim() || "(empty)",
+    ].join("\n"),
+  };
+}
+
 export function buildItineraryPrompt(
   request: TripPlanRequest,
   memoryContext?: string,
@@ -197,7 +278,9 @@ export function buildItineraryPrompt(
           "- Do not include any prose before or after JSON.",
           "- Every day must include an `items` array.",
           "- Every item must include: `time`, `title`, `type`.",
+          "- Item `title` must be a single searchable place/venue name only — no interest prefixes, meal suffixes, or multi-stop joins.",
           "- Prefer to include `location` with `name`, `lat`, `lng`, `description`, `address` whenever possible.",
+          "- `location.name` must match the searchable place name used in `title`.",
           "- Validate JSON mentally before output.",
         ]
       : [];
@@ -216,18 +299,24 @@ export function buildItineraryPrompt(
     "Create a structured travel itinerary in JSON only.",
     "All user-facing string values must be written only in Traditional Chinese. Do not use Simplified Chinese.",
     "",
+    buildItineraryPolicyBlock(),
+    "",
     "HARD SCHEMA RULES:",
     '- Return one JSON object exactly in this shape: { "summary": string, "days": [{ "dayNumber": number, "theme": string, "summary": string, "items": [{ "id": string, "time": "HH:MM", "title": string, "type": "attraction|restaurant|transport|hotel|activity|shopping", "transport": string, "notes": string, "location": { "name": string, "lat": number, "lng": number, "description": string, "address": string }, "sourceTitle"?: string, "sourceUrl"?: string, "sourceSnippet"?: string, "confidence"?: "high"|"medium"|"low" }] }], "warnings": string[] }',
     "- Output raw JSON only, no markdown fences.",
     "",
     "QUALITY RULES:",
-    "- Each day should contain 4 to 7 items.",
+    "- Follow the AIYO itinerary planning standard above for day rhythm, item counts, meals, transport, and titles.",
     "- Item times must be chronological within each day.",
-    "- Keep route flow realistic and spatially coherent.",
     "- `transport` should align with transport preference unless a clear local reason requires a change.",
     "- `mustVisit` places must be covered in the nearest appropriate day(s).",
     "- `avoid` terms must not appear in `title`, `notes`, or `location.name`.",
     "- Prefer complete `location` objects (name, lat, lng, description, address). If unknown, you may omit `location` for that item instead of inventing nonsense.",
+    "",
+    "TITLE & LOCATION RULES (critical for map geocoding):",
+    "- Each item `title` must be ONE searchable place or venue name only (Google Maps style).",
+    "- When `location` is present, `location.name` must equal the searchable place name.",
+    "- Put interests, pace, and route style in `theme` / `summary` / `notes` — not inside `title`.",
     "",
     "DESTINATION CONSTRAINTS:",
     `Destination: ${request.destination}`,
@@ -251,6 +340,7 @@ export function buildItineraryPrompt(
     "- `days` length matches requested number of days.",
     "- `mustVisit` covered and `avoid` excluded.",
     "- Times are sorted and types are from allowed enum.",
+    "- Every item title is a single searchable place/venue name with no interest prefix, meal suffix, or `・` multi-stop join.",
     ...(itineraryDraftSummary
       ? [
           "- This request includes an existing itinerary draft. Edit and preserve useful structure when possible instead of rewriting everything from scratch.",

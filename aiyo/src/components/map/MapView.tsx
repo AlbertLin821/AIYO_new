@@ -1,8 +1,9 @@
 "use client";
+"use memo";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
-import { AlertCircle, Layers, MapPin, Navigation, RefreshCcw, ZoomIn, ZoomOut } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { m } from "@/lib/motion";
+import { AlertCircle, MapPin, Navigation, RefreshCcw, Settings, ZoomIn, ZoomOut } from "lucide-react";
 import type {
   GoogleInfoWindowInstance,
   GoogleMapLayerInstance,
@@ -26,8 +27,31 @@ import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
 import type { LocationReference, MapPin as MapPinType } from "@/types";
 import { zhTW as t } from "@/locales/zh-TW";
+import { buildPinStopOrderByPinId } from "@/lib/mapPinItineraryLink";
 import { createMapPinElement, encodeMapPinDataUrl, MAP_PIN_VIEWBOX_H, MAP_PIN_VIEWBOX_W } from "@/components/map/mapPinIcon";
 import { MapPinMarker } from "@/components/map/MapPinMarker";
+import MapPinInfoPanel from "@/components/map/MapPinInfoPanel";
+import MapPoiAddOverlay from "@/components/map/MapPoiAddOverlay";
+import { buildPinInfoContent } from "@/components/map/mapPinInfoShared";
+import { resolvePlacePhotoUrl } from "@/lib/placePhotoUrl";
+import { MAP_CONTROLS_OFFSET_WITH_PANEL } from "@/lib/mapLayout";
+import { loadMapPreferences, saveMapPreferences } from "@/lib/mapPreferences";
+import {
+  buildMapLabelStyles,
+  type MapLabelToggleKey,
+} from "@/lib/mapLabelStyles";
+import {
+  collectMapViewportPoints,
+  DEFAULT_MAP_TW_CENTER,
+  DEFAULT_MAP_TW_ZOOM,
+  focusLocationToPoint,
+  getMockLatLngRanges,
+  pinsGeometryKey,
+  shouldUseTaiwanDefaultViewport,
+  type MapViewportPoint,
+} from "@/lib/mapViewport";
+import { syncService } from "@/services/syncService";
+import { geocodeQuery } from "@/services/geocodeItineraryItems";
 
 const GOOGLE_MAPS_API_KEY = (
   process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""
@@ -37,9 +61,9 @@ const FORCE_MOCK_MAP = process.env.NEXT_PUBLIC_ENABLE_MOCK_MAPS === "true";
 /** Vector map ID from Cloud Console (Map Management). Required for AdvancedMarkerElement; omit to use legacy Marker. */
 const GOOGLE_MAPS_MAP_ID = (process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || "").trim();
 
-/** 無任何標記時：地圖預設對準台灣本島（略放大、視覺置中）。 */
-const DEFAULT_MAP_TW_CENTER = { lat: 23.62, lng: 121.0 };
-const DEFAULT_MAP_TW_ZOOM = 8;
+const PLACE_DETAILS_CACHE_PREFIX = "aiyo:place-details:v2:";
+const PLACE_DETAILS_HIT_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+const PLACE_DETAILS_MISS_TTL_MS = 1000 * 60 * 60 * 24;
 
 const MAP_TYPE_OPTIONS: Array<{ value: GoogleMapTypeId; label: string }> = [
   { value: "roadmap", label: t.map.mapTypeRoadmap },
@@ -56,9 +80,12 @@ const MAP_LAYER_OPTIONS: Array<{ value: MapOverlayLayer; label: string }> = [
   { value: "bicycling", label: t.map.layerBicycling },
 ];
 
-/** Mock 地圖無標記時的示意範圍（約略台灣區域）。 */
-const MOCK_TW_LAT_RANGE = { min: 21.95, max: 25.35 };
-const MOCK_TW_LNG_RANGE = { min: 119.35, max: 122.05 };
+const MAP_LABEL_TOGGLE_OPTIONS: Array<{ value: MapLabelToggleKey; label: string }> = [
+  { value: "highway", label: t.map.labelHighway },
+  { value: "road", label: t.map.labelRoad },
+  { value: "poi", label: t.map.labelPoi },
+  { value: "administrative", label: t.map.labelAdministrative },
+];
 
 type SdkState = "loading" | "ready" | "error";
 
@@ -66,6 +93,12 @@ type RuntimeMapsConfig = {
   googleMapsApiKey: string;
   googleMapsMapId: string;
   enableMockMaps: boolean;
+};
+
+type PlaceDetailsCacheEntry = {
+  cachedAt: number;
+  details?: Partial<MapPinType>;
+  miss?: boolean;
 };
 
 function normalizeMapId(value: string): string {
@@ -108,52 +141,13 @@ function segmentRouteDisplayMinutes(
   return segment.estimatedMinutes;
 }
 
-function buildMarkerPinIcon(maps: GoogleMapsApi, color: string, selected: boolean) {
+function buildMarkerPinIcon(maps: GoogleMapsApi, color: string, selected: boolean, stopLabel?: number) {
   const baseW = selected ? 40 : 34;
   const height = Math.round((MAP_PIN_VIEWBOX_H / MAP_PIN_VIEWBOX_W) * baseW);
   return {
-    url: encodeMapPinDataUrl(color, selected),
+    url: encodeMapPinDataUrl(color, selected, stopLabel),
     scaledSize: new maps.Size(baseW, height),
     anchor: new maps.Point(baseW / 2, height),
-  };
-}
-
-function pinSourceLabel(source: string | undefined) {
-  if (!source || source === "manual") {
-    return t.map.sourceManual;
-  }
-  if (source === "itinerary") {
-    return t.map.sourceItinerary;
-  }
-  if (source === "video") {
-    return t.map.sourceVideo;
-  }
-  return source;
-}
-
-function buildLocationBackfilledPin(
-  pin: MapPinType,
-  linkedItem?: { time: string; title: string; type: string; transport?: string; notes?: string; location?: LocationReference },
-): MapPinType {
-  const location = linkedItem?.location;
-  if (!location) {
-    return pin;
-  }
-  return {
-    ...pin,
-    description: pin.description || linkedItem?.notes || location.description,
-    address: pin.address || location.address,
-    placeId: pin.placeId || location.placeId,
-    photoUrl: pin.photoUrl || location.photoUrl,
-    thumbnail: pin.thumbnail || location.thumbnail || location.photoUrl,
-    openingHours: pin.openingHours || location.openingHours,
-    phoneNumber: pin.phoneNumber || location.phoneNumber,
-    website: pin.website || location.website,
-    googleMapsUrl: pin.googleMapsUrl || location.googleMapsUrl,
-    rating: pin.rating ?? location.rating,
-    userRatingsTotal: pin.userRatingsTotal ?? location.userRatingsTotal,
-    confidence: pin.confidence ?? location.confidence,
-    verified: pin.verified ?? location.verified,
   };
 }
 
@@ -206,6 +200,47 @@ function detailsRequestKey(pin: MapPinType, linkedItem?: { location?: LocationRe
   return `name:${pin.name.trim().toLowerCase()}:${pin.lat.toFixed(5)}:${pin.lng.toFixed(5)}`;
 }
 
+function normalizePhotoPatch<T extends Partial<MapPinType>>(patch: T): T {
+  const next = { ...patch };
+  if (patch.photoUrl) {
+    next.photoUrl = resolvePlacePhotoUrl(patch.photoUrl) ?? patch.photoUrl;
+  }
+  if (patch.thumbnail) {
+    next.thumbnail = resolvePlacePhotoUrl(patch.thumbnail) ?? patch.thumbnail;
+  }
+  return next;
+}
+
+function readPlaceDetailsCache(key: string): PlaceDetailsCacheEntry | null {
+  try {
+    const raw = window.localStorage.getItem(`${PLACE_DETAILS_CACHE_PREFIX}${key}`);
+    if (!raw) {
+      return null;
+    }
+    const entry = JSON.parse(raw) as PlaceDetailsCacheEntry;
+    const age = Date.now() - Number(entry.cachedAt || 0);
+    const ttl = entry.miss ? PLACE_DETAILS_MISS_TTL_MS : PLACE_DETAILS_HIT_TTL_MS;
+    if (!Number.isFinite(age) || age < 0 || age > ttl) {
+      window.localStorage.removeItem(`${PLACE_DETAILS_CACHE_PREFIX}${key}`);
+      return null;
+    }
+    return entry;
+  } catch {
+    return null;
+  }
+}
+
+function writePlaceDetailsCache(key: string, entry: Omit<PlaceDetailsCacheEntry, "cachedAt">) {
+  try {
+    window.localStorage.setItem(
+      `${PLACE_DETAILS_CACHE_PREFIX}${key}`,
+      JSON.stringify({ ...entry, cachedAt: Date.now() }),
+    );
+  } catch {
+    /* localStorage can be unavailable in private or restricted contexts. */
+  }
+}
+
 function findLinkedItineraryItem(
   itinerary: ReturnType<typeof useTripStore.getState>["itinerary"],
   pin: MapPinType | null,
@@ -233,98 +268,6 @@ function findLinkedItineraryItem(
     });
 }
 
-function buildRoutePlanningUrl(pin: Pick<MapPinType, "lat" | "lng" | "address" | "placeId">): string {
-  const routeParams = new URLSearchParams({
-    api: "1",
-    destination: `${pin.lat},${pin.lng}`,
-  });
-  if (pin.placeId) {
-    routeParams.set("destination_place_id", pin.placeId);
-  }
-  return `https://www.google.com/maps/dir/?${routeParams.toString()}`;
-}
-
-function buildGoogleMapsUrl(pin: Pick<MapPinType, "lat" | "lng" | "placeId" | "googleMapsUrl">): string | null {
-  if (pin.googleMapsUrl) {
-    return pin.googleMapsUrl;
-  }
-  if (!pin.placeId) {
-    return null;
-  }
-  const params = new URLSearchParams({
-    api: "1",
-    query: `${pin.lat},${pin.lng}`,
-    query_place_id: pin.placeId,
-  });
-  return `https://www.google.com/maps/search/?${params.toString()}`;
-}
-
-function buildPinInfoContent(
-  pin: MapPinType,
-  linkedItem?: { time: string; title: string; type: string; transport?: string; notes?: string; location?: LocationReference },
-): string {
-  const resolvedPin = buildLocationBackfilledPin(pin, linkedItem);
-  const routeUrl = buildRoutePlanningUrl(resolvedPin);
-  const googleMapsUrl = buildGoogleMapsUrl(resolvedPin);
-  const thumbnail = resolvedPin.thumbnail || resolvedPin.photoUrl;
-  const empty = t.map.notProvided;
-
-  return `
-    <article style="min-width:280px;max-width:340px;padding:0 0 8px;font-family:inherit;color:#1f2937;overflow:hidden;">
-      <div style="height:132px;background:#eef3f7;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:12px 12px 8px 8px;">
-        ${
-          thumbnail
-            ? `<img src="${escapeHtml(thumbnail)}" alt="${escapeHtml(t.map.infoThumbnail)}" style="width:100%;height:100%;object-fit:cover;" />`
-            : `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#6b7280;font-size:12px;">${escapeHtml(t.map.infoThumbnail)}</div>`
-        }
-      </div>
-      <div style="padding:12px 8px 0;">
-        <div style="display:flex;align-items:flex-start;gap:8px;">
-              <div style="width:12px;height:12px;border-radius:999px;background:${escapeHtml(resolvedPin.color || "#5a7ea3")};margin-top:5px;box-shadow:0 0 0 3px rgba(255,255,255,.9),0 2px 8px rgba(0,0,0,.18);"></div>
-              <div style="min-width:0;flex:1;">
-            <h3 style="margin:0;font-size:16px;line-height:1.35;font-weight:700;color:#111827;">${escapeHtml(resolvedPin.name)}</h3>
-            <p style="margin:4px 0 0;font-size:12px;line-height:1.45;color:#4b5563;">${escapeHtml(resolvedPin.description || t.map.noDescription)}</p>
-          </div>
-        </div>
-      </div>
-      <dl style="display:grid;grid-template-columns:72px 1fr;gap:6px 8px;margin:12px 8px 0;font-size:12px;line-height:1.45;">
-        <dt style="color:#6b7280;">${escapeHtml(t.map.infoAddress)}</dt>
-        <dd style="margin:0;color:#1f2937;">${escapeHtml(resolvedPin.address || empty)}</dd>
-        <dt style="color:#6b7280;">${escapeHtml(t.map.infoOpeningHours)}</dt>
-        <dd style="margin:0;color:#1f2937;">${escapeHtml(resolvedPin.openingHours || empty)}</dd>
-        <dt style="color:#6b7280;">${escapeHtml(t.map.infoPhone)}</dt>
-        <dd style="margin:0;color:#1f2937;">${escapeHtml(resolvedPin.phoneNumber || empty)}</dd>
-        <dt style="color:#6b7280;">${escapeHtml(t.map.infoSource)}</dt>
-        <dd style="margin:0;color:#1f2937;">${escapeHtml(pinSourceLabel(resolvedPin.source))}${resolvedPin.dayNumber ? ` · D${escapeHtml(resolvedPin.dayNumber)}` : ""}</dd>
-        <dt style="color:#6b7280;">${escapeHtml(t.map.infoCoords)}</dt>
-        <dd style="margin:0;color:#1f2937;">${escapeHtml(resolvedPin.lat.toFixed(5))}, ${escapeHtml(resolvedPin.lng.toFixed(5))}</dd>
-      </dl>
-      <a href="${escapeHtml(routeUrl)}" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;justify-content:center;margin:12px 8px 0;padding:9px 12px;border-radius:10px;background:#426991;color:white;font-size:12px;font-weight:700;text-decoration:none;">
-        ${escapeHtml(t.map.infoRoute)}
-      </a>
-      ${
-        googleMapsUrl
-          ? `<a href="${escapeHtml(googleMapsUrl)}" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;justify-content:center;margin:8px 8px 0;padding:9px 12px;border-radius:10px;border:1px solid #cbd5e1;color:#1f2937;font-size:12px;font-weight:700;text-decoration:none;">
-              ${escapeHtml(t.map.infoGoogleMaps)}
-            </a>`
-          : ""
-      }
-      ${
-        linkedItem
-          ? `<div style="margin:12px 8px 0;padding:9px 10px;border-radius:12px;background:#f4f7fb;border:1px solid #dbe7f3;">
-              <div style="font-size:11px;font-weight:700;color:#426991;letter-spacing:.04em;">${escapeHtml(t.map.linkedItinerary)}</div>
-              <div style="margin-top:4px;font-size:13px;font-weight:650;color:#111827;">${escapeHtml(linkedItem.time)} ${escapeHtml(linkedItem.title)}</div>${
-                linkedItem.transport
-                  ? `<div style="margin-top:3px;font-size:12px;color:#4b5563;">${escapeHtml(linkedItem.transport)}</div>`
-                  : ""
-              }
-            </div>`
-          : ""
-      }
-    </article>
-  `;
-}
-
 function buildRouteSegmentInfoContent(segment: ItineraryRouteSegment, displayMinutes: number): string {
   return `
     <article style="min-width:240px;max-width:320px;padding:10px 8px;font-family:inherit;color:#1f2937;">
@@ -344,32 +287,49 @@ function buildRouteSegmentInfoContent(segment: ItineraryRouteSegment, displayMin
   `;
 }
 
+function segmentTouchesLinkedItem(
+  segment: ItineraryRouteSegment,
+  linkedItem: ReturnType<typeof findLinkedItineraryItem> | undefined,
+) {
+  if (!linkedItem) {
+    return false;
+  }
+  return segment.fromItemId === linkedItem.id || segment.toItemId === linkedItem.id;
+}
+
 function MockMapFallback({
   pins,
+  pinStopById,
   routeSegments,
+  highlightedRouteIds,
+  showItineraryRoutes,
+  viewportPoints,
   selectedPinId,
-  setSelectedPinId,
+  onPinMarkerClick,
+  onPinInfoClose,
+  itinerary,
   zoom,
+  readOnly = false,
 }: {
   pins: MapPinType[];
+  pinStopById: ReadonlyMap<string, number>;
   routeSegments: ItineraryRouteSegment[];
+  highlightedRouteIds: Set<string>;
+  showItineraryRoutes: boolean;
+  viewportPoints: MapViewportPoint[];
   selectedPinId: string | null;
-  setSelectedPinId: (value: string | null) => void;
+  onPinMarkerClick: (pinId: string) => void;
+  onPinInfoClose: () => void;
+  itinerary: ReturnType<typeof useTripStore.getState>["itinerary"];
   zoom: number;
+  readOnly?: boolean;
 }) {
   const [hoveredPin, setHoveredPin] = useState<string | null>(null);
   const segmentDirectionsMinutes = useMapStore((s) => s.segmentDirectionsMinutes);
+  const selectedPin = pins.find((pin) => pin.id === selectedPinId) || null;
+  const selectedLinkedItem = findLinkedItineraryItem(itinerary, selectedPin);
 
-  const lats = pins.map((pin) => pin.lat);
-  const lngs = pins.map((pin) => pin.lng);
-  const latRange =
-    lats.length > 0
-      ? { min: Math.min(...lats) - 0.012, max: Math.max(...lats) + 0.012 }
-      : MOCK_TW_LAT_RANGE;
-  const lngRange =
-    lngs.length > 0
-      ? { min: Math.min(...lngs) - 0.012, max: Math.max(...lngs) + 0.012 }
-      : MOCK_TW_LNG_RANGE;
+  const { latRange, lngRange } = getMockLatLngRanges(viewportPoints);
 
   function getPos(lat: number, lng: number) {
     return {
@@ -408,7 +368,9 @@ function MockMapFallback({
           </svg>
 
           <svg className="pointer-events-none absolute inset-0 z-[1] h-full w-full">
-            {routeSegments.map((segment) => {
+            {showItineraryRoutes
+              ? routeSegments.map((segment) => {
+                const isHighlighted = highlightedRouteIds.has(segment.id);
                 const from = getPos(segment.from.lat, segment.from.lng);
                 const to = getPos(segment.to.lat, segment.to.lng);
                 const midX = (from.x + to.x) / 2;
@@ -421,9 +383,9 @@ function MockMapFallback({
                       x2={`${to.x}%`}
                       y2={`${to.y}%`}
                       stroke={segment.color}
-                      strokeWidth="3"
+                      strokeWidth={isHighlighted ? "5" : "3"}
                       strokeDasharray="8 6"
-                      opacity="0.72"
+                      opacity={isHighlighted ? "1" : "0.48"}
                     />
                     <text
                       x={`${midX}%`}
@@ -441,14 +403,48 @@ function MockMapFallback({
                     </text>
                   </g>
                 );
-              })}
+              })
+              : null}
           </svg>
 
           {pins.map((pin) => {
             const pos = getPos(pin.lat, pin.lng);
             const isSelected = pin.id === selectedPinId;
+            const pinBody = (
+              <div className={cn("group relative", readOnly ? "cursor-pointer" : "cursor-pointer transition-transform group-hover:scale-105")}>
+                <MapPinMarker
+                  fill={pin.color || "#5a7ea3"}
+                  selected={isSelected}
+                  stopOrder={pinStopById.get(pin.id)}
+                  decorative
+                />
+                {!readOnly && hoveredPin === pin.id && !selectedPinId && (
+                  <div className="absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-xl border border-border bg-surface px-3 py-2 text-left shadow-soft-lg">
+                    <p className="text-xs font-semibold text-foreground">{pin.name}</p>
+                    <p className="mt-0.5 max-w-[220px] text-[10px] text-muted">{pin.description}</p>
+                  </div>
+                )}
+              </div>
+            );
+            if (readOnly) {
+              return (
+                <m.button
+                  key={pin.id}
+                  initial={{ scale: 0, y: 10 }}
+                  animate={{ scale: 1, y: 0 }}
+                  type="button"
+                  data-testid="map-pin-marker"
+                  aria-label={pin.name}
+                  className="absolute z-[2] -translate-x-1/2 -translate-y-full outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-primary"
+                  style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
+                  onClick={() => onPinMarkerClick(pin.id)}
+                >
+                  {pinBody}
+                </m.button>
+              );
+            }
             return (
-              <motion.button
+              <m.button
                 key={pin.id}
                 initial={{ scale: 0, y: 10 }}
                 animate={{ scale: 1, y: 0 }}
@@ -459,20 +455,22 @@ function MockMapFallback({
                 style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
                 onMouseEnter={() => setHoveredPin(pin.id)}
                 onMouseLeave={() => setHoveredPin(null)}
-                onClick={() => setSelectedPinId(pin.id)}
+                onClick={() => onPinMarkerClick(pin.id)}
               >
-                <div className="group relative cursor-pointer transition-transform group-hover:scale-105">
-                  <MapPinMarker fill={pin.color || "#5a7ea3"} selected={isSelected} decorative />
-                  {hoveredPin === pin.id && (
-                    <div className="absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-xl border border-border bg-surface px-3 py-2 text-left shadow-soft-lg">
-                      <p className="text-xs font-semibold text-foreground">{pin.name}</p>
-                      <p className="mt-0.5 max-w-[220px] text-[10px] text-muted">{pin.description}</p>
-                    </div>
-                  )}
-                </div>
-              </motion.button>
+                {pinBody}
+              </m.button>
             );
           })}
+
+          {!readOnly && selectedPin && (
+            <div className="absolute bottom-4 left-4 z-[12] max-w-[calc(100%-2rem)]">
+              <MapPinInfoPanel
+                pin={selectedPin}
+                linkedItem={selectedLinkedItem}
+                onClose={onPinInfoClose}
+              />
+            </div>
+          )}
 
           {pins.length === 0 && (
             <div className="absolute inset-0 z-[2] flex items-center justify-center px-8">
@@ -489,12 +487,25 @@ function MockMapFallback({
   );
 }
 
-export default function MapView() {
+type MapViewProps = {
+  embedded?: boolean;
+  allowPoiAdd?: boolean;
+  /** Chat sidebar: map + pins only — no settings, POI add, or pin info popups. */
+  readOnly?: boolean;
+};
+
+export default function MapView({
+  embedded = false,
+  allowPoiAdd = false,
+  readOnly = false,
+}: MapViewProps) {
+  const effectiveAllowPoiAdd = allowPoiAdd && !readOnly;
   const tripStore = useTripStore();
   const itinerary = tripStore.itinerary;
   const tripDestination = tripStore.destination;
-  const { pins, selectedPinId, setSelectedPinId } = useMapStore();
-  const segmentDirectionsMinutes = useMapStore((s) => s.segmentDirectionsMinutes);
+  const tripId = tripStore.tripId;
+  const { pins, selectedPinId, setSelectedPinId, setPendingPoi, setPanelOpen, clearPins, panelOpen, focusLocation } =
+    useMapStore();
   const pushToast = useToastStore((state) => state.pushToast);
   const [runtimeMapsConfig, setRuntimeMapsConfig] = useState<RuntimeMapsConfig>({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
@@ -503,22 +514,42 @@ export default function MapView() {
   });
   const [runtimeConfigChecked, setRuntimeConfigChecked] = useState(Boolean(GOOGLE_MAPS_API_KEY) || FORCE_MOCK_MAP);
   const useGoogleSdk = Boolean(runtimeMapsConfig.googleMapsApiKey) && !runtimeMapsConfig.enableMockMaps;
+
+  useEffect(() => {
+    if (tripStore.tripId || itinerary.length > 0) {
+      return;
+    }
+    if (useMapStore.getState().pins.length === 0) {
+      return;
+    }
+    clearPins();
+  }, [clearPins, itinerary.length, tripStore.tripId]);
+
+  useEffect(() => {
+    if (!readOnly) {
+      return;
+    }
+    setPendingPoi(null);
+  }, [readOnly, setPendingPoi]);
   const useAdvancedMarkers = Boolean(runtimeMapsConfig.googleMapsMapId);
   const [sdkState, setSdkState] = useState<SdkState>(() => (useGoogleSdk ? "loading" : "error"));
   const [mockZoom, setMockZoom] = useState(1);
-  const [mapType, setMapType] = useState<GoogleMapTypeId>("roadmap");
-  const [enabledLayers, setEnabledLayers] = useState<Record<MapOverlayLayer, boolean>>({
-    traffic: false,
-    transit: false,
-    bicycling: false,
-  });
+  const [mapType, setMapType] = useState<GoogleMapTypeId>(() => loadMapPreferences().mapType);
+  const [enabledLayers, setEnabledLayers] = useState<Record<MapOverlayLayer, boolean>>(
+    () => loadMapPreferences().enabledLayers,
+  );
+  const [labelVisibility, setLabelVisibility] = useState(() => loadMapPreferences().labelVisibility);
+  const [showItineraryRoutes, setShowItineraryRoutes] = useState(
+    () => loadMapPreferences().showItineraryRoutes,
+  );
+  const effectiveShowItineraryRoutes = readOnly ? true : showItineraryRoutes;
   const [mapControlsOpen, setMapControlsOpen] = useState(false);
   const [providerError, setProviderError] = useState<string | null>(null);
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<GoogleMapInstance | null>(null);
+  const [googleMap, setGoogleMap] = useState<GoogleMapInstance | null>(null);
   const infoWindowRef = useRef<GoogleInfoWindowInstance | null>(null);
   const markersRef = useRef<Map<string, GoogleMarkerInstance>>(new Map());
-  const polylinesRef = useRef<GooglePolylineInstance[]>([]);
   const routeLabelMarkersRef = useRef<GoogleMarkerInstance[]>([]);
   const overlayLayersRef = useRef<Record<MapOverlayLayer, GoogleMapLayerInstance | null>>({
     traffic: null,
@@ -526,12 +557,207 @@ export default function MapView() {
     bicycling: null,
   });
   const requestedPlaceDetailsRef = useRef<Set<string>>(new Set());
+  const routePolylinesRef = useRef<
+    Array<{ polyline: GooglePolylineInstance; segmentId: string; usedDirections: boolean }>
+  >([]);
+  const suppressMapClickRef = useRef(false);
+  const selectedPinIdRef = useRef<string | null>(selectedPinId);
+  const highlightedRouteIdsRef = useRef<Set<string>>(new Set());
+  const openPinInfoRef = useRef<(pinId: string) => void>(() => {});
+  const refreshPinInfoRef = useRef<(pinId: string) => void>(() => {});
+  const lastPinsGeometryKeyRef = useRef("");
+  const prevSelectedPinIdForInfoRef = useRef<string | null>(null);
 
   const selectedPin = useMemo(
     () => pins.find((pin) => pin.id === selectedPinId) || null,
     [pins, selectedPinId],
   );
   const routeSegments = useMemo(() => buildItineraryRouteSegments(itinerary), [itinerary]);
+  const pinStopById = useMemo(
+    () => buildPinStopOrderByPinId(itinerary, pins),
+    [itinerary, pins],
+  );
+  const highlightedItem = useMemo(
+    () => findLinkedItineraryItem(itinerary, selectedPin),
+    [itinerary, selectedPin],
+  );
+  const selectedPinRoutes = useMemo(
+    () =>
+      selectedPin
+        ? routeSegments.filter((segment) => segmentTouchesLinkedItem(segment, highlightedItem))
+        : [],
+    [highlightedItem, routeSegments, selectedPin],
+  );
+  const highlightedRouteIds = useMemo(
+    () => new Set(selectedPinRoutes.map((segment) => segment.id)),
+    [selectedPinRoutes],
+  );
+  const [destinationViewport, setDestinationViewport] = useState<MapViewportPoint | null>(null);
+  const viewportPoints = useMemo(() => {
+    const fromPinsAndItinerary = collectMapViewportPoints(pins, itinerary);
+    if (fromPinsAndItinerary.length > 0) {
+      return fromPinsAndItinerary;
+    }
+    return destinationViewport ? [destinationViewport] : fromPinsAndItinerary;
+  }, [destinationViewport, pins, itinerary]);
+
+  useEffect(() => {
+    const destination = tripDestination?.trim();
+    if (!destination || collectMapViewportPoints(pins, itinerary).length > 0) {
+      setDestinationViewport(null);
+      return;
+    }
+
+    let cancelled = false;
+    void geocodeQuery(destination, inferMapsRegionCode(destination))
+      .then((location) => {
+        if (cancelled || !location) {
+          return;
+        }
+        setDestinationViewport({ lat: location.lat, lng: location.lng });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDestinationViewport(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [itinerary, pins, tripDestination]);
+
+  useEffect(() => {
+    selectedPinIdRef.current = selectedPinId;
+  }, [selectedPinId]);
+
+  useEffect(() => {
+    highlightedRouteIdsRef.current = highlightedRouteIds;
+  }, [highlightedRouteIds]);
+
+  const refreshPinInfoContent = useCallback(
+    (pinId: string) => {
+      if (sdkState !== "ready") {
+        return;
+      }
+      const map = mapInstanceRef.current;
+      const infoWindow = infoWindowRef.current;
+      if (!map || !infoWindow) {
+        return;
+      }
+      const pin = pins.find((entry) => entry.id === pinId);
+      if (!pin) {
+        return;
+      }
+      const marker = markersRef.current.get(pinId);
+      if (!marker) {
+        return;
+      }
+      const linkedItem = findLinkedItineraryItem(itinerary, pin);
+      infoWindow.setContent(buildPinInfoContent(pin, linkedItem));
+      infoWindow.open({ map, anchor: marker });
+    },
+    [itinerary, pins, sdkState],
+  );
+
+  const openPinInfoForPinId = useCallback(
+    (pinId: string) => {
+      if (sdkState !== "ready") {
+        return;
+      }
+      const map = mapInstanceRef.current;
+      if (!map) {
+        return;
+      }
+      const pin = pins.find((entry) => entry.id === pinId);
+      if (!pin) {
+        return;
+      }
+      map.panTo({ lat: pin.lat, lng: pin.lng });
+      refreshPinInfoContent(pinId);
+    },
+    [pins, refreshPinInfoContent, sdkState],
+  );
+
+  const panMapToPinId = useCallback(
+    (pinId: string) => {
+      if (sdkState !== "ready") {
+        return;
+      }
+      const map = mapInstanceRef.current;
+      const pin = pins.find((entry) => entry.id === pinId);
+      if (!map || !pin) {
+        return;
+      }
+      map.panTo({ lat: pin.lat, lng: pin.lng });
+      map.setZoom(Math.max(map.getZoom() || 12, 15));
+    },
+    [pins, sdkState],
+  );
+
+  useEffect(() => {
+    openPinInfoRef.current = openPinInfoForPinId;
+    refreshPinInfoRef.current = refreshPinInfoContent;
+  }, [openPinInfoForPinId, refreshPinInfoContent]);
+
+  const handlePinMarkerClick = useCallback(
+    (pinId: string) => {
+      suppressMapClickRef.current = true;
+      if (readOnly) {
+        setSelectedPinId(pinId);
+        return;
+      }
+      if (selectedPinIdRef.current === pinId) {
+        setSelectedPinId(null);
+        return;
+      }
+      setSelectedPinId(pinId);
+      openPinInfoRef.current(pinId);
+    },
+    [readOnly, setSelectedPinId],
+  );
+
+  const handlePinInfoClose = useCallback(() => {
+    setSelectedPinId(null);
+  }, [setSelectedPinId]);
+
+  useEffect(() => {
+    if (readOnly || sdkState !== "ready") {
+      if (readOnly) {
+        infoWindowRef.current?.close?.();
+      }
+      prevSelectedPinIdForInfoRef.current = null;
+      return;
+    }
+    if (!selectedPinId) {
+      infoWindowRef.current?.close?.();
+      prevSelectedPinIdForInfoRef.current = null;
+      return;
+    }
+    const selectionChanged = prevSelectedPinIdForInfoRef.current !== selectedPinId;
+    prevSelectedPinIdForInfoRef.current = selectedPinId;
+    if (selectionChanged) {
+      openPinInfoForPinId(selectedPinId);
+    } else {
+      refreshPinInfoContent(selectedPinId);
+    }
+  }, [
+    itinerary,
+    openPinInfoForPinId,
+    pins,
+    readOnly,
+    refreshPinInfoContent,
+    sdkState,
+    selectedPinId,
+  ]);
+
+  useEffect(() => {
+    if (!readOnly || sdkState !== "ready" || !selectedPinId) {
+      return;
+    }
+    panMapToPinId(selectedPinId);
+  }, [panMapToPinId, readOnly, sdkState, selectedPinId]);
+
   useEffect(() => {
     let cancelled = false;
     fetch("/api/runtime-config", { cache: "no-store" })
@@ -551,7 +777,17 @@ export default function MapView() {
         };
         setRuntimeMapsConfig(nextConfig);
         setRuntimeConfigChecked(true);
-        setSdkState(nextConfig.googleMapsApiKey && !nextConfig.enableMockMaps ? "loading" : "error");
+        const shouldUseGoogle = Boolean(nextConfig.googleMapsApiKey && !nextConfig.enableMockMaps);
+        if (!shouldUseGoogle) {
+          setSdkState("error");
+        } else {
+          setSdkState((current) => {
+            if (current === "ready" || mapInstanceRef.current) {
+              return "ready";
+            }
+            return "loading";
+          });
+        }
       })
       .catch(() => {
         setRuntimeConfigChecked(true);
@@ -581,23 +817,48 @@ export default function MapView() {
       if (!mapElementRef.current || cancelled) {
         return;
       }
+      if (mapInstanceRef.current) {
+        setGoogleMap(mapInstanceRef.current);
+        setSdkState("ready");
+        return;
+      }
       loadGoogleMapsApi(runtimeMapsConfig.googleMapsApiKey)
         .then((maps) => {
           if (cancelled || !mapElementRef.current) {
             return;
           }
+          const initialViewport = collectMapViewportPoints(
+            useMapStore.getState().pins,
+            useTripStore.getState().itinerary,
+          );
+          const initialCenter =
+            initialViewport.length === 1
+              ? initialViewport[0]
+              : initialViewport.length > 0
+                ? {
+                    lat:
+                      initialViewport.reduce((sum, point) => sum + point.lat, 0) /
+                      initialViewport.length,
+                    lng:
+                      initialViewport.reduce((sum, point) => sum + point.lng, 0) /
+                      initialViewport.length,
+                  }
+                : DEFAULT_MAP_TW_CENTER;
           const mapOptions: Record<string, unknown> = {
-            center: DEFAULT_MAP_TW_CENTER,
-            zoom: DEFAULT_MAP_TW_ZOOM,
-            mapTypeId: "roadmap",
+            center: initialCenter,
+            zoom: initialViewport.length === 1 ? 14 : DEFAULT_MAP_TW_ZOOM,
+            mapTypeId: loadMapPreferences().mapType,
             streetViewControl: false,
             fullscreenControl: false,
             mapTypeControl: false,
+            clickableIcons: effectiveAllowPoiAdd,
           };
           if (useAdvancedMarkers) {
             mapOptions.mapId = runtimeMapsConfig.googleMapsMapId;
           }
+          mapOptions.styles = buildMapLabelStyles(loadMapPreferences().labelVisibility);
           mapInstanceRef.current = new maps.Map(mapElementRef.current, mapOptions);
+          setGoogleMap(mapInstanceRef.current);
           infoWindowRef.current = new maps.InfoWindow();
           setSdkState("ready");
           setProviderError(null);
@@ -640,6 +901,37 @@ export default function MapView() {
   }, [pushToast, useGoogleSdk]);
 
   useEffect(() => {
+    if (!effectiveAllowPoiAdd || sdkState !== "ready" || !mapInstanceRef.current || !useGoogleSdk) {
+      return;
+    }
+    const map = mapInstanceRef.current;
+    const listener = map.addListener?.("click", (event: { placeId?: string; stop?: () => void; latLng?: { lat: () => number; lng: () => number } }) => {
+      if (suppressMapClickRef.current) {
+        suppressMapClickRef.current = false;
+        return;
+      }
+      const lat = event.latLng?.lat();
+      const lng = event.latLng?.lng();
+      if (lat == null || lng == null) {
+        return;
+      }
+      const placeId = event.placeId?.trim();
+      if (placeId) {
+        event.stop?.();
+      }
+      setSelectedPinId(null);
+      setPendingPoi({
+        placeId: placeId || undefined,
+        lat,
+        lng,
+      });
+    });
+    return () => {
+      listener?.remove?.();
+    };
+  }, [effectiveAllowPoiAdd, sdkState, setPendingPoi, setSelectedPinId, useGoogleSdk]);
+
+  useEffect(() => {
     if (sdkState !== "ready" || !mapInstanceRef.current) {
       return;
     }
@@ -668,6 +960,16 @@ export default function MapView() {
       layers.bicycling?.setMap(null);
     };
   }, [enabledLayers, sdkState]);
+
+  useEffect(() => {
+    if (sdkState !== "ready" || !mapInstanceRef.current) {
+      return;
+    }
+    mapInstanceRef.current.setOptions?.({
+      styles: buildMapLabelStyles(labelVisibility),
+      clickableIcons: effectiveAllowPoiAdd,
+    });
+  }, [effectiveAllowPoiAdd, labelVisibility, sdkState]);
 
   useEffect(() => {
     if (!useGoogleSdk || sdkState !== "ready" || !mapInstanceRef.current || !mapElementRef.current) {
@@ -706,11 +1008,11 @@ export default function MapView() {
   }, [sdkState, useGoogleSdk]);
 
   useEffect(() => {
-    if (sdkState !== "ready") {
+    if (readOnly || !runtimeConfigChecked || !runtimeMapsConfig.googleMapsApiKey || pins.length === 0) {
       return;
     }
 
-    const candidates = pins
+    const entries = pins
       .map((pin) => ({ pin, linkedItem: findLinkedItineraryItem(itinerary, pin) }))
       .filter(({ pin, linkedItem }) => needsPlaceDetails(pin, linkedItem))
       .map(({ pin, linkedItem }) => ({
@@ -724,8 +1026,48 @@ export default function MapView() {
         linkedItemId: linkedItem?.id,
         linkedItemDay: linkedItem?.dayNumber,
       }))
-      .filter((entry) => entry.name && !requestedPlaceDetailsRef.current.has(entry.key))
+      .filter((entry) => entry.name && !requestedPlaceDetailsRef.current.has(entry.key));
+
+    const cachedPatches = new Map<string, Partial<MapPinType>>();
+    const candidates = entries
+      .filter((entry) => {
+        const cached = readPlaceDetailsCache(entry.key);
+        if (!cached) {
+          return true;
+        }
+        requestedPlaceDetailsRef.current.add(entry.key);
+        if (cached.details && Object.values(cached.details).some((value) => value !== undefined && value !== "")) {
+          cachedPatches.set(entry.pinId, normalizePhotoPatch(cached.details));
+        }
+        return false;
+      })
       .slice(0, 6);
+
+    if (cachedPatches.size > 0) {
+      const currentPins = useMapStore.getState().pins;
+      useMapStore.getState().setPins(
+        currentPins.map((pin) => {
+          const patch = cachedPatches.get(pin.id);
+          return patch ? mergePinDetails(pin, patch) : pin;
+        }),
+      );
+
+      const trip = useTripStore.getState();
+      entries.forEach((entry) => {
+        const patch = cachedPatches.get(entry.pinId);
+        if (!patch || !entry.linkedItemId || !entry.linkedItemDay) {
+          return;
+        }
+        const day = trip.itinerary.find((candidateDay) => candidateDay.dayNumber === entry.linkedItemDay);
+        const item = day?.items.find((candidateItem) => candidateItem.id === entry.linkedItemId);
+        if (!item?.location) {
+          return;
+        }
+        trip.updateItineraryItem(entry.linkedItemDay, entry.linkedItemId, {
+          location: mergeLocationDetails(item.location, patch),
+        });
+      });
+    }
 
     if (candidates.length === 0) {
       return;
@@ -767,8 +1109,15 @@ export default function MapView() {
           if (!row.id || !row.details) {
             return;
           }
+          const candidate = candidates.find((entry) => entry.pinId === row.id);
           if (Object.values(row.details).some((value) => value !== undefined && value !== "")) {
-            patches.set(row.id, row.details);
+            const normalized = normalizePhotoPatch(row.details);
+            patches.set(row.id, normalized);
+            if (candidate) {
+              writePlaceDetailsCache(candidate.key, { details: normalized });
+            }
+          } else if (candidate) {
+            writePlaceDetailsCache(candidate.key, { miss: true });
           }
         });
         if (patches.size === 0) {
@@ -816,7 +1165,7 @@ export default function MapView() {
     return () => {
       cancelled = true;
     };
-  }, [itinerary, pins, sdkState, tripDestination]);
+  }, [itinerary, pins, readOnly, runtimeConfigChecked, runtimeMapsConfig.googleMapsApiKey, tripDestination]);
 
   useEffect(() => {
     const maps = window.google?.maps;
@@ -825,166 +1174,76 @@ export default function MapView() {
     }
     const mapsApi = maps;
 
+    const geometryKey = pinsGeometryKey(pins);
+    if (
+      geometryKey === lastPinsGeometryKeyRef.current &&
+      markersRef.current.size > 0 &&
+      pins.length > 0
+    ) {
+      return;
+    }
+    lastPinsGeometryKeyRef.current = geometryKey;
+
     let cancelled = false;
-    let directionsTimer: number | NodeJS.Timeout | undefined;
+    const map = mapInstanceRef.current;
 
     markersRef.current.forEach((marker) => marker.setMap(null));
     markersRef.current.clear();
 
-    const map = mapInstanceRef.current;
-    const clearRouteOverlays = () => {
-      polylinesRef.current.forEach((polyline) => polyline.setMap(null));
-      polylinesRef.current = [];
-      routeLabelMarkersRef.current.forEach((marker) => marker.setMap(null));
-      routeLabelMarkersRef.current = [];
-    };
+    const focusPoint = focusLocationToPoint(focusLocation);
+    const framePoints = viewportPoints.length > 0 ? viewportPoints : focusPoint ? [focusPoint] : [];
+
+    function applyMapViewport() {
+      if (framePoints.length === 0) {
+        if (!syncService.isHydrated()) {
+          return;
+        }
+        if (
+          shouldUseTaiwanDefaultViewport({
+            tripId,
+            destination: tripDestination,
+            points: viewportPoints,
+            focusLocation,
+          })
+        ) {
+          map.setCenter(DEFAULT_MAP_TW_CENTER);
+          map.setZoom(DEFAULT_MAP_TW_ZOOM);
+        }
+        return;
+      }
+
+      if (framePoints.length === 1) {
+        map.setCenter(framePoints[0]);
+        map.setZoom(focusLocation?.zoom ?? 14);
+        return;
+      }
+
+      const bounds = new mapsApi.LatLngBounds();
+      framePoints.forEach((point) => bounds.extend(point));
+      map.fitBounds(bounds, 72);
+    }
 
     if (pins.length === 0) {
-      clearRouteOverlays();
-      useMapStore.getState().setItinerarySegmentDurations({});
-      map.setCenter(DEFAULT_MAP_TW_CENTER);
-      map.setZoom(DEFAULT_MAP_TW_ZOOM);
-      return;
+      applyMapViewport();
+      return () => {
+        cancelled = true;
+      };
     }
 
     const bounds = new mapsApi.LatLngBounds();
 
-    function openInfoForSelectedPin() {
-      if (!selectedPinId || !infoWindowRef.current) {
-        return;
-      }
-      const pin = pins.find((entry) => entry.id === selectedPinId);
-      if (!pin) {
-        return;
-      }
-      const marker = markersRef.current.get(pin.id);
-      if (!marker) {
-        return;
-      }
-      const linkedItem = findLinkedItineraryItem(itinerary, pin);
-      map.panTo({ lat: pin.lat, lng: pin.lng });
-      infoWindowRef.current.setContent(buildPinInfoContent(pin, linkedItem));
-      infoWindowRef.current.open({ map, anchor: marker });
-    }
-
     function fitMapToBounds() {
-      if (pins.length === 1) {
-        map.setCenter({ lat: pins[0].lat, lng: pins[0].lng });
-        map.setZoom(14);
-      } else {
-        map.fitBounds(bounds, 72);
-      }
+      applyMapViewport();
     }
 
-    function scheduleDirectionsOverlay() {
-      clearTimeout(directionsTimer);
-      if (routeSegments.length === 0) {
-        clearRouteOverlays();
-        useMapStore.getState().setItinerarySegmentDurations({});
-        logFrontendDebugEvent("map", "routes-empty", {
-          pins: pins.length,
-          itineraryDays: itinerary.length,
-        });
+    function reopenSelectedPinInfo() {
+      if (readOnly) {
         return;
       }
-      logFrontendDebugEvent("map", "routes-scheduled", {
-        segments: routeSegments.length,
-        pins: pins.length,
-      });
-      directionsTimer = window.setTimeout(() => {
-        void (async () => {
-          let resolved: Awaited<ReturnType<typeof fetchItineraryRoutePaths>>;
-          try {
-            resolved = await fetchItineraryRoutePaths(mapsApi, routeSegments, {
-              cancelled: () => cancelled,
-              region: inferMapsRegionCode(tripDestination),
-            });
-          } catch {
-            logFrontendDebugEvent("map", "routes-fetch-threw", {
-              segments: routeSegments.length,
-            });
-            return;
-          }
-          if (cancelled || !mapInstanceRef.current) {
-            return;
-          }
-          const map = mapInstanceRef.current;
-          const routeBounds = new mapsApi.LatLngBounds();
-          pins.forEach((pin) => {
-            routeBounds.extend({ lat: pin.lat, lng: pin.lng });
-          });
-
-          const nextMinutes: Record<string, number> = {};
-          clearRouteOverlays();
-          resolved.forEach((entry) => {
-            const { segment, path, usedDirections, durationSeconds } = entry;
-            const displayMinutes = segmentRouteDisplayMinutes(segment, durationSeconds, usedDirections);
-            nextMinutes[segment.id] = displayMinutes;
-
-            const polyline = new mapsApi.Polyline({
-              map,
-              path,
-              strokeColor: segment.color,
-              strokeOpacity: usedDirections ? 0.92 : 0.72,
-              strokeWeight: usedDirections ? 5 : 4,
-              geodesic: !usedDirections,
-              zIndex: 950,
-            });
-            polylinesRef.current.push(polyline);
-            path.forEach((p) => routeBounds.extend(p));
-
-            const mid = path[Math.floor(path.length / 2)]!;
-            const labelMarker = new mapsApi.Marker({
-              map,
-              position: mid,
-              clickable: true,
-              title: `${segment.fromName} → ${segment.toName}`,
-              zIndex: 980,
-              icon: {
-                path: mapsApi.SymbolPath.CIRCLE,
-                scale: 0,
-                fillOpacity: 0,
-                strokeOpacity: 0,
-              },
-              label: {
-                text: `${segment.transport} · ${formatRouteMinutes(displayMinutes)}`,
-                color: segment.color,
-                fontSize: "11px",
-                fontWeight: "700",
-              },
-            });
-            labelMarker.addListener("click", () => {
-              if (!infoWindowRef.current) {
-                return;
-              }
-              infoWindowRef.current.setContent(buildRouteSegmentInfoContent(segment, displayMinutes));
-              infoWindowRef.current.open({ map, anchor: labelMarker });
-            });
-            polyline.addListener?.("click", () => {
-              if (!infoWindowRef.current) {
-                return;
-              }
-              infoWindowRef.current.setContent(buildRouteSegmentInfoContent(segment, displayMinutes));
-              infoWindowRef.current.open({ map, anchor: labelMarker });
-              map.panTo(mid);
-            });
-            routeLabelMarkersRef.current.push(labelMarker);
-          });
-
-          useMapStore.getState().setItinerarySegmentDurations(nextMinutes);
-          logFrontendDebugEvent("map", "routes-drawn", {
-            requested: routeSegments.length,
-            resolved: resolved.length,
-            directions: resolved.filter((entry) => entry.usedDirections).length,
-            fallback: resolved.filter((entry) => !entry.usedDirections).length,
-            polylines: polylinesRef.current.length,
-          });
-
-          if (resolved.some((entry) => entry.usedDirections)) {
-            map.fitBounds(routeBounds, 72);
-          }
-        })();
-      }, 420);
+      const activePinId = selectedPinIdRef.current;
+      if (activePinId) {
+        refreshPinInfoRef.current(activePinId);
+      }
     }
 
     if (useAdvancedMarkers && typeof mapsApi.importLibrary === "function") {
@@ -999,23 +1258,21 @@ export default function MapView() {
           };
 
           pins.forEach((pin) => {
-            const selected = pin.id === selectedPinId;
-            const content = createMapPinElement(pin.color || "#5a7ea3", selected);
+            const stopN = pinStopById.get(pin.id);
+            const content = createMapPinElement(pin.color || "#5a7ea3", false, stopN);
             const marker = new lib.AdvancedMarkerElement({
               map,
               position: { lat: pin.lat, lng: pin.lng },
               title: pin.name,
               content,
             });
-            // AdvancedMarkerElement emits `gmp-click` (not `click`) on its underlying element.
-            marker.addListener("gmp-click", () => setSelectedPinId(pin.id));
+            marker.addListener("gmp-click", () => handlePinMarkerClick(pin.id));
             markersRef.current.set(pin.id, marker as GoogleMarkerInstance);
             bounds.extend({ lat: pin.lat, lng: pin.lng });
           });
 
           fitMapToBounds();
-          openInfoForSelectedPin();
-          scheduleDirectionsOverlay();
+          reopenSelectedPinInfo();
         })
         .catch(() => {
           if (cancelled) {
@@ -1032,9 +1289,9 @@ export default function MapView() {
               map,
               position: { lat: pin.lat, lng: pin.lng },
               title: pin.name,
-              icon: buildMarkerPinIcon(mapsApi, pin.color || "#5a7ea3", pin.id === selectedPinId),
+              icon: buildMarkerPinIcon(mapsApi, pin.color || "#5a7ea3", false, pinStopById.get(pin.id)),
             });
-            marker.addListener("click", () => setSelectedPinId(pin.id));
+            marker.addListener("click", () => handlePinMarkerClick(pin.id));
             markersRef.current.set(pin.id, marker);
             fallbackBounds.extend({ lat: pin.lat, lng: pin.lng });
           });
@@ -1044,12 +1301,10 @@ export default function MapView() {
           } else {
             map.fitBounds(fallbackBounds, 72);
           }
-          openInfoForSelectedPin();
-          scheduleDirectionsOverlay();
+          reopenSelectedPinInfo();
         });
       return () => {
         cancelled = true;
-        clearTimeout(directionsTimer);
       };
     }
 
@@ -1058,39 +1313,207 @@ export default function MapView() {
         map,
         position: { lat: pin.lat, lng: pin.lng },
         title: pin.name,
-        icon: buildMarkerPinIcon(mapsApi, pin.color || "#5a7ea3", pin.id === selectedPinId),
+        icon: buildMarkerPinIcon(mapsApi, pin.color || "#5a7ea3", false, pinStopById.get(pin.id)),
       });
-      marker.addListener("click", () => setSelectedPinId(pin.id));
+      marker.addListener("click", () => handlePinMarkerClick(pin.id));
       markersRef.current.set(pin.id, marker);
       bounds.extend({ lat: pin.lat, lng: pin.lng });
     });
 
     fitMapToBounds();
-    openInfoForSelectedPin();
-    scheduleDirectionsOverlay();
+    reopenSelectedPinInfo();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    focusLocation,
+    handlePinMarkerClick,
+    pins,
+    pushToast,
+    sdkState,
+    tripDestination,
+    tripId,
+    readOnly,
+    useAdvancedMarkers,
+    viewportPoints,
+  ]);
+
+  useEffect(() => {
+    const maps = window.google?.maps;
+    if (sdkState !== "ready" || !mapInstanceRef.current || !maps) {
+      return;
+    }
+    const mapsApi = maps;
+
+    let cancelled = false;
+    let directionsTimer: number | NodeJS.Timeout | undefined;
+
+    const clearRouteOverlays = () => {
+      routePolylinesRef.current.forEach(({ polyline }) => polyline.setMap(null));
+      routePolylinesRef.current = [];
+      routeLabelMarkersRef.current.forEach((marker) => marker.setMap(null));
+      routeLabelMarkersRef.current = [];
+    };
+
+    if (!effectiveShowItineraryRoutes || pins.length === 0 || routeSegments.length === 0) {
+      clearRouteOverlays();
+      useMapStore.getState().setItinerarySegmentDurations({});
+      return;
+    }
+
+    directionsTimer = window.setTimeout(() => {
+      void (async () => {
+        let resolved: Awaited<ReturnType<typeof fetchItineraryRoutePaths>>;
+        try {
+          resolved = await fetchItineraryRoutePaths(mapsApi, routeSegments, {
+            cancelled: () => cancelled,
+            region: inferMapsRegionCode(tripDestination),
+          });
+        } catch {
+          logFrontendDebugEvent("map", "routes-fetch-threw", {
+            segments: routeSegments.length,
+          });
+          return;
+        }
+        if (cancelled || !mapInstanceRef.current) {
+          return;
+        }
+        const map = mapInstanceRef.current;
+        const routeBounds = new mapsApi.LatLngBounds();
+        pins.forEach((pin) => {
+          routeBounds.extend({ lat: pin.lat, lng: pin.lng });
+        });
+
+        const nextMinutes: Record<string, number> = {};
+        clearRouteOverlays();
+        resolved.forEach((entry) => {
+          const { segment, path, usedDirections, durationSeconds } = entry;
+          const isHighlighted = highlightedRouteIdsRef.current.has(segment.id);
+          const displayMinutes = segmentRouteDisplayMinutes(segment, durationSeconds, usedDirections);
+          nextMinutes[segment.id] = displayMinutes;
+
+          const polyline = new mapsApi.Polyline({
+            map,
+            path,
+            strokeColor: segment.color,
+            strokeOpacity: isHighlighted ? 1 : usedDirections ? 0.82 : 0.58,
+            strokeWeight: isHighlighted ? 7 : usedDirections ? 5 : 4,
+            geodesic: !usedDirections,
+            zIndex: isHighlighted ? 980 : 950,
+          });
+          routePolylinesRef.current.push({
+            polyline,
+            segmentId: segment.id,
+            usedDirections,
+          });
+          path.forEach((p) => routeBounds.extend(p));
+
+          const mid = path[Math.floor(path.length / 2)]!;
+          const labelMarker = new mapsApi.Marker({
+            map,
+            position: mid,
+            clickable: !readOnly,
+            title: `${segment.fromName} → ${segment.toName}`,
+            zIndex: 980,
+            icon: {
+              path: mapsApi.SymbolPath.CIRCLE,
+              scale: 0,
+              fillOpacity: 0,
+              strokeOpacity: 0,
+            },
+            label: {
+              text: `${segment.transport} · ${formatRouteMinutes(displayMinutes)}`,
+              color: segment.color,
+              fontSize: "11px",
+              fontWeight: "700",
+            },
+          });
+          if (!readOnly) {
+            labelMarker.addListener("click", () => {
+              if (!infoWindowRef.current) {
+                return;
+              }
+              infoWindowRef.current.setContent(buildRouteSegmentInfoContent(segment, displayMinutes));
+              infoWindowRef.current.open({ map, anchor: labelMarker });
+            });
+            polyline.addListener?.("click", () => {
+              if (!infoWindowRef.current) {
+                return;
+              }
+              infoWindowRef.current.setContent(buildRouteSegmentInfoContent(segment, displayMinutes));
+              infoWindowRef.current.open({ map, anchor: labelMarker });
+              map.panTo(mid);
+            });
+          }
+          routeLabelMarkersRef.current.push(labelMarker);
+        });
+
+        useMapStore.getState().setItinerarySegmentDurations(nextMinutes);
+        logFrontendDebugEvent("map", "routes-drawn", {
+          requested: routeSegments.length,
+          resolved: resolved.length,
+          directions: resolved.filter((entry) => entry.usedDirections).length,
+          fallback: resolved.filter((entry) => !entry.usedDirections).length,
+          polylines: routePolylinesRef.current.length,
+        });
+
+        const activePinId = selectedPinIdRef.current;
+        if (activePinId && !readOnly) {
+          refreshPinInfoRef.current(activePinId);
+        } else if (resolved.some((entry) => entry.usedDirections)) {
+          map.fitBounds(routeBounds, 72);
+        }
+      })();
+    }, 420);
 
     return () => {
       cancelled = true;
       clearTimeout(directionsTimer);
     };
-  }, [
-    itinerary,
-    pins,
-    pushToast,
-    routeSegments,
-    sdkState,
-    selectedPinId,
-    setSelectedPinId,
-    tripDestination,
-    useAdvancedMarkers,
-  ]);
+  }, [effectiveShowItineraryRoutes, pins, readOnly, routeSegments, sdkState, tripDestination]);
+
+  useEffect(() => {
+    if (sdkState !== "ready" || !effectiveShowItineraryRoutes) {
+      return;
+    }
+    routePolylinesRef.current.forEach(({ polyline, segmentId, usedDirections }) => {
+      const isHighlighted = highlightedRouteIds.has(segmentId);
+      polyline.setOptions?.({
+        strokeOpacity: isHighlighted ? 1 : usedDirections ? 0.82 : 0.58,
+        strokeWeight: isHighlighted ? 7 : usedDirections ? 5 : 4,
+        zIndex: isHighlighted ? 980 : 950,
+      });
+    });
+  }, [effectiveShowItineraryRoutes, highlightedRouteIds, sdkState]);
+
+  useEffect(() => {
+    const maps = window.google?.maps;
+    if (sdkState !== "ready" || !maps) {
+      return;
+    }
+
+    pins.forEach((pin) => {
+      const marker = markersRef.current.get(pin.id);
+      if (!marker) {
+        return;
+      }
+      const selected = pin.id === selectedPinId;
+      const stopN = pinStopById.get(pin.id);
+      if (useAdvancedMarkers) {
+        marker.content = createMapPinElement(pin.color || "#5a7ea3", selected, stopN);
+        return;
+      }
+      marker.setIcon(buildMarkerPinIcon(maps, pin.color || "#5a7ea3", selected, stopN));
+    });
+  }, [pinStopById, pins, sdkState, selectedPinId, useAdvancedMarkers]);
 
   useEffect(
     () => () => {
       markersRef.current.forEach((marker) => marker.setMap(null));
       markersRef.current.clear();
-      polylinesRef.current.forEach((polyline) => polyline.setMap(null));
-      polylinesRef.current = [];
+      routePolylinesRef.current.forEach(({ polyline }) => polyline.setMap(null));
+      routePolylinesRef.current = [];
       routeLabelMarkersRef.current.forEach((marker) => marker.setMap(null));
       routeLabelMarkersRef.current = [];
     },
@@ -1128,51 +1551,101 @@ export default function MapView() {
     if (sdkState === "ready" && mapInstanceRef.current) {
       mapInstanceRef.current.setMapTypeId(nextType);
     }
+    saveMapPreferences({ mapType: nextType, enabledLayers, labelVisibility, showItineraryRoutes });
   }
 
   function toggleOverlayLayer(layer: MapOverlayLayer) {
-    setEnabledLayers((current) => ({
-      ...current,
-      [layer]: !current[layer],
-    }));
+    setEnabledLayers((current) => {
+      const next = {
+        ...current,
+        [layer]: !current[layer],
+      };
+      saveMapPreferences({ mapType, enabledLayers: next, labelVisibility, showItineraryRoutes });
+      return next;
+    });
   }
 
-  const highlightedItem = findLinkedItineraryItem(itinerary, selectedPin);
-  const resolvedSelectedPin = selectedPin ? buildLocationBackfilledPin(selectedPin, highlightedItem) : null;
-  const selectedPinRoutes = selectedPin
-    ? routeSegments.filter(
-        (segment) =>
-          segment.fromItemId === highlightedItem?.id ||
-          segment.toItemId === highlightedItem?.id,
-      )
-    : [];
+  function toggleLabelVisibility(key: MapLabelToggleKey) {
+    setLabelVisibility((current) => {
+      const next = {
+        ...current,
+        [key]: !current[key],
+      };
+      saveMapPreferences({ mapType, enabledLayers, labelVisibility: next, showItineraryRoutes });
+      return next;
+    });
+  }
+
+  function toggleShowItineraryRoutes() {
+    setShowItineraryRoutes((current) => {
+      const next = !current;
+      saveMapPreferences({
+        mapType,
+        enabledLayers,
+        labelVisibility,
+        showItineraryRoutes: next,
+      });
+      return next;
+    });
+  }
 
   const showRealMap = useGoogleSdk && sdkState !== "error";
   const mapReady = sdkState === "ready";
+  const mapControlsInsetWhenPanelOpen = panelOpen && !embedded;
+  const mapControlsPositionClass = cn(
+    mapControlsInsetWhenPanelOpen ? "max-lg:left-4 max-lg:right-auto" : "right-4",
+  );
+  const mapControlsRightStyle = mapControlsInsetWhenPanelOpen
+    ? { right: MAP_CONTROLS_OFFSET_WITH_PANEL }
+    : undefined;
 
   return (
     <div
       data-testid="map-view"
-      className="relative flex min-h-0 flex-1 w-full flex-col overflow-hidden rounded-2xl border-2 border-border bg-surface shadow-soft-lg ring-1 ring-black/5"
+      className={cn(
+        "relative w-full overflow-hidden rounded-2xl border-2 border-border bg-surface shadow-soft-lg ring-1 ring-black/5",
+        embedded ? "h-full" : "flex min-h-0 flex-1 flex-col",
+      )}
     >
       {showRealMap ? (
-        <div className="relative z-0 min-h-0 flex-1">
+        <div className={cn("relative z-0 min-h-0", embedded ? "h-full" : "flex-1")}>
           <div
             ref={mapElementRef}
-            className="absolute inset-0 min-h-[200px] bg-[var(--surface-elevated)]"
+            className={cn(
+              "absolute inset-0 bg-[var(--surface-elevated)]",
+              embedded ? "min-h-0" : "min-h-[200px]",
+            )}
           />
         </div>
       ) : (
-        <div className="relative z-0 min-h-0 flex-1 overflow-hidden">
+        <div className={cn("relative z-0 min-h-0 overflow-hidden", embedded ? "h-full" : "flex-1")}>
           <MockMapFallback
             pins={pins}
+            pinStopById={pinStopById}
             routeSegments={routeSegments}
+            highlightedRouteIds={highlightedRouteIds}
+            showItineraryRoutes={effectiveShowItineraryRoutes}
+            viewportPoints={viewportPoints}
             selectedPinId={selectedPinId}
-            setSelectedPinId={setSelectedPinId}
+            onPinMarkerClick={handlePinMarkerClick}
+            onPinInfoClose={handlePinInfoClose}
+            itinerary={itinerary}
             zoom={mockZoom}
+            readOnly={readOnly}
           />
         </div>
       )}
+
+      {showRealMap && effectiveAllowPoiAdd ? (
+        <MapPoiAddOverlay
+          map={googleMap}
+          mapReady={mapReady}
+          tripDestination={tripDestination}
+          onMapClickSuppress={() => {
+            suppressMapClickRef.current = true;
+          }}
+        />
+      ) : null}
 
       {!showRealMap && runtimeMapsConfig.enableMockMaps && (
         <div className="absolute left-0 right-0 top-14 z-[12] flex justify-center px-6">
@@ -1190,23 +1663,11 @@ export default function MapView() {
         </div>
       )}
 
-      <div className="absolute right-4 top-[7.25rem] z-[11] flex flex-col gap-2 sm:top-[6.75rem]">
-        <button
-          type="button"
-          onClick={() => (showRealMap ? changeZoom(1) : changeMockZoom(0.18))}
-          disabled={showRealMap && !mapReady}
-          className="flex size-9 cursor-pointer items-center justify-center rounded-xl border border-border bg-surface text-muted shadow-soft transition-colors hover:border-primary/30 hover:bg-surface-elevated hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
-        >
-          <ZoomIn className="size-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => (showRealMap ? changeZoom(-1) : changeMockZoom(-0.18))}
-          disabled={showRealMap && !mapReady}
-          className="flex size-9 cursor-pointer items-center justify-center rounded-xl border border-border bg-surface text-muted shadow-soft transition-colors hover:border-primary/30 hover:bg-surface-elevated hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
-        >
-          <ZoomOut className="size-4" />
-        </button>
+      {!readOnly && (
+      <div
+        className={cn("absolute top-4 z-[11]", mapControlsPositionClass)}
+        style={mapControlsRightStyle}
+      >
         <button
           type="button"
           onClick={() => setMapControlsOpen((open) => !open)}
@@ -1214,29 +1675,30 @@ export default function MapView() {
           aria-expanded={mapControlsOpen}
           disabled={showRealMap && !mapReady}
           className={cn(
-            "flex size-9 cursor-pointer items-center justify-center rounded-xl border border-border bg-surface text-muted shadow-soft transition-colors hover:border-primary/30 hover:bg-surface-elevated hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45",
-            mapControlsOpen && "border-primary/35 bg-primary/10 text-primary",
+            "flex size-9 cursor-pointer items-center justify-center rounded-xl border border-black bg-black text-white shadow-soft transition-colors hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-45",
+            mapControlsOpen && "ring-2 ring-white/25",
           )}
         >
-          <Layers className="size-4" />
-        </button>
-        <button
-          type="button"
-          onClick={focusSelectedPin}
-          disabled={!mapReady || pins.length === 0}
-          className="flex size-9 cursor-pointer items-center justify-center rounded-xl border border-border bg-surface text-muted shadow-soft transition-colors hover:border-primary/30 hover:bg-surface-elevated hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
-        >
-          <Navigation className="size-4" />
+          <Settings
+            className={cn(
+              "size-4 transition-transform duration-300 ease-out",
+              mapControlsOpen && "rotate-90",
+            )}
+          />
         </button>
       </div>
+      )}
 
-      {mapControlsOpen && (
-        <div className="absolute right-16 top-[7.25rem] z-[12] w-64 rounded-2xl border border-border-light bg-surface/95 p-3 text-xs shadow-soft-lg backdrop-blur-md sm:top-[6.75rem]">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-foreground">{t.map.mapControls}</p>
-              <p className="mt-0.5 text-[11px] text-muted">{t.map.mapControlsHint}</p>
-            </div>
+      {!readOnly && mapControlsOpen && (
+        <div
+          className={cn(
+            "absolute top-14 z-[12] max-h-[min(32rem,calc(100vh-5rem))] w-64 overflow-y-auto rounded-2xl border border-border-light bg-surface/95 p-3 text-xs shadow-soft-lg backdrop-blur-md [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+            mapControlsPositionClass,
+          )}
+          style={mapControlsRightStyle}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-foreground">{t.map.mapControls}</p>
             {!mapReady && showRealMap && (
               <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
                 {t.map.loadingLabel}
@@ -1244,8 +1706,42 @@ export default function MapView() {
             )}
           </div>
 
-          <div className="mt-3">
-            <p className="mb-2 font-semibold text-muted">{t.map.mapDisplayType}</p>
+          <div className="mt-3 rounded-xl border border-black p-2">
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => (showRealMap ? changeZoom(1) : changeMockZoom(0.18))}
+                disabled={showRealMap && !mapReady}
+                aria-label={t.map.mapZoomIn}
+                title={t.map.mapZoomIn}
+                className="flex h-9 w-full items-center justify-center rounded-xl border border-border-light bg-white text-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <ZoomIn className="size-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => (showRealMap ? changeZoom(-1) : changeMockZoom(-0.18))}
+                disabled={showRealMap && !mapReady}
+                aria-label={t.map.mapZoomOut}
+                title={t.map.mapZoomOut}
+                className="flex h-9 w-full items-center justify-center rounded-xl border border-border-light bg-white text-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <ZoomOut className="size-4" />
+              </button>
+              <button
+                type="button"
+                onClick={focusSelectedPin}
+                disabled={showRealMap && (!mapReady || pins.length === 0)}
+                aria-label={t.map.mapFocusSelectedPin}
+                title={t.map.mapFocusSelectedPin}
+                className="flex h-9 w-full items-center justify-center rounded-xl border border-border-light bg-white text-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <Navigation className="size-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 rounded-xl border border-black p-2">
             <div className="grid grid-cols-2 gap-2">
               {MAP_TYPE_OPTIONS.map((option) => (
                 <button
@@ -1267,7 +1763,36 @@ export default function MapView() {
           </div>
 
           <div className="mt-4">
-            <p className="mb-2 font-semibold text-muted">{t.map.mapOverlayLayers}</p>
+            <button
+              type="button"
+              onClick={toggleShowItineraryRoutes}
+              disabled={!mapReady}
+              className={cn(
+                "flex w-full items-center justify-between rounded-xl border px-3 py-2 font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+                showItineraryRoutes
+                  ? "border-secondary/40 bg-secondary/15 text-foreground"
+                  : "border-border-light bg-white text-foreground hover:border-primary/30 hover:bg-primary/5",
+              )}
+            >
+              <span>{t.map.mapShowItineraryRoutes}</span>
+              <span
+                className={cn(
+                  "h-5 w-9 rounded-full p-0.5 transition-colors",
+                  showItineraryRoutes ? "bg-primary" : "bg-border",
+                )}
+                aria-hidden
+              >
+                <span
+                  className={cn(
+                    "block size-4 rounded-full bg-white shadow-sm transition-transform",
+                    showItineraryRoutes && "translate-x-4",
+                  )}
+                />
+              </span>
+            </button>
+          </div>
+
+          <div className="mt-4">
             <div className="flex flex-col gap-2">
               {MAP_LAYER_OPTIONS.map((option) => (
                 <button
@@ -1301,6 +1826,41 @@ export default function MapView() {
               ))}
             </div>
           </div>
+
+          <div className="mt-4">
+            <div className="flex flex-col gap-2">
+              {MAP_LABEL_TOGGLE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => toggleLabelVisibility(option.value)}
+                  disabled={!mapReady}
+                  className={cn(
+                    "flex items-center justify-between rounded-xl border px-3 py-2 font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+                    labelVisibility[option.value]
+                      ? "border-secondary/40 bg-secondary/15 text-foreground"
+                      : "border-border-light bg-white text-foreground hover:border-primary/30 hover:bg-primary/5",
+                  )}
+                >
+                  <span>{option.label}</span>
+                  <span
+                    className={cn(
+                      "h-5 w-9 rounded-full p-0.5 transition-colors",
+                      labelVisibility[option.value] ? "bg-primary" : "bg-border",
+                    )}
+                    aria-hidden
+                  >
+                    <span
+                      className={cn(
+                        "block size-4 rounded-full bg-white shadow-sm transition-transform",
+                        labelVisibility[option.value] && "translate-x-4",
+                      )}
+                    />
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -1311,94 +1871,6 @@ export default function MapView() {
             <p className="font-semibold">{t.map.fallbackMode}</p>
             <p className="mt-1 text-xs text-muted">{providerError}</p>
           </div>
-        </div>
-      )}
-
-      {resolvedSelectedPin && (
-        <div className="absolute bottom-4 left-4 z-[11] max-h-[min(70vh,28rem)] w-80 overflow-y-auto rounded-2xl border-2 border-primary/25 bg-peach-light/60 p-4 shadow-soft-lg backdrop-blur-sm" data-testid="selected-map-pin">
-          <div className="mb-3 flex h-28 items-center justify-center overflow-hidden rounded-xl bg-surface-elevated">
-            {resolvedSelectedPin.thumbnail || resolvedSelectedPin.photoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element -- Google Places photo URLs are runtime-provided.
-              <img
-                src={resolvedSelectedPin.thumbnail || resolvedSelectedPin.photoUrl}
-                alt={t.map.infoThumbnail}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <span className="text-xs font-medium text-muted">{t.map.infoThumbnail}</span>
-            )}
-          </div>
-          <p className="mb-2 text-xs uppercase tracking-wide text-muted">{t.map.selectedPinTitle}</p>
-          <h3 className="text-base font-semibold text-foreground">{resolvedSelectedPin.name}</h3>
-          <p className="mt-1 text-sm text-muted">{resolvedSelectedPin.description}</p>
-          <div className="mt-3 grid grid-cols-[4.5rem_1fr] gap-x-2 gap-y-1 text-xs">
-            <span className="text-muted">{t.map.infoAddress}</span>
-            <span className="text-foreground">{resolvedSelectedPin.address || t.map.notProvided}</span>
-            <span className="text-muted">{t.map.infoOpeningHours}</span>
-            <span className="text-foreground">{resolvedSelectedPin.openingHours || t.map.notProvided}</span>
-            <span className="text-muted">{t.map.infoPhone}</span>
-            <span className="text-foreground">{resolvedSelectedPin.phoneNumber || t.map.notProvided}</span>
-            <span className="text-muted">{t.map.infoSource}</span>
-            <span className="text-foreground">
-              {pinSourceLabel(resolvedSelectedPin.source)}
-              {resolvedSelectedPin.dayNumber ? ` · D${resolvedSelectedPin.dayNumber}` : ""}
-            </span>
-            <span className="text-muted">{t.map.infoCoords}</span>
-            <span className="font-mono text-[11px] text-foreground">
-              {resolvedSelectedPin.lat.toFixed(5)}, {resolvedSelectedPin.lng.toFixed(5)}
-            </span>
-          </div>
-          <a
-            href={buildRoutePlanningUrl(resolvedSelectedPin)}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-testid="map-route-link"
-            className="mt-3 flex w-full items-center justify-center rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-dark"
-          >
-            {t.map.infoRoute}
-          </a>
-          {buildGoogleMapsUrl(resolvedSelectedPin) && (
-            <a
-              href={buildGoogleMapsUrl(resolvedSelectedPin) || undefined}
-              target="_blank"
-              rel="noopener noreferrer"
-              data-testid="map-google-maps-link"
-              className="mt-2 flex w-full items-center justify-center rounded-xl border border-border px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-surface-elevated"
-            >
-              {t.map.infoGoogleMaps}
-            </a>
-          )}
-          {highlightedItem && (
-            <div className="mt-3 rounded-xl bg-primary/5 px-3 py-2">
-              <p className="text-[11px] uppercase tracking-wide text-primary">{t.map.linkedItinerary}</p>
-              <p className="mt-1 text-sm font-medium text-foreground">{highlightedItem.time} {highlightedItem.title}</p>
-              {highlightedItem.transport && (
-                <p className="mt-1 text-xs text-muted">{highlightedItem.transport}</p>
-              )}
-            </div>
-          )}
-          {selectedPinRoutes.length > 0 && (
-            <div className="mt-3 rounded-xl border border-border/80 bg-surface/80 px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                {t.map.relatedRoutes}
-              </p>
-              <div className="mt-2 flex flex-col gap-2">
-                {selectedPinRoutes.map((segment) => (
-                  <div key={segment.id} className="text-xs leading-relaxed text-foreground">
-                    <p className="font-medium">
-                      D{segment.dayNumber} {segment.fromTime} {segment.fromName} → {segment.toTime} {segment.toName}
-                    </p>
-                    <p className="text-muted">
-                      {segment.transport} · {formatDistanceKm(segment.distanceKm)} ·{" "}
-                      {formatRouteMinutes(
-                        segmentDirectionsMinutes[segment.id] ?? segment.estimatedMinutes,
-                      )}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 

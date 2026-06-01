@@ -115,8 +115,8 @@ export function normalizeOllamaJsonContent(input: string): string {
   }
 }
 
-export function normalizeOllamaResponseContent(input: string, format?: "json"): string {
-  if (format === "json") {
+export function normalizeOllamaResponseContent(input: string, format?: "json" | Record<string, unknown>): string {
+  if (format === "json" || (format && typeof format === "object")) {
     return normalizeOllamaJsonContent(input);
   }
   return normalizeOllamaPlainText(input);

@@ -1,5 +1,7 @@
+import { ensureItineraryDayCount } from "@/lib/ensureItineraryDays";
 import { buildPinsFromLocations } from "@/services/mapSync";
 import { syncService } from "@/services/syncService";
+import { recordAppliedVideoSummary } from "@/services/videoClient";
 import { useMapStore } from "@/stores/useMapStore";
 import { useTripStore } from "@/stores/useTripStore";
 import type { LocationReference, Video } from "@/types";
@@ -42,7 +44,7 @@ function isGenericFoodLocation(location: LocationReference) {
   return GENERIC_FOOD_NAMES.has(normalized);
 }
 
-function buildVideoNotes(video: Video, location: LocationReference) {
+function buildVideoSummarySnippet(video: Video, location: LocationReference) {
   const matchedSegments = (video.summarySegments || []).filter((segment) =>
     (segment.locationHints || []).some((hint) => normalizeLocationName(hint) === normalizeLocationName(location.name)),
   );
@@ -75,30 +77,6 @@ export function getVerifiedGeocodedVideoLocations(video: Video) {
 /** 可透過「加入地圖與行程」匯入的地點（已驗證、非泛用美食名）。 */
 export function getVideoImportCandidateLocations(video: Video) {
   return getVerifiedGeocodedVideoLocations(video).filter((location) => !isGenericFoodLocation(location));
-}
-
-function ensureItineraryDayCount(targetDayNumber?: number) {
-  const normalizedTarget =
-    typeof targetDayNumber === "number" && Number.isFinite(targetDayNumber) && targetDayNumber >= 1
-      ? Math.floor(targetDayNumber)
-      : null;
-
-  if (normalizedTarget === null) {
-    if (useTripStore.getState().itinerary.length === 0) {
-      useTripStore.getState().addDay();
-    }
-    return;
-  }
-
-  const maxDay = Math.max(1, normalizedTarget);
-  let guard = 0;
-  while (!useTripStore.getState().itinerary.some((day) => day.dayNumber === normalizedTarget)) {
-    useTripStore.getState().addDay();
-    guard += 1;
-    if (guard > maxDay + 3) {
-      break;
-    }
-  }
 }
 
 /** 明確把影片摘要中已驗證的具名地點加入目前行程與地圖，並立即同步到後端。 */
@@ -150,7 +128,9 @@ export async function importVideoVerifiedPlacesToTrip(
       time: `${String(9 + index * 2).padStart(2, "0")}:00`,
       title: location.name,
       type: inferredType,
-      notes: buildVideoNotes(video, location),
+      // 備註欄位保留給使用者手動補充交通或訂位資訊，不混入影片摘要段落。
+      notes: location.address || location.description || "",
+      sourceSnippet: buildVideoSummarySnippet(video, location),
       location,
       source: "video",
     });
@@ -171,6 +151,20 @@ export async function importVideoVerifiedPlacesToTrip(
     linkedTripItemId: itemsToPin[index]?.itemId,
   }));
   useMapStore.getState().addPins(pins);
-  await syncService.flushTripSyncNow();
+  await syncService.flushTripSyncNow({ force: true });
+  await recordAppliedVideoSummary({
+    tripId: useTripStore.getState().tripId,
+    videoId: video.videoId || video.id,
+    summaryId: video.videoId || video.id,
+    videoUrl: video.url,
+    title: video.title,
+    appliedPlaces: verified.map((location) => location.name),
+    appliedSegments: video.summarySegments || [],
+    createdTripItems: itemsToPin.map((entry) => entry.itemId),
+    summarySnapshot: {
+      summary: video.summary,
+      extractedLocations: verified.map((location) => location.name),
+    },
+  }).catch(() => undefined);
   return { addedItems: itemsToPin.length, addedPins: pins.length };
 }

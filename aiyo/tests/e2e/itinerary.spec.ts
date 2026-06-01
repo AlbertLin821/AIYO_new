@@ -38,6 +38,7 @@ test("authenticated user can add and delete an itinerary activity", async ({ pag
   const reloadedCard = page.getByTestId("activity-card").filter({ hasText: "第五輪 QA 赤崁樓" });
   await reloadedCard.hover();
   await reloadedCard.getByTestId("activity-delete-button").click();
+  await page.getByRole("button", { name: "確認刪除" }).click();
   await expect(page.getByTestId("activity-card").filter({ hasText: "第五輪 QA 赤崁樓" })).toHaveCount(0);
 });
 

@@ -214,6 +214,7 @@ export async function extractFinalVideoPlaces(
   const verified = uniqueVerifiedPlaces(
     await verifyCanonicalPlaces(deduped, {
       destinationHint: input.destinationHint,
+      destinationScope: input.destinationScope,
       enableGeocode: input.enableGeocode,
       enableSearch: input.enableSearch,
     }),

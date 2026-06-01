@@ -1,6 +1,11 @@
 import { Prisma } from "@prisma/client";
+import { applyChatMessageMetadata, extractChatMessageMetadata } from "@/lib/chatMessageMetadata";
 import { prisma } from "@/lib/prisma";
+import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
+import { findLinkedPinForItem } from "@/lib/mapPinItineraryLink";
+import { reconcileTripMapState } from "@/services/mapSync";
 import { getTripAccess, requireTripAccess } from "@/server/tripAccess";
+import type { TripPlanItem } from "@/types";
 import type {
   BootstrapPayload,
   ChatMessage,
@@ -55,17 +60,26 @@ export function toUserProfile(input: {
 }
 
 function serializeChatMessages(
-  messages: Array<{ id: string; role: string; content: string; createdAt: Date }>,
+  messages: Array<{
+    id: string;
+    role: string;
+    content: string;
+    metadata: unknown;
+    createdAt: Date;
+  }>,
 ): ChatMessage[] {
-  return messages.map((message) => ({
-    id: message.id,
-    role: message.role as ChatMessage["role"],
-    content: message.content,
-    timestamp: message.createdAt.toLocaleTimeString("zh-TW", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-  }));
+  return messages.map((message) => {
+    const base: ChatMessage = {
+      id: message.id,
+      role: message.role as ChatMessage["role"],
+      content: message.content,
+      timestamp: message.createdAt.toLocaleTimeString("zh-TW", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
+    return applyChatMessageMetadata(base, message.metadata);
+  });
 }
 
 function sanitizeBootstrapTrip(input: {
@@ -93,96 +107,151 @@ function sanitizeBootstrapTrip(input: {
   };
 }
 
-function parseSparseDayStops(input: {
-  dayNumber: number;
-  theme?: string | null;
-  summary?: string | null;
-}) {
-  const themeBase = (input.theme || "").replace(/\s*(與周邊順遊|順遊)$/u, "").trim();
-  const summary = (input.summary || "").trim();
-  const pairMatch = summary.match(/第\s*\d+\s*天以\s*(.+?)、(.+?)\s*與沿線餐食安排為主/u);
-  const themedStops = themeBase
-    .split(/[・／/、]/u)
-    .map((value) => value.trim())
-    .filter(Boolean);
-  const morning = themedStops[0] || pairMatch?.[1]?.trim() || themeBase || `第 ${input.dayNumber} 天`;
-  const afternoon = themedStops[1] || pairMatch?.[2]?.trim() || morning;
-  return {
-    morning,
-    afternoon,
-  };
-}
-
-function hydrateSparseDayItems<T extends { dayNumber: number; theme?: string | null; summary?: string | null; items: Array<{
-  id: string;
-  dayNumber?: number;
-  time: string;
-  title: string;
-  type: "attraction" | "restaurant" | "transport" | "hotel" | "activity" | "shopping";
-  transport?: string;
-  notes?: string;
-  source?: "ai" | "manual" | "video";
-  location?: {
-    name: string;
+function buildSerializedPins(
+  pins: Array<{
+    id: string;
+    label: string;
     lat: number;
     lng: number;
-    description: string;
-    address?: string;
-  };
-}> }>(day: T, destination?: string | null): T {
-  if (day.items.length > 0) {
-    return day;
+    description: string | null;
+    address: string | null;
+    placeId: string | null;
+    photoUrl: string | null;
+    thumbnail: string | null;
+    openingHours: string | null;
+    phoneNumber: string | null;
+    website: string | null;
+    googleMapsUrl: string | null;
+    rating: number | null;
+    userRatingsTotal: number | null;
+    color: string | null;
+    source: string | null;
+    confidence: number | null;
+    verified: boolean | null;
+    linkedTripItemId: string | null;
+    dayNumber: number | null;
+  }>,
+): MapPin[] {
+  return pins.filter((pin) => hasUsableMapCoordinate(pin)).map((pin) => ({
+    id: pin.id,
+    name: pin.label,
+    lat: pin.lat,
+    lng: pin.lng,
+    description: pin.description || pin.label,
+    address: pin.address || undefined,
+    placeId: pin.placeId || undefined,
+    photoUrl: pin.photoUrl || undefined,
+    thumbnail: pin.thumbnail || undefined,
+    openingHours: pin.openingHours || undefined,
+    phoneNumber: pin.phoneNumber || undefined,
+    website: pin.website || undefined,
+    googleMapsUrl: pin.googleMapsUrl || undefined,
+    rating: pin.rating ?? undefined,
+    userRatingsTotal: pin.userRatingsTotal ?? undefined,
+    color: pin.color || undefined,
+    linkedTripItemId: pin.linkedTripItemId || undefined,
+    dayNumber: pin.dayNumber || undefined,
+    source: (pin.source || "itinerary") as MapPin["source"],
+    confidence: pin.confidence ?? undefined,
+    verified: pin.verified ?? undefined,
+  }));
+}
+
+function resolveSerializedItemLocation(
+  item: {
+    id: string;
+    day: number;
+    title: string;
+    description: string | null;
+    timeSlot: string | null;
+    itemType: string | null;
+    source: string | null;
+    location: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    locationDesc: string | null;
+    locationAddress: string | null;
+    placeId: string | null;
+    photoUrl: string | null;
+    thumbnail: string | null;
+    openingHours: string | null;
+    phoneNumber: string | null;
+    website: string | null;
+    googleMapsUrl: string | null;
+    rating: number | null;
+    userRatingsTotal: number | null;
+    confidence: number | null;
+    verified: boolean | null;
+  },
+  pins: MapPin[],
+): TripPlanItem["location"] {
+  if (
+    item.location &&
+    item.latitude != null &&
+    item.longitude != null &&
+    hasUsableMapCoordinate({ lat: item.latitude, lng: item.longitude })
+  ) {
+    return {
+      name: item.location,
+      lat: item.latitude,
+      lng: item.longitude,
+      description: item.locationDesc || item.description || `${item.location} stop`,
+      address: item.locationAddress || item.location,
+      placeId: item.placeId || undefined,
+      photoUrl: item.photoUrl || undefined,
+      thumbnail: item.thumbnail || undefined,
+      openingHours: item.openingHours || undefined,
+      phoneNumber: item.phoneNumber || undefined,
+      website: item.website || undefined,
+      googleMapsUrl: item.googleMapsUrl || undefined,
+      rating: item.rating ?? undefined,
+      userRatingsTotal: item.userRatingsTotal ?? undefined,
+      confidence: item.confidence ?? undefined,
+      verified: item.verified ?? undefined,
+    };
   }
-  const stops = parseSparseDayStops(day);
-  const areaLabel = destination?.trim() || stops.morning;
+
+  const stubItem: TripPlanItem = {
+    id: item.id,
+    dayNumber: item.day,
+    time: item.timeSlot || "09:00",
+    title: item.title,
+    type: (item.itemType || "activity") as TripPlanItem["type"],
+    location: item.location?.trim()
+      ? {
+          name: item.location.trim(),
+          lat: 0,
+          lng: 0,
+          description: item.locationDesc || item.description || item.location.trim(),
+        }
+      : undefined,
+  };
+  const linkedPin = findLinkedPinForItem(stubItem, pins);
+  if (!linkedPin || !hasUsableMapCoordinate(linkedPin)) {
+    return undefined;
+  }
+
   return {
-    ...day,
-    items: [
-      {
-        id: `synthetic_${day.dayNumber}_1`,
-        dayNumber: day.dayNumber,
-        time: "09:00",
-        title: stops.morning,
-        type: "attraction",
-        transport: "大眾運輸",
-        notes: `依照目前摘要補齊的上午停留點：${stops.morning}`,
-        source: "ai",
-      },
-      {
-        id: `synthetic_${day.dayNumber}_2`,
-        dayNumber: day.dayNumber,
-        time: "12:00",
-        title: `${stops.morning} 周邊午餐`,
-        type: "restaurant",
-        transport: "大眾運輸",
-        notes: `依照目前摘要補齊的午餐停留點：${stops.morning} 周邊午餐`,
-        source: "ai",
-      },
-      {
-        id: `synthetic_${day.dayNumber}_3`,
-        dayNumber: day.dayNumber,
-        time: "15:00",
-        title: stops.afternoon,
-        type: "activity",
-        transport: "大眾運輸",
-        notes: `依照目前摘要補齊的下午停留點：${stops.afternoon}`,
-        source: "ai",
-      },
-      {
-        id: `synthetic_${day.dayNumber}_4`,
-        dayNumber: day.dayNumber,
-        time: "18:30",
-        title: `${stops.afternoon || areaLabel} 晚餐與散步`,
-        type: "restaurant",
-        transport: "大眾運輸",
-        notes: `依照目前摘要補齊的晚餐停留點：${stops.afternoon || areaLabel} 晚餐與散步`,
-        source: "ai",
-      },
-    ],
+    name: linkedPin.name,
+    lat: linkedPin.lat,
+    lng: linkedPin.lng,
+    description: item.description || linkedPin.description || linkedPin.name,
+    address: linkedPin.address || item.locationAddress || item.location || undefined,
+    placeId: linkedPin.placeId || item.placeId || undefined,
+    photoUrl: linkedPin.photoUrl || item.photoUrl || undefined,
+    thumbnail: linkedPin.thumbnail || item.thumbnail || undefined,
+    openingHours: linkedPin.openingHours || item.openingHours || undefined,
+    phoneNumber: linkedPin.phoneNumber || item.phoneNumber || undefined,
+    website: linkedPin.website || item.website || undefined,
+    googleMapsUrl: linkedPin.googleMapsUrl || item.googleMapsUrl || undefined,
+    rating: linkedPin.rating ?? item.rating ?? undefined,
+    userRatingsTotal: linkedPin.userRatingsTotal ?? item.userRatingsTotal ?? undefined,
+    confidence: linkedPin.confidence ?? item.confidence ?? undefined,
+    verified: linkedPin.verified ?? item.verified ?? undefined,
   };
 }
 
-function serializeTrip(trip: {
+export function serializeTrip(trip: {
   id: string;
   title: string;
   coverImageUrl: string | null;
@@ -204,6 +273,9 @@ function serializeTrip(trip: {
     timeSlot: string | null;
     itemType: string | null;
     transportMode: string | null;
+    transportDurationMinutes: number | null;
+    transportDistanceMeters: number | null;
+    transportDataSource: string | null;
     source: string | null;
     location: string | null;
     latitude: number | null;
@@ -252,6 +324,8 @@ function serializeTrip(trip: {
     (left, right) => left.sortOrder - right.sortOrder || left.dayNumber - right.dayNumber,
   );
 
+  const serializedPins = buildSerializedPins(trip.pins);
+
   for (const day of orderedDays) {
     grouped.set(day.dayNumber, {
       dayNumber: day.dayNumber,
@@ -277,58 +351,17 @@ function serializeTrip(trip: {
       title: item.title,
       type: (item.itemType || "activity") as PersistedTripPayload["itinerary"][number]["items"][number]["type"],
       transport: item.transportMode || undefined,
+      transportDurationMinutes: item.transportDurationMinutes ?? undefined,
+      transportDistanceMeters: item.transportDistanceMeters ?? undefined,
+      transportDataSource: item.transportDataSource === "google_routes" ? "google_routes" : undefined,
       notes: item.description || undefined,
-      location:
-        item.location && item.latitude != null && item.longitude != null
-          ? {
-              name: item.location,
-              lat: item.latitude,
-              lng: item.longitude,
-              description: item.locationDesc || item.description || `${item.location} stop`,
-              address: item.locationAddress || item.location,
-              placeId: item.placeId || undefined,
-              photoUrl: item.photoUrl || undefined,
-              thumbnail: item.thumbnail || undefined,
-              openingHours: item.openingHours || undefined,
-              phoneNumber: item.phoneNumber || undefined,
-              website: item.website || undefined,
-              googleMapsUrl: item.googleMapsUrl || undefined,
-              rating: item.rating ?? undefined,
-              userRatingsTotal: item.userRatingsTotal ?? undefined,
-              confidence: item.confidence ?? undefined,
-              verified: item.verified ?? undefined,
-            }
-          : undefined,
+      location: resolveSerializedItemLocation(item, serializedPins),
       source: (item.source || "manual") as PersistedTripPayload["itinerary"][number]["items"][number]["source"],
     });
   }
 
-  const itinerary = Array.from(grouped.values())
-    .sort((left, right) => left.dayNumber - right.dayNumber)
-    .map((day) => hydrateSparseDayItems(day, trip.destination));
-  const pins: MapPin[] = trip.pins.map((pin) => ({
-    id: pin.id,
-    name: pin.label,
-    lat: pin.lat,
-    lng: pin.lng,
-    description: pin.description || pin.label,
-    address: pin.address || undefined,
-    placeId: pin.placeId || undefined,
-    photoUrl: pin.photoUrl || undefined,
-    thumbnail: pin.thumbnail || undefined,
-    openingHours: pin.openingHours || undefined,
-    phoneNumber: pin.phoneNumber || undefined,
-    website: pin.website || undefined,
-    googleMapsUrl: pin.googleMapsUrl || undefined,
-    rating: pin.rating ?? undefined,
-    userRatingsTotal: pin.userRatingsTotal ?? undefined,
-    color: pin.color || undefined,
-    linkedTripItemId: pin.linkedTripItemId || undefined,
-    dayNumber: pin.dayNumber || undefined,
-    source: (pin.source || "itinerary") as MapPin["source"],
-    confidence: pin.confidence ?? undefined,
-    verified: pin.verified ?? undefined,
-  }));
+  const itinerary = Array.from(grouped.values()).sort((left, right) => left.dayNumber - right.dayNumber);
+  const reconciled = reconcileTripMapState(itinerary, serializedPins);
 
   return {
     tripId: trip.id,
@@ -336,8 +369,8 @@ function serializeTrip(trip: {
     destination: trip.destination?.trim() || "",
     days: trip.days,
     coverImageUrl: trip.coverImageUrl ?? null,
-    itinerary,
-    pins,
+    itinerary: reconciled.itinerary,
+    pins: reconciled.pins,
     updatedAt: trip.updatedAt.toISOString(),
   };
 }
@@ -572,7 +605,7 @@ export async function getBootstrapPayload(userId: string): Promise<BootstrapPayl
   const user = await ensureProfile(userId);
   const tripRecord = await resolveSessionTrip(userId);
   const messages = await prisma.chatMessage.findMany({
-    where: { userId },
+    where: tripRecord?.id ? { userId, tripId: tripRecord.id } : { userId, tripId: null },
     orderBy: { createdAt: "asc" },
     take: 50,
   });
@@ -630,11 +663,16 @@ export async function getBootstrapPayload(userId: string): Promise<BootstrapPayl
 }
 
 export async function getTripSwitchPayload(userId: string, tripId: string) {
-  const [user, tripRecord] = await Promise.all([
+  const [user, tripRecord, messages] = await Promise.all([
     ensureProfile(userId),
     prisma.trip.findUnique({
       where: { id: tripId },
       include: tripIncludeFull,
+    }),
+    prisma.chatMessage.findMany({
+      where: { userId, tripId },
+      orderBy: { createdAt: "asc" },
+      take: 50,
     }),
   ]);
 
@@ -653,6 +691,7 @@ export async function getTripSwitchPayload(userId: string, tripId: string) {
       }),
       budget: user.profile?.budget ?? 0,
     },
+    chatMessages: serializeChatMessages(messages),
     collaboration: serializeCollaboration(room),
   };
 }
@@ -787,7 +826,7 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
   await prisma.tripItem.deleteMany({ where: { tripId: trip.id } });
   await prisma.mapPin.deleteMany({ where: { tripId: trip.id } });
 
-  const normalizedDays = input.itinerary.map((day) => hydrateSparseDayItems(day, input.destination));
+  const normalizedDays = input.itinerary;
 
   if (normalizedDays.length > 0) {
     await prisma.tripDay.createMany({
@@ -802,34 +841,40 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
   }
 
   const items = normalizedDays.flatMap((day) =>
-    day.items.map((item, index) => ({
-      id: item.id,
-      tripId: trip.id,
-      day: day.dayNumber,
-      title: item.title,
-      description: item.notes || null,
-      timeSlot: item.time,
-      itemType: item.type,
-      transportMode: item.transport || null,
-      source: item.source || "manual",
-      location: item.location?.name || null,
-      latitude: item.location?.lat ?? null,
-      longitude: item.location?.lng ?? null,
-      locationDesc: item.location?.description || null,
-      locationAddress: item.location?.address || null,
-      placeId: item.location?.placeId || null,
-      photoUrl: item.location?.photoUrl || null,
-      thumbnail: item.location?.thumbnail || null,
-      openingHours: item.location?.openingHours || null,
-      phoneNumber: item.location?.phoneNumber || null,
-      website: item.location?.website || null,
-      googleMapsUrl: item.location?.googleMapsUrl || null,
-      rating: item.location?.rating ?? null,
-      userRatingsTotal: item.location?.userRatingsTotal ?? null,
-      confidence: item.location?.confidence ?? null,
-      verified: item.location?.verified ?? null,
-      order: index,
-    })),
+    day.items.map((item, index) => {
+      const location = hasUsableMapCoordinate(item.location) ? item.location : undefined;
+      return {
+        id: item.id,
+        tripId: trip.id,
+        day: day.dayNumber,
+        title: item.title,
+        description: item.notes || null,
+        timeSlot: item.time,
+        itemType: item.type,
+        transportMode: item.transport || null,
+        transportDurationMinutes: item.transportDurationMinutes ?? null,
+        transportDistanceMeters: item.transportDistanceMeters ?? null,
+        transportDataSource: item.transportDataSource ?? null,
+        source: item.source || "manual",
+        location: location?.name || null,
+        latitude: location?.lat ?? null,
+        longitude: location?.lng ?? null,
+        locationDesc: location?.description || null,
+        locationAddress: location?.address || null,
+        placeId: location?.placeId || null,
+        photoUrl: location?.photoUrl || null,
+        thumbnail: location?.thumbnail || null,
+        openingHours: location?.openingHours || null,
+        phoneNumber: location?.phoneNumber || null,
+        website: location?.website || null,
+        googleMapsUrl: location?.googleMapsUrl || null,
+        rating: location?.rating ?? null,
+        userRatingsTotal: location?.userRatingsTotal ?? null,
+        confidence: location?.confidence ?? null,
+        verified: location?.verified ?? null,
+        order: index,
+      };
+    }),
   );
 
   if (items.length > 0) {
@@ -839,9 +884,10 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
     });
   }
 
-  if (input.pins.length > 0) {
+  const validPins = input.pins.filter((pin) => hasUsableMapCoordinate(pin));
+  if (validPins.length > 0) {
     await prisma.mapPin.createMany({
-      data: input.pins.map((pin) => ({
+      data: validPins.map((pin) => ({
         id: pin.id,
         tripId: trip.id,
         label: pin.name,
@@ -952,13 +998,21 @@ export async function duplicateTripForUser(userId: string, sourceTripId: string)
   return { tripId: saved.tripId };
 }
 
-export async function saveChatMessage(userId: string, role: string, content: string, tripId?: string) {
+export async function saveChatMessage(
+  userId: string,
+  role: string,
+  content: string,
+  tripId?: string,
+  structuredSource?: ChatMessage,
+) {
+  const structured = structuredSource ? extractChatMessageMetadata(structuredSource) : null;
   return prisma.chatMessage.create({
     data: {
       userId,
       role,
       content,
       tripId,
+      metadata: structured ? (structured as Prisma.InputJsonValue) : undefined,
     },
   });
 }

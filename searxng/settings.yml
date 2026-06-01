@@ -1,4 +1,13 @@
-use_default_settings: true
+use_default_settings:
+  engines:
+    remove:
+      - brave
+      - brave.images
+      - brave.videos
+      - brave.news
+      - wikidata
+      - ahmia
+      - torch
 
 general:
   instance_name: "AIYO SearXNG"
@@ -19,4 +28,14 @@ search:
     - en
 
 ui:
-  default_locale: "zh-TW"
+  default_locale: ""
+
+engines:
+  - name: karmasearch
+    disabled: true
+  - name: karmasearch images
+    disabled: true
+  - name: karmasearch videos
+    disabled: true
+  - name: karmasearch news
+    disabled: true

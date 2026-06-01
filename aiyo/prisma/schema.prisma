@@ -20,7 +20,10 @@ model User {
   trips          Trip[]
   itineraryFolders ItineraryFolder[]
   tripCollaborations TripCollaborator[]
+  tripPublications TripPublication[]
   chatMessages   ChatMessage[]
+  videoInteractions VideoInteraction[]
+  appliedVideoSummaries AppliedVideoSummary[]
   comments       Comment[]
   presences      CollaborationPresence[]
   accounts       Account[]
@@ -58,10 +61,35 @@ model Trip {
   chatMessages ChatMessage[]
   room        CollaborationRoom?
   collaborators TripCollaborator[]
+  publication TripPublication?
+  videoInteractions VideoInteraction[]
+  appliedVideoSummaries AppliedVideoSummary[]
 
   @@index([userId, updatedAt])
   @@index([folderId])
   @@map("trips")
+}
+
+model TripPublication {
+  id             String    @id @default(cuid())
+  tripId         String    @unique
+  publisherId    String
+  title          String
+  coverImageUrl  String?
+  days           Int
+  destination    String?
+  searchText     String    @default("")
+  snapshotJson   Json
+  publisherImage String?
+  publishedAt    DateTime  @default(now())
+  revokedAt      DateTime?
+
+  trip           Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  publisher      User      @relation(fields: [publisherId], references: [id], onDelete: Cascade)
+
+  @@index([publishedAt(sort: Desc)])
+  @@index([publisherId])
+  @@map("trip_publications")
 }
 
 model ItineraryFolder {
@@ -119,6 +147,9 @@ model TripItem {
   timeSlot         String?
   itemType         String?
   transportMode    String?
+  transportDurationMinutes Int?
+  transportDistanceMeters Int?
+  transportDataSource String?
   source           String?
   location         String?
   latitude         Float?
@@ -178,6 +209,7 @@ model ChatMessage {
   tripId    String?
   role      String
   content   String
+  metadata  Json?
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   trip      Trip?    @relation(fields: [tripId], references: [id], onDelete: SetNull)
@@ -195,6 +227,54 @@ model VideoSummaryCache {
   updatedAt DateTime @updatedAt
 
   @@map("video_summary_caches")
+}
+
+model VideoInteraction {
+  id              String   @id @default(cuid())
+  userId          String
+  tripId          String?
+  videoId         String
+  source          String?
+  videoUrl        String?
+  title           String?
+  interactionType String
+  analysisId      String?
+  summaryId       String?
+  watchDurationSeconds Int?
+  progress        Float?
+  extractedPlaces Json?
+  extractedTimestamps Json?
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trip            Trip?    @relation(fields: [tripId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([tripId, createdAt])
+  @@index([videoId])
+  @@map("video_interactions")
+}
+
+model AppliedVideoSummary {
+  id               String   @id @default(cuid())
+  userId           String
+  tripId           String?
+  videoId          String
+  summaryId        String?
+  videoUrl         String?
+  title            String?
+  appliedPlaces    Json?
+  appliedSegments  Json?
+  createdTripItems Json?
+  summarySnapshot  Json?
+  appliedAt        DateTime @default(now())
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trip             Trip?    @relation(fields: [tripId], references: [id], onDelete: SetNull)
+
+  @@index([userId, appliedAt])
+  @@index([tripId, appliedAt])
+  @@index([videoId])
+  @@map("applied_video_summaries")
 }
 
 model CollaborationRoom {

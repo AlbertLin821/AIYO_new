@@ -2,5 +2,12 @@
 .cursor/
 *.log
 
+# Playwright artifacts (E2E debugging)
+.playwright-mcp/
+.logs/
+
+# Deprecated prototype (deleted in cleanup)
+youtube-proj/
+
 # Environment files are local-only; app templates live under aiyo/.env.example.
 .env*

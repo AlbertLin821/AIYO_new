@@ -8,7 +8,7 @@
 |------|------|
 | `aiyo/` | Next.js 16 應用程式、Prisma 綱要、遷移、種子腳本與應用層文件 |
 | `docs/` | 架構說明、遷移筆記、實作報告等（若專案內有） |
-| `youtube-proj/` | 舊版 YouTube 字幕／outline 參考實作（Vite＋Python server），已去除巢狀 `.git`，與主專案一併版本化 |
+| `youtube-proj/` | 舊版 YouTube 字幕／outline 參考實作（Vite＋Python server）；已於「中等」清理階段移除 |
 | `vendor/mem0/` | Mem0 上游原始碼快照（已去除 `.git`），供 `docker-compose.yml` 的 `mem0-memory` 建置使用；可用環境變數 `MEM0_REPO_PATH` 覆寫 |
 | `docker-compose.yml` | 本地 PostgreSQL、Redis、選用應用容器與選用 Mem0 相關服務 |
 | `dev-up.ps1` | Windows 上僅啟動 Docker Compose（含 `dev` 與 `mem0` 設定檔），不安裝 npm／不檢查 Ollama |
@@ -26,7 +26,7 @@
 
 ## 開發模式（Docker）：啟動所有服務
 
-此處的**開發模式**指：在儲存庫根目錄用 Compose **設定檔 `dev`** 啟動 **`app-dev`**，容器內執行 `npm run dev`（熱重載），並連同 **PostgreSQL**、**Redis**、**SearXNG**（站內搜尋／AI 網搜後端）一併啟動。這是目前團隊在容器內開發時的建議組合。
+此處的**開發模式**指：在儲存庫根目錄用 Compose **設定檔 `dev`** 啟動 **`app-dev`**，容器內執行 `npm run dev`（熱重載），並連同 **PostgreSQL**、**Redis**、**SearXNG**（舊版／手動搜尋實驗用）一併啟動。AI 對話搜尋與行程生成只允許 Serper 與 Tavily，不會 fallback 到 SearXNG。
 
 ### 開發模式會啟動哪些服務？
 
@@ -35,7 +35,7 @@
 | `app-dev` | `aiyo-new-app-dev` | Next.js 開發伺服器，`http://localhost:3000` |
 | `postgres` | `aiyo-new-postgres` | `localhost:5432`，資料庫 `aiyo_new_db` |
 | `redis` | `aiyo-new-redis` | `localhost:6379` |
-| `searxng` | `aiyo-new-searxng` | `localhost:8081`（對應容器內 `8080`），`app-dev` 的 `depends_on` 會一併拉起 |
+| `searxng` | `aiyo-new-searxng` | `localhost:8081`（對應容器內 `8080`），僅保留給舊版／手動搜尋實驗；AI 對話搜尋不使用 |
 
 **未包含在上一列指令內（可另外啟動）：**
 
@@ -55,7 +55,7 @@
 | `aiyo/.env` 內 **`MEM0_ENABLED=false`**（或未設定；程式預設為 `false`，見 `aiyo/src/server/config.ts`） | **不必**。聊天與行程規劃仍會執行，只是略過 Mem0 的搜尋／寫入記憶。 |
 | **`MEM0_ENABLED=true`**（例如沿用 `.env.example`）且希望對話能寫入／查詢 Mem0 | **要**。需能成功建置並啟動 `--profile mem0` 下的 `mem0-memory` 等服務（預設自 `vendor/mem0/` 建置；若要改用本機其他路徑可設 `MEM0_REPO_PATH`）。 |
 
-**與 PostgreSQL 的區別：** 行程、個人檔、聊天訊息等**主要持久化**仍由 **PostgreSQL（Prisma）** 負責；Mem0 額外提供的是可檢索的「記憶」語境（例如對話前後文補強），兩者層級不同。因此一般開發只要 DB + Redis + SearXNG + 應用即可；**只有在你明確要驗 Mem0 行為時**，才需要把 Mem0 一併拉起，或暫時關閉 `MEM0_ENABLED` 直到環境就緒。
+**與 PostgreSQL 的區別：** 行程、個人檔、聊天訊息等**主要持久化**仍由 **PostgreSQL（Prisma）** 負責；Mem0 額外提供的是可檢索的「記憶」語境（例如對話前後文補強），兩者層級不同。因此一般開發只要 DB + Redis + 應用即可；若要驗證 AI 網搜，請設定 `SERPER_API_KEY` 或 `TAVILY_API_KEY`。**只有在你明確要驗 Mem0 行為時**，才需要把 Mem0 一併拉起，或暫時關閉 `MEM0_ENABLED` 直到環境就緒。
 
 ### 啟動前檢查清單
 

@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { motion } from "framer-motion";
+import { m } from "@/lib/motion";
 import { Loader2 } from "lucide-react";
 import ResearchActivityFeed from "@/components/chat/ResearchActivityFeed";
 import {
@@ -33,7 +33,7 @@ export default function WorkflowProgressPanel({
 
   return (
     <div className="space-y-3">
-      <motion.div
+      <m.div
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.24 }}
@@ -57,7 +57,7 @@ export default function WorkflowProgressPanel({
           aria-label="行程規劃進度"
           className="h-2 w-full overflow-hidden rounded-full bg-slate-200"
         >
-          <motion.div
+          <m.div
             className="h-full rounded-full bg-gradient-to-r from-primary/80 to-primary"
             initial={{ width: 0 }}
             animate={{ width: `${progressPercent}%` }}
@@ -92,7 +92,7 @@ export default function WorkflowProgressPanel({
             </li>
           ))}
         </ul>
-      </motion.div>
+      </m.div>
       {showResearchFeed ? <ResearchActivityFeed steps={steps} /> : null}
     </div>
   );

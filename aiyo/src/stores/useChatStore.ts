@@ -9,6 +9,15 @@ import type { ChatMessage } from "@/types";
 /** Bootstrap／`/api/ai/chat` 持久化對話在商店中的固定識別 */
 export const CHAT_REMOTE_CONVERSATION_ID = "remote-current-trip";
 
+export function getRemoteConversationId(tripId?: string | null): string {
+  const normalizedTripId = tripId?.trim();
+  return normalizedTripId ? `remote-trip-${normalizedTripId}` : CHAT_REMOTE_CONVERSATION_ID;
+}
+
+function isSyncedRemoteConversation(conversation: ChatConversation): boolean {
+  return conversation.id === getRemoteConversationId(conversation.tripId);
+}
+
 export interface ChatConversation {
   id: string;
   title: string;
@@ -28,24 +37,116 @@ interface ChatState {
   setConversationTrip: (conversationId: string, tripId: string) => void;
   selectConversation: (conversationId: string) => void;
   deleteConversation: (conversationId: string) => Promise<void>;
-  setMessages: (messages: ChatMessage[]) => void;
-  mergeRemoteMessages: (messages: ChatMessage[]) => void;
+  setMessages: (
+    messages: ChatMessage[],
+    trip?: { tripId?: string | null; title?: string | null },
+    options?: { force?: boolean },
+  ) => void;
+  mergeRemoteMessages: (messages: ChatMessage[], trip?: { tripId?: string | null; title?: string | null }) => void;
   appendMessage: (message: ChatMessage) => void;
+  removeMessageById: (messageId: string) => void;
+  clearProposedChangesForMessage: (messageId: string) => void;
   setIsSending: (isSending: boolean) => void;
   setErrorMessage: (message: string | null) => void;
   clearMessages: () => void;
 }
 
-function messageSignature(message: ChatMessage): string {
+export function messageSignature(message: ChatMessage): string {
   return `${message.role}:${message.content.trim().toLowerCase()}`;
+}
+
+function dedupeChatMessagesBySignature(messages: ChatMessage[]): ChatMessage[] {
+  const seen = new Set<string>();
+  const deduped: ChatMessage[] = [];
+  for (const message of messages) {
+    const signature = messageSignature(message);
+    if (seen.has(signature)) {
+      continue;
+    }
+    seen.add(signature);
+    deduped.push(message);
+  }
+  return deduped;
 }
 
 function isEphemeralMessage(message: ChatMessage): boolean {
   return /^(chat_user_|user_|voice_user_)/.test(message.id);
 }
 
+function hasStructuredChatPayload(message: ChatMessage): boolean {
+  return Boolean(
+      message.travelPlan ||
+      message.questionCard ||
+      message.preferenceConfirmation ||
+      message.responseType === "travel_plan" ||
+      message.responseType === "question_card" ||
+      (message.proposedChanges?.length ?? 0) > 0 ||
+      (message.assistantActions?.length ?? 0) > 0 ||
+      (message.sourceReferences?.length ?? 0) > 0,
+  );
+}
+
+function mergeStructuredChatFields(remote: ChatMessage, local: ChatMessage): ChatMessage {
+  if (!hasStructuredChatPayload(local)) {
+    return remote;
+  }
+  return {
+    ...remote,
+    responseType: local.responseType ?? remote.responseType,
+    travelPlan: local.travelPlan ?? remote.travelPlan,
+    questionCard: local.questionCard ?? remote.questionCard,
+    preferenceConfirmation: local.preferenceConfirmation ?? remote.preferenceConfirmation,
+    statusSteps: local.statusSteps?.length ? local.statusSteps : remote.statusSteps,
+    tripProfile: local.tripProfile ?? remote.tripProfile,
+    proposedChanges: local.proposedChanges ?? remote.proposedChanges,
+    assistantActions: local.assistantActions ?? remote.assistantActions,
+    sourceReferences: local.sourceReferences ?? remote.sourceReferences,
+    sources: local.sources ?? remote.sources,
+  };
+}
+
+function mergeRemoteWithLocalChatMessages(
+  remoteMessages: ChatMessage[],
+  localMessages: ChatMessage[],
+): ChatMessage[] {
+  const localById = new Map(localMessages.map((message) => [message.id, message]));
+  const localBySignature = new Map(localMessages.map((message) => [messageSignature(message), message]));
+
+  const mergedRemote = remoteMessages.map((remoteMessage) => {
+    const localMatch =
+      localById.get(remoteMessage.id) ||
+      localBySignature.get(messageSignature(remoteMessage));
+    return localMatch ? mergeStructuredChatFields(remoteMessage, localMatch) : remoteMessage;
+  });
+
+  const remoteSignatures = new Set(remoteMessages.map(messageSignature));
+  const pendingLocal = localMessages.filter(
+    (message) =>
+      (isEphemeralMessage(message) || hasStructuredChatPayload(message)) &&
+      !remoteSignatures.has(messageSignature(message)),
+  );
+
+  return dedupeChatMessagesBySignature([...mergedRemote, ...pendingLocal]);
+}
+
+/** @internal Exported for unit tests */
+export function mergeRemoteWithLocalChatMessagesForTest(
+  remoteMessages: ChatMessage[],
+  localMessages: ChatMessage[],
+): ChatMessage[] {
+  return mergeRemoteWithLocalChatMessages(remoteMessages, localMessages);
+}
+
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function formatTripConversationTitle(title?: string | null): string | null {
+  const trimmed = title?.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.endsWith("對話") ? trimmed : `${trimmed}對話`;
 }
 
 function deriveConversationTitle(messages: ChatMessage[], fallback = "新的對話"): string {
@@ -69,21 +170,24 @@ function createEmptyConversation(title = "新的對話", tripId?: string): ChatC
 function upsertRemoteConversation(
   conversations: ChatConversation[],
   remoteMessages: ChatMessage[],
+  trip?: { tripId?: string | null; title?: string | null },
 ): ChatConversation[] {
   const updatedAt = nowIso();
-  const existing = conversations.find((conversation) => conversation.id === CHAT_REMOTE_CONVERSATION_ID);
+  const remoteId = getRemoteConversationId(trip?.tripId);
+  const existing = conversations.find((conversation) => conversation.id === remoteId);
+  const fallbackTitle = formatTripConversationTitle(trip?.title);
   const remoteConversation: ChatConversation = {
-    id: CHAT_REMOTE_CONVERSATION_ID,
-    title: deriveConversationTitle(remoteMessages, "目前行程對話"),
+    id: remoteId,
+    title: fallbackTitle || deriveConversationTitle(remoteMessages, "目前行程對話"),
     createdAt: existing?.createdAt || updatedAt,
     updatedAt,
     messages: remoteMessages,
-    tripId: existing?.tripId,
+    tripId: trip?.tripId?.trim() || existing?.tripId,
   };
 
   return [
     remoteConversation,
-    ...conversations.filter((conversation) => conversation.id !== CHAT_REMOTE_CONVERSATION_ID),
+    ...conversations.filter((conversation) => conversation.id !== remoteId),
   ];
 }
 
@@ -169,23 +273,27 @@ export const useChatStore = create<ChatState>((set) => ({
       });
     });
   },
-  setMessages: (messages) =>
+  setMessages: (messages, trip, options) =>
     set((state) => {
+      if (state.isSending) {
+        return state;
+      }
+      const remoteId = getRemoteConversationId(trip?.tripId);
       const activeConversation = state.conversations.find(
         (conversation) => conversation.id === state.activeConversationId,
       );
-      if (activeConversation?.tripId && activeConversation.id !== CHAT_REMOTE_CONVERSATION_ID) {
+      if (activeConversation?.tripId && !isSyncedRemoteConversation(activeConversation) && !options?.force) {
         return {
           conversations: state.conversations.filter(
-            (conversation) => conversation.id !== CHAT_REMOTE_CONVERSATION_ID,
+            (conversation) => conversation.id !== remoteId,
           ),
           activeConversationId: activeConversation.id,
           messages: activeConversation.messages,
         };
       }
 
-      const conversations = upsertRemoteConversation(state.conversations, messages);
-      const activeConversationId = state.activeConversationId || CHAT_REMOTE_CONVERSATION_ID;
+      const conversations = upsertRemoteConversation(state.conversations, messages, trip);
+      const activeConversationId = state.activeConversationId || remoteId;
       const nextActiveConversation = conversations.find((item) => item.id === activeConversationId);
       return {
         conversations,
@@ -193,39 +301,43 @@ export const useChatStore = create<ChatState>((set) => ({
         messages: nextActiveConversation?.messages || messages,
       };
     }),
-  mergeRemoteMessages: (messages) =>
+  mergeRemoteMessages: (messages, trip) =>
     set((state) => {
+      if (state.isSending) {
+        return state;
+      }
+      const remoteId = getRemoteConversationId(trip?.tripId);
       const activeConversation = state.conversations.find(
         (conversation) => conversation.id === state.activeConversationId,
       );
-      if (activeConversation?.tripId && activeConversation.id !== CHAT_REMOTE_CONVERSATION_ID) {
+      if (activeConversation?.tripId && !isSyncedRemoteConversation(activeConversation)) {
         return {
           conversations: state.conversations.filter(
-            (conversation) => conversation.id !== CHAT_REMOTE_CONVERSATION_ID,
+            (conversation) => conversation.id !== remoteId,
           ),
           messages: activeConversation.messages,
         };
       }
 
-      const remoteSignatures = new Set(messages.map(messageSignature));
       const remoteConversation = state.conversations.find(
-        (conversation) => conversation.id === CHAT_REMOTE_CONVERSATION_ID,
+        (conversation) => conversation.id === remoteId,
       );
-      const pendingLocal = (remoteConversation?.messages || []).filter(
-        (message) =>
-          isEphemeralMessage(message) && !remoteSignatures.has(messageSignature(message)),
-      );
-      const mergedMessages = [...messages, ...pendingLocal];
-      const conversations = upsertRemoteConversation(state.conversations, mergedMessages);
+      const localMessages = dedupeChatMessagesBySignature([
+        ...(remoteConversation?.messages || []),
+        ...(state.activeConversationId === remoteId ? state.messages : []),
+      ]);
+      const mergedMessages = mergeRemoteWithLocalChatMessages(messages, localMessages);
+      const conversations = upsertRemoteConversation(state.conversations, mergedMessages, trip);
       const nextActiveConversation = conversations.find(
         (conversation) => conversation.id === state.activeConversationId,
       );
+      const nextMessages =
+        state.activeConversationId === remoteId
+          ? mergedMessages
+          : nextActiveConversation?.messages || state.messages;
       return {
         conversations,
-        messages:
-          state.activeConversationId === CHAT_REMOTE_CONVERSATION_ID
-            ? mergedMessages
-            : nextActiveConversation?.messages || state.messages,
+        messages: nextMessages,
       };
     }),
   appendMessage: (message) =>
@@ -239,6 +351,21 @@ export const useChatStore = create<ChatState>((set) => ({
               ...createEmptyConversation(),
               id: activeId,
             } satisfies ChatConversation);
+          const signature = messageSignature(message);
+          const isDuplicateAssistant =
+            message.role === "assistant" &&
+            existingConversation.messages.some(
+              (existingMessage) =>
+                existingMessage.role === "assistant" &&
+                messageSignature(existingMessage) === signature,
+            );
+          if (isDuplicateAssistant) {
+            return {
+              conversations: state.conversations,
+              activeConversationId: state.activeConversationId || activeId,
+              messages: state.messages,
+            };
+          }
           const messages = [...existingConversation.messages, message];
           const updatedConversation: ChatConversation = {
             ...existingConversation,
@@ -259,6 +386,38 @@ export const useChatStore = create<ChatState>((set) => ({
           };
         })(),
       }));
+    }),
+  removeMessageById: (messageId) =>
+    withSyncMutationSource("local-user-edit", () => {
+      set((state) => {
+        const strip = (messages: ChatMessage[]) =>
+          messages.filter((message) => message.id !== messageId);
+        return {
+          messages: strip(state.messages),
+          conversations: state.conversations.map((conversation) =>
+            conversation.id === state.activeConversationId
+              ? { ...conversation, messages: strip(conversation.messages) }
+              : conversation,
+          ),
+        };
+      });
+    }),
+  clearProposedChangesForMessage: (messageId) =>
+    withSyncMutationSource("local-user-edit", () => {
+      set((state) => {
+        const stripProposedChanges = (messages: ChatMessage[]) =>
+          messages.map((message) =>
+            message.id === messageId ? { ...message, proposedChanges: undefined } : message,
+          );
+        return {
+          messages: stripProposedChanges(state.messages),
+          conversations: state.conversations.map((conversation) =>
+            conversation.id === state.activeConversationId
+              ? { ...conversation, messages: stripProposedChanges(conversation.messages) }
+              : conversation,
+          ),
+        };
+      });
     }),
   setIsSending: (isSending) => set({ isSending }),
   setErrorMessage: (errorMessage) => set({ errorMessage }),

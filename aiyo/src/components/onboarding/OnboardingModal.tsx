@@ -1,9 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import { CalendarDays, MapPin, Sparkles, X } from "lucide-react";
 import { useSession } from "next-auth/react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { zhTW as t } from "@/locales/zh-TW";
 import { syncService } from "@/services/syncService";
 import { useTripStore } from "@/stores/useTripStore";
@@ -18,6 +25,8 @@ export default function OnboardingModal() {
   const [destinationInput, setDestinationInput] = useState("");
   const [daysInput, setDaysInput] = useState("");
   const [isFinishing, setIsFinishing] = useState(false);
+
+  const open = showOnboarding && status === "authenticated";
 
   async function finish(skip: boolean) {
     if (isFinishing) {
@@ -55,117 +64,104 @@ export default function OnboardingModal() {
   }
 
   return (
-    <AnimatePresence>
-      {showOnboarding && status === "authenticated" && (
-        <motion.div
-          data-testid="onboarding-root"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    <div data-testid="onboarding-root">
+      {open ? <span data-testid="onboarding-overlay" className="sr-only" aria-hidden /> : null}
+      <Dialog
+        open={open}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !isFinishing) {
+            void finish(true);
+          }
+        }}
+      >
+        <DialogContent
+          data-testid="onboarding-modal"
+          showCloseButton={false}
+          className="max-w-lg overflow-hidden rounded-3xl border-border-light bg-surface p-0 shadow-soft-lg"
         >
-          <motion.div
-            data-testid="onboarding-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-foreground/20 backdrop-blur-sm"
+          <button
+            data-testid="onboarding-close-button"
+            aria-label={t.onboarding.closeModalAria}
+            type="button"
+            disabled={isFinishing}
             onClick={() => void finish(true)}
-            aria-disabled={isFinishing}
-            style={isFinishing ? { pointerEvents: "none" } : undefined}
-          />
-
-          <motion.div
-            data-testid="onboarding-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="onboarding-title"
-            initial={{ opacity: 0, scale: 0.92, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.92, y: 20 }}
-            transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-            className="relative w-full max-w-lg overflow-hidden rounded-3xl bg-surface shadow-soft-lg"
+            className="absolute right-4 top-4 z-10 cursor-pointer rounded-full p-1.5 text-muted transition-colors hover:bg-border-light hover:text-foreground disabled:cursor-wait disabled:opacity-50"
           >
-            <button
-              data-testid="onboarding-close-button"
-              aria-label={t.onboarding.closeModalAria}
-              type="button"
-              disabled={isFinishing}
-              onClick={() => void finish(true)}
-              className="absolute right-4 top-4 z-10 cursor-pointer rounded-full p-1.5 text-muted transition-colors hover:bg-border-light hover:text-foreground disabled:cursor-wait disabled:opacity-50"
-            >
-              <X className="size-4" />
-            </button>
+            <X className="size-4" aria-hidden />
+          </button>
 
-            <div className="h-2 bg-gradient-to-r from-primary via-lavender to-secondary" />
+          <div className="h-2 bg-gradient-to-r from-primary via-lavender to-secondary" />
 
-            <div className="p-8 pt-6">
-              <div className="mb-8 text-center">
-                <div className="mb-4 inline-flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 to-lavender/15">
-                  <Sparkles className="size-7 text-primary" />
-                </div>
-                <h2 id="onboarding-title" className="mb-2 text-2xl font-bold text-foreground">{t.onboarding.welcomeTitle}</h2>
-                <p className="text-sm leading-relaxed text-muted">{t.onboarding.welcomeBody}</p>
+          <div className="p-8 pt-6">
+            <div className="mb-8 text-center">
+              <div className="mb-4 inline-flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 to-lavender/15">
+                <Sparkles className="size-7 text-primary" />
+              </div>
+              <DialogTitle id="onboarding-title" className="mb-2 text-2xl font-bold">
+                {t.onboarding.welcomeTitle}
+              </DialogTitle>
+              <p className="text-sm leading-relaxed text-muted">{t.onboarding.welcomeBody}</p>
+            </div>
+
+            <div className="flex flex-col gap-5">
+              <div>
+                <Label htmlFor="onboarding-destination" className="mb-2 flex items-center gap-2 text-sm font-medium">
+                  <MapPin className="size-4 text-secondary" />
+                  {t.onboarding.destination}
+                </Label>
+                <Input
+                  type="text"
+                  id="onboarding-destination"
+                  value={destinationInput}
+                  onChange={(event) => setDestinationInput(event.target.value)}
+                  placeholder={t.onboarding.destinationPh}
+                  data-testid="onboarding-destination-input"
+                  className="rounded-xl border-border bg-cream/50"
+                />
               </div>
 
-              <div className="flex flex-col gap-5">
-                <div>
-                  <label className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
-                    <MapPin className="size-4 text-secondary" />
-                    {t.onboarding.destination}
-                  </label>
-                  <input
-                    type="text"
-                    value={destinationInput}
-                    onChange={(event) => setDestinationInput(event.target.value)}
-                    placeholder={t.onboarding.destinationPh}
-                    data-testid="onboarding-destination-input"
-                    className="w-full rounded-xl border border-border bg-cream/50 px-4 py-3 text-sm text-foreground transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
-                    <CalendarDays className="size-4 text-primary" />
-                    {t.onboarding.tripDays}
-                  </label>
-                  <input
-                    type="number"
-                    value={daysInput}
-                    onChange={(event) => setDaysInput(event.target.value)}
-                    placeholder={t.onboarding.daysPlaceholder}
-                    min={1}
-                    max={30}
-                    data-testid="onboarding-days-input"
-                    className="w-full rounded-xl border border-border bg-cream/50 px-4 py-3 text-sm text-foreground transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-8 flex items-center justify-between">
-                <button
-                  data-testid="onboarding-skip-button"
-                  type="button"
-                  disabled={isFinishing}
-                  onClick={() => void finish(true)}
-                  className="cursor-pointer rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-border-light hover:text-foreground disabled:cursor-wait disabled:opacity-50"
-                >
-                  {t.onboarding.skip}
-                </button>
-                <button
-                  data-testid="onboarding-start-button"
-                  type="button"
-                  disabled={isFinishing}
-                  onClick={() => void finish(false)}
-                  className="cursor-pointer rounded-xl bg-gradient-to-r from-primary to-primary-dark px-6 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98] disabled:cursor-wait disabled:opacity-50"
-                >
-                  {t.onboarding.start}
-                </button>
+              <div>
+                <Label htmlFor="onboarding-days" className="mb-2 flex items-center gap-2 text-sm font-medium">
+                  <CalendarDays className="size-4 text-primary" />
+                  {t.onboarding.tripDays}
+                </Label>
+                <Input
+                  type="number"
+                  id="onboarding-days"
+                  value={daysInput}
+                  onChange={(event) => setDaysInput(event.target.value)}
+                  placeholder={t.onboarding.daysPlaceholder}
+                  min={1}
+                  max={30}
+                  data-testid="onboarding-days-input"
+                  className="rounded-xl border-border bg-cream/50"
+                />
               </div>
             </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+
+            <div className="mt-8 flex items-center justify-between">
+              <button
+                data-testid="onboarding-skip-button"
+                type="button"
+                disabled={isFinishing}
+                onClick={() => void finish(true)}
+                className="cursor-pointer rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-border-light hover:text-foreground disabled:cursor-wait disabled:opacity-50"
+              >
+                {t.onboarding.skip}
+              </button>
+              <Button
+                data-testid="onboarding-start-button"
+                type="button"
+                disabled={isFinishing}
+                onClick={() => void finish(false)}
+                className="rounded-xl bg-gradient-to-r from-primary to-primary-dark px-6 py-2.5 text-sm font-medium hover:scale-[1.02] hover:shadow-md active:scale-[0.98]"
+              >
+                {t.onboarding.start}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

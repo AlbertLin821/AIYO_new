@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
+import { requireSessionUser } from "@/server/auth";
 import { serverConfig } from "@/server/config";
 import { fetchGooglePlaceDetailsByPlaceId, geocodeWithGoogle } from "@/server/geo/geocodeService";
 import type { GeocodeApiResult } from "@/types";
@@ -9,6 +10,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
+    await requireSessionUser();
     if (!serverConfig.googleMapsApiKey) {
       return NextResponse.json(
         createError(
@@ -79,7 +81,10 @@ export async function POST(request: Request) {
     return NextResponse.json(
       createSuccess({ results }, errors.length ? { partialFailures: errors } : undefined),
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === "unauthorized") {
+      return NextResponse.json(createError("unauthorized", "請先登入。"), { status: 401 });
+    }
     return NextResponse.json(
       createError("internal_error", "地理編碼失敗，請稍後再試。"),
       { status: 500 },

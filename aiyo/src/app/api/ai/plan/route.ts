@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
 import { OllamaRequestError, resolveModelForTask } from "@/server/ai/ollamaClient";
-import { addMemories, formatMemoryContext, searchMemories } from "@/server/memory/mem0Client";
+import { buildPersonalizedAIContext, type AIContextBuildResult } from "@/server/ai/aiContextBuilder";
+import { addMemories, formatMemoryContext } from "@/server/memory/mem0Client";
+import { retrieveRelevantMemoriesForUser } from "@/server/memory/memoryRetrieval";
 import { StructuredOutputError } from "@/server/ai/responseParser";
 import { requireSessionUser } from "@/server/auth";
 import { resolveSessionTrip, saveTripPayload } from "@/server/data/appStateService";
 import { generateTripPlan } from "@/server/services/travelPlannerService";
+import { updateTravelPreferencesFromSuggestion } from "@/server/personalization/personalizationService";
 import { buildPinsFromTripPlan } from "@/services/mapSync";
-import type { TravelPreferences, TripPlanRequest } from "@/types";
+import type { TravelPreferences, TripPlanRequest, TripPlanResult } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-/** 與客戶端 `VOICE_PLAN_CLIENT_TIMEOUT_MS` 對齊；Vercel 等環境需足夠上限才能完成網搜＋多輪模型。 */
+/** 行程 JSON 會觸發網搜、Mem0 與一或多輪 Ollama；Vercel 等環境需足夠上限才能完成。 */
 export const maxDuration = 300;
 
 function normalizePreferences(input: Partial<TravelPreferences> | undefined): TravelPreferences {
@@ -42,6 +45,50 @@ function inferDestinationFromTranscript(transcript: string): string {
   return guided?.[1]?.trim() || "";
 }
 
+function ensurePlanHasEditableItems(plan: TripPlanResult, request: TripPlanRequest): TripPlanResult {
+  if (plan.days.some((day) => day.items.length > 0)) {
+    return plan;
+  }
+
+  const seeds = request.preferences.mustVisit?.length
+    ? request.preferences.mustVisit
+    : [request.destination];
+  const dayCount = Math.max(1, request.days);
+  const days =
+    plan.days.length > 0
+      ? plan.days
+      : Array.from({ length: dayCount }, (_, index) => ({
+          dayNumber: index + 1,
+          theme: `Day ${index + 1}`,
+          summary: "",
+          items: [],
+        }));
+
+  return {
+    ...plan,
+    days: days.map((day, index) => {
+      const title = seeds[index % seeds.length] || request.destination;
+      return {
+        ...day,
+        dayNumber: day.dayNumber || index + 1,
+        theme: day.theme || `Day ${day.dayNumber || index + 1}`,
+        summary: day.summary || `${request.destination} 行程安排`,
+        items: [
+          {
+            id: `fallback_${day.dayNumber || index + 1}_1`,
+            dayNumber: day.dayNumber || index + 1,
+            time: index === 0 ? "09:30" : "10:00",
+            title,
+            type: "attraction",
+            notes: "AI 回傳的活動清單為空，已依照你的必訪清單建立可編輯項目。",
+            source: "ai",
+          },
+        ],
+      };
+    }),
+  };
+}
+
 export async function POST(request: Request) {
   try {
     const { userId } = await requireSessionUser();
@@ -49,7 +96,10 @@ export async function POST(request: Request) {
       transcript?: string;
       interests?: string[];
       transportPreference?: string;
+      tripId?: string;
+      currentTripId?: string;
     };
+    const existingTrip = await resolveSessionTrip(userId);
 
     const transcript = body.transcript?.trim();
     const destination =
@@ -81,7 +131,7 @@ export async function POST(request: Request) {
     const mustVisit = tripRequest.preferences.mustVisit || [];
     const avoid = tripRequest.preferences.avoid || [];
 
-    const memories = await searchMemories({
+    const { memories } = await retrieveRelevantMemoriesForUser({
       userId,
       query: [
         destination,
@@ -93,11 +143,40 @@ export async function POST(request: Request) {
         .filter(Boolean)
         .join(" "),
     });
+    let personalizedContext: AIContextBuildResult | null = null;
+    try {
+      personalizedContext = await buildPersonalizedAIContext({
+        userId,
+        currentUserInput: transcript || destination,
+        tripRequest,
+        tripId: body.tripId || body.currentTripId || existingTrip?.id,
+        memorySnippets: memories.map((memory) => ({
+          content: memory.memory,
+          source: "mem0",
+          relevance: memory.score,
+        })),
+      });
+    } catch {
+      personalizedContext = null;
+    }
 
-    const generated = await generateTripPlan(tripRequest, formatMemoryContext(memories));
-    const result = generated.plan;
+    await updateTravelPreferencesFromSuggestion(userId, {
+      destination,
+      budget,
+      days,
+      travelStyle: tripRequest.preferences.interests,
+      transportPreference: tripRequest.preferences.transportPreference,
+      mustVisit,
+      avoid,
+      notes: tripRequest.preferences.notes,
+    });
 
-    const existingTrip = await resolveSessionTrip(userId);
+    const generated = await generateTripPlan(
+      tripRequest,
+      personalizedContext?.promptContextText || formatMemoryContext(memories),
+    );
+    const result = ensurePlanHasEditableItems(generated.plan, tripRequest);
+
     const savedTrip = await saveTripPayload(userId, {
       tripId: existingTrip?.id ?? "",
       title: `${destination} 行程`,
@@ -153,6 +232,9 @@ export async function POST(request: Request) {
         planGenerationMode: generated.diagnostics.planGenerationMode,
         parseMode: generated.diagnostics.parseMode,
         retryCount: generated.diagnostics.retryCount,
+        ...(process.env.NODE_ENV !== "production" && personalizedContext
+          ? { aiContextDebug: personalizedContext.debug }
+          : {}),
       }),
     );
   } catch (error) {

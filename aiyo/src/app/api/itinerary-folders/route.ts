@@ -3,6 +3,7 @@ import { createError, createSuccess } from "@/lib/api-response";
 import { prisma } from "@/lib/prisma";
 import { toApiError } from "@/server/apiErrors";
 import { requireSessionUser } from "@/server/auth";
+import { findDuplicateFolderForUser } from "@/server/itineraryFolderNames";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,6 +45,11 @@ export async function POST(request: Request) {
     if (!name) {
       return NextResponse.json(createError("invalid_request", "Folder name is required."), {
         status: 400,
+      });
+    }
+    if (await findDuplicateFolderForUser(userId, name)) {
+      return NextResponse.json(createError("invalid_request", "Folder name already exists."), {
+        status: 409,
       });
     }
     const folder = await prisma.itineraryFolder.create({

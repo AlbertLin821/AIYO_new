@@ -1,7 +1,8 @@
 import { zhTW as t } from "@/locales/zh-TW";
 import { markPersistenceServerHydrated, persistActiveUserSnapshotNow } from "@/services/persistence";
+import { reconcileTripMapState } from "@/services/mapSync";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/services/apiClient";
-import { CHAT_REMOTE_CONVERSATION_ID, useChatStore } from "@/stores/useChatStore";
+import { getRemoteConversationId, useChatStore } from "@/stores/useChatStore";
 import { useCollabStore } from "@/stores/useCollabStore";
 import { useMapStore } from "@/stores/useMapStore";
 import { getSyncMutationSource } from "@/stores/syncMutationSource";
@@ -52,12 +53,18 @@ class SyncService {
   private roomId: string | null = null;
   private hydrated = false;
   private realtimeErrorShown = false;
+  private realtimeReconnectWarnTimer: number | null = null;
+  private manuallyClosingRealtime = false;
   private isApplyingRemote = false;
   private isSyncing = false;
   private lastSyncedPayloadKey: string | null = null;
   private debouncedTripSync = debouncedVoidRunner(() => {
     void this.syncTripState("debounced");
   }, 350);
+
+  isHydrated(): boolean {
+    return this.hydrated;
+  }
 
   /** Call when session ends so guests do not reuse a prior authenticated hydrate flag. */
   resetSessionState() {
@@ -69,7 +76,7 @@ class SyncService {
   }
 
   flushTripSyncNow(options?: { keepalive?: boolean; force?: boolean }) {
-    if ((!this.hydrated && !options?.force) || this.isApplyingRemote) {
+    if ((!this.hydrated && !options?.force) || (this.isApplyingRemote && !options?.force)) {
       return Promise.resolve();
     }
     this.debouncedTripSync.cancel();
@@ -80,6 +87,22 @@ class SyncService {
     if (process.env.NODE_ENV !== "production") {
       console.info(`[sync] ${message}`, payload || {});
     }
+  }
+
+  private applyReconciledTripSnapshot(
+    trip: PersistedTripPayload,
+    budget: number | undefined,
+    source: "bootstrap" | "realtime" | "server-ack",
+  ) {
+    const reconciled = reconcileTripMapState(trip.itinerary, trip.pins);
+    const nextTrip: PersistedTripPayload = {
+      ...trip,
+      itinerary: reconciled.itinerary,
+      pins: reconciled.pins,
+    };
+    useTripStore.getState().setRemoteTrip(nextTrip, budget, source);
+    useMapStore.getState().setPins(reconciled.pins, source);
+    return nextTrip;
   }
 
   private normalizePayload(payload: PersistedTripPayload) {
@@ -100,6 +123,9 @@ class SyncService {
           title: item.title,
           type: item.type,
           transport: item.transport || "",
+          transportDurationMinutes: item.transportDurationMinutes || 0,
+          transportDistanceMeters: item.transportDistanceMeters || 0,
+          transportDataSource: item.transportDataSource || "",
           notes: item.notes || "",
           source: item.source || "manual",
           location: item.location
@@ -197,13 +223,12 @@ class SyncService {
         const tripSnapshotSource = source === "realtime" ? "realtime" : "bootstrap";
         this.isApplyingRemote = true;
         try {
-          useTripStore.getState().setRemoteTrip(
+          const nextTrip = this.applyReconciledTripSnapshot(
             snapshot.trip,
             snapshot.profile.budget,
             tripSnapshotSource,
           );
-          useMapStore.getState().setPins(snapshot.trip.pins, tripSnapshotSource);
-          this.lastSyncedPayloadKey = remoteKey;
+          this.lastSyncedPayloadKey = this.getPayloadKey(nextTrip);
           this.log("remote snapshot applied", { source, updatedAt: remoteUpdatedAt });
         } finally {
           this.isApplyingRemote = false;
@@ -222,13 +247,19 @@ class SyncService {
     }
 
     if (source === "realtime") {
-      useChatStore.getState().mergeRemoteMessages(snapshot.chatMessages);
+      useChatStore.getState().mergeRemoteMessages(snapshot.chatMessages, {
+        tripId: snapshot.trip?.tripId,
+        title: snapshot.trip?.title,
+      });
     } else {
-      useChatStore.getState().setMessages(snapshot.chatMessages);
+      useChatStore.getState().setMessages(snapshot.chatMessages, {
+        tripId: snapshot.trip?.tripId,
+        title: snapshot.trip?.title,
+      });
     }
     if (snapshot.trip?.tripId) {
       useChatStore.getState().setConversationTrip(
-        CHAT_REMOTE_CONVERSATION_ID,
+        getRemoteConversationId(snapshot.trip.tripId),
         snapshot.trip.tripId,
       );
     }
@@ -271,18 +302,33 @@ class SyncService {
 
   applyTripSwitch(snapshot: {
     trip: PersistedTripPayload;
+    chatMessages?: BootstrapPayload["chatMessages"];
     collaboration: CollaborationPresenceState | null;
+    selectConversation?: boolean;
   }) {
-    const remoteKey = this.getPayloadKey(snapshot.trip);
-
     this.isApplyingRemote = true;
     try {
-      useTripStore.getState().setRemoteTrip(snapshot.trip, snapshot.trip.budget, "bootstrap");
-      useMapStore.getState().setPins(snapshot.trip.pins, "bootstrap");
-      this.lastSyncedPayloadKey = remoteKey;
+      const nextTrip = this.applyReconciledTripSnapshot(
+        snapshot.trip,
+        snapshot.trip.budget,
+        "bootstrap",
+      );
+      this.lastSyncedPayloadKey = this.getPayloadKey(nextTrip);
       this.log("trip switch snapshot applied", { tripId: snapshot.trip.tripId });
     } finally {
       this.isApplyingRemote = false;
+    }
+
+    useChatStore.getState().setMessages(
+      snapshot.chatMessages || [],
+      {
+        tripId: snapshot.trip.tripId,
+        title: snapshot.trip.title,
+      },
+      { force: true },
+    );
+    if (snapshot.selectConversation !== false) {
+      useChatStore.getState().selectConversation(getRemoteConversationId(snapshot.trip.tripId));
     }
 
     if (snapshot.collaboration) {
@@ -306,10 +352,15 @@ class SyncService {
     this.stopRealtime();
     useCollabStore.getState().setConnectionStatus("connecting");
     this.realtimeErrorShown = false;
+    this.manuallyClosingRealtime = false;
 
     this.eventSource = new EventSource(`/api/realtime/stream?roomId=${roomId}`);
     this.eventSource.addEventListener("connected", () => {
       this.realtimeErrorShown = false;
+      if (this.realtimeReconnectWarnTimer !== null) {
+        window.clearTimeout(this.realtimeReconnectWarnTimer);
+        this.realtimeReconnectWarnTimer = null;
+      }
       useCollabStore.getState().setConnectionStatus("connected");
     });
     this.eventSource.addEventListener("snapshot", (event) => {
@@ -317,19 +368,34 @@ class SyncService {
       this.applyBootstrap(payload.data, { source: "realtime" });
     });
     this.eventSource.onerror = () => {
+      if (this.manuallyClosingRealtime) {
+        return;
+      }
       useCollabStore.getState().setConnectionStatus("reconnecting");
-      if (!this.realtimeErrorShown) {
+      if (this.realtimeReconnectWarnTimer !== null || this.realtimeErrorShown) {
+        return;
+      }
+      this.realtimeReconnectWarnTimer = window.setTimeout(() => {
+        this.realtimeReconnectWarnTimer = null;
+        if (this.manuallyClosingRealtime || useCollabStore.getState().connectionStatus === "connected") {
+          return;
+        }
         this.realtimeErrorShown = true;
         useToastStore.getState().pushToast({
           variant: "error",
           title: t.bootstrap.realtimeLostTitle,
           description: t.bootstrap.realtimeLostDesc,
         });
-      }
+      }, 10_000);
     };
   }
 
   stopRealtime() {
+    this.manuallyClosingRealtime = true;
+    if (this.realtimeReconnectWarnTimer !== null) {
+      window.clearTimeout(this.realtimeReconnectWarnTimer);
+      this.realtimeReconnectWarnTimer = null;
+    }
     this.eventSource?.close();
     this.eventSource = null;
     useCollabStore.getState().setConnectionStatus("disconnected");
@@ -371,7 +437,7 @@ class SyncService {
     const payload = this.buildCurrentTripPayload();
     const payloadKey = this.getPayloadKey(payload);
 
-    if ((!this.hydrated && !options?.force) || this.isApplyingRemote) {
+    if ((!this.hydrated && !options?.force) || (this.isApplyingRemote && !options?.force)) {
       return;
     }
 
@@ -381,11 +447,11 @@ class SyncService {
       return;
     }
 
-    if (payloadKey === this.lastSyncedPayloadKey) {
+    if (payloadKey === this.lastSyncedPayloadKey && !options?.force) {
       this.log("skip duplicate trip sync", { source });
       return;
     }
-    if (this.isSyncing) {
+    if (this.isSyncing && !options?.force) {
       this.log("skip overlapping trip sync", { source });
       return;
     }

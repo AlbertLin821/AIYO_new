@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useSession } from "next-auth/react";
-import { motion } from "framer-motion";
+import { m } from "@/lib/motion";
 import { MessageSquare, Plus, Trash2, Users } from "lucide-react";
 import { zhTW as t } from "@/locales/zh-TW";
 import { cn } from "@/lib/utils";
@@ -177,7 +177,7 @@ export default function ItineraryCollaborationSidebar({ variant = "light" }: Pro
         </div>
         <div className="flex max-h-48 flex-col gap-2 overflow-y-auto">
           {comments.map((comment) => (
-            <motion.div
+            <m.div
               key={comment.id}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
@@ -214,7 +214,7 @@ export default function ItineraryCollaborationSidebar({ variant = "light" }: Pro
                 )}
               </div>
               <p className={cn("leading-relaxed", isDark ? "text-zinc-300" : "text-foreground")}>{comment.content}</p>
-            </motion.div>
+            </m.div>
           ))}
           {comments.length === 0 && (
             <p
