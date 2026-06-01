@@ -1,5 +1,5 @@
 import type { ChatContext, SearchDecision, SearchNeed, TravelAgentKnownPreferences, TravelSearchContext } from "@/types";
-import type { WebSearchResult } from "@/server/search/searxngClient";
+import type { WebSearchResult } from "@/server/search/webSearchTypes";
 
 const AI_SEARCH_PROVIDERS = ["serper", "tavily"] as const;
 

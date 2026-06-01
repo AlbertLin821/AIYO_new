@@ -40,6 +40,13 @@ function regionFromHint(locationHint?: string): string | undefined {
   if (/japan|tokyo|osaka|kyoto|日本|東京|大阪|京都/.test(h)) {
     return "jp";
   }
+  if (
+    /usa|u\.s\.a|united states|america|美國|美国|new york|los angeles|san francisco|las vegas|chicago|miami|seattle|boston|hawaii|夏威夷|紐約|纽约|洛杉磯|洛杉矶|舊金山|旧金山/.test(
+      h,
+    )
+  ) {
+    return "us";
+  }
   if (/korea|seoul|busan|韓國|首爾|釜山/.test(h)) {
     return "kr";
   }
@@ -70,7 +77,7 @@ export async function searchPlacesByText(
   options?: { maxResults?: number },
 ): Promise<{ ok: true; places: PlaceSearchHit[] } | { ok: false; reason: string }> {
   const maxResults = Math.min(12, Math.max(1, options?.maxResults ?? 8));
-  const key = serverConfig.googleMapsApiKey;
+  const key = serverConfig.googleMapsApiKey || process.env.GOOGLE_MAPS_API_KEY?.trim() || "";
 
   if (serverConfig.enableMockMaps) {
     return {

@@ -97,6 +97,9 @@ export async function applyAssistantActions(
       if (action.payload.destination) {
         tripStore.setDestination(action.payload.destination);
       }
+      if (typeof action.payload.days === "number") {
+        tripStore.resizeItineraryToDayCount(action.payload.days);
+      }
       appliedCount += 1;
       continue;
     }
@@ -164,6 +167,7 @@ export async function applyAssistantActions(
       if (action.payload.patch.title !== undefined) patch.title = action.payload.patch.title;
       if (action.payload.patch.startTime !== undefined) patch.time = action.payload.patch.startTime || "";
       if (action.payload.patch.notes !== undefined) patch.notes = action.payload.patch.notes || undefined;
+      if (action.payload.patch.transport !== undefined) patch.transport = action.payload.patch.transport || undefined;
       if (action.payload.patch.location !== undefined || action.payload.patch.lat !== undefined || action.payload.patch.lng !== undefined) {
         patch.location = locationFromInput(action.payload.patch);
         if (!patch.location) {

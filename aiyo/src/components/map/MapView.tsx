@@ -15,6 +15,8 @@ import type {
 } from "@/services/googleMapsLoader";
 import {
   AIYO_MAPS_AUTH_FAILURE_EVENT,
+  AIYO_MAPS_TARGET_BLOCKED_EVENT,
+  isGoogleMapsTargetBlockedMessage,
   loadGoogleMapsApi,
 } from "@/services/googleMapsLoader";
 import { fetchItineraryRoutePaths } from "@/lib/fetchItineraryDirections";
@@ -51,6 +53,7 @@ import {
   type MapViewportPoint,
 } from "@/lib/mapViewport";
 import { syncService } from "@/services/syncService";
+import { normalizeGoogleMapsMapId, resolveGoogleMapsMapId } from "@/lib/googleMapsEnv";
 import { geocodeQuery } from "@/services/geocodeItineraryItems";
 
 const GOOGLE_MAPS_API_KEY = (
@@ -59,7 +62,7 @@ const GOOGLE_MAPS_API_KEY = (
 /** 與伺服端 ENABLE_MOCK_MAPS 對齊：建置時由 next.config 注入。 */
 const FORCE_MOCK_MAP = process.env.NEXT_PUBLIC_ENABLE_MOCK_MAPS === "true";
 /** Vector map ID from Cloud Console (Map Management). Required for AdvancedMarkerElement; omit to use legacy Marker. */
-const GOOGLE_MAPS_MAP_ID = (process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || "").trim();
+const GOOGLE_MAPS_MAP_ID = resolveGoogleMapsMapId();
 
 const PLACE_DETAILS_CACHE_PREFIX = "aiyo:place-details:v2:";
 const PLACE_DETAILS_HIT_TTL_MS = 1000 * 60 * 60 * 24 * 7;
@@ -100,13 +103,6 @@ type PlaceDetailsCacheEntry = {
   details?: Partial<MapPinType>;
   miss?: boolean;
 };
-
-function normalizeMapId(value: string): string {
-  if (!value || /NEXT_PUBLIC_|GOOGLE_MAPS_API_KEY|Frontend_/i.test(value)) {
-    return "";
-  }
-  return value;
-}
 
 function escapeHtml(value: string | number | undefined): string {
   return String(value ?? "")
@@ -509,7 +505,7 @@ export default function MapView({
   const pushToast = useToastStore((state) => state.pushToast);
   const [runtimeMapsConfig, setRuntimeMapsConfig] = useState<RuntimeMapsConfig>({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-    googleMapsMapId: normalizeMapId(GOOGLE_MAPS_MAP_ID),
+    googleMapsMapId: GOOGLE_MAPS_MAP_ID,
     enableMockMaps: FORCE_MOCK_MAP,
   });
   const [runtimeConfigChecked, setRuntimeConfigChecked] = useState(Boolean(GOOGLE_MAPS_API_KEY) || FORCE_MOCK_MAP);
@@ -771,7 +767,7 @@ export default function MapView({
             typeof payload.googleMapsApiKey === "string" ? payload.googleMapsApiKey.trim() : "",
           googleMapsMapId:
             typeof payload.googleMapsMapId === "string"
-              ? normalizeMapId(payload.googleMapsMapId.trim())
+              ? normalizeGoogleMapsMapId(payload.googleMapsMapId.trim())
               : "",
           enableMockMaps: payload.enableMockMaps === true,
         };
@@ -898,6 +894,34 @@ export default function MapView({
     };
     window.addEventListener(AIYO_MAPS_AUTH_FAILURE_EVENT, onAuthFailure);
     return () => window.removeEventListener(AIYO_MAPS_AUTH_FAILURE_EVENT, onAuthFailure);
+  }, [pushToast, useGoogleSdk]);
+
+  useEffect(() => {
+    if (!useGoogleSdk) {
+      return;
+    }
+    const onTargetBlocked = () => {
+      setSdkState("error");
+      setProviderError(`${t.map.apiTargetBlockedError} ${t.map.apiTargetBlockedHint}`);
+      pushToast({
+        variant: "error",
+        title: t.map.fallbackMode,
+        description: t.map.apiTargetBlockedError,
+      });
+    };
+    const onWindowError = (event: ErrorEvent) => {
+      const message = event.message ?? "";
+      if (!isGoogleMapsTargetBlockedMessage(message)) {
+        return;
+      }
+      window.dispatchEvent(new CustomEvent(AIYO_MAPS_TARGET_BLOCKED_EVENT));
+    };
+    window.addEventListener(AIYO_MAPS_TARGET_BLOCKED_EVENT, onTargetBlocked);
+    window.addEventListener("error", onWindowError);
+    return () => {
+      window.removeEventListener(AIYO_MAPS_TARGET_BLOCKED_EVENT, onTargetBlocked);
+      window.removeEventListener("error", onWindowError);
+    };
   }, [pushToast, useGoogleSdk]);
 
   useEffect(() => {

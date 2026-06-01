@@ -108,8 +108,6 @@ test.describe("Live AI itinerary conversation — generation", () => {
 
       const titles = days.flatMap((day) => day.items.map((item) => item.title));
       assertNoPlaceholderItineraryTitles(titles);
-      monitor.assertNoSearxngInAiChat();
-
       const responseType = lastPayload?.data?.reply?.responseType;
       expect(
         responseType === "travel_plan" || days.length >= 2,
@@ -203,8 +201,6 @@ test.describe("Live AI itinerary conversation — delete", () => {
 
     assertNoTokyoTemplatePollution(reply);
     assertNoApiKeyLeak(reply);
-    monitor.assertNoSearxngInAiChat();
-
     if (!removeAction) {
       recordLiveAiOutcome(testInfo, {
         scenario: "2 delete remove_item",
@@ -287,8 +283,6 @@ test.describe("Live AI itinerary conversation — Q&A", () => {
     expect(reply.length).toBeGreaterThanOrEqual(10);
     expect(reply).toMatch(new RegExp(knownPoi.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "|首爾|附近|推薦|景點"));
     expect(mutationActions.length, "推薦問答不應修改行程").toBe(0);
-    monitor.assertNoSearxngInAiChat();
-
     await assertItineraryUnchanged(page, before);
 
     recordLiveAiOutcome(testInfo, {

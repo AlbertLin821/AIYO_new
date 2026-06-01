@@ -9,7 +9,6 @@ const PROVIDER_LABELS: Record<NonNullable<StatusStepPayload["provider"]>, string
   open_meteo: "Open-Meteo",
   tavily: "Tavily",
   youtube: "YouTube",
-  searxng: "SearXNG",
   serper: "Serper",
   mock_web: "離線示範",
   ollama: "Ollama",
@@ -35,7 +34,7 @@ export default function ResearchActivityFeed({
 }: {
   steps: StatusStepPayload[];
 }) {
-  const activities = steps.filter((step) => step.provider !== "searxng" && (step.provider || step.query || step.detail));
+  const activities = steps.filter((step) => step.provider || step.query || step.detail);
   if (!activities.length) {
     return null;
   }

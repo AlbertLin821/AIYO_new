@@ -66,8 +66,16 @@ export function resolveModelForTask(
   if (task === "location-filter" && serverConfig.ollamaLocationModel) {
     return serverConfig.ollamaLocationModel;
   }
-  if (task === "video-place-candidate-extract" && serverConfig.ollamaLocationModel) {
-    return serverConfig.ollamaLocationModel;
+  if (task === "video-place-candidate-extract") {
+    if (serverConfig.ollamaVideoExtractModel) {
+      return serverConfig.ollamaVideoExtractModel;
+    }
+    if (serverConfig.ollamaTravelChatModel) {
+      return serverConfig.ollamaTravelChatModel;
+    }
+    if (serverConfig.ollamaLocationModel) {
+      return serverConfig.ollamaLocationModel;
+    }
   }
   if (task === "trip-plan" && serverConfig.ollamaTripPlanModel) {
     return serverConfig.ollamaTripPlanModel;
@@ -79,13 +87,15 @@ export function resolveModelForTask(
 }
 
 function shouldUseThinkingForTask(task: OllamaChatOptions["task"] = "default"): boolean {
+  if (task === "video-place-candidate-extract") {
+    return serverConfig.ollamaVideoExtractThink;
+  }
   if (
     task === "video-summary" ||
     task === "video-summary-fast" ||
     task === "video-summary-final" ||
     task === "location-filter" ||
-    task === "video-moment-polish" ||
-    task === "video-place-candidate-extract"
+    task === "video-moment-polish"
   ) {
     return serverConfig.ollamaVideoThink;
   }
@@ -143,6 +153,7 @@ export async function chatWithOllama({
       body: JSON.stringify({
         model: resolveModelForTask(task, model),
         stream: false,
+        keep_alive: serverConfig.ollamaKeepAlive,
         think: shouldUseThinkingForTask(task),
         format,
         options: {

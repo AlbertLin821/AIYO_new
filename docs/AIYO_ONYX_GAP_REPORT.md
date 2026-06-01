@@ -90,7 +90,7 @@
 | **Itinerary Data Model** | Prisma `Trip`/`TripDay`/`TripItem` + 前端 `TripPlanDay` | 無需對齊 Onyx | TODO 的 `ItineraryPatch`、`TravelPreferences` 與現有 `TripPlanItem` **並存需對照映射** | **P0** | P0 types 作「API/訊息層」合約；Prisma 漸進擴充或 mapper |
 | **Map Sync** | Map 頁、pins、geocode | N/A | 與 chat 產出 **marker 序號、選取捲動、路由預覽** 的產品級同步仍可強化 | **P1** | `/trip/[id]` 佈局、numbered markers、雙向聚焦 |
 | **YouTube Timestamp Sources** | 影片分析、快取、來源正規化 | N/A | **型別與 UI 卡片**（timestamp 區間、segment）可更顯性 | **P1** | `YouTubeSourceCard` + service/connector 介面 |
-| **Web Search** | 已有 `/api/search/web` | 多 search provider | Adapter（Mock / Serper / SearXNG）與 **`WebSearchResult` → `SourceReference`** 統一 | **P2** | `web-search-service.ts` + 無 key 時 mock |
+| **Web Search** | 已有 `/api/search/web` | 多 search provider | Adapter（Serper / Tavily）與 **`WebSearchResult` → `SourceReference`** 統一 | **P2** | `web-search-service.ts` |
 | **RAG** | 無向量 chunk 表；memories API 存在 | 內部檢索 + vector | 無 embedding 管線與 chunk 儲存 | **P2** | 先 keyword + `source_chunks` 簡版，避免阻塞 P0 |
 | **User Preference Memory** | Profile preferences JSON、memories API | N/A | 與 TODO **`UserTravelPreference`** 邊界（長期 vs 單次 trip）需理清 | **P3** | 集中 preference 服務 + UI 檢視/刪除 |
 | **Artifacts Export** | 部分能力可能散落 | artifact export | Markdown/PDF/分享頁統一 | **P3** | `/api/trips/:id/export/*` 漸進 |

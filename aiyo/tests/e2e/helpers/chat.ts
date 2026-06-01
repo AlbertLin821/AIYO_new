@@ -24,7 +24,6 @@ export type ChatApiPayload = {
 export class ChatNetworkMonitor {
   readonly chatResponses: ChatApiPayload[] = [];
   readonly searchProviders = new Set<string>();
-  readonly searxngHits: string[] = [];
   private attached = false;
 
   attach(page: Page) {
@@ -36,9 +35,6 @@ export class ChatNetworkMonitor {
     page.on("response", async (response: Response) => {
       const url = response.url();
       if (!url.includes("/api/ai/chat") || response.request().method() !== "POST") {
-        if (url.includes("searxng") && (url.includes("/api/ai") || url.includes("web-search"))) {
-          this.searxngHits.push(url);
-        }
         return;
       }
       try {
@@ -49,25 +45,10 @@ export class ChatNetworkMonitor {
             this.searchProviders.add(step.provider);
           }
         }
-        const bodyText = JSON.stringify(payload);
-        if (/searxng/i.test(bodyText)) {
-          this.searxngHits.push(url);
-        }
       } catch {
         // ignore non-json
       }
     });
-  }
-
-  assertNoSearxngInAiChat() {
-    expect(this.searxngHits, "AI chat 路徑不應出現 searxng provider").toEqual([]);
-    for (const provider of this.searchProviders) {
-      expect(provider, `不允許的搜尋 provider: ${provider}`).not.toBe("searxng");
-      expect(
-        ["serper", "tavily", "mock_web", "ollama", "google_places", "open_meteo", "youtube"].includes(provider) ||
-          provider === undefined,
-      ).toBeTruthy();
-    }
   }
 
   lastChatPayload(): ChatApiPayload | undefined {

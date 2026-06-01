@@ -189,7 +189,7 @@ test("Phase 5 search decision and Serper fallback stay within allowed providers"
     const decision = decideTravelAgentMode({ message: "東京晴空塔今天營業到幾點" });
     const result = await runUnifiedWebSearch({
       query: decision.searchDecision?.query || "東京晴空塔 今天 營業時間",
-      providers: ["tavily", "serper", "searxng"],
+      providers: ["tavily", "serper"],
       limit: 5,
     });
 
@@ -197,7 +197,6 @@ test("Phase 5 search decision and Serper fallback stay within allowed providers"
     assert.deepEqual(decision.requiredSearchProviders, ["serper", "tavily"]);
     assert.equal(result.backend, "serper");
     assert.ok(result.results.length <= 5);
-    assert.ok(!urls.some((url) => url.includes("searxng")));
     assert.ok(!urls.join("\n").includes("serper-secret"));
     assert.ok(headers.join("\n").includes("serper-secret"));
   } finally {

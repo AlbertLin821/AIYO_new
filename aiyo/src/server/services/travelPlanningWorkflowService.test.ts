@@ -123,4 +123,5 @@ test("runStructuredTripWorkflow generates travel plan when no question card is n
   assert.equal(response?.reply.responseType, "travel_plan");
   assert.equal(response?.reply.travelPlan?.title, "熊本三日");
   assert.equal(response?.itinerarySuggestion?.summary, "熊本三日");
+  assert.equal(response?.tripProfile?.plan_integration, "self_merge");
 });

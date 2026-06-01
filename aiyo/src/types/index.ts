@@ -217,6 +217,7 @@ export type AssistantActionItemInput = {
   endTime?: string | null;
   notes?: string | null;
   category?: string | null;
+  transport?: string | null;
   lat?: number | null;
   lng?: number | null;
   source?: "assistant" | "search" | "video" | "manual";
@@ -270,6 +271,7 @@ export type AssistantAction =
         tripId?: string;
         title?: string;
         destination?: string;
+        days?: number;
         budgetLevel?: "low" | "medium" | "high" | string;
         travelStyles?: string[];
         pace?: "relaxed" | "balanced" | "intensive" | string;
@@ -373,7 +375,6 @@ export type StatusStepProvider =
   | "open_meteo"
   | "tavily"
   | "youtube"
-  | "searxng"
   | "serper"
   | "mock_web"
   | "ollama";

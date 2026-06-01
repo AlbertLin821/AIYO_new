@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { chatWithOllama } from "@/server/ai/ollamaClient";
+import { serverConfig } from "@/server/config";
 
 test("chatWithOllama passes JSON schema format and deterministic options", async () => {
   const originalFetch = globalThis.fetch;
@@ -30,6 +31,7 @@ test("chatWithOllama passes JSON schema format and deterministic options", async
     });
 
     assert.equal(response, '{"answer":"完成"}');
+    assert.equal(captured.requestBody?.keep_alive, serverConfig.ollamaKeepAlive);
     assert.equal(captured.requestBody?.think, false);
     assert.deepEqual(captured.requestBody?.format, schema);
     assert.deepEqual(captured.requestBody?.options, {
@@ -42,7 +44,7 @@ test("chatWithOllama passes JSON schema format and deterministic options", async
   }
 });
 
-test("chatWithOllama keeps thinking enabled for video place extraction tasks", async () => {
+test("chatWithOllama disables thinking for video place extraction by default", async () => {
   const originalFetch = globalThis.fetch;
   const captured: { requestBody?: Record<string, unknown> } = {};
 
@@ -61,7 +63,7 @@ test("chatWithOllama keeps thinking enabled for video place extraction tasks", a
       messages: [{ role: "user", content: "請擷取影片地點" }],
     });
 
-    assert.equal(captured.requestBody?.think, true);
+    assert.equal(captured.requestBody?.think, false);
   } finally {
     globalThis.fetch = originalFetch;
   }

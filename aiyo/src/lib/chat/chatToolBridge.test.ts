@@ -17,7 +17,6 @@ const base = (overrides: Partial<StatusStepPayload>): StatusStepPayload => ({
 
 test("statusStepToChatToolStatus maps providers", () => {
   assert.equal(statusStepToChatToolStatus(base({ provider: "tavily" })), "searching_web");
-  assert.equal(statusStepToChatToolStatus(base({ provider: "searxng" })), "searching_web");
   assert.equal(statusStepToChatToolStatus(base({ provider: "serper" })), "searching_web");
   assert.equal(statusStepToChatToolStatus(base({ provider: "mock_web" })), "searching_web");
   assert.equal(statusStepToChatToolStatus(base({ provider: "youtube" })), "reading_youtube");

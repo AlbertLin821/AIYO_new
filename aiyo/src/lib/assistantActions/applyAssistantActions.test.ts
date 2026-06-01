@@ -102,3 +102,29 @@ test("map.focus_location does not modify trip items", async () => {
   assert.equal(useTripStore.getState().itinerary[0]?.items.length, 2);
   assert.equal(useMapStore.getState().focusLocation?.placeName, "清水寺");
 });
+
+test("trip.update_metadata can extend trip days without changing existing items", async () => {
+  await applyAssistantActions([
+    { type: "trip.update_metadata", payload: { days: 3 } },
+  ], { persist: false });
+
+  const state = useTripStore.getState();
+  assert.equal(state.days, 3);
+  assert.equal(state.itinerary.length, 3);
+  assert.equal(state.itinerary[0]?.items[0]?.title, "秋葉原");
+  assert.deepEqual(state.itinerary[1]?.items, []);
+  assert.deepEqual(state.itinerary[2]?.items, []);
+});
+
+test("updates item time and transport fields", async () => {
+  await applyAssistantActions([
+    {
+      type: "itinerary.update_item",
+      payload: { dayId: "day-1", itemId: "b", patch: { startTime: "10:30", transport: "計程車" } },
+    },
+  ], { persist: false });
+
+  const item = useTripStore.getState().itinerary[0]?.items.find((candidate) => candidate.id === "b");
+  assert.equal(item?.time, "10:30");
+  assert.equal(item?.transport, "計程車");
+});

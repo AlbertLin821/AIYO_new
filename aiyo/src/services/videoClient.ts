@@ -186,7 +186,9 @@ export async function summarizeVideo(input: {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...(input.refresh ? { "Cache-Control": "no-store" } : {}),
     },
+    cache: input.refresh ? "no-store" : "default",
     body: JSON.stringify(requestBody),
   });
   if (processId) {

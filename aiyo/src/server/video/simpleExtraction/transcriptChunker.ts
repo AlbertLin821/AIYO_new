@@ -4,7 +4,7 @@ const DEFAULT_MAX_CHARS_PER_CHUNK = 12_000;
 const DEFAULT_OVERLAP_CHARS = 500;
 const DEFAULT_MAX_CHUNK_COUNT = 8;
 
-type TranscriptChunk = {
+export type TranscriptChunk = {
   chunkIndex: number;
   text: string;
   startSeconds?: number;

@@ -17,8 +17,8 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-Write-Host "Starting postgres, redis, searxng, mem0, and app-dev via Compose (project network: backend; env-file: aiyo/.env)."
-docker compose --env-file ./aiyo/.env --profile dev --profile mem0 up -d postgres redis searxng mem0-memory-postgres mem0-memory app-dev
+Write-Host "Starting postgres, redis, mem0, and app-dev via Compose (project network: backend; env-file: aiyo/.env)."
+docker compose --env-file ./aiyo/.env --profile dev --profile mem0 up -d postgres redis mem0-memory-postgres mem0-memory app-dev
 
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE

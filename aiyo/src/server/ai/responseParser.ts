@@ -165,6 +165,44 @@ function timeToMinutes(value: string): number {
   return h * 60 + m;
 }
 
+function collectRawDayItems(day: Record<string, unknown>): Array<Record<string, unknown>> {
+  const structured = toArray(
+    (day.items as unknown) ?? day.activities ?? day.stops ?? day.events,
+  ).map((entry) => toRecord(entry));
+  if (structured.length > 0) {
+    return structured;
+  }
+
+  const spots = toArray(day.spots).map((entry) => toRecord(entry));
+  const foods = toArray(day.food_recommendations).map((entry) => toRecord(entry));
+  if (spots.length === 0 && foods.length === 0) {
+    return [];
+  }
+
+  return [
+    ...spots.map((spot, index) => ({
+      title: spot.name ?? spot.title,
+      name: spot.name,
+      type: "attraction",
+      notes: spot.feature ?? spot.description ?? spot.desc,
+      time: spot.time,
+      id: spot.id,
+      location: spot.location ?? spot.place ?? spot.poi,
+      _fallbackIndex: index,
+    })),
+    ...foods.map((food, index) => ({
+      title: food.name ?? food.title,
+      name: food.name,
+      type: "restaurant",
+      notes: food.description ?? food.feature ?? food.desc,
+      time: food.time,
+      id: food.id,
+      location: food.location ?? food.place ?? food.poi,
+      _fallbackIndex: spots.length + index,
+    })),
+  ];
+}
+
 function normalizeLocation(
   input: unknown,
   fallbackName: string,
@@ -295,10 +333,13 @@ function parseTripPlanJson(
       normalized = true;
     }
 
-    const rawItems = toArray(
-      (day.items as unknown) ?? day.activities ?? day.stops ?? day.events,
-    ).map((entry) => toRecord(entry));
-    if (!Array.isArray(day.items)) {
+    const rawItems = collectRawDayItems(day);
+    if (
+      !Array.isArray(day.items) &&
+      (Array.isArray(day.spots) || Array.isArray(day.food_recommendations))
+    ) {
+      normalized = true;
+    } else if (!Array.isArray(day.items)) {
       normalized = true;
     }
     if (rawItems.length === 0) {
@@ -306,7 +347,7 @@ function parseTripPlanJson(
     }
 
     const items = rawItems.map((record, itemIndex) => {
-        const title = String(record.title || `行程點 ${itemIndex + 1}`);
+        const title = String(record.title || record.name || `行程點 ${itemIndex + 1}`);
         const locationInput = record.location || record.place || record.poi;
         const normalizedItem = {
           id:

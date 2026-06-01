@@ -2,16 +2,13 @@ import path from "node:path";
 import { loadEnvConfig } from "@next/env";
 import type { NextConfig } from "next";
 
+import { resolveGoogleMapsApiKey, resolveGoogleMapsMapId } from "./src/lib/googleMapsEnv";
+
 const repoRoot = path.join(__dirname);
 loadEnvConfig(repoRoot, process.env.NODE_ENV !== "production");
 
-const mapsKey =
-  (
-    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
-    process.env.GOOGLE_MAPS_API_KEY ||
-    ""
-  ).trim();
-const mapId = (process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || "").trim();
+const mapsKey = resolveGoogleMapsApiKey();
+const mapId = resolveGoogleMapsMapId();
 const enableMockMaps =
   (process.env.NEXT_PUBLIC_ENABLE_MOCK_MAPS ||
     process.env.ENABLE_MOCK_MAPS ||

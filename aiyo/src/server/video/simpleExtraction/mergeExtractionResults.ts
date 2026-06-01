@@ -71,13 +71,17 @@ function isSentenceLikeName(value: string): boolean {
   return SENTENCE_WORDS.some((token) => value.includes(token));
 }
 
-function canonicalizePlaceName(name: string): string {
+export function canonicalizeSimplePlaceName(name: string): string {
   const stripped = stripKnownPrefixes(name)
     .replace(/[。！？!?].*$/u, "")
     .replace(/^[「『【(（\[]+/, "")
     .replace(/[」』】)）\]]+$/, "")
     .trim();
   return STATION_ALIASES[stripped] || stripped;
+}
+
+function canonicalizePlaceName(name: string): string {
+  return canonicalizeSimplePlaceName(name);
 }
 
 function canonicalizeFoodName(name: string): string {

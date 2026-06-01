@@ -1,4 +1,4 @@
-import type { WebSearchResult } from "@/server/search/searxngClient";
+import type { WebSearchResult } from "@/server/search/webSearchTypes";
 
 export type SearchEvidenceScore = {
   accepted: boolean;

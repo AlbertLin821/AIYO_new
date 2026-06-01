@@ -29,6 +29,8 @@ export type SummaryDiagnostics = {
   geocodeWarnings?: string[];
   summaryUnavailable?: boolean;
   unavailableReason?: string;
+  fallbackReason?: string;
+  failedChunkCount?: number;
 };
 
 export type VideoRecommendationRequest = {

@@ -10,10 +10,16 @@ const ITINERARY_MUTATION_PATTERN =
   /新增|加入|加上|刪除|刪掉|移除|取消|去掉|修改|調整|改成|換成|改到|提前|延後|移到|重排|重新規劃|幫我(?:安排|規劃|新增|加入|調整|修改|刪除|刪掉|移除|取消|去掉)|請(?:安排|規劃|新增|加入|調整|修改|刪除|刪掉|移除|取消|去掉)/u;
 
 const FULL_ITINERARY_REVISION_PATTERN =
-  /重新規劃|重排|整份|整個|全部|從頭|完整(?:安排|規劃)|(?:規劃|安排).{0,8}(?:新|完整|整份|全部)?行程/u;
+  /重新規劃|重排|整份|整個|全部|從頭|完整(?:安排|規劃)|(?:規劃|安排).{0,8}(?:新|完整|整份|全部)行程/u;
 
 const LIKELY_TRIP_WORKFLOW_PATTERN =
   /(?:幫我|請|可以|能不能|想要|我要|我想|需要).{0,12}(?:規劃|安排|建立|創建|產生|生成|做一份|排|新增|加入|加上|修改|調整|重排|重新規劃)|(?:規劃|安排|建立|產生|生成|新增|加入|修改|調整|重排|重新規劃).{0,12}(?:行程|旅行|旅遊|景點|活動|餐廳|美食)|(?:想去|我要去|我想去).{0,30}(?:旅遊|旅行|自由行|[一二兩三四五六七八九十\d]+\s*天)|(?:玩|排)[一二兩三四五六七八九十\d]+\s*天|[一二兩三四五六七八九十\d]+\s*天[一二兩三四五六七八九十\d]*\s*夜(?:行程|旅行|旅遊|自由行)?/u;
+
+const APPLY_PREVIOUS_ITINERARY_PATTERN =
+  /(?:把|將)?.{0,12}(?:這些內容|這些行程|這份|上一份|剛剛|剛才|前面|提案|建議|內容).{0,16}(?:加到|加入|新增到|套用到|寫入|放進|丟到|改到).{0,12}(?:我的)?(?:行程|右側|即時行程)|(?:套用|加入|新增|寫入|丟到|改到).{0,12}(?:這份|上一份|剛剛|剛才|前面|提案|建議|內容|行程).{0,12}(?:行程|右側|即時行程)|(?:套用|加入|新增|寫入|丟到|改到)(?:到)?(?:我的)?(?:行程|右側|即時行程)/u;
+
+const PLANNING_CONFIRMATION_PATTERN =
+  /^(?:讚(?:喔|哦)?|可以|好|好啊|沒問題|就這樣|同意|ok|OK|開始|開始規劃|幫我排|幫我規劃)(?:[，,。！!\s]*.*)?$/u;
 
 const PLANNING_MODES: ReadonlySet<ConversationMode> = new Set([
   "collect_requirements",
@@ -53,6 +59,14 @@ export function isFullItineraryRevisionCommand(message: string): boolean {
 
 export function isLikelyTripWorkflowMessage(message: string): boolean {
   return LIKELY_TRIP_WORKFLOW_PATTERN.test(message);
+}
+
+export function isApplyPreviousItineraryCommand(message: string): boolean {
+  return APPLY_PREVIOUS_ITINERARY_PATTERN.test(normalizeText(message));
+}
+
+export function isPlanningConfirmationCommand(message: string): boolean {
+  return PLANNING_CONFIRMATION_PATTERN.test(normalizeText(message));
 }
 
 export function shouldShowPlanningWorkflowRail(input: {

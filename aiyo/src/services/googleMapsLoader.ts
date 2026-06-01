@@ -140,6 +140,15 @@ declare global {
 }
 
 export const AIYO_MAPS_AUTH_FAILURE_EVENT = "aiyo-google-maps-auth-failure";
+export const AIYO_MAPS_TARGET_BLOCKED_EVENT = "aiyo-google-maps-target-blocked";
+
+export function isGoogleMapsTargetBlockedMessage(message: string): boolean {
+  return (
+    message.includes("ApiTargetBlockedMapError") ||
+    message.includes("ApiNotActivatedMapError") ||
+    message.includes("RefererNotAllowedMapError")
+  );
+}
 
 function resetLoaderPromise() {
   googleMapsPromise = null;

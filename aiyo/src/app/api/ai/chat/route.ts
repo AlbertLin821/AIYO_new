@@ -13,6 +13,7 @@ import type { ChatContext, ChatMessage, ChatQuestionAnswer, TripProfile } from "
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 function logChatRouteFailure(messagePreview: string, error: unknown) {
   if (process.env.NODE_ENV === "production") {

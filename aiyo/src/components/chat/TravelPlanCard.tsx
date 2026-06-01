@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Sparkles } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import { CitationGroup } from "@/components/chat/SourceTag";
 import TravelPlanDayAccordion from "@/components/chat/TravelPlanDayAccordion";
 import TravelPlanSourcePanel from "@/components/chat/TravelPlanSourcePanel";
@@ -44,11 +44,13 @@ function RevisionActionBar({
 export default function TravelPlanCard({
   plan,
   onRevise,
+  onApply,
   revisionDisabled,
   onOpenGroundedSource,
 }: {
   plan: TravelPlanResponse;
   onRevise: (instruction: string) => void;
+  onApply?: () => void;
   revisionDisabled?: boolean;
   onOpenGroundedSource?: (source: SourceReference) => void;
 }) {
@@ -68,19 +70,32 @@ export default function TravelPlanCard({
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/80">行程提案</p>
               <h3 className="text-xl font-semibold tracking-tight text-white">{plan.title}</h3>
               <p className="max-w-2xl text-sm leading-relaxed text-white/85">
-                已整理成可直接調整與套用的每日安排。右側行程欄會同步顯示最新結果。
+                已整理成可直接調整與套用的每日安排。套用後會寫入右側即時行程。
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() =>
-                setExpandedDays(Object.fromEntries(plan.days.map((day) => [day.day, !allExpanded])))
-              }
-              className="inline-flex shrink-0 items-center gap-2 rounded-full border border-primary/40 bg-white/10 px-4 py-2 text-xs font-medium text-white backdrop-blur-sm transition-colors hover:bg-white/20"
-            >
-              {allExpanded ? <ChevronUp className="size-3.5" aria-hidden /> : <ChevronDown className="size-3.5" aria-hidden />}
-              {allExpanded ? "全部收合" : "全部展開"}
-            </button>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {onApply ? (
+                <button
+                  type="button"
+                  disabled={revisionDisabled}
+                  onClick={onApply}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/50 bg-white px-4 py-2 text-xs font-semibold text-primary shadow-sm transition-colors hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Check className="size-3.5" aria-hidden />
+                  套用到行程
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() =>
+                  setExpandedDays(Object.fromEntries(plan.days.map((day) => [day.day, !allExpanded])))
+                }
+                className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-white/10 px-4 py-2 text-xs font-medium text-white backdrop-blur-sm transition-colors hover:bg-white/20"
+              >
+                {allExpanded ? <ChevronUp className="size-3.5" aria-hidden /> : <ChevronDown className="size-3.5" aria-hidden />}
+                {allExpanded ? "全部收合" : "全部展開"}
+              </button>
+            </div>
           </div>
         </div>
 

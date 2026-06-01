@@ -5,12 +5,14 @@ import dynamic from "next/dynamic";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import HomeHeroBanner from "@/components/home/HomeHeroBanner";
+import HomePartnerAdsSection from "@/components/home/HomePartnerAdsSection";
 import HomeRecommendationsSection, {
   type HomeRecommendPanel,
 } from "@/components/home/HomeRecommendationsSection";
+import HomeTravelArticlesSection from "@/components/home/HomeTravelArticlesSection";
 import PlanningWaitGame from "@/components/chat/PlanningWaitGame";
 import VideoSearchBar from "@/components/home/VideoSearchBar";
 import { getDefaultTaiwanCityVideos } from "@/data/defaultTaiwanCityVideos";
@@ -175,7 +177,6 @@ export default function HomePage() {
   const isAuthenticated = sessionStatus === "authenticated";
   const resumeImportHandledRef = useRef(false);
   const videoSearchInputRef = useRef<HTMLInputElement | null>(null);
-  const adScrollRef = useRef<HTMLDivElement | null>(null);
 
   const [isLoadingMoreVideos, setIsLoadingMoreVideos] = useState(false);
   const [replacingVideoIndex, setReplacingVideoIndex] = useState<number | null>(null);
@@ -363,6 +364,8 @@ export default function HomePage() {
         geocodeWarnings: result.geocodeWarnings,
         summaryUnavailable: result.summaryUnavailable,
         unavailableReason: result.unavailableReason,
+        fallbackReason: result.fallbackReason,
+        failedChunkCount: result.debug?.failedChunkCount,
       });
       logFrontendDebugEvent("home-video", "summary-ready", {
         videoId: result.video.videoId,
@@ -640,12 +643,16 @@ export default function HomePage() {
           geocodeWarnings: result.geocodeWarnings,
           summaryUnavailable: result.summaryUnavailable,
           unavailableReason: result.unavailableReason,
+          fallbackReason: result.fallbackReason,
+          failedChunkCount: result.debug?.failedChunkCount,
         });
         logFrontendDebugEvent("home-video", "refresh-summary-ready", {
           videoId: result.video.videoId,
           title: result.video.title,
           locations: result.video.extractedLocations.length,
           segments: result.video.summarySegments?.length || 0,
+          failedChunkCount: result.debug?.failedChunkCount ?? 0,
+          cacheStatus: result.debug?.cacheStatus,
         });
       } catch (error) {
         pushToast({
@@ -723,6 +730,8 @@ export default function HomePage() {
           geocodeWarnings: result.geocodeWarnings,
           summaryUnavailable: result.summaryUnavailable,
           unavailableReason: result.unavailableReason,
+          fallbackReason: result.fallbackReason,
+          failedChunkCount: result.debug?.failedChunkCount,
         });
         if (result.summaryUnavailable) {
           pushToast({
@@ -859,86 +868,20 @@ export default function HomePage() {
       <PlanningWaitGame
         isWaiting={homeVideoProcessingActive}
         waitKey={homeVideoProcessingKey}
-        planningComplete={!homeVideoProcessingActive}
+        planningComplete={!homeVideoProcessingActive && videos.length > 0}
         promptDelayMs={3000}
-        promptTitle="影片處理中，先玩個小遊戲吧！"
-        gameDescription="影片處理進行中，先玩小遊戲打發等待時間。"
-        completionTitle="影片處理完成！"
-        completionDescription="影片資料已更新，可以繼續瀏覽了。"
+        promptTitle="影片搜尋中，先玩個小遊戲吧！"
+        gameDescription="正在查詢推薦影片，先玩小遊戲打發等待時間。"
+        completionTitle="影片已載入"
+        completionDescription="推薦影片已更新，可以繼續瀏覽了。"
       />
 
-      <section className="mt-12 mb-6 max-w-6xl mx-auto">
-        <h3 className="mb-4 text-sm font-semibold text-muted">{t.home.adSectionTitle ?? "合作夥伴優惠"}</h3>
-        <div className="group relative">
-          <button
-            type="button"
-            aria-label="往左滑動"
-            onClick={() => {
-              const el = adScrollRef.current;
-              if (el) el.scrollBy({ left: -340, behavior: "smooth" });
-            }}
-            className="absolute -left-3 top-1/2 z-10 -translate-y-1/2 flex size-9 items-center justify-center rounded-full border border-border-light bg-white/90 text-foreground shadow-md backdrop-blur-sm transition-opacity hover:bg-white opacity-0 group-hover:opacity-100"
-          >
-            <ChevronLeft className="size-5" />
-          </button>
+      <HomeTravelArticlesSection
+        className="mt-12"
+        query={searchQuery.trim() || itinerarySearchQuery.trim()}
+      />
 
-          <div
-            ref={adScrollRef}
-            className="flex gap-4 overflow-x-auto pb-3 scroll-smooth"
-            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-          >
-            {AD_PREVIEWS.map((ad) => (
-              <div
-                key={ad.id}
-                className="relative flex-shrink-0 w-[320px] h-[160px] rounded-2xl overflow-hidden border border-border-light shadow-soft cursor-pointer transition-transform hover:scale-[1.02]"
-                style={{ background: ad.bg }}
-              >
-                <div className="absolute inset-0 p-5 flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="rounded-md bg-white/90 px-2 py-0.5 text-[10px] font-bold text-foreground shadow-sm">
-                        {ad.brand}
-                      </span>
-                      {ad.partner && (
-                        <span className="rounded-md bg-white/70 px-2 py-0.5 text-[10px] font-medium text-muted">
-                          {ad.partner}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-lg font-extrabold leading-tight" style={{ color: ad.titleColor }}>
-                      {ad.title}
-                    </p>
-                    <p className="mt-1 text-xs font-medium" style={{ color: ad.descColor }}>
-                      {ad.description}
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span
-                      className="rounded-full px-3 py-1 text-[11px] font-bold"
-                      style={{ backgroundColor: ad.btnBg, color: ad.btnColor }}
-                    >
-                      {ad.cta}
-                    </span>
-                    <span className="text-[9px] font-medium text-white/50">AD</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <button
-            type="button"
-            aria-label="往右滑動"
-            onClick={() => {
-              const el = adScrollRef.current;
-              if (el) el.scrollBy({ left: 340, behavior: "smooth" });
-            }}
-            className="absolute -right-3 top-1/2 z-10 -translate-y-1/2 flex size-9 items-center justify-center rounded-full border border-border-light bg-white/90 text-foreground shadow-md backdrop-blur-sm transition-opacity hover:bg-white opacity-0 group-hover:opacity-100"
-          >
-            <ChevronRight className="size-5" />
-          </button>
-        </div>
-      </section>
+      <HomePartnerAdsSection className="mx-auto mt-12 max-w-6xl" />
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { resolveGoogleMapsApiKey, resolveGoogleMapsMapId } from "@/lib/googleMapsEnv";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -11,18 +12,10 @@ function readBoolean(...names: string[]): boolean {
   return names.some((name) => readString(name).toLowerCase() === "true");
 }
 
-function normalizeMapId(value: string): string {
-  if (!value || /NEXT_PUBLIC_|GOOGLE_MAPS_API_KEY|Frontend_/i.test(value)) {
-    return "";
-  }
-  return value;
-}
-
 export async function GET() {
   return NextResponse.json({
-    googleMapsApiKey:
-      readString("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY") || readString("GOOGLE_MAPS_API_KEY"),
-    googleMapsMapId: normalizeMapId(readString("NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID")),
+    googleMapsApiKey: resolveGoogleMapsApiKey(),
+    googleMapsMapId: resolveGoogleMapsMapId(),
     enableMockMaps: readBoolean("NEXT_PUBLIC_ENABLE_MOCK_MAPS", "ENABLE_MOCK_MAPS"),
     googleAuthEnabled: Boolean(readString("GOOGLE_CLIENT_ID") && readString("GOOGLE_CLIENT_SECRET")),
   });

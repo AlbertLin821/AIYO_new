@@ -30,7 +30,7 @@ import {
   toTravelSearchContext,
 } from "@/server/search/searchIntent";
 import { runUnifiedWebSearch, type WebSearchBackend } from "@/server/search/webSearchService";
-import type { WebSearchResult } from "@/server/search/searxngClient";
+import type { WebSearchResult } from "@/server/search/webSearchTypes";
 import { mergeChatSources, normalizeWebSearchSources, pickCitationIdsForText } from "@/server/chat/sourceNormalization";
 import { registerChatSources } from "@/server/chat/sourcePreviewStore";
 import { publishChatProgress } from "@/server/chat/chatProgressStore";
@@ -183,6 +183,10 @@ function stripRedundantFollowUpPrompts(content: string): string {
     .trim();
 }
 
+function contextHasItineraryItems(context?: ChatContext): boolean {
+  return Boolean(context?.itinerary?.some((day) => day.items.length > 0));
+}
+
 function buildGuidedTravelAgentResponse(
   decision: TravelAgentDecision,
   input: {
@@ -211,7 +215,10 @@ function buildGuidedTravelAgentResponse(
   const followUpCard = buildQuestionCard(mergedProfile, input.context);
 
   if (!followUpCard) {
-    return buildNaturalTravelAgentResponse(decision);
+    return {
+      ...buildNaturalTravelAgentResponse(decision),
+      tripProfile: mergedProfile,
+    };
   }
 
   return {
@@ -407,7 +414,12 @@ type WebSearchBundle = {
 };
 
 const TRIP_PLAN_COMPOSE_TIMEOUT_MS = 60_000;
-const CHAT_COMPOSE_TIMEOUT_MS = 60_000;
+
+function resolveOllamaRoundTimeoutMs(): number {
+  const floor = 45_000;
+  const fromEnv = Math.max(floor, serverConfig.ollamaTimeoutMs);
+  return Math.min(serverConfig.ollamaTimeoutCapMs, fromEnv);
+}
 const PATCH_INTENT_TIMEOUT_MS = 30_000;
 const PERSONAL_MEMORY_RECALL_TIMEOUT_MS = 45_000;
 const TRAVEL_CHAT_TIMEOUT_FALLBACK =
@@ -591,6 +603,7 @@ const CHINESE_NUMBERS: Record<string, number> = {
   一: 1,
   二: 2,
   兩: 2,
+  两: 2,
   三: 3,
   四: 4,
   五: 5,
@@ -1574,13 +1587,19 @@ function isExistingItineraryPatchRequest(input: {
   message: string;
   context?: ChatContext;
 }): boolean {
+  const message = input.message.trim();
   if (/(?:地圖|地图).{0,12}(?:定位到|移到|顯示|聚焦)/u.test(input.message)) {
+    return true;
+  }
+  if (parseTripDurationExtensionRequest(message) && hasCurrentTripDurationContext(input.context)) {
+    return true;
+  }
+  if (parseTripDurationReductionRequest(message) && hasCurrentTripDurationContext(input.context)) {
     return true;
   }
   if (!input.context?.itinerary?.length) {
     return false;
   }
-  const message = input.message.trim();
   const mutatesCurrentItinerary =
     /新增|加入|加上|加到|刪除|刪掉|移除|取消|去掉|修改|調整|改成|換成|改到|提前|延後|移到/u.test(message) ||
     (/(?:不要了|不用了)/u.test(message) &&
@@ -1621,6 +1640,239 @@ function parseExplicitDayNumberFromMessage(message: string): number | null {
     return null;
   }
   return parsePatchDayNumber(match[1]);
+}
+
+function parseTripDurationExtensionRequest(message: string): number | null {
+  const match =
+    message.match(/(?:再)?(?:多加|增加|加|延長|延伸)\s*(\d+|[一二兩两三四五六七八九十])?\s*天/u) ||
+    message.match(/(?:多|加)(一|1)\s*天/u);
+  if (!match) {
+    return null;
+  }
+  const increment = parsePatchDayNumber(match[1] || "一");
+  return increment && increment > 0 ? increment : 1;
+}
+
+function getCurrentTripDayCount(context?: ChatContext): number {
+  const explicitDays = typeof context?.days === "number" && Number.isFinite(context.days) ? Math.floor(context.days) : 0;
+  const itineraryDays = context?.itinerary?.length || 0;
+  const maxItineraryDay = Math.max(0, ...(context?.itinerary || []).map((day) => day.dayNumber || 0));
+  return Math.max(explicitDays, itineraryDays, maxItineraryDay);
+}
+
+function hasCurrentTripDurationContext(context?: ChatContext): boolean {
+  return Boolean(context?.destination || getCurrentTripDayCount(context) > 0);
+}
+
+function buildTripDurationExtensionPatchResponse(input: {
+  message: string;
+  context?: ChatContext;
+}): ChatResponsePayload | null {
+  const increment = parseTripDurationExtensionRequest(input.message);
+  if (!increment || !hasCurrentTripDurationContext(input.context)) {
+    return null;
+  }
+  const currentDays = Math.max(1, getCurrentTripDayCount(input.context) || 1);
+  const targetDays = Math.min(30, currentDays + increment);
+  if (targetDays <= currentDays) {
+    return null;
+  }
+  const assistantActions: AssistantAction[] = [
+    {
+      type: "trip.update_metadata",
+      payload: { days: targetDays },
+    },
+  ];
+  const addedText = increment === 1 ? "1 天" : `${increment} 天`;
+  const destinationText = input.context?.destination ? `${input.context.destination} ` : "";
+  return {
+    reply: {
+      id: `assistant_${Date.now()}`,
+      role: "assistant",
+      content: `可以，我已幫你把${destinationText}行程從 ${currentDays} 天延長為 ${targetDays} 天，新增的 ${addedText} 會先保留空白，不會重排前面已安排的內容。`,
+      timestamp: nowChatTimestamp(),
+      responseType: "text_message",
+      assistantActions,
+    },
+    assistantActions,
+    proposedChanges: [],
+  };
+}
+
+function parseTripDurationReductionRequest(message: string): number | null {
+  const match =
+    message.match(/(?:少|減少|减少|縮短|缩短)\s*(\d+|[一二兩两三四五六七八九十])?\s*天/u) ||
+    message.match(/(?:少|減)(一|1)\s*天/u);
+  if (!match) {
+    return null;
+  }
+  const decrement = parsePatchDayNumber(match[1] || "一");
+  return decrement && decrement > 0 ? decrement : 1;
+}
+
+function buildTripDurationReductionPatchResponse(input: {
+  message: string;
+  context?: ChatContext;
+}): ChatResponsePayload | null {
+  const decrement = parseTripDurationReductionRequest(input.message);
+  if (!decrement || !hasCurrentTripDurationContext(input.context)) {
+    return null;
+  }
+  const currentDays = Math.max(1, getCurrentTripDayCount(input.context) || 1);
+  const targetDays = Math.max(1, currentDays - decrement);
+  if (targetDays >= currentDays) {
+    return null;
+  }
+  const assistantActions: AssistantAction[] = [
+    {
+      type: "trip.update_metadata",
+      payload: { days: targetDays },
+    },
+  ];
+  const removedText = currentDays - targetDays === 1 ? "1 天" : `${currentDays - targetDays} 天`;
+  const destinationText = input.context?.destination ? `${input.context.destination} ` : "";
+  return {
+    reply: {
+      id: `assistant_${Date.now()}`,
+      role: "assistant",
+      content: `可以，我已幫你把${destinationText}行程從 ${currentDays} 天縮短為 ${targetDays} 天，會移除最後的 ${removedText}，前面已安排的內容會保留。`,
+      timestamp: nowChatTimestamp(),
+      responseType: "text_message",
+      assistantActions,
+    },
+    assistantActions,
+    proposedChanges: [],
+  };
+}
+
+function normalizePatchTime(raw: string | undefined): string | null {
+  const value = (raw || "").trim().replace("：", ":");
+  const direct = value.match(/^([01]?\d|2[0-3]):([0-5]\d)$/u);
+  if (direct) {
+    return `${direct[1].padStart(2, "0")}:${direct[2]}`;
+  }
+  const meridiem = value.match(/^(上午|早上|下午|晚上)\s*(\d{1,2})(?:點|:)(?:(\d{1,2})分?)?$/u);
+  if (!meridiem) {
+    return null;
+  }
+  let hour = Number(meridiem[2]);
+  const minute = Number(meridiem[3] || 0);
+  if (minute > 59 || hour < 0 || hour > 12) {
+    return null;
+  }
+  if ((meridiem[1] === "下午" || meridiem[1] === "晚上") && hour < 12) {
+    hour += 12;
+  }
+  if ((meridiem[1] === "上午" || meridiem[1] === "早上") && hour === 12) {
+    hour = 0;
+  }
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function buildTimeUpdatePatchResponse(input: {
+  message: string;
+  context?: ChatContext;
+}): ChatResponsePayload | null {
+  const match =
+    input.message.match(
+      new RegExp(
+        `(?:把)?${DAY_PREFIX_PATTERN}(?:的)?\\s*([^\\n，。,]+?)\\s*(?:時間)?(?:改到|改成|改為|調整到|提前到|延後到)\\s*([0-2]?\\d[:：][0-5]\\d|(?:上午|早上|下午|晚上)\\s*\\d{1,2}(?:點|:)\\d{0,2}(?:分)?)`,
+        "u",
+      ),
+    ) ||
+    input.message.match(
+      /(?:把)?([^\n，。,]+?)\s*(?:時間)?(?:改到|改成|改為|調整到|提前到|延後到)\s*([0-2]?\d[:：][0-5]\d|(?:上午|早上|下午|晚上)\s*\d{1,2}(?:點|:)\d{0,2}(?:分)?)/u,
+    );
+  if (!match || !input.context?.itinerary?.length) {
+    return null;
+  }
+  const hasExplicitDay = match.length >= 4;
+  const day = hasExplicitDay ? parsePatchDayNumber(match[1]) : null;
+  const title = cleanupPatchTitle(hasExplicitDay ? match[2] : match[1]).replace(/時間$/u, "").trim();
+  const startTime = normalizePatchTime(hasExplicitDay ? match[3] : match[2]);
+  if (!title || !startTime) {
+    return null;
+  }
+  const target = matchItineraryItemFromContext({ context: input.context, title, day });
+  if (!target) {
+    return null;
+  }
+  const assistantActions: AssistantAction[] = [
+    {
+      type: "itinerary.update_item",
+      payload: {
+        dayId: `day-${target.dayNumber}`,
+        itemId: target.item.id,
+        patch: { startTime },
+      },
+    },
+  ];
+  return {
+    reply: {
+      id: `assistant_${Date.now()}`,
+      role: "assistant",
+      content: `可以，我會把第 ${target.dayNumber} 天「${target.item.title}」的時間調整為 ${startTime}。`,
+      timestamp: nowChatTimestamp(),
+      responseType: "text_message",
+      assistantActions,
+    },
+    assistantActions,
+    proposedChanges: assistantActions
+      .map((action) => assistantActionToLegacyProposedChange(action))
+      .filter((change): change is AiProposedChange => Boolean(change)),
+  };
+}
+
+function buildTransportUpdatePatchResponse(input: {
+  message: string;
+  context?: ChatContext;
+}): ChatResponsePayload | null {
+  const match =
+    input.message.match(
+      new RegExp(
+        `(?:把)?${DAY_PREFIX_PATTERN}(?:的)?\\s*(?:[^\\n，。,]{1,40}?到)?\\s*([^\\n，。,]+?)\\s*(?:的)?交通(?:方式)?(?:改成|改為|換成|調整成)\\s*([^\\n，。,]+)`,
+        "u",
+      ),
+    ) ||
+    input.message.match(
+      /(?:把)?(?:[^\n，。,]{1,40}?到)?\s*([^\n，。,]+?)\s*(?:的)?交通(?:方式)?(?:改成|改為|換成|調整成)\s*([^\n，。,]+)/u,
+    );
+  if (!match || !input.context?.itinerary?.length) {
+    return null;
+  }
+  const hasExplicitDay = match.length >= 4;
+  const day = hasExplicitDay ? parsePatchDayNumber(match[1]) : null;
+  const title = cleanupPatchTitle(hasExplicitDay ? match[2] : match[1]);
+  const transport = cleanupPatchTitle(hasExplicitDay ? match[3] : match[2]);
+  if (!title || !transport) {
+    return null;
+  }
+  const target = matchItineraryItemFromContext({ context: input.context, title, day });
+  if (!target) {
+    return null;
+  }
+  const assistantActions: AssistantAction[] = [
+    {
+      type: "itinerary.update_item",
+      payload: {
+        dayId: `day-${target.dayNumber}`,
+        itemId: target.item.id,
+        patch: { transport },
+      },
+    },
+  ];
+  return {
+    reply: {
+      id: `assistant_${Date.now()}`,
+      role: "assistant",
+      content: `可以，我會把第 ${target.dayNumber} 天「${target.item.title}」的交通方式調整為「${transport}」。`,
+      timestamp: nowChatTimestamp(),
+      responseType: "text_message",
+      assistantActions,
+    },
+    assistantActions,
+    proposedChanges: [],
+  };
 }
 
 function parseRemoveItineraryItemRequest(message: string): { day: number; title: string } | null {
@@ -2018,6 +2270,22 @@ function buildDeterministicItineraryPatchResponse(input: {
     }
   }
 
+  const durationExtensionResponse = buildTripDurationExtensionPatchResponse({
+    message,
+    context: input.context,
+  });
+  if (durationExtensionResponse) {
+    return durationExtensionResponse;
+  }
+
+  const durationReductionResponse = buildTripDurationReductionPatchResponse({
+    message,
+    context: input.context,
+  });
+  if (durationReductionResponse) {
+    return durationReductionResponse;
+  }
+
   if (!input.context?.itinerary?.length) {
     return null;
   }
@@ -2112,6 +2380,22 @@ function buildDeterministicItineraryPatchResponse(input: {
           .filter((change): change is AiProposedChange => Boolean(change)),
       };
     }
+  }
+
+  const timeUpdateResponse = buildTimeUpdatePatchResponse({
+    message,
+    context: input.context,
+  });
+  if (timeUpdateResponse) {
+    return timeUpdateResponse;
+  }
+
+  const transportUpdateResponse = buildTransportUpdatePatchResponse({
+    message,
+    context: input.context,
+  });
+  if (transportUpdateResponse) {
+    return transportUpdateResponse;
   }
 
   const replaceMatch =
@@ -2891,6 +3175,22 @@ async function buildExistingItineraryPatchResponse(input: {
     return null;
   }
 
+  const durationExtensionPatch = buildTripDurationExtensionPatchResponse({
+    message: input.message,
+    context: input.context,
+  });
+  if (durationExtensionPatch) {
+    return durationExtensionPatch;
+  }
+
+  const durationReductionPatch = buildTripDurationReductionPatchResponse({
+    message: input.message,
+    context: input.context,
+  });
+  if (durationReductionPatch) {
+    return durationReductionPatch;
+  }
+
   publishProgressStep(input.progressSessionId, {
     phase: "understand",
     label: "理解行程修改意圖",
@@ -3656,7 +3956,8 @@ export async function chatWithTravelAssistant(input: {
   });
   const generalReplyContext = contextWithoutItineraryForGeneralReply(context, travelAgentDecision);
 
-  const skipNaturalShortcut = Boolean(input.questionAnswers?.length);
+  const skipNaturalShortcut = Boolean(input.questionAnswers?.length) ||
+    Boolean(input.structuredTravelPlanning && input.tripProfile);
 
   if (
     !skipNaturalShortcut &&
@@ -3759,11 +4060,7 @@ export async function chatWithTravelAssistant(input: {
     status: "completed",
   });
 
-  const perRoundTimeout = Math.min(
-    CHAT_COMPOSE_TIMEOUT_MS,
-    serverConfig.ollamaTimeoutCapMs,
-    Math.max(45_000, serverConfig.ollamaTimeoutMs),
-  );
+  const perRoundTimeout = resolveOllamaRoundTimeoutMs();
 
   const shouldResearch = travelAgentDecision.shouldSearch;
   let digest: { text: string; placeHits: PlaceSearchHit[]; sources: Record<string, ChatSource> } = {
@@ -3940,7 +4237,7 @@ export async function chatWithTravelAssistant(input: {
     replyText,
   });
   const followUpCard =
-    !input.context?.itinerary?.length && !proposedChanges.length && !assistantActions.length
+    !contextHasItineraryItems(input.context) && !proposedChanges.length && !assistantActions.length
       ? buildQuestionCard(mergedTripProfile, input.context)
       : null;
 

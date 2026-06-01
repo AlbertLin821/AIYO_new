@@ -8,7 +8,7 @@ test("webSearchResultsToSourceReferences maps to website SourceReference", () =>
       title: "Example",
       url: "https://travel.example.com/page",
       content: "snippet text",
-      engine: "searxng",
+      engine: "serper",
     },
   ]);
   assert.equal(refs.length, 1);

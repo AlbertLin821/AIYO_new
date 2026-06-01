@@ -174,7 +174,7 @@ function isCasualChat(message: string): boolean {
 }
 
 function isPreferenceAcceptance(message: string): boolean {
-  return /^(沿用|可以|好|好啊|沒問題|照之前|照舊|用之前|就這樣|同意|ok|OK)(，|,|\s|。|！|!|$)/u.test(message) ||
+  return /^(讚(?:喔|哦)?(?:可以)?|沿用|可以|好|好啊|沒問題|照之前|照舊|用之前|就這樣|同意|開始|開始規劃|ok|OK)(，|,|\s|。|！|!|$)/u.test(message) ||
     /照之前|沿用|照舊/u.test(message);
 }
 
@@ -182,18 +182,35 @@ function isPreferenceRejectionOrOverride(message: string): boolean {
   return /不要|不用|這次想|這次要|改成|換成|不要沿用/u.test(message);
 }
 
+function isTripDurationExtensionIntent(message: string, context?: ChatContext): boolean {
+  if (!context?.destination && !context?.days && !context?.itinerary?.length) {
+    return false;
+  }
+  return /(?:再)?(?:多加|增加|加|延長|延伸)\s*(?:\d+|[一二兩两三四五六七八九十])?\s*天|(?:多|加)(?:一|1)\s*天/u.test(message);
+}
+
+function isTripDurationReductionIntent(message: string, context?: ChatContext): boolean {
+  if (!context?.destination && !context?.days && !context?.itinerary?.length) {
+    return false;
+  }
+  return /(?:少|減少|减少|縮短|缩短)\s*(?:\d+|[一二兩两三四五六七八九十])?\s*天|(?:少|減)(?:一|1)\s*天/u.test(message);
+}
+
 function isModifyIntent(message: string, context?: ChatContext): boolean {
+  if (isTripDurationExtensionIntent(message, context) || isTripDurationReductionIntent(message, context)) {
+    return true;
+  }
   if (!context?.itinerary?.length) {
     return false;
   }
-  const hasMutationVerb = /改成|換成|新增|加入|加上|加到|刪除|刪掉|移除|取消|不要了|不用了|提前|延後|移到/u.test(message);
+  const hasMutationVerb = /改成|改到|改為|換成|調整到|新增|加入|加上|加到|刪除|刪掉|移除|取消|不要了|不用了|提前|延後|移到/u.test(message);
   const mentionsCurrentPlanTarget =
     /第\s*[\d一二兩两三四五六七八九十]+\s*天|地\s*[\d一二兩两三四五六七八九十]+\s*天|最後一天|最后一天|行程/u.test(message) ||
     context.itinerary.some((day) => day.items.some((item) => item.title && message.includes(item.title)));
   if (hasMutationVerb && mentionsCurrentPlanTarget) {
     return true;
   }
-  return /(?:幫我|請|把|將)?.{0,12}(?:第\s*[\d一二兩两三四五六七八九十]+\s*天|第二天|第一天|第三天|最後一天|行程).{0,30}(?:改成|換成|新增|加入|加到|刪除|刪掉|移除|取消|提前|延後|移到)|(?:改成|換成|新增|加入|加到|刪除|刪掉|移除|取消).{0,30}(?:行程|景點|餐廳|活動)/u.test(message);
+  return /(?:幫我|請|把|將)?.{0,12}(?:第\s*[\d一二兩两三四五六七八九十]+\s*天|第二天|第一天|第三天|最後一天|行程).{0,30}(?:改成|改到|改為|換成|調整到|新增|加入|加到|刪除|刪掉|移除|取消|提前|延後|移到)|(?:改成|改到|改為|換成|調整到|新增|加入|加到|刪除|刪掉|移除|取消).{0,30}(?:行程|景點|餐廳|活動|時間|交通)/u.test(message);
 }
 
 function isMapFocusIntent(message: string): boolean {
@@ -202,6 +219,22 @@ function isMapFocusIntent(message: string): boolean {
 
 function isTripPlanningIntent(message: string): boolean {
   return /(?:想去|我要去|我想去|幫我|請|可以|能不能|想要|需要).{0,24}(?:規劃|安排|排|行程|自由行|旅遊|旅行|玩[\d一二兩两三四五六七八九十]+\s*(?:天|日))|(?:規劃|安排|排).{0,16}(?:行程|旅行|旅遊|自由行)|[\d一二兩两三四五六七八九十]+\s*(?:天|日).{0,10}(?:行程|旅行|旅遊|自由行)?/u.test(message);
+}
+
+function hasMessageLevelPlanningPreferences(message: string, hints: TripRequestHints): boolean {
+  return Boolean(
+    hints.budgetLevel ||
+      hints.pace ||
+      /預算|小資|舒適|舒服|豪華|交通|計程車|包車|自駕|大眾運輸|捷運|巴士|公車|火車|美食|料理|餐廳|自然|景觀|購物|娛樂|體驗|親子|長輩|老人|小孩|飯店|住宿|日期|出發|回程|不想|避免/u.test(
+        message,
+      ),
+  );
+}
+
+function isExplicitImmediatePlanningRequest(message: string): boolean {
+  return /(?:直接|現在|馬上|立刻|完整|整份|詳細).{0,10}(?:規劃|安排|生成|產生|排)|(?:規劃|安排|生成|產生|排).{0,10}(?:完整|整份|詳細)(?:行程)?/u.test(
+    message,
+  );
 }
 
 function isGeneralTravelQuestion(message: string): boolean {
@@ -344,6 +377,21 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
         searchDecision,
         userFacingGuidance: buildFollowUpGuidance(hints, missingRequirements),
         debugReason: "planning intent missing key requirements",
+      });
+    }
+
+    if (
+      !hasMessageLevelPlanningPreferences(message, hints) &&
+      !hasMeaningfulPreferences(reusablePreferences) &&
+      !isExplicitImmediatePlanningRequest(message)
+    ) {
+      const destinationPart = hints.destination || knownPreferences.destination || "這趟旅行";
+      const dayText = hints.days || knownPreferences.days ? ` ${hints.days || knownPreferences.days} 天` : "";
+      return buildDecision("collect_requirements", {
+        missingRequirements: [],
+        searchDecision,
+        userFacingGuidance: `可以，${destinationPart}${dayText}我先建立基本框架。想走小資、舒適還是高預算？交通偏好大眾運輸、計程車或自駕？另外比較想偏自然景觀、美食購物，還是娛樂體驗？`,
+        debugReason: "planning intent has basics but lacks preference detail",
       });
     }
 

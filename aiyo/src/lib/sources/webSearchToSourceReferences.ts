@@ -1,7 +1,7 @@
 import { chatSourcesRecordToReferences } from "@/lib/sources/chatSourceAdapter";
 import type { SourceReference } from "@/lib/types/sources";
 import { normalizeWebSearchSources } from "@/server/chat/sourceNormalization";
-import type { WebSearchResult } from "@/server/search/searxngClient";
+import type { WebSearchResult } from "@/server/search/webSearchTypes";
 
 /**
  * Maps unified web search hits to grounded {@link SourceReference} list (same shape as chat citations).

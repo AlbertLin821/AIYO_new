@@ -83,6 +83,13 @@ class SyncService {
     return this.syncTripState("flush", options);
   }
 
+  /** Mark current local trip payload as synced so realtime/bootstrap will not overwrite it. */
+  markLocalTripPayloadAsSynced() {
+    const payload = this.buildCurrentTripPayload();
+    this.lastSyncedPayloadKey = this.getPayloadKey(payload);
+    this.log("local trip payload marked synced", { tripId: payload.tripId, days: payload.days });
+  }
+
   private log(message: string, payload?: Record<string, unknown>) {
     if (process.env.NODE_ENV !== "production") {
       console.info(`[sync] ${message}`, payload || {});

@@ -112,6 +112,8 @@ const VideoSearchBar = forwardRef<HTMLInputElement, VideoSearchBarProps>(functio
           geocodeWarnings: result.geocodeWarnings,
           summaryUnavailable: result.summaryUnavailable,
           unavailableReason: result.unavailableReason,
+          fallbackReason: result.fallbackReason,
+          failedChunkCount: result.debug?.failedChunkCount,
         });
         if (result.summaryUnavailable) {
           pushToast({
@@ -167,6 +169,12 @@ const VideoSearchBar = forwardRef<HTMLInputElement, VideoSearchBarProps>(functio
               variant: "warning",
               title: t.video.mockVideosTitle,
               description: outcome.fallbackReason || t.video.mockVideosDesc,
+            });
+          } else if (outcome.videos.length === 0) {
+            pushToast({
+              variant: "warning",
+              title: t.home.noApiResults,
+              description: outcome.fallbackReason || t.home.emptyHint,
             });
           }
         };

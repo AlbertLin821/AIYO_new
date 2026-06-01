@@ -1,7 +1,7 @@
 import { createError, createSuccess } from "@/lib/api-response";
 import { runUnifiedWebSearch } from "@/server/search/webSearchService";
 import type { ApiError, ApiSuccess } from "@/types";
-import type { WebSearchResult } from "@/server/search/searxngClient";
+import type { WebSearchResult } from "@/server/search/webSearchTypes";
 
 export type WebSearchBody = {
   query?: string;

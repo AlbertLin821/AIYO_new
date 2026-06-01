@@ -1,3 +1,5 @@
+import { resolveGoogleMapsApiKey } from "@/lib/googleMapsEnv";
+
 function readString(name: string, fallback = ""): string {
   const value = process.env[name];
   return value && value.trim() ? value.trim() : fallback;
@@ -20,11 +22,30 @@ function readBoolean(name: string, fallback: boolean): boolean {
   return raw.toLowerCase() === "true";
 }
 
+/** Ollama keep_alive：`-1` 常駐 VRAM；或 `30m`、秒數。 */
+function readKeepAlive(name: string, fallback: string | number): string | number {
+  const raw = process.env[name];
+  if (!raw?.trim()) {
+    return fallback;
+  }
+  const trimmed = raw.trim();
+  if (trimmed === "-1") {
+    return -1;
+  }
+  const asNumber = Number(trimmed);
+  if (Number.isFinite(asNumber)) {
+    return asNumber;
+  }
+  return trimmed;
+}
+
 const ollamaModel = readString("OLLAMA_MODEL", "qwen3.5:9b");
 
 export const serverConfig = {
   appName: readString("NEXT_PUBLIC_APP_NAME", "AIYO"),
   ollamaBaseUrl: readString("OLLAMA_BASE_URL", "http://localhost:11434"),
+  /** 每次 /api/chat、/api/generate 帶入；預設 -1 保持模型載入。 */
+  ollamaKeepAlive: readKeepAlive("OLLAMA_KEEP_ALIVE", -1),
   ollamaModel,
   /** 語音／POST /api/ai/plan 行程 JSON；未設定時與 `OLLAMA_MODEL` 相同。 */
   ollamaTripPlanModel: readString("OLLAMA_TRIP_PLAN_MODEL", "granite4.1:3b"),
@@ -60,6 +81,13 @@ export const serverConfig = {
   ollamaThink: readBoolean("OLLAMA_THINK", false),
   /** 影片地點擷取／影片摘要相關任務保留 thinking，以提高地點召回與判斷品質。 */
   ollamaVideoThink: readBoolean("OLLAMA_VIDEO_THINK", true),
+  /**
+   * 字幕分塊地名擷取（video-place-candidate-extract）是否啟用 thinking。
+   * 預設關閉：8B + thinking + JSON 常超過 OLLAMA_TIMEOUT_MS，導致 failedChunkCount。
+   */
+  ollamaVideoExtractThink: readBoolean("OLLAMA_VIDEO_EXTRACT_THINK", false),
+  /** 字幕分塊地名擷取專用模型；未設時用 OLLAMA_TRAVEL_CHAT_MODEL（較快），再退回 OLLAMA_LOCATION_MODEL。 */
+  ollamaVideoExtractModel: readString("OLLAMA_VIDEO_EXTRACT_MODEL", ""),
   videoExtractionChunkMaxChars: readNumber("VIDEO_EXTRACTION_CHUNK_MAX_CHARS", 12000),
   videoExtractionChunkOverlapChars: readNumber("VIDEO_EXTRACTION_CHUNK_OVERLAP_CHARS", 500),
   videoExtractionChunkMaxCount: readNumber("VIDEO_EXTRACTION_CHUNK_MAX_COUNT", 8),
@@ -72,17 +100,9 @@ export const serverConfig = {
   enableMockVideoProvider: readBoolean("ENABLE_MOCK_VIDEO_PROVIDER", false),
   enableMockMaps: readBoolean("ENABLE_MOCK_MAPS", false),
   youtubeApiKey: readString("YOUTUBE_API_KEY", ""),
-  googleMapsApiKey: readString("GOOGLE_MAPS_API_KEY", ""),
+  googleMapsApiKey: resolveGoogleMapsApiKey(),
   /** Tavily Search API (https://tavily.com) for web research in travel chat and segment hints. */
   tavilyApiKey: readString("TAVILY_API_KEY", ""),
-  searxngBaseUrl: readString("SEARXNG_BASE_URL", "http://localhost:8081"),
-  searxngInternalBaseUrl: readString("SEARXNG_INTERNAL_BASE_URL", "http://searxng:8080"),
-  searxngEnabled: readBoolean("SEARXNG_ENABLED", true),
-  searxngTimeoutMs: readNumber("SEARXNG_TIMEOUT_MS", 12000),
-  searxngDefaultLanguage: readString("SEARXNG_DEFAULT_LANGUAGE", "zh-TW"),
-  searxngDefaultCategories: readString("SEARXNG_DEFAULT_CATEGORIES", "general"),
-  searxngResultLimit: readNumber("SEARXNG_RESULT_LIMIT", 8),
-  searxngSafeSearch: readNumber("SEARXNG_SAFE_SEARCH", 1),
   videoPlaceRequireVerification: readBoolean("VIDEO_PLACE_REQUIRE_VERIFICATION", true),
   videoPlaceAllowHeuristicFallback: readBoolean("VIDEO_PLACE_ALLOW_HEURISTIC_FALLBACK", false),
   videoPlaceEnableOllamaCandidates: readBoolean("VIDEO_PLACE_ENABLE_OLLAMA_CANDIDATES", true),
@@ -92,11 +112,7 @@ export const serverConfig = {
   aiWebSearchEnabled: readBoolean("AI_WEB_SEARCH_ENABLED", true),
   aiWebSearchMaxResults: readNumber("AI_WEB_SEARCH_MAX_RESULTS", 6),
   aiWebSearchRequireCitations: readBoolean("AI_WEB_SEARCH_REQUIRE_CITATIONS", true),
-  /**
-   * AI 對話與行程生成只允許 `auto` | `serper` | `tavily`。
-   * `auto`: Serper (if SERPER_API_KEY) → Tavily → none.
-   * SearXNG 設定保留給舊版非 AI 搜尋模組；AI 搜尋不得 fallback 到 SearXNG。
-   */
+  /** AI 對話與行程生成：`auto` | `serper` | `tavily`；`auto` = Serper (if key) → Tavily → none. */
   webSearchProvider: readString("WEB_SEARCH_PROVIDER", "auto").toLowerCase(),
   serperApiKey: readString("SERPER_API_KEY", ""),
   /** When no live provider is usable, return deterministic mock rows (dev/demo only). */

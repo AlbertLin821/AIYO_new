@@ -2,6 +2,7 @@ import { serverConfig } from "@/server/config";
 import { extractPlacesAndFoodsFromChunk, resolveSimpleExtractionModel } from "@/server/video/simpleExtraction/simpleOllamaExtractor";
 import { mergeSimpleExtractionResults } from "@/server/video/simpleExtraction/mergeExtractionResults";
 import { buildTranscriptChunks } from "@/server/video/simpleExtraction/transcriptChunker";
+import type { TranscriptChunk } from "@/server/video/simpleExtraction/transcriptChunker";
 import type { SimpleVideoExtractionChunkResult, SimpleVideoExtractionResult } from "@/server/video/simpleExtraction/types";
 import type { NormalizedTranscriptLine } from "@/server/video/transcriptProcessing";
 
@@ -41,6 +42,65 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+async function extractChunkResult(input: {
+  chunk: TranscriptChunk;
+  model: string;
+  timeoutMs: number;
+}): Promise<SimpleVideoExtractionChunkResult> {
+  return extractPlacesAndFoodsFromChunk({
+    chunkText: input.chunk.text,
+    chunkIndex: input.chunk.chunkIndex,
+    model: input.model,
+    timeoutMs: input.timeoutMs,
+  });
+}
+
+async function retryFailedTranscriptChunks(input: {
+  chunks: TranscriptChunk[];
+  chunkResults: SimpleVideoExtractionChunkResult[];
+  failedChunks: ChunkFailure[];
+  model: string;
+  baseTimeoutMs: number;
+}): Promise<void> {
+  if (input.failedChunks.length === 0) {
+    return;
+  }
+
+  const retryTimeoutMs = Math.floor(input.baseTimeoutMs * 1.35);
+  const pending = [...input.failedChunks];
+  input.failedChunks.length = 0;
+
+  for (const failure of pending) {
+    const arrayIndex = input.chunks.findIndex((chunk) => chunk.chunkIndex === failure.chunkIndex);
+    if (arrayIndex < 0) {
+      continue;
+    }
+    const chunk = input.chunks[arrayIndex];
+    if (!chunk) {
+      continue;
+    }
+
+    try {
+      input.chunkResults[arrayIndex] = await extractChunkResult({
+        chunk,
+        model: input.model,
+        timeoutMs: retryTimeoutMs,
+      });
+    } catch (error) {
+      const reason = errorMessage(error);
+      input.failedChunks.push({
+        chunkIndex: failure.chunkIndex,
+        reason,
+      });
+      console.warn("[simple-video-extraction] Chunk retry failed.", {
+        chunkIndex: failure.chunkIndex,
+        model: input.model,
+        reason,
+      });
+    }
+  }
+}
+
 export async function extractSimpleVideoPlacesAndFoods(input: {
   title: string;
   description?: string;
@@ -63,9 +123,8 @@ export async function extractSimpleVideoPlacesAndFoods(input: {
     serverConfig.videoExtractionChunkConcurrency,
     async (chunk): Promise<SimpleVideoExtractionChunkResult> => {
       try {
-        return await extractPlacesAndFoodsFromChunk({
-          chunkText: chunk.text,
-          chunkIndex: chunk.chunkIndex,
+        return await extractChunkResult({
+          chunk,
           model,
           timeoutMs: chunkTimeoutMs,
         });
@@ -84,6 +143,14 @@ export async function extractSimpleVideoPlacesAndFoods(input: {
       }
     },
   );
+
+  await retryFailedTranscriptChunks({
+    chunks,
+    chunkResults,
+    failedChunks,
+    model,
+    baseTimeoutMs: chunkTimeoutMs,
+  });
 
   const rawPlaceCount = chunkResults.reduce((sum, result) => sum + result.places.length, 0);
   const rawFoodCount = chunkResults.reduce((sum, result) => sum + result.foods.length, 0);

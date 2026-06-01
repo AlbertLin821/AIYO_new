@@ -73,7 +73,6 @@ test.describe("Phase 7 travel agent browser flow", () => {
       expect(last.data.assistantActions?.length ?? 0).toBe(0);
       expect(last.data.itinerarySuggestion).toBeFalsy();
     }
-    monitor.assertNoSearxngInAiChat();
   });
 
   test("B. 偏好確認：東京三天", async ({ page }) => {
@@ -116,7 +115,6 @@ test.describe("Phase 7 travel agent browser flow", () => {
     } else {
       expect(last?.data?.reply?.statusSteps?.some((step) => step.provider === "serper")).toBeTruthy();
     }
-    monitor.assertNoSearxngInAiChat();
     await expect(page.getByTestId("chat-message-ai").last()).toContainText(/營業|22|晴空塔/);
   });
 
@@ -128,7 +126,6 @@ test.describe("Phase 7 travel agent browser flow", () => {
     const { payload: generalPayload } = await sendChatMessage(page, "你覺得東京適合第一次自由行嗎？");
     const last = monitor.lastChatPayload() || generalPayload;
     expect(last?.data?.assistantActions?.length ?? 0).toBe(0);
-    monitor.assertNoSearxngInAiChat();
     await expect(page.getByTestId("chat-message-ai").last()).toContainText(/東京|自由行/);
   });
 
@@ -167,7 +164,6 @@ test.describe("Phase 7 travel agent browser flow", () => {
     const lastReorder = monitor.lastChatPayload() || reorderPayload;
     expect(lastReorder?.data?.assistantActions?.some((action) => action.type === "itinerary.reorder_items")).toBeTruthy();
     await expectDay2Order(page, ["銀座", "晴空塔"]);
-    monitor.assertNoSearxngInAiChat();
   });
 
   test("I. 地圖定位：清水寺", async ({ page }) => {

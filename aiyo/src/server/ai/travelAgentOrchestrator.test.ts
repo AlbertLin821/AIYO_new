@@ -56,13 +56,32 @@ test("你好 stays casual without search or itinerary generation", () => {
   assert.equal(decision.shouldGenerateItinerary, false);
 });
 
-test("Tokyo three-day request can generate once destination and duration are known", () => {
+test("Tokyo three-day request asks for preference detail before generating", () => {
   const decision = decideTravelAgentMode({ message: "我想去東京玩三天" });
+
+  assert.equal(decision.mode, "collect_requirements");
+  assert.equal(decision.shouldSearch, false);
+  assert.equal(decision.shouldGenerateItinerary, false);
+  assert.deepEqual(decision.missingRequirements, []);
+  assert.match(decision.userFacingGuidance || "", /預算/);
+});
+
+test("Osaka planning request with basics still asks preferences first", () => {
+  const decision = decideTravelAgentMode({
+    message: "我想要去大阪五天四夜總共4個人去玩幫我規劃一下行程",
+  });
+
+  assert.equal(decision.mode, "collect_requirements");
+  assert.equal(decision.shouldGenerateItinerary, false);
+  assert.match(decision.userFacingGuidance || "", /交通偏好/);
+});
+
+test("explicit complete planning request can generate once basics are known", () => {
+  const decision = decideTravelAgentMode({ message: "幫我完整規劃東京三天行程" });
 
   assert.equal(decision.mode, "generate_itinerary");
   assert.equal(decision.shouldSearch, false);
   assert.equal(decision.shouldGenerateItinerary, true);
-  assert.deepEqual(decision.missingRequirements, []);
 });
 
 test("known mid-budget food preferences trigger preference confirmation", () => {
@@ -140,6 +159,39 @@ test("reuse preference follow-up can generate with relaxed pace", () => {
   assert.equal(decision.preferenceConfirmation?.preferences.pace, "relaxed");
 });
 
+test("positive acknowledgement can continue into itinerary generation", () => {
+  const decision = decideTravelAgentMode({
+    message: "讚喔可以",
+    context: { destination: "韓國", days: 5 },
+  });
+
+  assert.equal(decision.mode, "generate_itinerary");
+  assert.equal(decision.shouldGenerateItinerary, true);
+});
+
+test("adding one more day modifies the current itinerary instead of confirming preferences", () => {
+  const decision = decideTravelAgentMode({
+    message: "幫我再多加一天好不好",
+    context: {
+      destination: "大阪",
+      days: 3,
+      itinerary: [
+        { dayNumber: 1, items: [] },
+        { dayNumber: 2, items: [] },
+        { dayNumber: 3, items: [] },
+      ],
+    },
+    aiContext: makeAiContext({
+      budgetLevel: "medium",
+      travelStyle: ["美食"],
+    }),
+  });
+
+  assert.equal(decision.mode, "modify_itinerary");
+  assert.equal(decision.shouldModifyItinerary, true);
+  assert.equal(decision.shouldGenerateItinerary, false);
+});
+
 test("current itinerary replacement enters modify itinerary mode", () => {
   const decision = decideTravelAgentMode({
     message: "幫我把第二天秋葉原改成晴空塔",
@@ -163,7 +215,6 @@ test("fresh opening-hour question uses only Serper or Tavily search providers", 
   assert.equal(decision.shouldSearch, true);
   assert.equal(decision.searchDecision?.searchNeed, "opening_hours");
   assert.deepEqual(decision.requiredSearchProviders, ["serper", "tavily"]);
-  assert.ok(!decision.requiredSearchProviders.includes("searxng" as never));
 });
 
 test("general first-time Tokyo question does not force search", () => {

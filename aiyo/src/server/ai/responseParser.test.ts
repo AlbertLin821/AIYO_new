@@ -58,6 +58,27 @@ test("parseTripPlanResponse repairs alias keys and malformed times", () => {
   assert.equal(parsed.diagnostics.parseMode, "normalized");
 });
 
+test("parseTripPlanResponse maps spots and food_recommendations into day items", () => {
+  const raw = JSON.stringify({
+    summary: "Trip",
+    days: [
+      {
+        dayNumber: 1,
+        theme: "Day one",
+        spots: [{ name: "神農街", feature: "walk" }],
+        food_recommendations: [{ name: "小南門", description: "snacks" }],
+      },
+    ],
+  });
+
+  const parsed = parseTripPlanResponse(raw, request);
+  assert.equal(parsed.result.days[0].items.length, 2);
+  assert.equal(parsed.result.days[0].items[0].title, "神農街");
+  assert.equal(parsed.result.days[0].items[0].type, "attraction");
+  assert.equal(parsed.result.days[0].items[1].title, "小南門");
+  assert.equal(parsed.result.days[0].items[1].type, "restaurant");
+});
+
 test("parseTripPlanResponse drops null-island placeholder locations", () => {
   const raw = JSON.stringify({
     summary: "Trip",

@@ -24,7 +24,7 @@ AIYO_new 的影片地點處理改成 deterministic pipeline：
 5. `placeVerifier`
    - 優先用 `locationCatalog` 做 gazetteer 命中。
    - 有 Google Maps key 時再做 geocode 驗證。
-   - 有 SearXNG 時可做文字搜尋輔助。
+   - 有 Serper 或 Tavily API 金鑰時可做文字搜尋輔助。
    - 若名稱品質高但無外部驗證，才允許 heuristic fallback。
 
 6. `finalPlaceBuilder`

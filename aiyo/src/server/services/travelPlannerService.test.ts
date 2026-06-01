@@ -136,6 +136,26 @@ function makeTainanPreferenceAiContext(): AIContextBuildResult {
   };
 }
 
+function makeCurrentTripAiContext(destination: string, days: number): AIContextBuildResult {
+  const base = makeTainanPreferenceAiContext();
+  return {
+    ...base,
+    structuredContext: {
+      ...base.structuredContext,
+      currentTrip: {
+        id: "trip-current",
+        title: `${destination} 行程`,
+        destination,
+        days: Array.from({ length: days }, (_, index) => ({
+          id: `day-${index + 1}`,
+          dayNumber: index + 1,
+          items: [],
+        })),
+      },
+    },
+  };
+}
+
 test("東京三天 with stale 台南 context confirms preferences without question card", async () => {
   const response = await chatWithTravelAssistant({
     message: "東京三天",
@@ -233,6 +253,108 @@ test("travel chat retries once when the first compose request times out", async 
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("adding one more day extends current itinerary without generating a new plan", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "幫我再多加一天好不好",
+    context: {
+      destination: "大阪",
+      days: 3,
+      itinerary: [
+        { dayNumber: 1, items: [] },
+        { dayNumber: 2, items: [] },
+        { dayNumber: 3, items: [] },
+      ],
+    },
+    aiContext: makeCurrentTripAiContext("大阪", 3),
+  });
+
+  assert.equal(response.reply.responseType, "text_message");
+  assert.equal(response.reply.travelPlan, undefined);
+  assert.equal(response.reply.itinerarySuggestion, undefined);
+  assert.equal(response.assistantActions?.[0]?.type, "trip.update_metadata");
+  assert.equal(response.assistantActions?.[0]?.payload.days, 4);
+  assert.match(response.reply.content, /從 3 天延長為 4 天/);
+  assert.match(response.reply.content, /不會重排/);
+  assert.notEqual(response.travelAgentDecision?.mode, "confirm_preferences");
+});
+
+test("adding one more day also works when only trip duration context exists", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "幫我再多加一天好不好",
+    context: {
+      destination: "大阪",
+      days: 1,
+    },
+    aiContext: makeCurrentTripAiContext("大阪", 1),
+  });
+
+  assert.equal(response.reply.responseType, "text_message");
+  assert.equal(response.assistantActions?.[0]?.type, "trip.update_metadata");
+  assert.equal(response.assistantActions?.[0]?.payload.days, 2);
+  assert.equal(response.reply.travelPlan, undefined);
+});
+
+test("reducing trip days shortens metadata without generating a new plan", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "幫我少一天",
+    context: {
+      destination: "大阪",
+      days: 4,
+      itinerary: [
+        { dayNumber: 1, items: [] },
+        { dayNumber: 2, items: [] },
+        { dayNumber: 3, items: [] },
+        { dayNumber: 4, items: [] },
+      ],
+    },
+    aiContext: makeCurrentTripAiContext("大阪", 4),
+  });
+
+  assert.equal(response.reply.responseType, "text_message");
+  assert.equal(response.assistantActions?.[0]?.type, "trip.update_metadata");
+  assert.equal(response.assistantActions?.[0]?.payload.days, 3);
+  assert.equal(response.reply.travelPlan, undefined);
+  assert.match(response.reply.content, /從 4 天縮短為 3 天/);
+});
+
+test("existing itinerary time edit becomes an update item action", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "把第二天的秋葉原時間改到10:30",
+    structuredTravelPlanning: true,
+    context: {
+      destination: "東京",
+      days: 3,
+      itinerary: [
+        { dayNumber: 2, items: [{ id: "d2-a", time: "14:00", title: "秋葉原", type: "attraction" as const }] },
+      ],
+    },
+  });
+
+  assert.equal(response.reply.responseType, "text_message");
+  assert.equal(response.assistantActions?.[0]?.type, "itinerary.update_item");
+  assert.equal(response.assistantActions?.[0]?.payload.itemId, "d2-a");
+  assert.equal(response.assistantActions?.[0]?.payload.patch.startTime, "10:30");
+});
+
+test("existing itinerary transport edit becomes an update item action", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "把第二天秋葉原的交通改成計程車",
+    structuredTravelPlanning: true,
+    context: {
+      destination: "東京",
+      days: 3,
+      itinerary: [
+        { dayNumber: 2, items: [{ id: "d2-a", time: "14:00", title: "秋葉原", type: "attraction" as const }] },
+      ],
+    },
+  });
+
+  assert.equal(response.reply.responseType, "text_message");
+  assert.equal(response.assistantActions?.[0]?.type, "itinerary.update_item");
+  assert.equal(response.assistantActions?.[0]?.payload.itemId, "d2-a");
+  assert.equal(response.assistantActions?.[0]?.payload.patch.transport, "計程車");
 });
 
 test("travel chat returns timeout fallback text after retry exhaustion", async () => {

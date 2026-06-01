@@ -21,7 +21,9 @@
 ### 1.1 職責
 
 - 對 `OLLAMA_BASE_URL` 發 `POST .../api/chat`。
-- 依 `task` 呼叫 `resolveModelForTask` 選模型（見後文「環境變數」表）。
+- 依 `task` 呼叫 `resolveModelForTask` 選模型（見後文「環境變數」表）；**使用者無需手動切模型**。
+- 每次請求帶 `keep_alive`（`OLLAMA_KEEP_ALIVE`，預設 `-1`）以保持模型在 VRAM，減少冷啟動與聊天中斷。
+- 登入且 Ollama 就緒時，`ollamaModelWarmup` 會背景預載常用模型（`POST /api/ai/ollama-warm`）。
 - 將呼叫端傳入的 `messages` 與**固定一則全域 system** 合併後送出；可選 `format: "json"` 交給 Ollama 做 JSON 模式。
 
 ### 1.2 全域 system（固定插入於 `messages` 最前）
@@ -163,7 +165,7 @@
 | DESTINATION CONSTRAINTS | 插入 request 各欄 + `formatMemoryContext` | 把使用者偏好綁進生成 |
 | SELF-CHECK | 檢查 JSON、天數、必去迴避、時間與 enum | 降低格式錯誤 |
 | VERIFIED RESEARCH（可選） | `externalResearch` 全文 + 一句「location.name 必須對應研究內真實場館」 | 讓 POI 名稱有外部依據 |
-| WEB SEARCH（可選） | SearXNG digest + 引用 source 欄位說明 +「資料不足寫進 summary/warnings」 | 網搜事實錨定 |
+| WEB SEARCH（可選） | 網搜 digest + 引用 source 欄位說明 +「資料不足寫進 summary/warnings」 | 網搜事實錨定 |
 | STRICT FORMAT RETRY（`retryMode === "strict-format"`） | 禁止 prose 包夾 JSON、每日必有 `items`、每項必有 `time`/`title`/`type`、盡量補 `location` | 第一次 parse 失敗後的嚴格重試 |
 
 ### 3.4 `buildMapPlanningPrompt(request)`
@@ -203,7 +205,7 @@
 |------|------------|------|
 | `researchDigest` 有內容 | **必須** JSON；`proposedChanges` 每項形狀為 `add_itinerary_item`；實體餐廳／景點須出現在 Verified research 中否則回空陣列 | 避免無根據加行程 |
 | 無 researchDigest | **偏好** JSON，否則可純繁中簡答 | 無外部 digest 時仍可比較自然回答 |
-| `webSearchDigest` 有內容 | 可用網搜為事實根據、不可發明營業時間價格地址；不足要明講 | 與 SearXNG 結果對齊 |
+| `webSearchDigest` 有內容 | 可用網搜為事實根據、不可發明營業時間價格地址；不足要明講 | 與 Serper/Tavily 結果對齊 |
 | 固定多句 | 繁中、翻譯非中文、用 context／記憶但勿過度斷言、行程與影片建議、禁止叫使用者自己去平台搜、有天氣／網摘時提醒查官方、不洩漏 system | 產品政策與安全語氣 |
 
 **`.user` 段落要旨：**與研究輪相同的 user 骨架，另在條件成立時附加 **Verified research** 全文與／或 **\[Web Search Results\]** 區塊。
