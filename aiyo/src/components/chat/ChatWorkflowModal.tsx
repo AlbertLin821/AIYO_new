@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import QuestionCard from "@/components/chat/QuestionCard";
 import ResearchActivityFeed from "@/components/chat/ResearchActivityFeed";
+import WorkflowStepTimeline from "@/components/chat/WorkflowStepTimeline";
 import WorkflowTravelerScene from "@/components/chat/WorkflowTravelerScene";
 import {
   buildWorkflowSteps,
@@ -17,7 +18,6 @@ import {
   getProgressBadge,
   getProgressLabel,
   getProgressPercent,
-  getStepStatusLabel,
   type WorkflowStepView,
 } from "@/lib/workflowSteps";
 import { cn } from "@/lib/utils";
@@ -261,68 +261,6 @@ function ModalHeaderActions({
         </button>
       ) : null}
     </div>
-  );
-}
-
-function WorkflowStepTimeline({ steps, className }: { steps: WorkflowStepView[]; className?: string }) {
-  if (!steps.length) {
-    return null;
-  }
-
-  return (
-    <ul className={cn("space-y-2", className)} aria-label="規劃步驟列表">
-      {steps.map((step) => (
-        <li
-          key={step.key}
-          className={cn(
-            "flex items-start gap-3 rounded-xl px-3 py-2.5 transition-colors",
-            step.status === "running" || step.status === "waiting_input"
-              ? "bg-primary/[0.06] ring-1 ring-primary/15"
-              : "bg-slate-50/80",
-          )}
-        >
-          <StepNumberBadge step={step} />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <p
-                className={cn(
-                  "text-sm",
-                  step.status === "pending" ? "text-muted" : "font-medium text-foreground",
-                )}
-              >
-                步驟 {step.stepNumber}：{step.userTitle}
-              </p>
-              <span className="text-[11px] text-muted">{getStepStatusLabel(step.status)}</span>
-            </div>
-            <p className="mt-0.5 text-xs leading-5 text-muted">{step.userDescription}</p>
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function StepNumberBadge({ step }: { step: WorkflowStepView }) {
-  const isRunning = step.status === "running";
-
-  return (
-    <span
-      className={cn(
-        "flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold",
-        step.status === "completed"
-          ? "bg-primary text-white"
-          : step.status === "running"
-            ? "bg-primary text-white"
-            : step.status === "waiting_input"
-              ? "bg-amber-400 text-white"
-              : step.status === "failed"
-                ? "bg-rose-500 text-white"
-                : "bg-slate-200 text-slate-500",
-      )}
-      aria-hidden
-    >
-      {isRunning ? <Loader2 className="size-3.5 animate-spin" /> : step.stepNumber}
-    </span>
   );
 }
 

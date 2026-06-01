@@ -19,6 +19,7 @@ import {
   Square,
 } from "lucide-react";
 import ChatHistorySidebar from "@/components/chat/ChatHistorySidebar";
+import ChatTypingPopup from "@/components/chat/ChatTypingPopup";
 import ChatWorkflowRail from "@/components/chat/ChatWorkflowRail";
 import PlanningWaitGame from "@/components/chat/PlanningWaitGame";
 import PreferenceReusePanel from "@/components/chat/PreferenceReusePanel";
@@ -413,6 +414,7 @@ export default function ChatPage() {
   const contextTripResyncAttemptRef = useRef<string | null>(null);
   const lastTravelPlanScrollIdRef = useRef<string | null>(null);
   const [videosPanelExpanded, setVideosPanelExpanded] = useState(true);
+  const [skyDashOpen, setSkyDashOpen] = useState(false);
   const {
     conversations,
     activeConversationId,
@@ -2470,7 +2472,7 @@ export default function ChatPage() {
                           ? "rounded-br-md bg-slate-900 text-white"
                           : message.responseType === "travel_plan"
                             ? "rounded-bl-md bg-transparent p-0 text-foreground"
-                            : "rounded-bl-md border border-slate-200 bg-white text-slate-800 shadow-none"
+                            : "chat-assistant-surface rounded-bl-md text-slate-800"
                       }`}
                     >
                       {message.responseType === "travel_plan" && message.travelPlan ? (
@@ -2594,26 +2596,6 @@ export default function ChatPage() {
               </div>
             </m.div>
           ))}
-
-          {isSending ? (
-            <m.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex items-center gap-2"
-              data-testid="chat-typing-indicator"
-              role="status"
-              aria-live="polite"
-              aria-busy="true"
-            >
-              <div className="flex size-8 items-center justify-center rounded-full bg-slate-700 text-xs text-white">
-                {t.chat.aiShort}
-              </div>
-              <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">
-                <Loader2 className="size-4 shrink-0 animate-spin text-slate-700" aria-hidden />
-                <span>{assistantTypingLabel}</span>
-              </div>
-            </m.div>
-          ) : null}
 
           {errorMessage && (
             <div className="rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger backdrop-blur-sm">
@@ -2830,10 +2812,21 @@ export default function ChatPage() {
         )}
       </div>
 
+      <ChatTypingPopup
+        open={isSending}
+        label={assistantTypingLabel}
+        steps={activePlanningSteps}
+        canOfferWaitGame={isPlanningActive}
+        onOpenWaitGame={() => setSkyDashOpen(true)}
+      />
+
       <PlanningWaitGame
         steps={activePlanningSteps}
         isPlanning={isPlanningActive}
         planningComplete={planningComplete}
+        suppressFloatingPrompt={isSending}
+        gameOpen={skyDashOpen}
+        onGameOpenChange={setSkyDashOpen}
       />
 
       <VideoSummaryDrawer

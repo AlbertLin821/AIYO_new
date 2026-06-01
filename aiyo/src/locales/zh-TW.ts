@@ -62,6 +62,17 @@ export const zhTW = {
     emptyHint: "請輸入關鍵字或貼上 YouTube 連結。",
     noApiResults: "沒有符合的影片結果",
     adSectionTitle: "合作夥伴優惠",
+    adScrollPrev: "往左滑動廣告",
+    adScrollNext: "往右滑動廣告",
+    travelArticlesTitle: "旅遊文章推薦",
+    travelArticlesLoading: "載入文章中…",
+    travelArticlesShowMore: "顯示更多",
+    travelArticlesShowLess: "收起",
+    travelArticlesRefresh: "換一批",
+    travelArticlesRefreshing: "換一批中…",
+    travelArticlesError: "旅遊文章暫時無法載入，請稍後再試。",
+    travelArticlesEmptyTitle: "目前沒有相關文章",
+    travelArticlesEmptyHint: "試試其他關鍵字，或稍後再來看看。",
   },
   video: {
     search: "搜尋",
@@ -262,6 +273,7 @@ export const zhTW = {
     workflowModalHint: "請在彈出視窗中完成行程條件設定。",
     workflowProcessing: "正在規劃行程…",
     assistantTyping: "正在回覆…",
+    typingPopupTitle: "AIYO 思考中",
     typingMessages: {
       preference: [
         "我來查看你的旅遊偏好",
@@ -636,7 +648,7 @@ export const zhTW = {
   profile: {
     tagsHint: "這些標籤會作為推薦關鍵字與規劃提示的種子。",
     title: "旅遊檔案",
-    subtitle: "管理基本資料、旅遊偏好與 AI 長期記憶。",
+    subtitle: "管理基本資料與旅遊偏好。",
     basicDetails: "基本資料",
     name: "姓名",
     email: "電子郵件",

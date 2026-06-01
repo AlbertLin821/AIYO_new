@@ -51,7 +51,7 @@ export default function PreferenceReusePanel({
       data-testid="preference-reuse-panel"
       className={cn(
         variant === "inline"
-          ? "rounded-2xl border border-slate-200 bg-white px-4 py-4 text-slate-800 shadow-none"
+          ? "chat-assistant-surface rounded-2xl px-4 py-4 text-slate-800"
           : "relative z-10 border-t border-primary/15 bg-white/90 px-5 py-5 backdrop-blur-sm",
         className,
       )}
@@ -69,7 +69,7 @@ export default function PreferenceReusePanel({
           {detailRows.length ? (
             <dl className="mt-4 grid gap-2 sm:grid-cols-2">
               {detailRows.map((row) => (
-                <div key={row.label} className="rounded-2xl border border-slate-200/80 bg-slate-50/80 px-3 py-2">
+                <div key={row.label} className="chat-assistant-surface-inset rounded-2xl border px-3 py-2">
                   <dt className="text-xs font-medium text-slate-500">{row.label}</dt>
                   <dd className="mt-0.5 text-sm text-slate-800">{row.value}</dd>
                 </div>

@@ -28,7 +28,12 @@ export async function searchSerper(options: WebSearchOptions): Promise<WebSearch
         "Content-Type": "application/json",
         "X-API-KEY": key,
       },
-      body: JSON.stringify({ q: query, num: limit, hl: options.language || "zh-tw" }),
+      body: JSON.stringify({
+        q: query,
+        num: limit,
+        hl: options.language || "zh-tw",
+        page: Math.max(1, options.page ?? 1),
+      }),
       cache: "no-store",
       signal: controller.signal,
     });

@@ -1,17 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import {
-  Check,
-  Globe,
-  Heart,
-  Pencil,
-  Plus,
-  RefreshCcw,
-  Save,
-  Trash2,
-  X,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Globe, Heart, Plus, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,16 +13,13 @@ import { zhTW as t } from "@/locales/zh-TW";
 import {
   clearPersonalizationData,
   deleteAiMemory,
-  deleteMemory,
-  listMemories,
   resetTravelPreferences,
-  updateMemory,
 } from "@/services/aiClient";
 import { syncService } from "@/services/syncService";
 import { useProfileStore } from "@/stores/useProfileStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useUIStore } from "@/stores/useUIStore";
-import type { MemoryRecord, User } from "@/types";
+import type { User } from "@/types";
 
 const paceOptions: { value: User["travelPace"]; label: string; desc: string }[] = [
   { value: "relaxed", label: t.profile.paceRelaxed, desc: t.profile.paceRelaxedDesc },
@@ -82,33 +69,7 @@ export default function SettingsModal() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const [memories, setMemories] = useState<MemoryRecord[]>([]);
-  const [memoriesLoading, setMemoriesLoading] = useState(true);
-  const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null);
-  const [editingMemoryText, setEditingMemoryText] = useState("");
-  const [savingMemoryId, setSavingMemoryId] = useState<string | null>(null);
-  const [deletingMemoryId, setDeletingMemoryId] = useState<string | null>(null);
   const [bulkAction, setBulkAction] = useState<"preferences" | "memory" | "all" | null>(null);
-
-  const loadMemories = useCallback(async () => {
-    setMemoriesLoading(true);
-    try {
-      const rows = await listMemories();
-      setMemories(
-        [...rows].sort((a, b) =>
-          (b.updated_at || b.created_at || "").localeCompare(a.updated_at || a.created_at || ""),
-        ),
-      );
-    } catch (error) {
-      pushToast({
-        variant: "error",
-        title: t.profile.memoryLoadFailed,
-        description: error instanceof Error ? error.message : t.api.getFailed,
-      });
-    } finally {
-      setMemoriesLoading(false);
-    }
-  }, [pushToast]);
 
   useEffect(() => {
     if (!open) return;
@@ -119,8 +80,7 @@ export default function SettingsModal() {
     setCustomInterest("");
     setShowCustomInput(false);
     setSaved(false);
-    void loadMemories();
-  }, [open, store.travelPace, store.travelPreferences, store.interests, store.preferredTransport, loadMemories]);
+  }, [open, store.travelPace, store.travelPreferences, store.interests, store.preferredTransport]);
 
   function togglePreference(pref: string) {
     setPreferences((c) => (c.includes(pref) ? c.filter((i) => i !== pref) : [...c, pref]));
@@ -159,39 +119,6 @@ export default function SettingsModal() {
     }
   }
 
-  async function handleSaveMemory(memoryId: string) {
-    if (!editingMemoryText.trim()) return;
-    setSavingMemoryId(memoryId);
-    try {
-      const updated = await updateMemory(memoryId, editingMemoryText.trim());
-      setMemories((c) => c.map((m) => (m.id === updated.id ? updated : m)));
-      setEditingMemoryId(null);
-      setEditingMemoryText("");
-      pushToast({ variant: "success", title: t.profile.memoryUpdated, description: t.profile.memoryUpdatedDesc });
-    } catch (error) {
-      pushToast({ variant: "error", title: t.profile.memoryUpdateFailed, description: error instanceof Error ? error.message : t.api.putFailed });
-    } finally {
-      setSavingMemoryId(null);
-    }
-  }
-
-  async function handleDeleteMemory(memoryId: string) {
-    setDeletingMemoryId(memoryId);
-    try {
-      await deleteMemory(memoryId);
-      setMemories((c) => c.filter((m) => m.id !== memoryId));
-      if (editingMemoryId === memoryId) {
-        setEditingMemoryId(null);
-        setEditingMemoryText("");
-      }
-      pushToast({ variant: "success", title: t.profile.memoryDeleted, description: t.profile.memoryDeletedDesc });
-    } catch (error) {
-      pushToast({ variant: "error", title: t.profile.memoryDeleteFailed, description: error instanceof Error ? error.message : t.api.postFailed });
-    } finally {
-      setDeletingMemoryId(null);
-    }
-  }
-
   async function handleResetPreferences() {
     if (!window.confirm("確定要重置旅遊偏好嗎？這會清除目的地、預算、旅遊風格與交通偏好。")) {
       return;
@@ -227,7 +154,6 @@ export default function SettingsModal() {
     setBulkAction("memory");
     try {
       await deleteAiMemory();
-      setMemories([]);
       pushToast({ variant: "success", title: "已刪除 AI 記憶", description: "後續 AI context 不會再讀取舊聊天記憶。" });
     } catch (error) {
       pushToast({ variant: "error", title: "刪除 AI 記憶失敗", description: error instanceof Error ? error.message : t.api.postFailed });
@@ -256,7 +182,6 @@ export default function SettingsModal() {
       setPreferences([]);
       setInterests([]);
       setTransport("");
-      setMemories([]);
       pushToast({ variant: "success", title: "已清除個人化資料", description: "行程會保留，但個人化依據已清除。" });
     } catch (error) {
       pushToast({ variant: "error", title: "清除個人化資料失敗", description: error instanceof Error ? error.message : t.api.postFailed });
@@ -433,103 +358,6 @@ export default function SettingsModal() {
                   )}
                 </button>
               </div>
-
-              <section>
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-semibold text-foreground">{t.profile.memoryTitle}</h3>
-                    <p className="mt-0.5 text-xs text-muted">{t.profile.memorySubtitle}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void loadMemories()}
-                    disabled={memoriesLoading || Boolean(savingMemoryId || deletingMemoryId)}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-cream/50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <RefreshCcw className="size-3.5" />
-                    {t.profile.memoryRefresh}
-                  </button>
-                </div>
-
-                {memoriesLoading ? (
-                  <p className="text-sm text-muted">{t.profile.memoryLoading}</p>
-                ) : memories.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-border-light bg-cream/30 px-4 py-6 text-center text-sm text-muted">
-                    {t.profile.memoryEmpty}
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-3">
-                    {memories.map((memory) => {
-                      const isEditing = editingMemoryId === memory.id;
-                      const isSavingMem = savingMemoryId === memory.id;
-                      const isDeletingMem = deletingMemoryId === memory.id;
-                      const updatedAt = memory.updated_at || memory.created_at;
-
-                      return (
-                        <div key={memory.id} className="rounded-2xl border border-border-light bg-cream/35 p-4">
-                          {isEditing ? (
-                            <div className="space-y-3">
-                              <textarea
-                                value={editingMemoryText}
-                                onChange={(e) => setEditingMemoryText(e.target.value)}
-                                className="min-h-[80px] w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                              />
-                              <div className="flex justify-end gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => { setEditingMemoryId(null); setEditingMemoryText(""); }}
-                                  className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface"
-                                >
-                                  {t.profile.memoryCancel}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleSaveMemory(memory.id)}
-                                  disabled={isSavingMem || !editingMemoryText.trim()}
-                                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  <Save className="size-3.5" />
-                                  {isSavingMem ? t.profile.memorySaving : t.profile.memorySave}
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                                {memory.memory}
-                              </p>
-                              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                                <p className="text-[11px] text-muted">
-                                  {updatedAt ? `${t.profile.memoryEditedAt} ${new Date(updatedAt).toLocaleString("zh-TW")}` : ""}
-                                </p>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => { setEditingMemoryId(memory.id); setEditingMemoryText(memory.memory); }}
-                                    className="inline-flex items-center gap-1 rounded-xl border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface"
-                                  >
-                                    <Pencil className="size-3" />
-                                    {t.profile.memoryEdit}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => void handleDeleteMemory(memory.id)}
-                                    disabled={isDeletingMem}
-                                    className="inline-flex items-center gap-1 rounded-xl border border-danger/20 px-2.5 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-50"
-                                  >
-                                    <Trash2 className="size-3" />
-                                    {isDeletingMem ? t.profile.memoryDeleting : t.profile.memoryDelete}
-                                  </button>
-                                </div>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
 
               <section className="rounded-2xl border border-danger/20 bg-danger/5 p-4">
                 <h3 className="font-semibold text-danger">隱私與資料管理</h3>

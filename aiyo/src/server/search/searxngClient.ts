@@ -16,6 +16,8 @@ export type WebSearchOptions = {
   categories?: string;
   limit?: number;
   safeSearch?: number;
+  /** Serper 分頁（1 起算）；其他提供者忽略。 */
+  page?: number;
 };
 
 type SearxngJson = {

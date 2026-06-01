@@ -34,6 +34,10 @@ type PlanningWaitGameProps = {
   gameDescription?: string;
   completionTitle?: string;
   completionDescription?: string;
+  /** 隱藏底部浮動提示（例如聊天頁已由旅行者彈窗承接小遊戲入口） */
+  suppressFloatingPrompt?: boolean;
+  gameOpen?: boolean;
+  onGameOpenChange?: (open: boolean) => void;
 };
 
 function isWaitGamePhase(step: WorkflowStepView | null): boolean {
@@ -53,6 +57,9 @@ export default function PlanningWaitGame({
   gameDescription = "規劃進行中，先玩小遊戲打發時間。",
   completionTitle = "旅遊規劃完成囉！",
   completionDescription,
+  suppressFloatingPrompt = false,
+  gameOpen: controlledGameOpen,
+  onGameOpenChange,
 }: PlanningWaitGameProps) {
   const workflowSteps = buildWorkflowSteps(steps);
   const activeStep = getActiveWorkflowStep(workflowSteps);
@@ -62,7 +69,18 @@ export default function PlanningWaitGame({
   const activeWaitKey = waitKey ?? activeStep?.key ?? (waitingActive ? "default-wait" : null);
 
   const [promptVisible, setPromptVisible] = useState(false);
-  const [gameOpen, setGameOpen] = useState(false);
+  const [internalGameOpen, setInternalGameOpen] = useState(false);
+  const gameOpen = controlledGameOpen ?? internalGameOpen;
+  const setGameOpen = useCallback(
+    (nextOpen: boolean) => {
+      if (onGameOpenChange) {
+        onGameOpenChange(nextOpen);
+      } else {
+        setInternalGameOpen(nextOpen);
+      }
+    },
+    [onGameOpenChange],
+  );
   const [completionToastVisible, setCompletionToastVisible] = useState(false);
   const [escHint, setEscHint] = useState<string | null>(null);
   const [savedHighScore, setSavedHighScore] = useState(0);
@@ -93,7 +111,7 @@ export default function PlanningWaitGame({
     completionNotifiedRef.current = false;
     hadWaitingSessionRef.current = false;
     escSavedOnceRef.current = false;
-  }, [clearPromptTimer]);
+  }, [clearPromptTimer, setGameOpen]);
 
   useEffect(() => {
     if (waitingDone) {
@@ -123,10 +141,21 @@ export default function PlanningWaitGame({
       clearPromptTimer();
 
       promptTimerRef.current = window.setTimeout(() => {
-        setPromptVisible(true);
+        if (!suppressFloatingPrompt) {
+          setPromptVisible(true);
+        }
       }, promptDelayMs);
     }
-  }, [activeWaitKey, waitingActive, clearPromptTimer, resetSession, gameOpen, waitingDone, promptDelayMs]);
+  }, [
+    activeWaitKey,
+    waitingActive,
+    clearPromptTimer,
+    resetSession,
+    gameOpen,
+    waitingDone,
+    promptDelayMs,
+    suppressFloatingPrompt,
+  ]);
 
   useEffect(() => {
     if (!waitingDone || completionNotifiedRef.current || !hadWaitingSessionRef.current) {
@@ -199,13 +228,13 @@ export default function PlanningWaitGame({
     setSavedHighScore((current) => Math.max(current, highScore));
   }, []);
 
-  const openGame = () => {
+  const openGame = useCallback(() => {
     setSavedHighScore(getSkyDashHighScore());
     setPromptVisible(false);
     setGameOpen(true);
     setEscHint(null);
     escSavedOnceRef.current = false;
-  };
+  }, [setGameOpen]);
 
   if (!waitingActive && !gameOpen && !completionToastVisible) {
     return null;
@@ -214,7 +243,7 @@ export default function PlanningWaitGame({
   return (
     <>
       <AnimatePresence>
-        {promptVisible && !gameOpen ? (
+        {promptVisible && !gameOpen && !suppressFloatingPrompt ? (
           <m.div
             key="planning-wait-prompt"
             initial={{ opacity: 0, y: 16 }}

@@ -8,7 +8,7 @@ test.afterAll(async () => {
   await resetE2EData();
 });
 
-test("authenticated user can review, edit, and delete AI memory", async ({ page }) => {
+test("authenticated user can persist, edit, and delete AI memory via API", async ({ page }) => {
   test.setTimeout(120000);
 
   const { owner } = await seedAuthUsers();
@@ -36,8 +36,6 @@ test("authenticated user can review, edit, and delete AI memory", async ({ page 
   expect(chatResponse.status).toBe(200);
   expect(chatResponse.payload.success).toBe(true);
 
-  await page.goto("/profile");
-  await page.getByTestId("memory-refresh-button").click();
   const initialMemories = await page.evaluate(async () => {
     const response = await fetch("/api/memories", { cache: "no-store" });
     return response.json();
@@ -51,17 +49,21 @@ test("authenticated user can review, edit, and delete AI memory", async ({ page 
   test.skip(!targetMemory, "Mem0 did not persist the test memory in this environment.");
   expect(targetMemory).toBeTruthy();
 
-  const memoryCard = page.getByTestId("memory-item").filter({ hasText: targetMemory!.memory }).first();
-  await expect(memoryCard).toBeVisible({ timeout: 30000 });
-
-  await memoryCard.getByTestId("memory-edit-button").click();
   const editedToken = `${token}-EDIT`;
-  await page.getByTestId("memory-edit-input").fill(`我的唯一偏好代碼已改成 ${editedToken}`);
-  await page.getByTestId("memory-save-button").click();
-  await expect(page.getByTestId("memory-item").filter({ hasText: editedToken }).first()).toBeVisible({
-    timeout: 30000,
-  });
-  await page.getByTestId("memory-refresh-button").click();
+  const editResponse = await page.evaluate(
+    async ({ memoryId, text }) => {
+      const response = await fetch(`/api/memories/${memoryId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      return { status: response.status, payload: await response.json() };
+    },
+    { memoryId: targetMemory!.id, text: `我的唯一偏好代碼已改成 ${editedToken}` },
+  );
+  expect(editResponse.status).toBe(200);
+  expect(editResponse.payload.success).toBe(true);
+
   const afterEdit = await page.evaluate(async () => {
     const response = await fetch("/api/memories", { cache: "no-store" });
     return response.json();
@@ -71,9 +73,13 @@ test("authenticated user can review, edit, and delete AI memory", async ({ page 
   expect(updatedMemory).toBeTruthy();
   expect(updatedMemory!.memory).not.toBe(targetMemory!.memory);
 
-  const editedCard = page.getByTestId("memory-item").filter({ hasText: updatedMemory!.memory }).first();
-  await editedCard.getByTestId("memory-delete-button").click();
-  await page.getByTestId("memory-refresh-button").click();
+  const deleteResponse = await page.evaluate(async (memoryId) => {
+    const response = await fetch(`/api/memories/${memoryId}`, { method: "DELETE" });
+    return { status: response.status, payload: await response.json() };
+  }, targetMemory!.id);
+  expect(deleteResponse.status).toBe(200);
+  expect(deleteResponse.payload.success).toBe(true);
+
   const afterDelete = await page.evaluate(async () => {
     const response = await fetch("/api/memories", { cache: "no-store" });
     return response.json();

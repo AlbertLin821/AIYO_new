@@ -175,6 +175,24 @@ body {
   --chat-chip-active-bg: rgba(255, 255, 255, 0.92);
   --chat-chip-idle-bg: rgba(255, 255, 255, 0.65);
   --chat-placeholder: 148, 163, 184;
+  --chat-assistant-surface-bg: linear-gradient(
+    152deg,
+    color-mix(in srgb, var(--primary-light) 34%, var(--surface-elevated)),
+    color-mix(in srgb, var(--primary) 11%, #ffffff)
+  );
+  --chat-assistant-surface-border: color-mix(in srgb, var(--primary) 24%, var(--border-light));
+  --chat-assistant-surface-inset: rgba(255, 255, 255, 0.62);
+}
+
+.chat-assistant-surface {
+  background: var(--chat-assistant-surface-bg);
+  border: 1px solid var(--chat-assistant-surface-border);
+  box-shadow: 0 1px 3px rgba(90, 126, 163, 0.1);
+}
+
+.chat-assistant-surface-inset {
+  background: var(--chat-assistant-surface-inset);
+  border-color: color-mix(in srgb, var(--primary) 14%, var(--border-light));
 }
 
 .chat-glass-panel {
