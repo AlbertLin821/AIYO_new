@@ -46,6 +46,9 @@ function regionFromHint(locationHint?: string): string | undefined {
   if (/taiwan|台灣|臺灣|chiayi|kaohsiung|taipei|taichung|tainan|嘉義|高雄|台北|臺北|台中|台南/.test(h)) {
     return "tw";
   }
+  if (/australia|australian|澳洲|澳大利亞|澳大利亚|sydney|melbourne|brisbane|cairns|gold coast|雪梨|悉尼|墨爾本|墨尔本|布里斯本|凱恩斯|凯恩斯/.test(h)) {
+    return "au";
+  }
   return undefined;
 }
 

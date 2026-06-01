@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   CHAT_REMOTE_CONVERSATION_ID,
+  getRemoteConversationId,
   mergeRemoteWithLocalChatMessagesForTest,
   useChatStore,
 } from "@/stores/useChatStore";
@@ -83,5 +84,57 @@ describe("useChatStore remote sync guards", () => {
       useChatStore.getState().messages.filter((message) => message.role === "assistant").length,
       1,
     );
+  });
+
+  it("keeps one synced conversation per trip and titles it from the trip name", () => {
+    useChatStore.setState({
+      isSending: false,
+      activeConversationId: null,
+      messages: [],
+      conversations: [],
+      errorMessage: null,
+    });
+
+    useChatStore.getState().setMessages(
+      [{ id: "us_user", role: "user", content: "幫我看美國行程", timestamp: "10:00" }],
+      { tripId: "trip_us", title: "美國行程" },
+    );
+    useChatStore.getState().setMessages(
+      [{ id: "jp_user", role: "user", content: "幫我看日本行程", timestamp: "11:00" }],
+      { tripId: "trip_jp", title: "日本行程" },
+    );
+
+    const state = useChatStore.getState();
+    const usConversation = state.conversations.find(
+      (conversation) => conversation.id === getRemoteConversationId("trip_us"),
+    );
+    const jpConversation = state.conversations.find(
+      (conversation) => conversation.id === getRemoteConversationId("trip_jp"),
+    );
+
+    assert.equal(state.conversations.length, 2);
+    assert.equal(usConversation?.title, "美國行程對話");
+    assert.equal(jpConversation?.title, "日本行程對話");
+    assert.equal(usConversation?.messages[0]?.content, "幫我看美國行程");
+    assert.equal(jpConversation?.messages[0]?.content, "幫我看日本行程");
+  });
+
+  it("does not duplicate an empty synced trip conversation on repeated hydration", () => {
+    useChatStore.setState({
+      isSending: false,
+      activeConversationId: null,
+      messages: [],
+      conversations: [],
+      errorMessage: null,
+    });
+
+    const trip = { tripId: "trip_empty", title: "" };
+    useChatStore.getState().setMessages([], trip, { force: true });
+    useChatStore.getState().setMessages([], trip, { force: true });
+
+    const state = useChatStore.getState();
+    assert.equal(state.conversations.length, 1);
+    assert.equal(state.conversations[0]?.id, getRemoteConversationId("trip_empty"));
+    assert.equal(state.activeConversationId, getRemoteConversationId("trip_empty"));
   });
 });

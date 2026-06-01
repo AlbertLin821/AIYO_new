@@ -50,7 +50,13 @@ export async function filterTripPlanByDestinationScope(
       const text = [item.title, item.notes, item.location?.address, item.location?.name]
         .filter(Boolean)
         .join(" ");
-      if (isTextInTripDestinationScope(text, scope)) {
+      const hasScopedText = scope.isCountryLevel
+        ? Boolean(
+            item.location?.address?.trim() &&
+              isTextInTripDestinationScope(item.location.address, scope),
+          )
+        : isTextInTripDestinationScope(text, scope);
+      if (hasScopedText) {
         keptItems.push(item);
         continue;
       }

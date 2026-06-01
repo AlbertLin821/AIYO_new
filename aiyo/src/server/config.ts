@@ -56,6 +56,10 @@ export const serverConfig = {
   ollamaTimeoutRetryCount: Math.max(0, Math.floor(readNumber("OLLAMA_TIMEOUT_RETRY_COUNT", 1))),
   /** 每次 timeout 重試前等待毫秒數。 */
   ollamaTimeoutRetryDelayMs: Math.max(0, readNumber("OLLAMA_TIMEOUT_RETRY_DELAY_MS", 400)),
+  /** 支援 thinking control 的 Ollama 模型會依此開關啟用／關閉 thinking；預設關閉以縮短聊天延遲。 */
+  ollamaThink: readBoolean("OLLAMA_THINK", false),
+  /** 影片地點擷取／影片摘要相關任務保留 thinking，以提高地點召回與判斷品質。 */
+  ollamaVideoThink: readBoolean("OLLAMA_VIDEO_THINK", true),
   videoExtractionChunkMaxChars: readNumber("VIDEO_EXTRACTION_CHUNK_MAX_CHARS", 12000),
   videoExtractionChunkOverlapChars: readNumber("VIDEO_EXTRACTION_CHUNK_OVERLAP_CHARS", 500),
   videoExtractionChunkMaxCount: readNumber("VIDEO_EXTRACTION_CHUNK_MAX_COUNT", 8),

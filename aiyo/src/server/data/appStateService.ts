@@ -605,7 +605,7 @@ export async function getBootstrapPayload(userId: string): Promise<BootstrapPayl
   const user = await ensureProfile(userId);
   const tripRecord = await resolveSessionTrip(userId);
   const messages = await prisma.chatMessage.findMany({
-    where: { userId },
+    where: tripRecord?.id ? { userId, tripId: tripRecord.id } : { userId, tripId: null },
     orderBy: { createdAt: "asc" },
     take: 50,
   });
@@ -663,11 +663,16 @@ export async function getBootstrapPayload(userId: string): Promise<BootstrapPayl
 }
 
 export async function getTripSwitchPayload(userId: string, tripId: string) {
-  const [user, tripRecord] = await Promise.all([
+  const [user, tripRecord, messages] = await Promise.all([
     ensureProfile(userId),
     prisma.trip.findUnique({
       where: { id: tripId },
       include: tripIncludeFull,
+    }),
+    prisma.chatMessage.findMany({
+      where: { userId, tripId },
+      orderBy: { createdAt: "asc" },
+      take: 50,
     }),
   ]);
 
@@ -686,6 +691,7 @@ export async function getTripSwitchPayload(userId: string, tripId: string) {
       }),
       budget: user.profile?.budget ?? 0,
     },
+    chatMessages: serializeChatMessages(messages),
     collaboration: serializeCollaboration(room),
   };
 }

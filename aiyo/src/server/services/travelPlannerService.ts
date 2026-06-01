@@ -53,7 +53,12 @@ import {
 import type { PlaceSearchHit } from "@/server/geo/placesSearchService";
 import { parseTripPlanResponse, StructuredOutputError } from "@/server/ai/responseParser";
 import { isUsableMapCoordinate } from "@/lib/geoCoordinates";
-import { enrichChatContextWithDestinationScope } from "@/lib/tripDestinationScope";
+import {
+  enrichChatContextWithDestinationScope,
+  isTextInTripDestinationScope,
+  resolveTripDestinationScope,
+  type TripDestinationScope,
+} from "@/lib/tripDestinationScope";
 import { resolveTripDestinationScopeWithGeocode } from "@/server/places/resolveTripDestinationScope";
 import { extractDestinationFromPlanningText, inferPlanningUpdateFromTexts } from "@/lib/tripPlanningSignals";
 import { filterTripPlanByDestinationScope } from "@/server/services/filterTripPlanByDestinationScope";
@@ -2433,12 +2438,13 @@ function hasInsufficientVerifiedResearch(request: TripPlanRequest, placeHits: Pl
 function assertTripPlanValidatorQuality(
   plan: TripPlanResult,
   request: TripPlanRequest,
-  options?: { researchPlaceHits?: PlaceSearchHit[] },
+  options?: { researchPlaceHits?: PlaceSearchHit[]; destinationScope?: TripDestinationScope | null },
 ): void {
   const issues = validateItineraryQuality(plan, request, {
     researchInsufficient: options?.researchPlaceHits
       ? hasInsufficientVerifiedResearch(request, options.researchPlaceHits)
       : undefined,
+    destinationScope: options?.destinationScope,
   });
   if (!issues.length) {
     return;
@@ -2636,7 +2642,13 @@ async function buildPlanningFallbackReturn(input: {
   progressSessionId?: string;
   retryCount: number;
 }) {
-  const fallback = buildFallbackTripPlan(input.request, input.researchPlaceHits);
+  const destinationScope =
+    resolveTripDestinationScope(input.request.destination) ||
+    (await resolveTripDestinationScopeWithGeocode(input.request.destination));
+  const scopedPlaceHits = input.researchPlaceHits.filter((place) =>
+    isPlaceHitInDestinationScope(place, destinationScope),
+  );
+  const fallback = buildFallbackTripPlan(input.request, scopedPlaceHits);
   console.warn("[trip-plan] model_unavailable,fallback");
   publishProgressStep(input.progressSessionId, {
     phase: "compose",
@@ -2646,15 +2658,18 @@ async function buildPlanningFallbackReturn(input: {
     provider: "ollama",
   });
   const enrichedPlan = enrichPlanWithSearchSources(
-    enrichPlanLocationsFromPlaceHits(fallback, input.researchPlaceHits),
+    enrichPlanLocationsFromPlaceHits(fallback, scopedPlaceHits),
     input.webSearch.results,
     input.webSearch.warning,
   );
+  const scopedPlan = await sanitizeTripPlanForDestination(
+    enrichedPlan,
+    input.request.destination,
+    destinationScope,
+    { throwOnRemoved: false },
+  );
   return {
-    plan: await applyDestinationScopeToTripPlan(
-      await enrichTripPlanWithRouteTravelTimes(enrichedPlan),
-      input.request.destination,
-    ),
+    plan: resetDayOpeningRouteMetadata(await enrichTripPlanWithRouteTravelTimes(scopedPlan)),
     sources: input.researchSources,
     diagnostics: {
       planGenerationMode: "fallback" as const,
@@ -3008,6 +3023,54 @@ function placeHitToLocation(place: PlaceSearchHit, description: string) {
   };
 }
 
+function resetDayOpeningRouteMetadata(plan: TripPlanResult): TripPlanResult {
+  return {
+    ...plan,
+    days: plan.days.map((day) => ({
+      ...day,
+      items: day.items.map((item, index) =>
+        index === 0
+          ? {
+              ...item,
+              transport: "",
+              transportDurationMinutes: undefined,
+              transportDistanceMeters: undefined,
+              transportDataSource: undefined,
+            }
+          : item,
+      ),
+    })),
+  };
+}
+
+function isPlaceHitInDestinationScope(place: PlaceSearchHit, scope?: TripDestinationScope | null): boolean {
+  if (!scope?.countryCodes.length) {
+    return true;
+  }
+  if (scope.isCountryLevel) {
+    const address = place.formattedAddress?.trim();
+    return Boolean(address && isTextInTripDestinationScope(address, scope));
+  }
+  const text = [place.name, place.formattedAddress].filter(Boolean).join(" ");
+  if (isTextInTripDestinationScope(text, scope)) {
+    return true;
+  }
+  return false;
+}
+
+async function sanitizeTripPlanForDestination(
+  plan: TripPlanResult,
+  destination: string,
+  scope?: TripDestinationScope | null,
+  options?: { throwOnRemoved?: boolean },
+): Promise<TripPlanResult> {
+  const filtered = await filterTripPlanByDestinationScope(plan, destination, scope);
+  if (filtered.removedCount > 0 && options?.throwOnRemoved !== false) {
+    throw new StructuredOutputError("MODEL_OUTPUT_DESTINATION_SCOPE_VIOLATION");
+  }
+  return resetDayOpeningRouteMetadata(filtered.plan);
+}
+
 function enrichPlanLocationsFromPlaceHits(plan: TripPlanResult, placeHits: PlaceSearchHit[]): TripPlanResult {
   const usableHits = dedupePlaceHitsByName(placeHits.filter(isUsablePlaceHit));
   if (!usableHits.length) {
@@ -3070,6 +3133,7 @@ function pickUniquePlaces(
 }
 
 export function buildFallbackTripPlan(request: TripPlanRequest, placeHits: PlaceSearchHit[] = []): TripPlanResult {
+  const destinationScope = resolveTripDestinationScope(request.destination);
   const chinese = isCjk(
     [request.destination, request.preferences.notes, request.preferences.interests.join(" ")]
       .filter(Boolean)
@@ -3080,7 +3144,12 @@ export function buildFallbackTripPlan(request: TripPlanRequest, placeHits: Place
   const mustVisit = request.preferences.mustVisit || [];
   const normalizedMustVisit = new Set(mustVisit.map((value) => value.trim().toLowerCase()).filter(Boolean));
   const validPlaces = dedupePlaceHitsByName(
-    placeHits.filter((place) => place.name.trim().length > 1 && isUsablePlaceHit(place)),
+    placeHits.filter(
+      (place) =>
+        place.name.trim().length > 1 &&
+        isUsablePlaceHit(place) &&
+        isPlaceHitInDestinationScope(place, destinationScope),
+    ),
   );
   const restaurants = validPlaces.filter(isRestaurantLikePlace);
   const attractions = validPlaces.filter((place) => !isRestaurantLikePlace(place));
@@ -3230,6 +3299,9 @@ export async function generateTripPlan(
   let researchSources: Record<string, ChatSource> = {};
   let researchPlaceHits: PlaceSearchHit[] = [];
   const researchPlan = buildTripPlanResearchPlan(request);
+  const destinationScope =
+    resolveTripDestinationScope(request.destination) ||
+    (await resolveTripDestinationScopeWithGeocode(request.destination));
   const researchContext = {
     destination: request.destination,
     days: request.days,
@@ -3274,7 +3346,11 @@ export async function generateTripPlan(
       const digest = value as typeof emptyDigest;
       externalResearch = [externalResearch, digest.text].filter(Boolean).join("\n\n").trim();
       researchSources = mergeChatSources(researchSources, digest.sources);
-      researchPlaceHits = dedupePlaceHitsByName([...researchPlaceHits, ...digest.placeHits]);
+      researchPlaceHits = dedupePlaceHitsByName(
+        [...researchPlaceHits, ...digest.placeHits].filter((place) =>
+          isPlaceHitInDestinationScope(place, destinationScope),
+        ),
+      );
     } else if (value && typeof value === "object" && "digest" in value) {
       webSearchBundles.push(value as WebSearchBundle);
     }
@@ -3355,7 +3431,10 @@ export async function generateTripPlan(
   try {
     const parsed = parseTripPlanResponse(raw, request);
     assertTripPlanQualityWarnings(parsed.result.warnings);
-    assertTripPlanValidatorQuality(parsed.result, request, { researchPlaceHits });
+    assertTripPlanValidatorQuality(parsed.result, request, {
+      researchPlaceHits,
+      destinationScope,
+    });
     console.info(`[trip-plan] parse_mode=${parsed.diagnostics.parseMode} retry_count=${retryCount}`);
     publishProgressStep(progressSessionId, {
       phase: "compose",
@@ -3364,15 +3443,18 @@ export async function generateTripPlan(
       status: "completed",
       provider: "ollama",
     });
-    const composed = await enrichTripPlanWithRouteTravelTimes(
+    const scoped = await sanitizeTripPlanForDestination(
       enrichPlanWithSearchSources(
         enrichPlanLocationsFromPlaceHits(parsed.result, researchPlaceHits),
         webSearch.results,
         webSearch.warning,
       ),
+      request.destination,
+      destinationScope,
     );
+    const composed = await enrichTripPlanWithRouteTravelTimes(scoped);
     return {
-      plan: await applyDestinationScopeToTripPlan(composed, request.destination),
+      plan: resetDayOpeningRouteMetadata(composed),
       sources: researchSources,
       diagnostics: {
         planGenerationMode: "model",
@@ -3426,7 +3508,10 @@ export async function generateTripPlan(
     try {
       const parsed = parseTripPlanResponse(retriedRaw, request);
       assertTripPlanQualityWarnings(parsed.result.warnings);
-      assertTripPlanValidatorQuality(parsed.result, request, { researchPlaceHits });
+      assertTripPlanValidatorQuality(parsed.result, request, {
+        researchPlaceHits,
+        destinationScope,
+      });
       if (parsed.diagnostics.parseMode === "normalized") {
         console.info("[trip-plan] normalized");
       }
@@ -3437,15 +3522,18 @@ export async function generateTripPlan(
         status: "completed",
         provider: "ollama",
       });
-      const composedRetry = await enrichTripPlanWithRouteTravelTimes(
+      const scopedRetry = await sanitizeTripPlanForDestination(
         enrichPlanWithSearchSources(
           enrichPlanLocationsFromPlaceHits(parsed.result, researchPlaceHits),
           webSearch.results,
           webSearch.warning,
         ),
+        request.destination,
+        destinationScope,
       );
+      const composedRetry = await enrichTripPlanWithRouteTravelTimes(scopedRetry);
       return {
-        plan: await applyDestinationScopeToTripPlan(composedRetry, request.destination),
+        plan: resetDayOpeningRouteMetadata(composedRetry),
         sources: researchSources,
         diagnostics: {
           planGenerationMode: "model",
@@ -3468,15 +3556,19 @@ export async function generateTripPlan(
         status: "completed",
         provider: "ollama",
       });
-      const composedFallback = await enrichTripPlanWithRouteTravelTimes(
+      const scopedFallback = await sanitizeTripPlanForDestination(
         enrichPlanWithSearchSources(
           enrichPlanLocationsFromPlaceHits(fallback, researchPlaceHits),
           webSearch.results,
           webSearch.warning,
         ),
+        request.destination,
+        destinationScope,
+        { throwOnRemoved: false },
       );
+      const composedFallback = await enrichTripPlanWithRouteTravelTimes(scopedFallback);
       return {
-        plan: await applyDestinationScopeToTripPlan(composedFallback, request.destination),
+        plan: resetDayOpeningRouteMetadata(composedFallback),
         sources: researchSources,
         diagnostics: {
           planGenerationMode: "fallback",
@@ -3519,15 +3611,6 @@ function contextWithoutItineraryForGeneralReply(
     return { ...context, itinerary: undefined };
   }
   return context;
-}
-
-async function applyDestinationScopeToTripPlan(
-  plan: TripPlanResult,
-  destination?: string | null,
-  scope?: import("@/lib/tripDestinationScope").TripDestinationScope | null,
-): Promise<TripPlanResult> {
-  const filtered = await filterTripPlanByDestinationScope(plan, destination, scope);
-  return filtered.plan;
 }
 
 export async function chatWithTravelAssistant(input: {

@@ -338,6 +338,24 @@ function buildTripProfileFallback(input: {
   };
 }
 
+function buildTripProfileFromPreferenceConfirmation(
+  confirmation: TravelAgentPreferenceConfirmation | null,
+): TripProfile | null {
+  const preferences = confirmation?.preferences;
+  if (!preferences) {
+    return null;
+  }
+
+  return buildTripProfileFallback({
+    destination: preferences.destination,
+    days: preferences.days,
+    budget: typeof preferences.budget === "number" ? preferences.budget : undefined,
+    transportPreference: preferences.transportPreference || null,
+    pace: preferences.pace || null,
+    interests: preferences.travelStyle || preferences.travelStyles || [],
+  });
+}
+
 export default function ChatPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -718,7 +736,7 @@ export default function ChatPage() {
     contextTripResyncAttemptRef.current = tripStore.tripId;
     void setActiveTrip(tripStore.tripId)
       .then((snapshot) => {
-        syncService.applyTripSwitch(snapshot);
+        syncService.applyTripSwitch({ ...snapshot, selectConversation: false });
         syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
       })
       .catch(() => {
@@ -791,7 +809,7 @@ export default function ChatPage() {
         if (cancelled) {
           return;
         }
-        syncService.applyTripSwitch(snapshot);
+        syncService.applyTripSwitch({ ...snapshot, selectConversation: false });
         syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
       })
       .catch(() => {
@@ -957,12 +975,6 @@ export default function ChatPage() {
     window.addEventListener("pointerup", handlePointerUp);
   }
 
-  function finishNewConversationSetup(tripId: string, title?: string) {
-    createConversation(title, tripId);
-    setInput("");
-    setTripProfile(null);
-  }
-
   async function ensureTripPlanningContext(conversationTitle?: string) {
     const currentTripId = useTripStore.getState().tripId?.trim();
     const currentConversationId = useChatStore.getState().activeConversationId;
@@ -980,7 +992,7 @@ export default function ChatPage() {
 
     if (conversationTripId) {
       const snapshot = await setActiveTrip(conversationTripId);
-      syncService.applyTripSwitch(snapshot);
+      syncService.applyTripSwitch({ ...snapshot, selectConversation: false });
       syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
       if (currentConversationId) {
         setConversationTrip(currentConversationId, conversationTripId);
@@ -990,7 +1002,7 @@ export default function ChatPage() {
 
     const created = await createNewTrip();
     const snapshot = await setActiveTrip(created.tripId);
-    syncService.applyTripSwitch(snapshot);
+    syncService.applyTripSwitch({ ...snapshot, selectConversation: false });
     syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
 
     const nextConversationId = useChatStore.getState().activeConversationId;
@@ -1032,7 +1044,8 @@ export default function ChatPage() {
       const snapshot = await setActiveTrip(created.tripId);
       syncService.applyTripSwitch(snapshot);
       syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
-      finishNewConversationSetup(created.tripId);
+      setInput("");
+      setTripProfile(null);
     } catch (error) {
       pushToast({
         variant: "warning",
@@ -1110,11 +1123,26 @@ export default function ChatPage() {
   }
 
   function handlePreferenceAccept() {
+    const confirmation = workflowRail.preferenceConfirmation;
+    const confirmationProfile = buildTripProfileFromPreferenceConfirmation(confirmation);
+    const destination = confirmationProfile?.destination?.trim();
+    const days = confirmationProfile?.duration_days;
+    const scopedInstruction = [
+      "沿用先前偏好，請直接開始規劃",
+      destination ? `${destination}` : "",
+      days ? `${days} 天` : "",
+      "完整行程。",
+    ]
+      .filter(Boolean)
+      .join("");
     setWorkflowRail((prev) => ({
       ...prev,
       preferenceConfirmation: null,
     }));
-    void handleSend("沿用先前偏好，請直接開始規劃完整行程。", { displayMessage: "沿用先前偏好" });
+    void handleSend(scopedInstruction, {
+      displayMessage: "沿用先前偏好",
+      tripProfile: confirmationProfile ?? tripProfile ?? undefined,
+    });
   }
 
   function handlePreferenceDecline() {

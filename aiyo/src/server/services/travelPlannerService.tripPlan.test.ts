@@ -8,8 +8,10 @@ import {
 } from "@/server/ai/planning/itineraryPlanningStandard";
 import { validateItineraryQuality } from "@/server/ai/planning/itineraryQualityValidator";
 import { buildTripPlanResearchPlan } from "@/server/ai/planning/tripPlanResearchPolicy";
+import { filterTripPlanByDestinationScope } from "@/server/services/filterTripPlanByDestinationScope";
 import { buildFallbackTripPlan, generateTripPlan } from "@/server/services/travelPlannerService";
-import type { PlaceSearchHit, TripPlanRequest } from "@/types";
+import type { PlaceSearchHit } from "@/server/geo/placesSearchService";
+import type { TripPlanRequest } from "@/types";
 
 function tokyo3D2NRequest(): TripPlanRequest {
   return {
@@ -53,6 +55,66 @@ function mockTokyoPlaceHits(): PlaceSearchHit[] {
       lat: 35.6672,
       lng: 139.7076,
       types: ["shopping_mall"],
+    },
+  ] as PlaceSearchHit[];
+}
+
+function australia5D4NRequest(): TripPlanRequest {
+  return {
+    destination: "澳洲",
+    days: 5,
+    preferences: {
+      interests: ["景點", "美食"],
+      pace: "moderate",
+      transportPreference: "public_transport",
+      notes: "我想要去澳洲玩五天四夜",
+    },
+  };
+}
+
+function mockAustraliaPlaceHits(): PlaceSearchHit[] {
+  return [
+    {
+      name: "Sydney Opera House",
+      formattedAddress: "Bennelong Point, Sydney NSW 2000, Australia",
+      placeId: "au_1",
+      lat: -33.8568,
+      lng: 151.2153,
+      types: ["tourist_attraction"],
+    },
+    {
+      name: "Queen Victoria Market",
+      formattedAddress: "Queen St, Melbourne VIC 3000, Australia",
+      placeId: "au_2",
+      lat: -37.8068,
+      lng: 144.9568,
+      types: ["tourist_attraction", "food"],
+    },
+  ] as PlaceSearchHit[];
+}
+
+function mockTaiwanPlaceHits(): PlaceSearchHit[] {
+  return [
+    {
+      name: "台北 101",
+      formattedAddress: "台灣台北市信義區信義路五段7號",
+      placeId: "tw_1",
+      lat: 25.0339,
+      lng: 121.5645,
+      types: ["tourist_attraction"],
+    },
+  ] as PlaceSearchHit[];
+}
+
+function mockHongKongAustraliaNamedPlaceHits(): PlaceSearchHit[] {
+  return [
+    {
+      name: "澳洲牛奶公司",
+      formattedAddress: "香港佐敦白加士街47號",
+      placeId: "hk_au_name_only",
+      lat: 22.3048,
+      lng: 114.1711,
+      types: ["restaurant", "food"],
     },
   ] as PlaceSearchHit[];
 }
@@ -151,6 +213,99 @@ test("fallback only uses verified place hits for concrete POI titles", () => {
 
   assert.ok(concreteTitles.length > 0);
   assert.ok(concreteTitles.every((title) => verifiedNames.has(title)), concreteTitles.join(", "));
+});
+
+test("Australia fallback filters out Taiwan place hits and clears first-leg route metadata", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalGoogleKey = process.env.GOOGLE_MAPS_API_KEY;
+  process.env.GOOGLE_MAPS_API_KEY = "";
+  globalThis.fetch = async () => {
+    const abortError = new Error("aborted");
+    abortError.name = "AbortError";
+    throw abortError;
+  };
+
+  try {
+    const generated = await generateTripPlan(australia5D4NRequest());
+    const titles = generated.plan.days.flatMap((day) => day.items.map((item) => item.title));
+    assert.equal(titles.some((title) => /台北|台灣|臺灣/.test(title)), false, titles.join(", "));
+    for (const day of generated.plan.days) {
+      const first = day.items[0];
+      if (!first) {
+        continue;
+      }
+      assert.equal(first.transport || "", "");
+      assert.equal(first.transportDurationMinutes, undefined);
+      assert.equal(first.transportDistanceMeters, undefined);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalGoogleKey === undefined) {
+      delete process.env.GOOGLE_MAPS_API_KEY;
+    } else {
+      process.env.GOOGLE_MAPS_API_KEY = originalGoogleKey;
+    }
+  }
+});
+
+test("Australia fallback keeps only Australia place hits when mixed with Taiwan hits", () => {
+  const request = australia5D4NRequest();
+  const plan = buildFallbackTripPlan(request, [
+    ...mockTaiwanPlaceHits(),
+    ...mockHongKongAustraliaNamedPlaceHits(),
+    ...mockAustraliaPlaceHits(),
+  ]);
+  const titles = plan.days.flatMap((day) => day.items.map((item) => item.title));
+  assert.equal(titles.some((title) => /台北|台灣|臺灣|澳洲牛奶公司/.test(title)), false, titles.join(", "));
+  assert.ok(
+    titles.some((title) => title === "Sydney Opera House" || title === "Queen Victoria Market"),
+    titles.join(", "),
+  );
+});
+
+test("Australia scope rejects places whose name only contains Australia but address is outside Australia", async () => {
+  const filtered = await filterTripPlanByDestinationScope(
+    {
+      summary: "澳洲五天四夜",
+      days: [
+        {
+          dayNumber: 1,
+          items: [
+            {
+              id: "hk-australia-name",
+              time: "10:00",
+              title: "澳洲牛奶公司",
+              type: "restaurant",
+              notes: "香港知名餐廳，不應出現在澳洲行程。",
+              location: {
+                name: "澳洲牛奶公司",
+                address: "香港佐敦白加士街47號",
+                lat: 22.3048,
+                lng: 114.1711,
+              },
+            },
+            {
+              id: "sydney-opera-house",
+              time: "13:00",
+              title: "Sydney Opera House",
+              type: "attraction",
+              location: {
+                name: "Sydney Opera House",
+                address: "Bennelong Point, Sydney NSW 2000, Australia",
+                lat: -33.8568,
+                lng: 151.2153,
+              },
+            },
+          ],
+        },
+      ],
+    },
+    "澳洲",
+  );
+
+  const titles = filtered.plan.days.flatMap((day) => day.items.map((item) => item.title));
+  assert.deepEqual(titles, ["Sydney Opera House"]);
+  assert.equal(filtered.removedCount, 1);
 });
 
 test("generateTripPlan returns fallback travel plan when Ollama times out", async () => {

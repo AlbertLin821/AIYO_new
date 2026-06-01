@@ -1,7 +1,7 @@
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/services/apiClient";
 import type { ItineraryListItem } from "@/lib/itinerary-sort";
 import type { CollaboratorRole } from "@/lib/permissions";
-import type { CollaborationPresenceState, PersistedTripPayload } from "@/types";
+import type { ChatMessage, CollaborationPresenceState, PersistedTripPayload } from "@/types";
 
 export type ItineraryFolderDto = {
   id: string;
@@ -25,6 +25,7 @@ export type TripCollaboratorDto = {
 
 export type TripSwitchPayload = {
   trip: PersistedTripPayload;
+  chatMessages: ChatMessage[];
   collaboration: CollaborationPresenceState | null;
 };
 

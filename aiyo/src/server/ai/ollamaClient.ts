@@ -78,6 +78,20 @@ export function resolveModelForTask(
   return serverConfig.ollamaModel;
 }
 
+function shouldUseThinkingForTask(task: OllamaChatOptions["task"] = "default"): boolean {
+  if (
+    task === "video-summary" ||
+    task === "video-summary-fast" ||
+    task === "video-summary-final" ||
+    task === "location-filter" ||
+    task === "video-moment-polish" ||
+    task === "video-place-candidate-extract"
+  ) {
+    return serverConfig.ollamaVideoThink;
+  }
+  return serverConfig.ollamaThink;
+}
+
 export function formatOllamaErrorMessage(
   error: OllamaRequestError,
   task: OllamaChatOptions["task"] = "default",
@@ -129,6 +143,7 @@ export async function chatWithOllama({
       body: JSON.stringify({
         model: resolveModelForTask(task, model),
         stream: false,
+        think: shouldUseThinkingForTask(task),
         format,
         options: {
           ...(format ? { temperature: 0, top_p: 0.9 } : {}),

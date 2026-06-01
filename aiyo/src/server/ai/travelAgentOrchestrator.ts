@@ -208,31 +208,9 @@ function isGeneralTravelQuestion(message: string): boolean {
   return /適合|推薦|建議|怎麼看|好玩嗎|第一次|自由行|親子|蜜月|美食|購物|景點|地點|有哪些|查看|目前行程|交通/u.test(message);
 }
 
-function hasTravelPartyInfo(tripProfile?: TripProfile | null, message?: string): boolean {
-  if (tripProfile?.companions) {
-    return true;
-  }
-  if (typeof tripProfile?.traveler_count === "number" && tripProfile.traveler_count > 0) {
-    return true;
-  }
-  const text = message?.trim() || "";
-  if (!text) {
-    return false;
-  }
-  return (
-    /(?:總共|一共|共)\s*[\d一二兩两三四五六七八九十]+\s*(?:個人|人)/u.test(text) ||
-    /[\d一二兩两三四五六七八九十]+\s*(?:個人|人)(?:同行|一起|出遊|旅遊|旅行|去玩)?/u.test(text) ||
-    /獨旅|自己去|我自己|一個人/u.test(text) ||
-    /女朋友|男朋友|老婆|老公|另一半|情侶/u.test(text) ||
-    /家人|家庭旅遊|爸媽|父母|小孩|孩子|親子/u.test(text)
-  );
-}
-
 function collectMissingRequirements(
   hints: TripRequestHints,
   knownPreferences: TravelAgentKnownPreferences,
-  tripProfile?: TripProfile | null,
-  message?: string,
 ): string[] {
   const missing: string[] = [];
   if (!hints.destination && !knownPreferences.destination) {
@@ -240,18 +218,6 @@ function collectMissingRequirements(
   }
   if (!hints.days && !knownPreferences.days) {
     missing.push("天數");
-  }
-  if (!hasTravelPartyInfo(tripProfile, message)) {
-    missing.push("旅客人數");
-  }
-  if (!hints.budgetLevel && !knownPreferences.budget && !knownPreferences.budgetLevel) {
-    missing.push("預算");
-  }
-  if (!knownPreferences.travelStyle?.length) {
-    missing.push("旅遊風格");
-  }
-  if (!hints.pace && !knownPreferences.pace) {
-    missing.push("步調");
   }
   return missing;
 }
@@ -352,7 +318,7 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
   }
 
   if (isTripPlanningIntent(message)) {
-    const missingRequirements = collectMissingRequirements(hints, knownPreferences, input.tripProfile, message);
+    const missingRequirements = collectMissingRequirements(hints, knownPreferences);
     if (hasMeaningfulPreferences(reusablePreferences) && !isPreferenceRejectionOrOverride(message)) {
       const reusable = reusablePreferences || {};
       const summary = formatPreferenceSummary(reusable);

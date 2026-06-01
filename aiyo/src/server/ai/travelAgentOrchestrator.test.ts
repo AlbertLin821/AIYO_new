@@ -56,14 +56,13 @@ test("你好 stays casual without search or itinerary generation", () => {
   assert.equal(decision.shouldGenerateItinerary, false);
 });
 
-test("Tokyo three-day request collects requirements before generating", () => {
+test("Tokyo three-day request can generate once destination and duration are known", () => {
   const decision = decideTravelAgentMode({ message: "我想去東京玩三天" });
 
-  assert.equal(decision.mode, "collect_requirements");
+  assert.equal(decision.mode, "generate_itinerary");
   assert.equal(decision.shouldSearch, false);
-  assert.equal(decision.shouldGenerateItinerary, false);
-  assert.ok(decision.missingRequirements.includes("預算"));
-  assert.ok(decision.missingRequirements.includes("旅客人數"));
+  assert.equal(decision.shouldGenerateItinerary, true);
+  assert.deepEqual(decision.missingRequirements, []);
 });
 
 test("known mid-budget food preferences trigger preference confirmation", () => {

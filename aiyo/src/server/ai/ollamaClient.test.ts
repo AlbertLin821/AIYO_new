@@ -30,12 +30,38 @@ test("chatWithOllama passes JSON schema format and deterministic options", async
     });
 
     assert.equal(response, '{"answer":"完成"}');
+    assert.equal(captured.requestBody?.think, false);
     assert.deepEqual(captured.requestBody?.format, schema);
     assert.deepEqual(captured.requestBody?.options, {
       temperature: 0,
       top_p: 0.9,
       num_ctx: 32768,
     });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("chatWithOllama keeps thinking enabled for video place extraction tasks", async () => {
+  const originalFetch = globalThis.fetch;
+  const captured: { requestBody?: Record<string, unknown> } = {};
+
+  globalThis.fetch = async (_input, init) => {
+    captured.requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return new Response(JSON.stringify({ message: { content: '{"places":[]}' } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    await chatWithOllama({
+      task: "video-place-candidate-extract",
+      format: "json",
+      messages: [{ role: "user", content: "請擷取影片地點" }],
+    });
+
+    assert.equal(captured.requestBody?.think, true);
   } finally {
     globalThis.fetch = originalFetch;
   }

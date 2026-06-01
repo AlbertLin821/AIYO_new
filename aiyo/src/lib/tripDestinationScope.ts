@@ -248,12 +248,34 @@ export function buildTripDestinationScopeFromCatalog(destination: string): TripD
   };
 }
 
+function buildCountryAliasScope(destination: string): TripDestinationScope | null {
+  const normalized = normalizeToken(destination);
+  for (const [countryCode, aliases] of Object.entries(COUNTRY_POSITIVE_ALIASES)) {
+    const matched = aliases.find((alias) => {
+      const normalizedAlias = normalizeToken(alias);
+      return normalized === normalizedAlias || normalized.includes(normalizedAlias);
+    });
+    if (!matched) {
+      continue;
+    }
+    return {
+      canonicalLabel: matched,
+      countryCodes: [countryCode],
+      positiveTokens: uniqueTokens(aliases),
+      negativeRegionTokens: NEGATIVE_REGION_BY_COUNTRY[countryCode] || [],
+      isCountryLevel: true,
+      source: "catalog",
+    };
+  }
+  return null;
+}
+
 export function resolveTripDestinationScope(destination?: string | null): TripDestinationScope | null {
   const trimmed = destination?.trim();
   if (!trimmed) {
     return null;
   }
-  return buildTripDestinationScopeFromCatalog(trimmed);
+  return buildTripDestinationScopeFromCatalog(trimmed) || buildCountryAliasScope(trimmed);
 }
 
 export function mergeTripDestinationScope(

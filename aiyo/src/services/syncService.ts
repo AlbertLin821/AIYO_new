@@ -2,7 +2,7 @@ import { zhTW as t } from "@/locales/zh-TW";
 import { markPersistenceServerHydrated, persistActiveUserSnapshotNow } from "@/services/persistence";
 import { reconcileTripMapState } from "@/services/mapSync";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/services/apiClient";
-import { CHAT_REMOTE_CONVERSATION_ID, useChatStore } from "@/stores/useChatStore";
+import { getRemoteConversationId, useChatStore } from "@/stores/useChatStore";
 import { useCollabStore } from "@/stores/useCollabStore";
 import { useMapStore } from "@/stores/useMapStore";
 import { getSyncMutationSource } from "@/stores/syncMutationSource";
@@ -247,13 +247,19 @@ class SyncService {
     }
 
     if (source === "realtime") {
-      useChatStore.getState().mergeRemoteMessages(snapshot.chatMessages);
+      useChatStore.getState().mergeRemoteMessages(snapshot.chatMessages, {
+        tripId: snapshot.trip?.tripId,
+        title: snapshot.trip?.title,
+      });
     } else {
-      useChatStore.getState().setMessages(snapshot.chatMessages);
+      useChatStore.getState().setMessages(snapshot.chatMessages, {
+        tripId: snapshot.trip?.tripId,
+        title: snapshot.trip?.title,
+      });
     }
     if (snapshot.trip?.tripId) {
       useChatStore.getState().setConversationTrip(
-        CHAT_REMOTE_CONVERSATION_ID,
+        getRemoteConversationId(snapshot.trip.tripId),
         snapshot.trip.tripId,
       );
     }
@@ -296,7 +302,9 @@ class SyncService {
 
   applyTripSwitch(snapshot: {
     trip: PersistedTripPayload;
+    chatMessages?: BootstrapPayload["chatMessages"];
     collaboration: CollaborationPresenceState | null;
+    selectConversation?: boolean;
   }) {
     this.isApplyingRemote = true;
     try {
@@ -309,6 +317,18 @@ class SyncService {
       this.log("trip switch snapshot applied", { tripId: snapshot.trip.tripId });
     } finally {
       this.isApplyingRemote = false;
+    }
+
+    useChatStore.getState().setMessages(
+      snapshot.chatMessages || [],
+      {
+        tripId: snapshot.trip.tripId,
+        title: snapshot.trip.title,
+      },
+      { force: true },
+    );
+    if (snapshot.selectConversation !== false) {
+      useChatStore.getState().selectConversation(getRemoteConversationId(snapshot.trip.tripId));
     }
 
     if (snapshot.collaboration) {

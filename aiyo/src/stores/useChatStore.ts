@@ -9,6 +9,15 @@ import type { ChatMessage } from "@/types";
 /** Bootstrap／`/api/ai/chat` 持久化對話在商店中的固定識別 */
 export const CHAT_REMOTE_CONVERSATION_ID = "remote-current-trip";
 
+export function getRemoteConversationId(tripId?: string | null): string {
+  const normalizedTripId = tripId?.trim();
+  return normalizedTripId ? `remote-trip-${normalizedTripId}` : CHAT_REMOTE_CONVERSATION_ID;
+}
+
+function isSyncedRemoteConversation(conversation: ChatConversation): boolean {
+  return conversation.id === getRemoteConversationId(conversation.tripId);
+}
+
 export interface ChatConversation {
   id: string;
   title: string;
@@ -28,8 +37,12 @@ interface ChatState {
   setConversationTrip: (conversationId: string, tripId: string) => void;
   selectConversation: (conversationId: string) => void;
   deleteConversation: (conversationId: string) => Promise<void>;
-  setMessages: (messages: ChatMessage[]) => void;
-  mergeRemoteMessages: (messages: ChatMessage[]) => void;
+  setMessages: (
+    messages: ChatMessage[],
+    trip?: { tripId?: string | null; title?: string | null },
+    options?: { force?: boolean },
+  ) => void;
+  mergeRemoteMessages: (messages: ChatMessage[], trip?: { tripId?: string | null; title?: string | null }) => void;
   appendMessage: (message: ChatMessage) => void;
   removeMessageById: (messageId: string) => void;
   clearProposedChangesForMessage: (messageId: string) => void;
@@ -128,6 +141,14 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function formatTripConversationTitle(title?: string | null): string | null {
+  const trimmed = title?.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.endsWith("對話") ? trimmed : `${trimmed}對話`;
+}
+
 function deriveConversationTitle(messages: ChatMessage[], fallback = "新的對話"): string {
   const firstUserMessage = messages.find((message) => message.role === "user");
   const content = (firstUserMessage?.content || messages[0]?.content || fallback).trim();
@@ -149,21 +170,24 @@ function createEmptyConversation(title = "新的對話", tripId?: string): ChatC
 function upsertRemoteConversation(
   conversations: ChatConversation[],
   remoteMessages: ChatMessage[],
+  trip?: { tripId?: string | null; title?: string | null },
 ): ChatConversation[] {
   const updatedAt = nowIso();
-  const existing = conversations.find((conversation) => conversation.id === CHAT_REMOTE_CONVERSATION_ID);
+  const remoteId = getRemoteConversationId(trip?.tripId);
+  const existing = conversations.find((conversation) => conversation.id === remoteId);
+  const fallbackTitle = formatTripConversationTitle(trip?.title);
   const remoteConversation: ChatConversation = {
-    id: CHAT_REMOTE_CONVERSATION_ID,
-    title: deriveConversationTitle(remoteMessages, "目前行程對話"),
+    id: remoteId,
+    title: fallbackTitle || deriveConversationTitle(remoteMessages, "目前行程對話"),
     createdAt: existing?.createdAt || updatedAt,
     updatedAt,
     messages: remoteMessages,
-    tripId: existing?.tripId,
+    tripId: trip?.tripId?.trim() || existing?.tripId,
   };
 
   return [
     remoteConversation,
-    ...conversations.filter((conversation) => conversation.id !== CHAT_REMOTE_CONVERSATION_ID),
+    ...conversations.filter((conversation) => conversation.id !== remoteId),
   ];
 }
 
@@ -249,26 +273,27 @@ export const useChatStore = create<ChatState>((set) => ({
       });
     });
   },
-  setMessages: (messages) =>
+  setMessages: (messages, trip, options) =>
     set((state) => {
       if (state.isSending) {
         return state;
       }
+      const remoteId = getRemoteConversationId(trip?.tripId);
       const activeConversation = state.conversations.find(
         (conversation) => conversation.id === state.activeConversationId,
       );
-      if (activeConversation?.tripId && activeConversation.id !== CHAT_REMOTE_CONVERSATION_ID) {
+      if (activeConversation?.tripId && !isSyncedRemoteConversation(activeConversation) && !options?.force) {
         return {
           conversations: state.conversations.filter(
-            (conversation) => conversation.id !== CHAT_REMOTE_CONVERSATION_ID,
+            (conversation) => conversation.id !== remoteId,
           ),
           activeConversationId: activeConversation.id,
           messages: activeConversation.messages,
         };
       }
 
-      const conversations = upsertRemoteConversation(state.conversations, messages);
-      const activeConversationId = state.activeConversationId || CHAT_REMOTE_CONVERSATION_ID;
+      const conversations = upsertRemoteConversation(state.conversations, messages, trip);
+      const activeConversationId = state.activeConversationId || remoteId;
       const nextActiveConversation = conversations.find((item) => item.id === activeConversationId);
       return {
         conversations,
@@ -276,37 +301,38 @@ export const useChatStore = create<ChatState>((set) => ({
         messages: nextActiveConversation?.messages || messages,
       };
     }),
-  mergeRemoteMessages: (messages) =>
+  mergeRemoteMessages: (messages, trip) =>
     set((state) => {
       if (state.isSending) {
         return state;
       }
+      const remoteId = getRemoteConversationId(trip?.tripId);
       const activeConversation = state.conversations.find(
         (conversation) => conversation.id === state.activeConversationId,
       );
-      if (activeConversation?.tripId && activeConversation.id !== CHAT_REMOTE_CONVERSATION_ID) {
+      if (activeConversation?.tripId && !isSyncedRemoteConversation(activeConversation)) {
         return {
           conversations: state.conversations.filter(
-            (conversation) => conversation.id !== CHAT_REMOTE_CONVERSATION_ID,
+            (conversation) => conversation.id !== remoteId,
           ),
           messages: activeConversation.messages,
         };
       }
 
       const remoteConversation = state.conversations.find(
-        (conversation) => conversation.id === CHAT_REMOTE_CONVERSATION_ID,
+        (conversation) => conversation.id === remoteId,
       );
       const localMessages = dedupeChatMessagesBySignature([
         ...(remoteConversation?.messages || []),
-        ...(state.activeConversationId === CHAT_REMOTE_CONVERSATION_ID ? state.messages : []),
+        ...(state.activeConversationId === remoteId ? state.messages : []),
       ]);
       const mergedMessages = mergeRemoteWithLocalChatMessages(messages, localMessages);
-      const conversations = upsertRemoteConversation(state.conversations, mergedMessages);
+      const conversations = upsertRemoteConversation(state.conversations, mergedMessages, trip);
       const nextActiveConversation = conversations.find(
         (conversation) => conversation.id === state.activeConversationId,
       );
       const nextMessages =
-        state.activeConversationId === CHAT_REMOTE_CONVERSATION_ID
+        state.activeConversationId === remoteId
           ? mergedMessages
           : nextActiveConversation?.messages || state.messages;
       return {
