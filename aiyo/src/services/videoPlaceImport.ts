@@ -151,7 +151,7 @@ export async function importVideoVerifiedPlacesToTrip(
     linkedTripItemId: itemsToPin[index]?.itemId,
   }));
   useMapStore.getState().addPins(pins);
-  await syncService.flushTripSyncNow();
+  await syncService.flushTripSyncNow({ force: true });
   await recordAppliedVideoSummary({
     tripId: useTripStore.getState().tripId,
     videoId: video.videoId || video.id,

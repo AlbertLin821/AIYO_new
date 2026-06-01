@@ -1,4 +1,5 @@
 import { enrichChatContextWithDestinationScope } from "@/lib/tripDestinationScope";
+import type { TripDestinationScope } from "@/lib/tripDestinationScope";
 import type { TripPlanRequest } from "@/types";
 import { serverConfig } from "@/server/config";
 import type { TravelToolRequest } from "@/server/services/travelResearchTools";
@@ -21,7 +22,10 @@ function buildScopeLabel(request: TripPlanRequest): string {
   if (!dest) {
     return "";
   }
-  const scoped = enrichChatContextWithDestinationScope({ destination: dest });
+  const scoped = enrichChatContextWithDestinationScope<{
+    destination?: string;
+    destinationScope?: TripDestinationScope;
+  }>({ destination: dest });
   return scoped?.destinationScope?.canonicalLabel || dest;
 }
 

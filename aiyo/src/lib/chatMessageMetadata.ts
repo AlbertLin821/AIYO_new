@@ -4,6 +4,7 @@ import type { ChatMessage } from "@/types";
 export type PersistedChatMessageMetadata = {
   responseType?: ChatMessage["responseType"];
   questionCard?: ChatMessage["questionCard"];
+  preferenceConfirmation?: ChatMessage["preferenceConfirmation"];
   statusSteps?: ChatMessage["statusSteps"];
   travelPlan?: ChatMessage["travelPlan"];
   tripProfile?: ChatMessage["tripProfile"];
@@ -24,6 +25,9 @@ export function extractChatMessageMetadata(message: ChatMessage): PersistedChatM
   }
   if (message.questionCard) {
     metadata.questionCard = message.questionCard;
+  }
+  if (message.preferenceConfirmation) {
+    metadata.preferenceConfirmation = message.preferenceConfirmation;
   }
   if (message.statusSteps?.length) {
     metadata.statusSteps = message.statusSteps;
@@ -71,6 +75,7 @@ export function applyChatMessageMetadata(
     ...message,
     responseType: stored.responseType ?? message.responseType,
     questionCard: stored.questionCard ?? message.questionCard,
+    preferenceConfirmation: stored.preferenceConfirmation ?? message.preferenceConfirmation,
     statusSteps: stored.statusSteps?.length ? stored.statusSteps : message.statusSteps,
     travelPlan: stored.travelPlan ?? message.travelPlan,
     tripProfile: stored.tripProfile ?? message.tripProfile,

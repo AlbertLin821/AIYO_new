@@ -1114,7 +1114,7 @@ export default function ChatPage() {
       ...prev,
       preferenceConfirmation: null,
     }));
-    void handleSend("沿用", { displayMessage: "沿用先前偏好" });
+    void handleSend("沿用先前偏好，請直接開始規劃完整行程。", { displayMessage: "沿用先前偏好" });
   }
 
   function handlePreferenceDecline() {
@@ -1619,7 +1619,14 @@ export default function ChatPage() {
       if (requestEpoch !== chatRequestEpochRef.current) {
         return;
       }
-      appendMessage(response.reply);
+      const replyWithPreferenceConfirmation: ChatMessage =
+        response.travelAgentDecision?.preferenceConfirmation && !response.reply.preferenceConfirmation
+          ? {
+              ...response.reply,
+              preferenceConfirmation: response.travelAgentDecision.preferenceConfirmation,
+            }
+          : response.reply;
+      appendMessage(replyWithPreferenceConfirmation);
       if (response.tripProfile) {
         setTripProfile(response.tripProfile);
       }
@@ -2501,12 +2508,12 @@ export default function ChatPage() {
                   ) : null}
                   {message.role === "assistant" &&
                   index === messages.length - 1 &&
-                  workflowRail.preferenceConfirmation &&
+                  (message.preferenceConfirmation || workflowRail.preferenceConfirmation) &&
                   !message.questionCard ? (
                     <div className="mt-3 w-full min-w-[min(100%,20rem)] max-w-md">
                       <PreferenceReusePanel
                         variant="inline"
-                        confirmation={workflowRail.preferenceConfirmation}
+                        confirmation={(message.preferenceConfirmation || workflowRail.preferenceConfirmation)!}
                         disabled={isSending}
                         currentDestination={tripProfile?.destination || planningSnapshot.destination}
                         currentDays={tripProfile?.duration_days || planningSnapshot.days}

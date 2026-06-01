@@ -158,7 +158,11 @@ export async function runStructuredTripWorkflow(
   const supplementarySources = (await shouldLoadSupplementarySources({
     generatedSourceCount: Object.keys(generated.sources).length,
     freshnessRequired: researchPlan.freshnessRequired,
-    profileNotes: profile.notes,
+    profileNotes: [
+      ...profile.preferences,
+      ...(profile.avoid_places || []),
+      ...(profile.dietary_restrictions || []),
+    ].join(" "),
     requireCitations: serverConfig.aiWebSearchRequireCitations,
   }))
     ? await deps.loadSupplementarySources(profile, input.progressSessionId, generated, researchPlan)

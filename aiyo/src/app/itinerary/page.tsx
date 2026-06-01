@@ -471,7 +471,7 @@ export default function ItineraryPage() {
           : undefined,
         source: "manual",
       });
-      void syncService.flushTripSyncNow();
+      void syncService.flushTripSyncNow({ force: true });
       setAddDraft(EMPTY_ADD_DRAFT);
       setAddingToDay(null);
     },

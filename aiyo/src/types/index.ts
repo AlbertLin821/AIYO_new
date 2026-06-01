@@ -690,6 +690,7 @@ export interface ChatMessage {
   timestamp: string;
   responseType?: ChatResponseType;
   questionCard?: QuestionCardPayload;
+  preferenceConfirmation?: TravelAgentPreferenceConfirmation;
   statusSteps?: StatusStepPayload[];
   travelPlan?: TravelPlanResponse;
   tripProfile?: TripProfile;

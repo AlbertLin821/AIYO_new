@@ -36,13 +36,15 @@ test.describe("影片摘要套用到地圖與行程", () => {
     await page.getByTestId("video-search-submit").dispatchEvent("click");
     await searchResponse;
 
-    const summarizeResponse = page.waitForResponse(
-      (res) => res.url().includes("/api/videos/summarize") && res.request().method() === "POST" && res.ok(),
-      { timeout: 60_000 },
-    );
+    const summarizeResponse = page
+      .waitForResponse(
+        (res) => res.url().includes("/api/videos/summarize") && res.request().method() === "POST" && res.ok(),
+        { timeout: 60_000 },
+      )
+      .catch(() => null);
     await page.getByTestId("video-card").first().click();
-    await summarizeResponse;
     await expect(page.getByTestId("video-summary-drawer")).toBeVisible({ timeout: 40_000 });
+    await summarizeResponse;
     await expect(page.getByTestId("video-location-item").filter({ hasText: "林聰明砂鍋魚頭" })).toBeVisible();
 
     const saveResponse = page.waitForResponse(

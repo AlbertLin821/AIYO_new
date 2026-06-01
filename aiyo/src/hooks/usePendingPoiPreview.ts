@@ -63,11 +63,12 @@ export function usePendingPoiPreview({
     Boolean(pendingPoi) &&
     isResolvableMapPickLocation(preview!, pendingPoi!.lat, pendingPoi!.lng);
 
+  const pendingPlaceId = pendingPoi?.placeId;
   const showAddUi =
     Boolean(pendingPoi) &&
-    ((loading && Boolean(pendingPoi.placeId)) ||
+    ((loading && Boolean(pendingPlaceId)) ||
       previewResolvable ||
-      (Boolean(error) && Boolean(pendingPoi.placeId)));
+      (Boolean(error) && Boolean(pendingPlaceId)));
 
   const dismiss = useCallback(() => {
     setPendingPoi(null);

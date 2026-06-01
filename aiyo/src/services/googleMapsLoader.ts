@@ -51,6 +51,26 @@ export interface GoogleLatLngBounds {
   extend: (coords: { lat: number; lng: number }) => void;
 }
 
+export interface GoogleLatLng {
+  lat: () => number;
+  lng: () => number;
+}
+
+export interface GoogleMapProjection {
+  fromLatLngToDivPixel: (latLng: GoogleLatLng) => { x: number; y: number } | null;
+}
+
+export interface GoogleMapPanes {
+  floatPane: HTMLElement;
+}
+
+export interface GoogleOverlayViewInstance {
+  setMap(map: GoogleMapInstance | null): void;
+  draw(): void;
+  getPanes(): GoogleMapPanes | null;
+  getProjection(): GoogleMapProjection | null;
+}
+
 export interface GooglePlacePhoto {
   getUrl: (options?: { maxWidth?: number; maxHeight?: number }) => string;
 }
@@ -88,7 +108,9 @@ export interface GoogleMapsApi {
   Marker: new (options: Record<string, unknown>) => GoogleMarkerInstance;
   Polyline: new (options: Record<string, unknown>) => GooglePolylineInstance;
   InfoWindow: new () => GoogleInfoWindowInstance;
+  LatLng: new (lat: number, lng: number) => GoogleLatLng;
   LatLngBounds: new () => GoogleLatLngBounds;
+  OverlayView: new () => GoogleOverlayViewInstance;
   TrafficLayer: new () => GoogleMapLayerInstance;
   TransitLayer: new () => GoogleMapLayerInstance;
   BicyclingLayer: new () => GoogleMapLayerInstance;

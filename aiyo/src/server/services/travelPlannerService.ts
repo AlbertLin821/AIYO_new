@@ -139,6 +139,7 @@ function buildNaturalTravelAgentResponse(decision: TravelAgentDecision): ChatRes
         minute: "2-digit",
       }),
       responseType: "text_message",
+      preferenceConfirmation: decision.preferenceConfirmation,
       proposedChanges: [],
     },
     proposedChanges: [],
@@ -400,8 +401,9 @@ type WebSearchBundle = {
   searchContext?: TravelSearchContext;
 };
 
-const TRIP_PLAN_COMPOSE_TIMEOUT_MS = 90_000;
-const CHAT_COMPOSE_TIMEOUT_MS = 75_000;
+const TRIP_PLAN_COMPOSE_TIMEOUT_MS = 60_000;
+const CHAT_COMPOSE_TIMEOUT_MS = 60_000;
+const PATCH_INTENT_TIMEOUT_MS = 30_000;
 const PERSONAL_MEMORY_RECALL_TIMEOUT_MS = 45_000;
 const TRAVEL_CHAT_TIMEOUT_FALLBACK =
   "我先保留目前的行程脈絡；你可以再補充想調整的地點、天數或預算，我會用更精簡的查詢重新規劃。";
@@ -1357,80 +1359,6 @@ export function buildQuestionCard(profile: TripProfile, context?: ChatContext): 
         { label: "6 天以上", value: "7" },
       ],
       helperText: "選最接近的選項即可，之後還能再調整。",
-    });
-  }
-
-  const hasTravelParty = Boolean(merged.companions) || (merged.traveler_count ?? 0) > 0;
-
-  if (merged.destination && merged.duration_days && !hasTravelParty) {
-    questions.push({
-      slot: "companions",
-      question: `這趟${destination}幾個人一起去？`,
-      type: "single_choice",
-      options: [
-        { label: "自己一個人（獨旅）", value: "solo" },
-        { label: "兩人（伴侶或朋友）", value: "couple_or_friend", recommended: true },
-        { label: "3–4 人小團", value: "small_group" },
-        { label: "5 人以上（含家人）", value: "family_group" },
-      ],
-      helperText: "會影響住宿、交通與預算估算。",
-    });
-  }
-
-  if (merged.destination && merged.duration_days && hasTravelParty && !merged.preferences.length) {
-    questions.push({
-      slot: "preferences",
-      question: `你想讓${destination}行程更偏向哪幾種體驗？`,
-      type: "multi_choice",
-      options: buildPreferenceOptions(merged),
-      helperText: "可複選；我會依此安排景點密度與路線。",
-    });
-  }
-
-  if (merged.destination && merged.duration_days && hasTravelParty && merged.preferences.length && !merged.pace) {
-    questions.push({
-      slot: "pace",
-      question: "每天的節奏希望怎麼安排？",
-      type: "single_choice",
-      options: [
-        { label: "輕鬆慢遊，保留休息時間", value: "relaxed", recommended: true },
-        { label: "平均節奏，景點與休息兼具", value: "balanced" },
-        { label: "行程緊湊，多跑幾個點", value: "intensive" },
-      ],
-    });
-  }
-
-  if (
-    merged.destination &&
-    merged.duration_days &&
-    hasTravelParty &&
-    merged.preferences.length &&
-    merged.pace &&
-    !merged.transportation
-  ) {
-    questions.push({
-      slot: "transportation",
-      question: `${destination}這趟打算怎麼移動？`,
-      type: "single_choice",
-      options: buildTransportOptions(destination),
-    });
-  }
-
-  if (
-    merged.destination &&
-    merged.duration_days &&
-    hasTravelParty &&
-    merged.preferences.length &&
-    merged.pace &&
-    merged.transportation &&
-    !merged.budget
-  ) {
-    questions.push({
-      slot: "budget",
-      question: `${destination}這趟每人預算大概落在哪個區間？`,
-      type: "budget",
-      options: estimateBudgetOptions(merged),
-      helperText: "以新台幣估算，含交通、餐食與門票，住宿另計。",
     });
   }
 
@@ -2969,6 +2897,7 @@ async function buildExistingItineraryPatchResponse(input: {
       const raw = await chatWithOllama({
         task: "travel-chat",
         format: structuredChatOutputJsonSchema,
+        timeoutMs: PATCH_INTENT_TIMEOUT_MS,
         options: { temperature: 0, top_p: 0.9, num_ctx: 16_384 },
         messages: [
           { role: "system", content: intentPrompt.system },

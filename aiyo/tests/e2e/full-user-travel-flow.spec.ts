@@ -68,7 +68,7 @@ test.describe("嘉義兩天一夜完整旅人流程", () => {
     page.on("response", async (response) => {
       try {
         const url = response.url();
-        if (!/\/api\/(videos|ai|bootstrap|trips)/.test(url)) {
+        if (!/\/api\/(videos|ai|bootstrap|trips|trip\/revise|chat)/.test(url)) {
           return;
         }
         const method = response.request().method();
@@ -142,7 +142,6 @@ test.describe("嘉義兩天一夜完整旅人流程", () => {
 
     const segmentWatch = beginSummarySegmentWatch(page, summarizeTimeout);
     const evidence = await Promise.race([summarizeWatch, segmentWatch]);
-    await Promise.allSettled([summarizeWatch, segmentWatch]);
 
     if (evidence.from === "api") {
       writeArtifactJson(
@@ -286,16 +285,20 @@ test.describe("嘉義兩天一夜完整旅人流程", () => {
 
     const chatStart = Date.now();
     const chatRespWait = page.waitForResponse(
-      (res) =>
-        res.url().includes("/api/chat/message") &&
-        res.request().method() === "POST",
-      { timeout: 300_000 },
+      (res) => {
+        const url = res.url();
+        return (
+          (url.includes("/api/chat/message") || url.includes("/api/trip/revise")) &&
+          res.request().method() === "POST"
+        );
+      },
+      { timeout: 180_000 },
     );
     await chatSendButton.click();
     const chatHttp = await chatRespWait.catch(() => null);
 
     await expect(page.locator('[data-testid="chat-message-ai"]').last()).toBeVisible({
-      timeout: 300_000,
+      timeout: 60_000,
     });
     const chatEnd = Date.now();
     const lastAiText = await page

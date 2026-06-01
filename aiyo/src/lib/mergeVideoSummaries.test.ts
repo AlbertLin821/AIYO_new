@@ -58,6 +58,37 @@ test("mergeProcessedVideoFields preserves processed summary fields from store", 
   assert.equal(merged.timestamps.length, 1);
 });
 
+test("mergeProcessedVideoFields does not let default seed summaries overwrite a different search result", () => {
+  const incoming = baseVideo({
+    id: "search_chiayi",
+    videoId: "same-id",
+    title: "嘉義兩天一夜 美食 文化路夜市",
+    listProvenance: "youtube-data-api",
+  });
+  const stored = baseVideo({
+    id: "default_newtaipei_intro",
+    videoId: "same-id",
+    title: "新北淡水景點完整攻略：老街、古蹟與河岸夕景",
+    listProvenance: "default-taiwan-cities",
+    extractedLocations: [
+      {
+        name: "淡水老街",
+        description: "",
+        lat: 25.17,
+        lng: 121.44,
+        confidence: 0.8,
+        verified: true,
+      },
+    ],
+    summarySegments: [{ id: "s1", startSeconds: 0, endSeconds: 10, text: "x", timestamp: "0:00" }],
+  });
+
+  const merged = mergeProcessedVideoFields(incoming, stored);
+  assert.equal(merged.title, "嘉義兩天一夜 美食 文化路夜市");
+  assert.equal(merged.extractedLocations.length, 0);
+  assert.equal(merged.summarySegments?.length ?? 0, 0);
+});
+
 test("mergeVideosWithStoredSummaries merges by videoId", () => {
   const incoming = [
     baseVideo({ videoId: "a", title: "A incoming" }),

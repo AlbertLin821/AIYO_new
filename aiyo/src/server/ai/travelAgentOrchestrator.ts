@@ -357,15 +357,17 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
       const reusable = reusablePreferences || {};
       const summary = formatPreferenceSummary(reusable);
       const promptDestination = hints.destination || knownPreferences.destination || "這趟";
+      const dayText = hints.days || knownPreferences.days ? ` ${hints.days || knownPreferences.days} 天` : "";
+      const prompt = `我找到可沿用的偏好：${summary}。這次${promptDestination}${dayText}也要沿用這些設定嗎？`;
       return buildDecision("confirm_preferences", {
         missingRequirements,
         searchDecision,
         preferenceConfirmation: {
           summary,
           preferences: mergedPreferences,
-        prompt: `可以。我看到你之前比較偏好${summary}路線，這次${promptDestination}${hints.days || knownPreferences.days ? ` ${hints.days || knownPreferences.days} 天` : ""}也要沿用這個方向嗎？`,
+          prompt,
         },
-        userFacingGuidance: `可以。我看到你之前比較偏好${summary}路線，這次${promptDestination}${hints.days || knownPreferences.days ? ` ${hints.days || knownPreferences.days} 天` : ""}也要沿用這個方向嗎？如果要，我可以直接幫你排；如果想改成更輕鬆或更高預算，也可以告訴我。`,
+        userFacingGuidance: `${prompt} 如果要，我可以直接幫你排；如果想改成更輕鬆或更高預算，也可以告訴我。`,
         debugReason: "planning intent with reusable known preferences",
       });
     }

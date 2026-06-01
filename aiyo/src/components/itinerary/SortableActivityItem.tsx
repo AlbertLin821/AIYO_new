@@ -1,7 +1,7 @@
 "use client";
 
-import { memo, useMemo, useState } from "react";
-import { MapPin, PencilLine, Save, Train, Trash2, X } from "lucide-react";
+import { memo, useId, useMemo, useState } from "react";
+import { GripVertical, MapPin, PencilLine, Save, Train, Trash2, X } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
@@ -64,6 +64,7 @@ function SortableActivityItem({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<EditDraft>(() => toDraft(item));
+  const formId = useId();
   const draftTransportTrimmed = (draft.transport ?? "").trim();
   const draftTransportSelectValue = draftTransportTrimmed || "Transit";
 
@@ -129,11 +130,23 @@ function SortableActivityItem({
             ? "border-primary/30 bg-zinc-800 opacity-90"
             : "border-primary/20 bg-cream/70 shadow-soft-lg opacity-90"),
       )}
-      {...attributes}
-      {...listeners}
-      title="拖曳排序"
     >
       <div className="flex items-start gap-3 px-4 py-3">
+        {canEdit ? (
+          <button
+            type="button"
+            className={cn(
+              "mt-1 rounded-lg p-1.5 text-muted transition-colors hover:bg-primary/10 hover:text-primary",
+              isDark && "text-zinc-500 hover:bg-zinc-800 hover:text-orange-300",
+            )}
+            aria-label={`拖曳排序：${item.title}`}
+            title="拖曳排序"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="size-4" aria-hidden />
+          </button>
+        ) : null}
         <div className="flex min-w-[56px] flex-col items-center gap-1">
           <span
             className={cn(
@@ -228,6 +241,7 @@ function SortableActivityItem({
             <label className="sm:col-span-2 text-xs font-medium text-muted">
               {t.itineraryPage.activityTitle}
               <input
+                id={`${formId}-title`}
                 data-testid="activity-edit-title-input"
                 value={draft.title}
                 onChange={(event) => updateDraft({ title: event.target.value })}
@@ -237,7 +251,9 @@ function SortableActivityItem({
             <label className="text-xs font-medium text-muted">
               {t.itineraryPage.activityTime}
               <input
+                id={`${formId}-time`}
                 type="time"
+                data-testid="activity-edit-time-input"
                 value={draft.time}
                 onChange={(event) => updateDraft({ time: event.target.value })}
                 className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"

@@ -127,33 +127,7 @@ function resolveScenario(message: string, seed: Phase7TokyoSeed, body?: ChatRout
     return {
       content:
         "東京三天聽起來很棒！我看到你先前偏好中等預算、美食與購物、步調適中。要沿用這些偏好來規劃嗎？",
-      responseType: "question_card",
-      statusSteps: [
-        {
-          type: "status_step",
-          phase: "understand",
-          label: "等你確認偏好",
-          detail: "請在下方選擇是否沿用先前設定。",
-          status: "waiting_input",
-        },
-      ],
-      questionCard: {
-        response_type: "question_card",
-        title: "再確認一下東京行程偏好",
-        description: "選好後我會依你的偏好繼續規劃。",
-        questions: [
-          {
-            slot: "preferences",
-            question: "你想讓東京行程更偏向哪幾種體驗？",
-            type: "multi_choice",
-            options: [
-              { label: "美食", value: "food", recommended: true },
-              { label: "購物", value: "shopping", recommended: true },
-            ],
-          },
-        ],
-        action: { label: "送出並繼續", shortcut: "Enter" },
-      },
+      responseType: "text_message",
       travelAgentDecision: {
         mode: "confirm_preferences",
         preferenceConfirmation: {

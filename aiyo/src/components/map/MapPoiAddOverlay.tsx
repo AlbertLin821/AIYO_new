@@ -9,11 +9,8 @@ import { pendingPoiKey, usePendingPoiPreview } from "@/hooks/usePendingPoiPrevie
 import { zhTW as t } from "@/locales/zh-TW";
 import { useMapStore } from "@/stores/useMapStore";
 import { useToastStore } from "@/stores/useToastStore";
+import type { GoogleMapInstance } from "@/services/googleMapsLoader";
 import type { LocationReference } from "@/types";
-
-type GoogleMapInstance = {
-  addListener?: (event: string, handler: () => void) => { remove?: () => void };
-};
 
 type MapPoiAddOverlayProps = {
   map: GoogleMapInstance | null;
@@ -254,8 +251,9 @@ export default function MapPoiAddOverlay({
     const container = document.createElement("div");
     container.style.position = "absolute";
     container.style.zIndex = "1000";
+    const mapsApi = maps;
 
-    class PoiAddOverlay extends maps.OverlayView {
+    class PoiAddOverlay extends mapsApi.OverlayView {
       onAdd() {
         this.getPanes()?.floatPane.appendChild(container);
       }
@@ -265,7 +263,7 @@ export default function MapPoiAddOverlay({
           return;
         }
         const projection = this.getProjection();
-        const point = projection?.fromLatLngToDivPixel(new maps.LatLng(poi.lat, poi.lng));
+        const point = projection?.fromLatLngToDivPixel(new mapsApi.LatLng(poi.lat, poi.lng));
         if (point) {
           container.style.left = `${point.x}px`;
           container.style.top = `${point.y}px`;
@@ -281,9 +279,9 @@ export default function MapPoiAddOverlay({
     overlay.setMap(map);
 
     const redraw = () => overlay.draw();
-    const listeners = ["bounds_changed", "zoom_changed", "center_changed"].map((event) =>
-      map.addListener?.(event, redraw),
-    );
+    const listeners = ["bounds_changed", "zoom_changed", "center_changed"]
+      .map((event) => map.addListener?.(event, redraw))
+      .filter((listener): listener is { remove?: () => void } => Boolean(listener));
 
     overlayRef.current = { poiKey, overlay, container, listeners };
     setPortalTarget(container);

@@ -236,6 +236,7 @@ const VideoSearchBar = forwardRef<HTMLInputElement, VideoSearchBarProps>(functio
           type="text"
           value={input}
           onChange={(event) => setInput(event.target.value)}
+          onInput={(event) => setInput(event.currentTarget.value)}
           onKeyDown={(event) => event.key === "Enter" && void handleSearch()}
           data-testid="video-search-input"
           placeholder={placeholder}

@@ -62,8 +62,9 @@ function isEphemeralMessage(message: ChatMessage): boolean {
 
 function hasStructuredChatPayload(message: ChatMessage): boolean {
   return Boolean(
-    message.travelPlan ||
+      message.travelPlan ||
       message.questionCard ||
+      message.preferenceConfirmation ||
       message.responseType === "travel_plan" ||
       message.responseType === "question_card" ||
       (message.proposedChanges?.length ?? 0) > 0 ||
@@ -81,6 +82,7 @@ function mergeStructuredChatFields(remote: ChatMessage, local: ChatMessage): Cha
     responseType: local.responseType ?? remote.responseType,
     travelPlan: local.travelPlan ?? remote.travelPlan,
     questionCard: local.questionCard ?? remote.questionCard,
+    preferenceConfirmation: local.preferenceConfirmation ?? remote.preferenceConfirmation,
     statusSteps: local.statusSteps?.length ? local.statusSteps : remote.statusSteps,
     tripProfile: local.tripProfile ?? remote.tripProfile,
     proposedChanges: local.proposedChanges ?? remote.proposedChanges,

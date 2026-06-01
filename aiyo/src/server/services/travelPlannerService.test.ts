@@ -423,7 +423,7 @@ test("question card skips destination when conversation already mentions Kumamot
   );
 });
 
-test("question card asks for companions when destination and duration are known", () => {
+test("question card does not block on companions when destination and duration are known", () => {
   const card = buildQuestionCard({
     ...makeStructuredProfile(),
     destination: "熊本",
@@ -434,15 +434,10 @@ test("question card asks for companions when destination and duration are known"
     preferences: [],
     pace: null,
   });
-  assert.equal(card?.response_type, "question_card");
-  assert.ok(card?.questions.some((question) => question.slot === "companions"));
-  assert.equal(
-    card?.questions.some((question) => question.slot === "preferences"),
-    false,
-  );
+  assert.equal(card, null);
 });
 
-test("question card asks for preferences after companions are known", () => {
+test("question card does not block on preferences after companions are known", () => {
   const card = buildQuestionCard({
     ...makeStructuredProfile(),
     destination: "熊本",
@@ -453,9 +448,7 @@ test("question card asks for preferences after companions are known", () => {
     preferences: [],
     pace: null,
   });
-  assert.equal(card?.response_type, "question_card");
-  assert.ok(card?.questions.some((question) => question.slot === "preferences"));
-  assert.equal(card?.questions[0]?.type, "multi_choice");
+  assert.equal(card, null);
 });
 
 test("applyQuestionAnswers maps traveler_count to companions", () => {

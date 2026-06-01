@@ -105,12 +105,13 @@ export default function OnboardingModal() {
 
             <div className="flex flex-col gap-5">
               <div>
-                <Label className="mb-2 flex items-center gap-2 text-sm font-medium">
+                <Label htmlFor="onboarding-destination" className="mb-2 flex items-center gap-2 text-sm font-medium">
                   <MapPin className="size-4 text-secondary" />
                   {t.onboarding.destination}
                 </Label>
                 <Input
                   type="text"
+                  id="onboarding-destination"
                   value={destinationInput}
                   onChange={(event) => setDestinationInput(event.target.value)}
                   placeholder={t.onboarding.destinationPh}
@@ -120,12 +121,13 @@ export default function OnboardingModal() {
               </div>
 
               <div>
-                <Label className="mb-2 flex items-center gap-2 text-sm font-medium">
+                <Label htmlFor="onboarding-days" className="mb-2 flex items-center gap-2 text-sm font-medium">
                   <CalendarDays className="size-4 text-primary" />
                   {t.onboarding.tripDays}
                 </Label>
                 <Input
                   type="number"
+                  id="onboarding-days"
                   value={daysInput}
                   onChange={(event) => setDaysInput(event.target.value)}
                   placeholder={t.onboarding.daysPlaceholder}

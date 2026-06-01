@@ -89,7 +89,7 @@ export interface VideoState {
   bumpSearchBarReset: () => void;
 }
 
-export const useVideoStore = create<VideoState>((set) => ({
+export const useVideoStore = create<VideoState>((set, get) => ({
   videos: [],
   selectedVideo: null,
   searchQuery: "",
@@ -103,7 +103,7 @@ export const useVideoStore = create<VideoState>((set) => ({
   searchBarResetNonce: 0,
   recommendationCache: {},
   getCachedRecommendations: (queryKey) => {
-    const entry = useVideoStore.getState().recommendationCache[queryKey];
+    const entry = get().recommendationCache[queryKey];
     return entry ?? null;
   },
   setCachedRecommendations: (queryKey, entry) =>
