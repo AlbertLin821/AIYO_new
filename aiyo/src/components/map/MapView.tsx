@@ -16,8 +16,10 @@ import type {
 import {
   AIYO_MAPS_AUTH_FAILURE_EVENT,
   AIYO_MAPS_TARGET_BLOCKED_EVENT,
-  isGoogleMapsTargetBlockedMessage,
+  isGoogleMapsConsoleErrorMessage,
+  isGoogleMapsDeletedProjectMessage,
   loadGoogleMapsApi,
+  unloadGoogleMapsApi,
 } from "@/services/googleMapsLoader";
 import { fetchItineraryRoutePaths } from "@/lib/fetchItineraryDirections";
 import { logFrontendDebugEvent } from "@/lib/frontendDebug";
@@ -53,7 +55,7 @@ import {
   type MapViewportPoint,
 } from "@/lib/mapViewport";
 import { syncService } from "@/services/syncService";
-import { normalizeGoogleMapsMapId, resolveGoogleMapsMapId } from "@/lib/googleMapsEnv";
+import { normalizeGoogleMapsMapId, resolveGoogleMapsMapId } from "@/lib/googleMapsMapId";
 import { geocodeQuery } from "@/services/geocodeItineraryItems";
 
 const GOOGLE_MAPS_API_KEY = (
@@ -771,7 +773,14 @@ export default function MapView({
               : "",
           enableMockMaps: payload.enableMockMaps === true,
         };
-        setRuntimeMapsConfig(nextConfig);
+        setRuntimeMapsConfig((prev) => {
+          if (prev.googleMapsApiKey !== nextConfig.googleMapsApiKey) {
+            unloadGoogleMapsApi();
+            mapInstanceRef.current = null;
+            setGoogleMap(null);
+          }
+          return nextConfig;
+        });
         setRuntimeConfigChecked(true);
         const shouldUseGoogle = Boolean(nextConfig.googleMapsApiKey && !nextConfig.enableMockMaps);
         if (!shouldUseGoogle) {
@@ -900,21 +909,28 @@ export default function MapView({
     if (!useGoogleSdk) {
       return;
     }
-    const onTargetBlocked = () => {
+    const onTargetBlocked = (event: Event) => {
+      const detail = (event as CustomEvent<{ message?: string }>).detail?.message ?? "";
+      const deleted = isGoogleMapsDeletedProjectMessage(detail);
+      const description = deleted ? t.map.deletedApiProjectError : t.map.apiTargetBlockedError;
       setSdkState("error");
-      setProviderError(`${t.map.apiTargetBlockedError} ${t.map.apiTargetBlockedHint}`);
+      setProviderError(
+        deleted ? description : `${description} ${t.map.apiTargetBlockedHint}`,
+      );
       pushToast({
         variant: "error",
         title: t.map.fallbackMode,
-        description: t.map.apiTargetBlockedError,
+        description,
       });
     };
     const onWindowError = (event: ErrorEvent) => {
       const message = event.message ?? "";
-      if (!isGoogleMapsTargetBlockedMessage(message)) {
+      if (!isGoogleMapsConsoleErrorMessage(message)) {
         return;
       }
-      window.dispatchEvent(new CustomEvent(AIYO_MAPS_TARGET_BLOCKED_EVENT));
+      window.dispatchEvent(
+        new CustomEvent(AIYO_MAPS_TARGET_BLOCKED_EVENT, { detail: { message } }),
+      );
     };
     window.addEventListener(AIYO_MAPS_TARGET_BLOCKED_EVENT, onTargetBlocked);
     window.addEventListener("error", onWindowError);

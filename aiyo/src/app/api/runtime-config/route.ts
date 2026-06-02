@@ -1,4 +1,4 @@
-import { resolveGoogleMapsApiKey, resolveGoogleMapsMapId } from "@/lib/googleMapsEnv";
+import { resolveGoogleMapsClientApiKey, resolveGoogleMapsMapId } from "@/lib/googleMapsEnv";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -14,7 +14,7 @@ function readBoolean(...names: string[]): boolean {
 
 export async function GET() {
   return NextResponse.json({
-    googleMapsApiKey: resolveGoogleMapsApiKey(),
+    googleMapsApiKey: resolveGoogleMapsClientApiKey(),
     googleMapsMapId: resolveGoogleMapsMapId(),
     enableMockMaps: readBoolean("NEXT_PUBLIC_ENABLE_MOCK_MAPS", "ENABLE_MOCK_MAPS"),
     googleAuthEnabled: Boolean(readString("GOOGLE_CLIENT_ID") && readString("GOOGLE_CLIENT_SECRET")),

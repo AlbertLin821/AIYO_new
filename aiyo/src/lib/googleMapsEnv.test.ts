@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { resolveGoogleMapsApiKey, resolveGoogleMapsMapId } from "./googleMapsEnv";
+import { resolveGoogleMapsMapId } from "./googleMapsMapId";
+import { resolveGoogleMapsApiKey, resolveGoogleMapsClientApiKey } from "./googleMapsEnv";
 
 test("resolveGoogleMapsApiKey prefers server key when both differ", () => {
   assert.equal(
@@ -11,6 +12,17 @@ test("resolveGoogleMapsApiKey prefers server key when both differ", () => {
       NODE_ENV: "development",
     }),
     "server-key",
+  );
+});
+
+test("resolveGoogleMapsClientApiKey prefers browser key when both differ", () => {
+  assert.equal(
+    resolveGoogleMapsClientApiKey({
+      GOOGLE_MAPS_API_KEY: "server-key",
+      NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: "client-key",
+      NODE_ENV: "development",
+    }),
+    "client-key",
   );
 });
 

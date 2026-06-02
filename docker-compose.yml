@@ -5,6 +5,8 @@
 #   docker compose --env-file ./aiyo/.env build [--profile dev app-dev | app]
 # 或將同樣鍵放在與本檔同一層資料夾的 .env（Docker Compose 用於 ${} 替換）。
 # 詳見：https://docs.docker.com/compose/how-tos/environment-variables/set-environment-variables/
+# 啟動時請帶 --env-file ./aiyo/.env（及可選 ./aiyo/.env.local），否則下方 ${GOOGLE_MAPS_*} 可能為空。
+# 勿只用 docker start app-dev（會脫離 backend 網路且保留映像內舊金鑰）。改 keys 後請 --force-recreate app-dev。
 
 services:
   app-dev:
@@ -18,6 +20,9 @@ services:
     container_name: aiyo-new-app-dev
     env_file:
       - ./aiyo/.env
+      # 若存在則覆寫 .env；與 dev-up.ps1 的 --env-file ./aiyo/.env.local 一致
+      - path: ./aiyo/.env.local
+        required: false
     environment:
       DATABASE_URL: postgresql://aiyo:aiyo_password@postgres:5432/aiyo_new_db?schema=public
       NEXTAUTH_URL: http://localhost:3000
@@ -36,6 +41,7 @@ services:
       AI_WEB_SEARCH_MAX_RESULTS: ${AI_WEB_SEARCH_MAX_RESULTS:-6}
       AI_WEB_SEARCH_REQUIRE_CITATIONS: ${AI_WEB_SEARCH_REQUIRE_CITATIONS:-true}
       NODE_ENV: development
+      # 勿在此覆寫 GOOGLE_MAPS_* / NEXT_PUBLIC_GOOGLE_MAPS_*：會蓋掉 env_file，且 ${} 常吃到 Windows 舊變數
       HOSTNAME: 0.0.0.0
       PORT: 3000
       CHOKIDAR_USEPOLLING: "true"

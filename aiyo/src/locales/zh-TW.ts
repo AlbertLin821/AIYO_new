@@ -181,6 +181,8 @@ export const zhTW = {
       "此 API 金鑰無法使用 Maps JavaScript API（ApiTargetBlockedMapError）。請在 Cloud Console 啟用「Maps JavaScript API」，並在金鑰的 API 限制中勾選該 API（不要只開 Geocoding）。本機請加 HTTP referrer：http://localhost:3000/*。",
     apiTargetBlockedHint:
       "開發者可查看 GET /api/map/setup-check 取得金鑰探測結果。",
+    deletedApiProjectError:
+      "此 Google Maps 金鑰所屬的 Cloud 專案已刪除（DeletedApiProjectMapError）。請在 aiyo/.env 設定新金鑰，並以 docker compose --env-file ./aiyo/.env [--env-file ./aiyo/.env.local] --profile dev up -d --force-recreate app-dev 重建容器（勿只用 docker start）。",
     advancedMarkerFailTitle: "進階標記無法使用",
     advancedMarkerFailDesc:
       "已改為傳統標記。請確認 Cloud Console 的 Map ID 與 NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID。",

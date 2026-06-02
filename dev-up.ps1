@@ -17,17 +17,25 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-Write-Host "Starting postgres, redis, mem0, and app-dev via Compose (project network: backend; env-file: aiyo/.env)."
-docker compose --env-file ./aiyo/.env --profile dev --profile mem0 up -d postgres redis mem0-memory-postgres mem0-memory app-dev
+. "$PSScriptRoot\scripts\import-compose-dotenv.ps1"
+$null = Import-AiyoComposeDotEnv -Root $PSScriptRoot
+
+$composeEnvArgs = @("--env-file", "./aiyo/.env")
+$envLocal = Join-Path $PSScriptRoot "aiyo\.env.local"
+if (Test-Path -LiteralPath $envLocal) {
+    $composeEnvArgs += @("--env-file", "./aiyo/.env.local")
+}
+Write-Host "Starting postgres, redis, mem0, and app-dev via Compose (network: backend; env: aiyo/.env + .env.local if present)."
+docker compose @composeEnvArgs --profile dev --profile mem0 up -d --force-recreate postgres redis mem0-memory-postgres mem0-memory app-dev
 
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
 Write-Host ""
-docker compose --env-file ./aiyo/.env --profile dev --profile mem0 ps
+docker compose @composeEnvArgs --profile dev --profile mem0 ps
 
 Write-Host ""
 Write-Host "If you previously saw Prisma error P1001, run:"
-Write-Host "  docker compose --env-file ./aiyo/.env --profile dev --profile mem0 up -d --force-recreate app-dev"
+Write-Host "  docker compose --env-file ./aiyo/.env [--env-file ./aiyo/.env.local] --profile dev --profile mem0 up -d --force-recreate app-dev"
 Write-Host "Avoid using only: docker start aiyo-new-app-dev"

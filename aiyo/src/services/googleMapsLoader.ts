@@ -128,7 +128,9 @@ export interface GoogleMapsApi {
 }
 
 let googleMapsPromise: Promise<GoogleMapsApi> | null = null;
+let loadedMapsApiKey: string | null = null;
 const GOOGLE_MAPS_LOAD_TIMEOUT_MS = 12_000;
+const GOOGLE_MAPS_SCRIPT_ID = "aiyo-google-maps-sdk";
 
 declare global {
   interface Window {
@@ -148,6 +150,33 @@ export function isGoogleMapsTargetBlockedMessage(message: string): boolean {
     message.includes("ApiNotActivatedMapError") ||
     message.includes("RefererNotAllowedMapError")
   );
+}
+
+export function isGoogleMapsDeletedProjectMessage(message: string): boolean {
+  return message.includes("DeletedApiProjectMapError");
+}
+
+export function isGoogleMapsConsoleErrorMessage(message: string): boolean {
+  return isGoogleMapsTargetBlockedMessage(message) || isGoogleMapsDeletedProjectMessage(message);
+}
+
+function apiKeyFromMapsScriptSrc(src: string): string | null {
+  try {
+    return new URL(src).searchParams.get("key");
+  } catch {
+    return null;
+  }
+}
+
+/** Drop cached SDK so a new API key can load (e.g. after .env.local change). */
+export function unloadGoogleMapsApi(): void {
+  googleMapsPromise = null;
+  loadedMapsApiKey = null;
+  document.getElementById(GOOGLE_MAPS_SCRIPT_ID)?.remove();
+  if (typeof window !== "undefined") {
+    delete window.google;
+    delete window.__aiyoGoogleMapsInit;
+  }
 }
 
 function resetLoaderPromise() {
@@ -177,13 +206,27 @@ export function loadGoogleMapsApi(apiKey: string): Promise<GoogleMapsApi> {
     return Promise.reject(new Error("Google Maps can only load in the browser."));
   }
 
-  if (window.google?.maps?.Map) {
+  const existingScript = document.getElementById(GOOGLE_MAPS_SCRIPT_ID) as HTMLScriptElement | null;
+  const scriptKey = existingScript?.src ? apiKeyFromMapsScriptSrc(existingScript.src) : null;
+  if (scriptKey && scriptKey !== apiKey) {
+    unloadGoogleMapsApi();
+  } else if (loadedMapsApiKey && loadedMapsApiKey !== apiKey) {
+    unloadGoogleMapsApi();
+  }
+
+  if (window.google?.maps?.Map && loadedMapsApiKey === apiKey) {
     return Promise.resolve(window.google.maps);
   }
 
-  if (googleMapsPromise) {
+  if (googleMapsPromise && loadedMapsApiKey === apiKey) {
     return googleMapsPromise;
   }
+
+  if (googleMapsPromise && loadedMapsApiKey !== apiKey) {
+    unloadGoogleMapsApi();
+  }
+
+  loadedMapsApiKey = apiKey;
 
   googleMapsPromise = new Promise((resolve, reject) => {
     let timeoutId: number | null = window.setTimeout(() => {
@@ -215,19 +258,23 @@ export function loadGoogleMapsApi(apiKey: string): Promise<GoogleMapsApi> {
       }
     };
 
-    const existingScript = document.getElementById("aiyo-google-maps-sdk") as HTMLScriptElement | null;
-    if (existingScript) {
-      if (window.google?.maps?.Map) {
-        void finishWithMaps();
+    const pendingScript = document.getElementById(GOOGLE_MAPS_SCRIPT_ID) as HTMLScriptElement | null;
+    if (pendingScript) {
+      const pendingKey = apiKeyFromMapsScriptSrc(pendingScript.src);
+      if (pendingKey === apiKey) {
+        if (window.google?.maps?.Map) {
+          void finishWithMaps();
+          return;
+        }
+        pendingScript.addEventListener("load", () => {
+          void finishWithMaps();
+        });
+        pendingScript.addEventListener("error", () =>
+          rejectWithCleanup(new Error("Failed to load Google Maps SDK.")),
+        );
         return;
       }
-      existingScript.addEventListener("load", () => {
-        void finishWithMaps();
-      });
-      existingScript.addEventListener("error", () =>
-        rejectWithCleanup(new Error("Failed to load Google Maps SDK.")),
-      );
-      return;
+      pendingScript.remove();
     }
 
     let settled = false;
@@ -257,7 +304,7 @@ export function loadGoogleMapsApi(apiKey: string): Promise<GoogleMapsApi> {
     };
 
     const script = document.createElement("script");
-    script.id = "aiyo-google-maps-sdk";
+    script.id = GOOGLE_MAPS_SCRIPT_ID;
     script.async = true;
     script.defer = true;
     const params = new URLSearchParams({
