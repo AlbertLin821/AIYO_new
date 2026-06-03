@@ -465,6 +465,10 @@ export async function geocodePlace(input: GeocodePlaceInput): Promise<GeocodePla
     language,
   });
 
+  if (!fetched.ok && fetched.code === "missing_api_key") {
+    return { ok: false, code: fetched.code, message: fetched.message };
+  }
+
   if (fetched.ok) {
     const picked = pickBestCandidate(
       query,

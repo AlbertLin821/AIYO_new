@@ -124,3 +124,25 @@ test("applyTextItineraryCorrections applies later assistant replacements", () =>
   assert.equal(corrected.days[0]?.items[0]?.title, "大阪海遊館");
   assert.equal(corrected.days[0]?.items.some((item) => item.title === "Day 1"), false);
 });
+
+test("textItineraryToTripPlanResult also parses non-bulleted time-prefixed lines with quoted places", () => {
+  const result = textItineraryToTripPlanResult(
+    `
+Day 1：抵達熊本
+下午：入住後步行至「八木屋」品嚐拉麵。
+晚上：前往「菊水公園」散步。
+
+Day 2：阿蘇自然之旅
+上午：前往「大觀峰展望所」。
+下午：到「草千里之濱」散步。
+`,
+    { targetDayCount: 2 },
+  );
+
+  assert.ok(result);
+  assert.equal(result.days.length, 2);
+  assert.equal(result.days[0]?.items[0]?.title, "八木屋");
+  assert.equal(result.days[0]?.items[1]?.title, "菊水公園");
+  assert.equal(result.days[1]?.items[0]?.title, "大觀峰展望所");
+  assert.equal(result.days[1]?.items[1]?.title, "草千里之濱");
+});

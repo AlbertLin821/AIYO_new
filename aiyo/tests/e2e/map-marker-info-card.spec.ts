@@ -63,7 +63,7 @@ test.describe("地圖 marker info card", () => {
       if (markerCount > 0) {
         await mockMarkers.nth(i).click();
       } else {
-        const marker = page.locator('[role="button"][tabindex="0"]').filter({ hasText: "赤崁樓" });
+        const marker = page.getByRole("button", { name: /時間 .*赤崁樓|活動 .*赤崁樓|景點 .*赤崁樓/u }).last();
         await expect(marker).toBeVisible({ timeout: 40_000 });
         await marker.click();
       }

@@ -207,7 +207,7 @@ test("Phase 5 search decision and Serper fallback stay within allowed providers"
   }
 });
 
-test("Phase 5 AssistantAction update clears stale map coordinates and keeps legacy compatibility", async () => {
+test("Phase 5 AssistantAction update clears stale map coordinates without relying on legacy proposedChanges", async () => {
   const response = await chatWithTravelAssistant({
     message: "幫我把第二天的秋葉原改成晴空塔",
     structuredTravelPlanning: true,
@@ -216,7 +216,7 @@ test("Phase 5 AssistantAction update clears stale map coordinates and keeps lega
 
   assert.equal(response.travelAgentDecision?.mode, "modify_itinerary");
   assert.equal(response.assistantActions?.[0]?.type, "itinerary.update_item");
-  assert.equal(response.proposedChanges?.[0]?.type, "update_itinerary_item");
+  assert.equal(response.proposedChanges?.length ?? 0, 0);
 
   await applyAssistantActions(response.assistantActions || [], { persist: false });
   const day2 = useTripStore.getState().itinerary.find((day) => day.dayNumber === 2);

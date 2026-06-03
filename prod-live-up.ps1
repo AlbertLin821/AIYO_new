@@ -24,11 +24,16 @@ if ($devRunning -match "aiyo-new-app-dev") {
     exit 1
 }
 
-$composeArgs = @(
-    "compose",
-    "--env-file", "./aiyo/.env",
-    "--profile", "prod-live"
-)
+. "$PSScriptRoot\scripts\import-compose-dotenv.ps1"
+$null = Import-AiyoComposeDotEnv -Root $PSScriptRoot
+
+$composeEnvArgs = @("--env-file", "./aiyo/.env")
+$envLocal = Join-Path $PSScriptRoot "aiyo\.env.local"
+if (Test-Path -LiteralPath $envLocal) {
+    $composeEnvArgs += @("--env-file", "./aiyo/.env.local")
+}
+
+$composeArgs = @("compose") + $composeEnvArgs + @("--profile", "prod-live")
 if ($WithMem0) {
     & "$PSScriptRoot\scripts\clone-mem0.ps1"
     if ($LASTEXITCODE -ne 0) {
@@ -38,10 +43,11 @@ if ($WithMem0) {
 }
 
 Write-Host "Starting postgres, redis, and app-prod-live (build + next start on each container start)."
+Write-Host "Env: aiyo/.env + .env.local if present (same as dev-up.ps1)."
 Write-Host "Pull latest code on the host yourself before re-running if needed."
 
 $upArgs = $composeArgs + @(
-    "up", "-d", "--build",
+    "up", "-d", "--build", "--force-recreate",
     "postgres", "redis", "app-prod-live"
 )
 if ($WithMem0) {
@@ -60,5 +66,5 @@ Write-Host ""
 Write-Host "App: http://localhost:3000  (health: curl http://localhost:3000/api/health)"
 Write-Host "First start runs npm run build inside the container; allow several minutes."
 Write-Host "After code changes, re-run .\prod-live-up.ps1 or:"
-Write-Host "  docker compose --env-file ./aiyo/.env --profile prod-live up -d --force-recreate app-prod-live"
+Write-Host "  docker compose --env-file ./aiyo/.env [--env-file ./aiyo/.env.local] --profile prod-live up -d --build --force-recreate app-prod-live"
 Write-Host "Switching from dev mode? Consider removing ./aiyo/.next if you see stale assets."

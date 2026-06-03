@@ -264,11 +264,38 @@ export const TripPlanResultSchema = z.object({
           sourceSnippet: z.string().trim().optional(),
           confidence: z.enum(["high", "medium", "low"]).optional(),
         }),
-      ),
+      ).min(1),
     }),
-  ),
+  ).min(1),
   warnings: z.array(z.string()).optional(),
 });
+
+export const ChatPlanningOutputSchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("generate_itinerary"),
+    replyText: z.string().trim(),
+    itinerary: TripPlanResultSchema,
+    assistantActions: z.tuple([]),
+    // Legacy compatibility only. New flow should consume `itinerary`.
+    proposedChanges: z.array(AiProposedChangeSchema),
+  }),
+  z.object({
+    mode: z.literal("modify_itinerary"),
+    replyText: z.string().trim(),
+    itinerary: z.null(),
+    assistantActions: z.array(AssistantActionSchema).max(6),
+    // Legacy compatibility only. New flow should consume `assistantActions`.
+    proposedChanges: z.array(AiProposedChangeSchema),
+  }),
+  z.object({
+    mode: z.literal("answer_question"),
+    replyText: z.string().trim(),
+    itinerary: z.null(),
+    assistantActions: z.tuple([]),
+    // Legacy compatibility only. New flow should keep this empty.
+    proposedChanges: z.array(AiProposedChangeSchema),
+  }),
+]);
 
 const CitationTextSchema = z.object({
   text: z.string().trim().min(1),
@@ -356,4 +383,5 @@ export const travelResearchToolRequestJsonSchema = z.toJSONSchema(
 ) as Record<string, unknown>;
 export const structuredChatOutputJsonSchema = z.toJSONSchema(StructuredChatOutputSchema) as Record<string, unknown>;
 export const tripPlanResultJsonSchema = z.toJSONSchema(TripPlanResultSchema) as Record<string, unknown>;
+export const chatPlanningOutputJsonSchema = z.toJSONSchema(ChatPlanningOutputSchema) as Record<string, unknown>;
 export const travelPlanResponseJsonSchema = z.toJSONSchema(TravelPlanResponseSchema) as Record<string, unknown>;

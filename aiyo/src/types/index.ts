@@ -287,6 +287,43 @@ export type AssistantAction =
       };
     };
 
+export type ChatPlanningMode =
+  | "generate_itinerary"
+  | "modify_itinerary"
+  | "answer_question";
+
+export type ChatPlanningOutput =
+  | {
+      mode: "generate_itinerary";
+      replyText: string;
+      itinerary: TripPlanResult;
+      assistantActions: [];
+      /**
+       * Legacy compatibility only. New flow must use `itinerary`.
+       */
+      proposedChanges: AiProposedChange[];
+    }
+  | {
+      mode: "modify_itinerary";
+      replyText: string;
+      itinerary: null;
+      assistantActions: AssistantAction[];
+      /**
+       * Legacy compatibility only. New flow must use `assistantActions`.
+       */
+      proposedChanges: AiProposedChange[];
+    }
+  | {
+      mode: "answer_question";
+      replyText: string;
+      itinerary: null;
+      assistantActions: [];
+      /**
+       * Legacy compatibility only. New flow should keep this empty.
+       */
+      proposedChanges: AiProposedChange[];
+    };
+
 export type ChatResponseType = "text_message" | "question_card" | "status_step" | "travel_plan" | "error";
 
 export type ChatQuestionType =

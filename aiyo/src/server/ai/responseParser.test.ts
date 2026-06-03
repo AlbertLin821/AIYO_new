@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  parseChatPlanningOutput,
   parseTripPlanResponse,
   parseVideoMomentPolishingResponse,
   StructuredOutputError,
@@ -27,8 +28,8 @@ test("parseTripPlanResponse parses direct valid JSON", () => {
         dayNumber: 1,
         theme: "老城",
         items: [
-          { time: "09:00", title: "神農街", type: "attraction" },
-          { time: "12:00", title: "午餐", type: "restaurant" },
+          { id: "d1_i1", time: "09:00", title: "神農街", type: "attraction" },
+          { id: "d1_i2", time: "12:00", title: "午餐", type: "restaurant" },
         ],
       },
     ],
@@ -36,7 +37,7 @@ test("parseTripPlanResponse parses direct valid JSON", () => {
 
   const parsed = parseTripPlanResponse(raw, request);
   assert.equal(parsed.result.days[0].items[0].title, "神農街");
-  assert.equal(parsed.diagnostics.parseMode, "normalized");
+  assert.equal(parsed.diagnostics.parseMode, "direct");
 });
 
 test("parseTripPlanResponse repairs alias keys and malformed times", () => {
@@ -169,6 +170,46 @@ test("parseTripPlanResponse throws when JSON block is missing", () => {
     (error: unknown) =>
       error instanceof StructuredOutputError &&
       error.message === "MODEL_OUTPUT_JSON_MISSING",
+  );
+});
+
+test("parseChatPlanningOutput parses modify_itinerary payload", () => {
+  const parsed = parseChatPlanningOutput(JSON.stringify({
+    mode: "modify_itinerary",
+    replyText: "已將第二天的淺草寺改成新宿。",
+    itinerary: null,
+    assistantActions: [
+      {
+        type: "itinerary.update_item",
+        payload: {
+          dayId: "day-2",
+          itemId: "d2_i1",
+          patch: {
+            title: "新宿",
+            location: "新宿",
+          },
+        },
+      },
+    ],
+    proposedChanges: [],
+  }));
+
+  assert.equal(parsed.mode, "modify_itinerary");
+  assert.equal(parsed.assistantActions[0]?.type, "itinerary.update_item");
+  assert.equal(parsed.proposedChanges.length, 0);
+});
+
+test("parseChatPlanningOutput rejects malformed payload", () => {
+  assert.throws(
+    () =>
+      parseChatPlanningOutput(JSON.stringify({
+        replyText: "missing mode",
+        assistantActions: [],
+        proposedChanges: [],
+      })),
+    (error: unknown) =>
+      error instanceof StructuredOutputError &&
+      error.message === "MODEL_OUTPUT_JSON_INVALID",
   );
 });
 

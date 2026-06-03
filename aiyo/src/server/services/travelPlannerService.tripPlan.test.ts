@@ -325,3 +325,42 @@ test("generateTripPlan returns fallback travel plan when Ollama times out", asyn
     globalThis.fetch = originalFetch;
   }
 });
+
+test("generateTripPlan retries once when Ollama returns non-JSON itinerary output and then falls back safely", async () => {
+  const originalFetch = globalThis.fetch;
+  let ollamaCallCount = 0;
+
+  globalThis.fetch = async (input: string | URL | Request) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : String(input.url);
+    if (url.includes("/api/chat")) {
+      ollamaCallCount += 1;
+      return new Response(
+        JSON.stringify({
+          message: {
+            content: ollamaCallCount === 1
+              ? "這裡是自然語言，不是 JSON"
+              : "第二次也還是不是合法 JSON",
+          },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const abortError = new Error("aborted");
+    abortError.name = "AbortError";
+    throw abortError;
+  };
+
+  try {
+    const generated = await generateTripPlan(tokyo3D2NRequest());
+    assert.equal(ollamaCallCount, 2);
+    assert.equal(generated.diagnostics.planGenerationMode, "fallback");
+    assert.equal(generated.diagnostics.retryCount, 1);
+    assert.ok(generated.plan.days.length > 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

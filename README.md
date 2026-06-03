@@ -290,16 +290,19 @@ docker compose --profile dev up -d --build postgres redis app-dev
 .\prod-live-up.ps1
 ```
 
-等同於（不含 Mem0）：
+等同於（不含 Mem0；若存在 `aiyo/.env.local` 請一併帶入）：
 
 ```bash
-docker compose --env-file ./aiyo/.env --profile prod-live up -d --build postgres redis app-prod-live
+docker compose --env-file ./aiyo/.env [--env-file ./aiyo/.env.local] --profile prod-live up -d --build --force-recreate postgres redis app-prod-live
 ```
 
-- 首次或改動程式後需重新執行 `prod-live-up.ps1`（或 `docker compose … up -d --force-recreate app-prod-live`），容器才會重新 `npm run build`。
+- 與 `dev-up.ps1` 相同：`prod-live-up.ps1` 會先匯入 `aiyo/.env`（及可選的 `.env.local`）到目前 shell，避免 Windows 使用者環境變數覆寫 Compose 的 `${NEXT_PUBLIC_*}` build args。
+- Compose 容器執行時亦讀取 `aiyo/.env` + 可選 `aiyo/.env.local`（見 `docker-compose.yml` 的 `app-prod-live.env_file`）。
+- 首次或改動程式／環境變數後請重新執行 `prod-live-up.ps1`（或上述 `docker compose … --force-recreate app-prod-live`），容器才會重新 `npm run build`。
 - 若 `app-dev` 仍在跑，腳本會提示先 `docker compose --env-file ./aiyo/.env --profile dev down`。
 - 需要 Mem0：`.\prod-live-up.ps1 -WithMem0`。
-- `NEXT_PUBLIC_*` 在容器內 build 時從掛載的 `aiyo/.env` 讀取；變更後請重啟 prod-live 以觸發重新 build。
+- `NEXT_PUBLIC_*` 在容器內 build 時從掛載的 `aiyo/.env` / `.env.local` 與 Compose build args 讀取；變更後請重啟 prod-live 以觸發重新 build。
+- 從 dev 切換過來若地圖或前端資源異常，可刪除本機 `./aiyo/.next` 後再執行 `prod-live-up.ps1`。
 
 **驗證：**
 
@@ -310,7 +313,7 @@ curl http://localhost:3000/api/health
 **切回開發：**
 
 ```bash
-docker compose --env-file ./aiyo/.env --profile prod-live down
+docker compose --env-file ./aiyo/.env [--env-file ./aiyo/.env.local] --profile prod-live down
 .\dev-up.ps1
 ```
 

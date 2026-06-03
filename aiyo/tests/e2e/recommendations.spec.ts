@@ -103,7 +103,7 @@ test("keyword search updates video cards and hides noisy description text", asyn
     (res) => res.url().includes("/api/videos/recommendations") && res.ok(),
     { timeout: 30_000 },
   );
-  await page.getByTestId("video-search-submit").click();
+  await page.getByTestId("video-search-input").press("Enter");
   await searchResponse;
 
   const card = page.getByTestId("video-card").filter({ hasText: "嘉義美食一日遊" });

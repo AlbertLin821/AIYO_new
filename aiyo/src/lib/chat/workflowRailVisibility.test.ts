@@ -37,6 +37,7 @@ test("apply previous itinerary command accepts text-description wording", () => 
   assert.equal(isApplyPreviousItineraryCommand("把他文字敘述的內容改到我的行程裡"), true);
   assert.equal(isApplyPreviousItineraryCommand("把這些內容加到我的行程裡面"), true);
   assert.equal(isApplyPreviousItineraryCommand("把這些行程丟到我的即時行程裡面"), true);
+  assert.equal(isApplyPreviousItineraryCommand("那直接替換到現有的行程"), true);
 });
 
 test("shouldShowPlanningWorkflowRail hides rail for answer_trip_question mode", () => {

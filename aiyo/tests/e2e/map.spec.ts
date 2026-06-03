@@ -30,7 +30,7 @@ test("authenticated map sync focuses selected itinerary stop and shows linked ro
   if (await openPanelButton.isVisible().catch(() => false)) {
     await openPanelButton.click();
   }
-  const itineraryStop = page.locator('[role="button"][tabindex="0"]').filter({ hasText: "赤崁樓" });
+  const itineraryStop = page.getByRole("button", { name: /時間 .*赤崁樓|活動 .*赤崁樓|景點 .*赤崁樓/u }).last();
   await expect(itineraryStop).toBeVisible();
 
   await itineraryStop.click();

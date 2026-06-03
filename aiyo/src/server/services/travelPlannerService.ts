@@ -4,8 +4,8 @@ import type { AIContextBuildResult } from "@/server/ai/aiContextBuilder";
 import { chatWithOllama, OllamaRequestError, type OllamaMessage } from "@/server/ai/ollamaClient";
 import { decideTravelAgentMode } from "@/server/ai/travelAgentOrchestrator";
 import {
+  chatPlanningOutputJsonSchema,
   questionCardJsonSchema,
-  structuredChatOutputJsonSchema,
   travelResearchToolRequestJsonSchema,
   tripPlanResultJsonSchema,
 } from "@/server/ai/schemas/travelPlanningSchemas";
@@ -51,7 +51,11 @@ import {
   parseTravelToolRequestsFromModel,
 } from "@/server/services/travelResearchTools";
 import type { PlaceSearchHit } from "@/server/geo/placesSearchService";
-import { parseTripPlanResponse, StructuredOutputError } from "@/server/ai/responseParser";
+import {
+  parseChatPlanningOutput,
+  parseTripPlanResponse,
+  StructuredOutputError,
+} from "@/server/ai/responseParser";
 import { isUsableMapCoordinate } from "@/lib/geoCoordinates";
 import {
   enrichChatContextWithDestinationScope,
@@ -63,7 +67,6 @@ import { resolveTripDestinationScopeWithGeocode } from "@/server/places/resolveT
 import { extractDestinationFromPlanningText, inferPlanningUpdateFromTexts } from "@/lib/tripPlanningSignals";
 import { filterTripPlanByDestinationScope } from "@/server/services/filterTripPlanByDestinationScope";
 import {
-  assistantActionToLegacyProposedChange,
   mergeAssistantActionsWithLegacy,
 } from "@/lib/assistantActions/converters";
 import { validateAssistantActions } from "@/server/ai/assistantActionValidator";
@@ -76,6 +79,7 @@ import {
 import type {
   AiProposedChange,
   AssistantAction,
+  ChatPlanningOutput,
   ChatContext,
   ChatMessage,
   ChatQuestion,
@@ -350,29 +354,27 @@ function normalizeAssistantAction(value: unknown): AssistantAction | null {
   return value as AssistantAction;
 }
 
-function parseStructuredChatOutput(raw: string): {
-  replyText: string;
-  proposedChanges: AiProposedChange[];
-  assistantActions: AssistantAction[];
-} {
-  const parsed = extractJsonObject(raw);
-  if (!parsed) {
-    return { replyText: sanitizeAssistantReply(raw) || raw.trim(), proposedChanges: [], assistantActions: [] };
+function parseStructuredChatOutput(raw: string): ChatPlanningOutput {
+  try {
+    const parsed = parseChatPlanningOutput(raw);
+    return {
+      ...parsed,
+      replyText: sanitizeAssistantReply(parsed.replyText) || parsed.replyText,
+    };
+  } catch {
+    const extracted = extractJsonObject(raw);
+    const extractedReplyText =
+      extracted && typeof extracted.replyText === "string"
+        ? sanitizeAssistantReply(extracted.replyText) || extracted.replyText.trim()
+        : "";
+    return {
+      mode: "answer_question",
+      replyText: extractedReplyText || sanitizeAssistantReply(raw) || raw.trim() || "暫時無法產生有用的回覆。",
+      itinerary: null,
+      assistantActions: [],
+      proposedChanges: [],
+    };
   }
-  const replyText = String(parsed.replyText || parsed.reply || parsed.message || "").trim();
-  const proposedChanges = Array.isArray(parsed.proposedChanges)
-    ? parsed.proposedChanges.map(normalizeProposedChange).filter((item): item is AiProposedChange => Boolean(item))
-    : [];
-  const assistantActions = Array.isArray((parsed as Record<string, unknown>).assistantActions)
-    ? ((parsed as Record<string, unknown>).assistantActions as unknown[])
-        .map(normalizeAssistantAction)
-        .filter((item): item is AssistantAction => Boolean(item))
-    : [];
-  return {
-    replyText: sanitizeAssistantReply(replyText || raw) || raw.trim(),
-    proposedChanges,
-    assistantActions,
-  };
 }
 
 function validatedAssistantPayload(input: {
@@ -393,12 +395,10 @@ function validatedAssistantPayload(input: {
     actions: merged.assistantActions,
     structuredContext: input.aiContext.structuredContext,
   });
-  const proposedChanges = validation.validActions
-    .map((action) => assistantActionToLegacyProposedChange(action))
-    .filter((change): change is AiProposedChange => Boolean(change));
   return {
     assistantActions: validation.validActions,
-    proposedChanges: proposedChanges.length ? proposedChanges : merged.proposedChanges,
+    // Legacy compatibility only: keep original proposedChanges if they were supplied.
+    proposedChanges: merged.proposedChanges,
   };
 }
 
@@ -1492,7 +1492,7 @@ export function isExistingItineraryInquiry(input: {
   context?: ChatContext;
   questionAnswers?: ChatQuestionAnswer[];
 }): boolean {
-  if (input.questionAnswers?.length || !input.context?.itinerary?.length) {
+  if (input.questionAnswers?.length) {
     return false;
   }
 
@@ -1503,7 +1503,7 @@ export function isExistingItineraryInquiry(input: {
     return false;
   }
 
-  return /(?:這個|目前|現在|我的)?行程(?:裡面|裡|內)?(?:有(?:哪些|什麼|甚麼)|包含|內容|活動|景點|地點|安排)|有(?:哪些|什麼|甚麼)(?:活動|景點|地點|安排)|第[一二兩三四五六七八九十\d]+天(?:有(?:哪些|什麼|甚麼)|安排|活動|景點|地點)|列出(?:這個|目前|我的)?行程/u.test(message);
+  return /(?:這個|目前|現在|我的)?行程(?:裡面|裡|內)?(?:有(?:哪些|什麼|甚麼)|包含|內容|活動|景點|地點|安排)|有(?:哪些|什麼|甚麼)(?:活動|景點|地點|安排)|第[一二兩三四五六七八九十\d]+天(?:有(?:哪些|什麼|甚麼)|安排|活動|景點|地點|午餐|晚餐)|列出(?:這個|目前|我的)?行程|第[一二兩三四五六七八九十\d]+天.*?(?:會不會太趕|太趕|太鬆|太鬆散|要不要調整)|(?:第一|第1)天.*?(?:午餐|晚餐).*(?:吃什麼|是什麼)/u.test(message);
 }
 
 function isVideoInspirationRequest(message: string): boolean {
@@ -1533,7 +1533,19 @@ function buildExistingItineraryInquiryResponse(input: {
 
   const itinerary = input.context?.itinerary || [];
   if (!itinerary.length) {
-    return null;
+    return {
+      reply: {
+        id: `assistant_${Date.now()}`,
+        role: "assistant",
+        content: "目前還沒有可參考的行程內容，所以我無法回答這個行程問題。你可以先讓我產生一份行程，或先告訴我想看的天數與地點。",
+        timestamp: nowChatTimestamp(),
+        responseType: "text_message",
+        assistantActions: [],
+        proposedChanges: [],
+      },
+      assistantActions: [],
+      proposedChanges: [],
+    };
   }
 
   const requestedDay = parseRequestedDayNumber(input.message);
@@ -1817,9 +1829,7 @@ function buildTimeUpdatePatchResponse(input: {
       assistantActions,
     },
     assistantActions,
-    proposedChanges: assistantActions
-      .map((action) => assistantActionToLegacyProposedChange(action))
-      .filter((change): change is AiProposedChange => Boolean(change)),
+    proposedChanges: [],
   };
 }
 
@@ -1948,9 +1958,26 @@ function buildRemoveItineraryItemPatchResponse(input: {
       content: `已從第 ${target.dayNumber} 天移除「${target.item.title}」。`,
       timestamp: nowChatTimestamp(),
       responseType: "text_message",
-      proposedChanges: [change],
+      assistantActions: [
+        {
+          type: "itinerary.remove_item",
+          payload: {
+            dayId: `day-${target.dayNumber}`,
+            itemId: target.item.id,
+          },
+        },
+      ],
     },
-    proposedChanges: [change],
+    assistantActions: [
+      {
+        type: "itinerary.remove_item",
+        payload: {
+          dayId: `day-${target.dayNumber}`,
+          itemId: target.item.id,
+        },
+      },
+    ],
+    proposedChanges: [],
   };
 }
 
@@ -2375,9 +2402,7 @@ function buildDeterministicItineraryPatchResponse(input: {
           assistantActions,
         },
         assistantActions,
-        proposedChanges: assistantActions
-          .map((action) => assistantActionToLegacyProposedChange(action))
-          .filter((change): change is AiProposedChange => Boolean(change)),
+        proposedChanges: [],
       };
     }
   }
@@ -2420,8 +2445,26 @@ function buildDeterministicItineraryPatchResponse(input: {
       title: originalTitle,
     });
     if (!target) {
-      return null;
+      return buildItineraryPatchResponsePayload({
+        content: day
+          ? `我目前無法唯一確認第 ${day} 天要替換的「${originalTitle}」。請再告訴我更完整的景點名稱。`
+          : `我目前無法唯一確認要替換的「${originalTitle}」。請再告訴我是哪一天的哪個景點。`,
+        proposedChanges: [],
+      });
     }
+    const assistantActions: AssistantAction[] = [
+      {
+        type: "itinerary.update_item",
+        payload: {
+          dayId: `day-${target.dayNumber}`,
+          itemId: target.item.id,
+          patch: {
+            title: nextTitle,
+            location: nextTitle,
+          },
+        },
+      },
+    ];
     return {
       reply: {
         id: `assistant_${Date.now()}`,
@@ -2429,31 +2472,10 @@ function buildDeterministicItineraryPatchResponse(input: {
         content: `已將第 ${target.dayNumber} 天的「${target.item.title}」調整為「${nextTitle}」，其餘安排維持不變。`,
         timestamp: nowChatTimestamp(),
         responseType: "text_message",
-        proposedChanges: [
-          {
-            type: "update_itinerary_item",
-            day: target.dayNumber,
-            itemId: target.item.id,
-            targetTitle: target.item.title,
-            title: nextTitle,
-            locationName: nextTitle,
-            reason: `依照使用者要求，將 ${originalTitle} 替換為 ${nextTitle}`,
-            source: "ai-chat",
-          },
-        ],
+        assistantActions,
       },
-      proposedChanges: [
-        {
-          type: "update_itinerary_item",
-          day: target.dayNumber,
-          itemId: target.item.id,
-          targetTitle: target.item.title,
-          title: nextTitle,
-          locationName: nextTitle,
-          reason: `依照使用者要求，將 ${originalTitle} 替換為 ${nextTitle}`,
-          source: "ai-chat",
-        },
-      ],
+      assistantActions,
+      proposedChanges: [],
     };
   }
 
@@ -2540,29 +2562,36 @@ function buildDeterministicItineraryPatchResponse(input: {
         content: `已將「${title}」加入第 ${day} 天行程。`,
         timestamp: nowChatTimestamp(),
         responseType: "text_message",
-        proposedChanges: [
+        assistantActions: [
           {
-            type: "add_itinerary_item",
-            day,
-            time: "18:30",
-            title,
-            locationName: title,
-            reason: "依照使用者要求新增行程項目",
-            source: "ai-chat",
+            type: "itinerary.add_item",
+            payload: {
+              dayId: `day-${day}`,
+              item: {
+                title,
+                location: title,
+                startTime: "18:30",
+                source: "assistant",
+              },
+            },
           },
         ],
       },
-      proposedChanges: [
+      assistantActions: [
         {
-          type: "add_itinerary_item",
-          day,
-          time: "18:30",
-          title,
-          locationName: title,
-          reason: "依照使用者要求新增行程項目",
-          source: "ai-chat",
+          type: "itinerary.add_item",
+          payload: {
+            dayId: `day-${day}`,
+            item: {
+              title,
+              location: title,
+              startTime: "18:30",
+              source: "assistant",
+            },
+          },
         },
       ],
+      proposedChanges: [],
     };
   }
 
@@ -3199,7 +3228,7 @@ async function buildExistingItineraryPatchResponse(input: {
   });
 
   let llmReplyText = "";
-  let resolvedChanges: AiProposedChange[] = [];
+  let resolvedActions: AssistantAction[] = [];
   let resolutionIssues: string[] = [];
   const shouldUseLlmPatchIntent = process.env.AIYO_SKIP_LLM_PATCH !== "1";
 
@@ -3211,7 +3240,7 @@ async function buildExistingItineraryPatchResponse(input: {
       });
       const raw = await chatWithOllama({
         task: "travel-chat",
-        format: structuredChatOutputJsonSchema,
+        format: chatPlanningOutputJsonSchema,
         timeoutMs: PATCH_INTENT_TIMEOUT_MS,
         options: { temperature: 0, top_p: 0.9, num_ctx: 16_384 },
         messages: [
@@ -3223,13 +3252,15 @@ async function buildExistingItineraryPatchResponse(input: {
       });
       const structured = parseStructuredChatOutput(raw);
       llmReplyText = structured.replyText;
-      const resolved = resolveProposedChangesFromContext({
-        changes: structured.proposedChanges,
-        context: input.context,
-        userMessage: input.message,
-      });
-      resolvedChanges = resolved.resolved;
-      resolutionIssues = resolved.issues;
+      if (structured.mode === "modify_itinerary") {
+        resolvedActions = structured.assistantActions;
+      } else if (structured.mode === "answer_question") {
+        return buildItineraryPatchResponsePayload({
+          content: structured.replyText,
+          proposedChanges: [],
+          assistantActions: [],
+        });
+      }
     } catch {
       // Ollama unavailable — fall back to deterministic parsing below.
     }
@@ -3238,14 +3269,15 @@ async function buildExistingItineraryPatchResponse(input: {
   publishProgressStep(input.progressSessionId, {
     phase: "understand",
     label: "理解行程修改意圖",
-    detail: resolvedChanges.length ? "已解析並對應可執行動作。" : "正在嘗試其他解析方式。",
+    detail: resolvedActions.length ? "已解析並對應可執行動作。" : "正在嘗試其他解析方式。",
     status: "completed",
   });
 
-  if (resolvedChanges.length) {
+  if (resolvedActions.length) {
     return buildItineraryPatchResponsePayload({
-      content: summarizeProposedChangesForReply(resolvedChanges),
-      proposedChanges: resolvedChanges,
+      content: llmReplyText || "已整理成可執行的行程修改。",
+      proposedChanges: [],
+      assistantActions: resolvedActions,
     });
   }
 
@@ -3784,6 +3816,10 @@ export async function generateTripPlan(
             role: "user",
             content: buildItineraryPrompt(request, memoryContext, {
               retryMode: "strict-format",
+              retryReason:
+                error.message === "MODEL_OUTPUT_JSON_MISSING"
+                  ? "The previous reply did not contain any valid JSON object."
+                  : "The previous reply did not match the required TripPlanResult schema.",
               externalResearch: externalResearch || undefined,
               webSearchDigest: webSearch.digest || undefined,
             }),
@@ -3899,17 +3935,8 @@ export async function buildMapPlanningNotes(request: TripPlanRequest): Promise<s
 
 function contextWithoutItineraryForGeneralReply(
   context: ChatContext | undefined,
-  decision: TravelAgentDecision,
+  _decision: TravelAgentDecision,
 ): ChatContext | undefined {
-  if (!context?.itinerary?.length) {
-    return context;
-  }
-  if (
-    decision.mode === "answer_trip_question" ||
-    (decision.mode === "search_travel_info" && !decision.shouldModifyItinerary)
-  ) {
-    return { ...context, itinerary: undefined };
-  }
   return context;
 }
 
@@ -3955,6 +3982,15 @@ export async function chatWithTravelAssistant(input: {
     memoryContext: input.memoryContext,
   });
   const generalReplyContext = contextWithoutItineraryForGeneralReply(context, travelAgentDecision);
+  const itineraryInquiryResponse = buildExistingItineraryInquiryResponse({
+    message: input.message,
+    context,
+    questionAnswers: input.questionAnswers,
+  });
+
+  if (itineraryInquiryResponse) {
+    return { ...itineraryInquiryResponse, travelAgentDecision };
+  }
 
   const skipNaturalShortcut = Boolean(input.questionAnswers?.length) ||
     Boolean(input.structuredTravelPlanning && input.tripProfile);
@@ -3989,15 +4025,6 @@ export async function chatWithTravelAssistant(input: {
       progressSessionId: input.progressSessionId,
       travelAgentDecision,
     });
-  }
-
-  const itineraryInquiryResponse = buildExistingItineraryInquiryResponse({
-    message: input.message,
-    context,
-    questionAnswers: input.questionAnswers,
-  });
-  if (itineraryInquiryResponse) {
-    return { ...itineraryInquiryResponse, travelAgentDecision };
   }
 
   const itineraryPatchResponse = await buildExistingItineraryPatchResponse({
@@ -4156,9 +4183,9 @@ export async function chatWithTravelAssistant(input: {
   let raw: string;
   try {
     try {
-      raw = await chatWithOllamaTimeoutRetry({
+        raw = await chatWithOllamaTimeoutRetry({
         ...composeOllamaBase,
-        format: structuredChatOutputJsonSchema,
+        format: chatPlanningOutputJsonSchema,
       });
     } catch (error) {
       if (error instanceof OllamaRequestError && error.code === "http_error") {
@@ -4237,6 +4264,7 @@ export async function chatWithTravelAssistant(input: {
     replyText,
   });
   const followUpCard =
+    structured.mode !== "modify_itinerary" &&
     !contextHasItineraryItems(input.context) && !proposedChanges.length && !assistantActions.length
       ? buildQuestionCard(mergedTripProfile, input.context)
       : null;
@@ -4278,6 +4306,7 @@ export async function chatWithTravelAssistant(input: {
       proposedChanges,
       assistantActions,
       sources,
+      metadata: { chatPlanningMode: structured.mode },
     },
     tripProfile: mergedTripProfile,
     proposedChanges,

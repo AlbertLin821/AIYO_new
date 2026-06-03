@@ -307,6 +307,14 @@ function inferTimeLabel(line: string): string | undefined {
 }
 
 function inferTitleFromTextLine(line: string): string | undefined {
+  const quotedTitles = [...line.matchAll(/[「『]([^「」『』]{1,40})[」』]/g)]
+    .map((match) => cleanTextItineraryTitle(match[1] || ""))
+    .filter((title) => title && !isTimeLabel(title));
+  const quotedTitle = quotedTitles.find((title) => title.length >= 2);
+  if (quotedTitle) {
+    return quotedTitle;
+  }
+
   const boldTitles = [...line.matchAll(/\*\*([^*]{1,40})\*\*/g)]
     .map((match) => cleanTextItineraryTitle(match[1] || ""))
     .filter((title) => title && !isTimeLabel(title));
@@ -366,13 +374,16 @@ function textSectionToDay(section: TextDaySection): TripPlanDay {
   const seenTitles = new Set<string>();
 
   for (const line of section.lines) {
-    if (!/^\s*(?:[-*]|\d+\.)\s+/u.test(line)) {
+    const normalizedLine = cleanMarkdownInline(line);
+    const isBulletLine = /^\s*(?:[-*]|\d+\.)\s+/u.test(line);
+    const isTimePrefixedLine = /^(?:早餐|上午|午餐|中午|下午|傍晚|晚餐|晚上|夜間)[：:]/u.test(normalizedLine);
+    if (!isBulletLine && !isTimePrefixedLine) {
       continue;
     }
     if (/^\s*(?:[-*]\s*)?(?:\*\*)?\s*(?:Day|第)\s*[\d一二兩两三四五六七八九十]{1,3}/iu.test(line)) {
       continue;
     }
-    if (/^\s*(?:[-*]|\d+\.)\s*(?:住宿|備案|提醒|請問|是否需要)/u.test(cleanMarkdownInline(line))) {
+    if (/^(?:住宿|備案|提醒|請問|是否需要)/u.test(normalizedLine.replace(/^\s*(?:[-*]|\d+\.)\s*/u, ""))) {
       continue;
     }
     const title = inferTitleFromTextLine(line);

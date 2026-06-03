@@ -61,6 +61,7 @@ test("missing dayId is rejected", () => {
     actions: [{ type: "itinerary.add_item", payload: { dayId: "day-9", item: { title: "晴空塔" } } }],
   });
   assert.equal(result.rejectedActions[0]?.reason, "dayId does not exist in current trip");
+  assert.ok(result.warnings.includes("dayId does not exist in current trip"));
 });
 
 test("missing itemId is rejected", () => {
@@ -97,4 +98,25 @@ test("unknown action type is rejected", () => {
     actions: [{ type: "raw.sql", payload: { sql: "drop table trips" } }],
   });
   assert.equal(result.rejectedActions[0]?.reason, "unknown action type");
+  assert.ok(result.warnings.includes("unknown action type"));
+});
+
+test("dangerous text is rejected with warning", () => {
+  const result = validateAssistantActions({
+    userId: "user-1",
+    structuredContext: context(),
+    actions: [
+      {
+        type: "itinerary.update_item",
+        payload: {
+          dayId: "day-1",
+          itemId: "a",
+          patch: { notes: "<script>alert(1)</script>" },
+        },
+      },
+    ],
+  });
+  assert.equal(result.validActions.length, 0);
+  assert.equal(result.rejectedActions[0]?.reason, "dangerous text rejected");
+  assert.ok(result.warnings.includes("dangerous text rejected"));
 });

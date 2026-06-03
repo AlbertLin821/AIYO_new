@@ -1,8 +1,13 @@
 import { parseTimestampToSeconds } from "@/lib/videoTimestamp";
 import { isUsableMapCoordinate } from "@/lib/geoCoordinates";
 import { getItineraryItemTitleViolation } from "@/lib/itineraryPlaceTitle";
+import {
+  ChatPlanningOutputSchema,
+  TripPlanResultSchema,
+} from "@/server/ai/schemas/travelPlanningSchemas";
 import { mergeVideoSummarySegmentsByStartSeconds } from "@/server/video/momentSegmentBuilder";
 import type {
+  ChatPlanningOutput,
   ChatMessage,
   ChatResponsePayload,
   LocationReference,
@@ -104,6 +109,13 @@ function repairJsonLikeString(input: string): string {
     .replace(/,\s*([}\]])/g, "$1")
     .replace(/[\u201C\u201D]/g, '"')
     .replace(/[\u2018\u2019]/g, "'");
+}
+
+function validateTripPlanResultStrict(
+  parsed: unknown,
+): TripPlanResult | null {
+  const result = TripPlanResultSchema.safeParse(parsed);
+  return result.success ? result.data : null;
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -305,6 +317,17 @@ function parseTripPlanJson(
   };
 
   const root = toRecord(parsed);
+  const strictResult = validateTripPlanResultStrict(root);
+  if (strictResult) {
+    return {
+      result: strictResult,
+      diagnostics: {
+        parseMode: mode,
+        repairStage: mode === "repaired" ? "json_repair" : "none",
+        issues: [],
+      },
+    };
+  }
   const rawDays = toArray(
     (root.days as unknown) ?? root.day ?? root.itinerary ?? root.planDays,
   ).map((entry) => toRecord(entry));
@@ -503,6 +526,36 @@ export function parseTripPlanResponse(
   }
 
   throw new StructuredOutputError("MODEL_OUTPUT_JSON_INVALID");
+}
+
+export function parseChatPlanningOutput(raw: string): ChatPlanningOutput {
+  const jsonBlock = extractJsonBlock(raw);
+  if (!jsonBlock) {
+    throw new StructuredOutputError("MODEL_OUTPUT_JSON_MISSING");
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonBlock);
+  } catch {
+    try {
+      parsed = JSON.parse(repairJsonLikeString(jsonBlock));
+    } catch {
+      throw new StructuredOutputError("MODEL_OUTPUT_JSON_INVALID");
+    }
+  }
+
+  const validated = ChatPlanningOutputSchema.safeParse(parsed);
+  if (!validated.success) {
+    throw new StructuredOutputError("MODEL_OUTPUT_JSON_INVALID");
+  }
+  return {
+    ...validated.data,
+    proposedChanges: validated.data.proposedChanges.map((change) => ({
+      ...change,
+      source: "ai-chat" as const,
+    })),
+  } as ChatPlanningOutput;
 }
 
 export function parseVideoSummaryResponse(

@@ -65,8 +65,6 @@ import {
 } from "@/app/chat/itineraryPatchUtils";
 import { applyAssistantActions } from "@/lib/assistantActions/applyAssistantActions";
 import {
-  applyTextItineraryCorrections,
-  textItineraryToTripPlanResult,
   travelPlanResponseToTripPlanResult,
   tripPlanHasItems,
 } from "@/lib/travelPlanConversion";
@@ -78,6 +76,7 @@ import {
   isPlanningConfirmationCommand,
   shouldShowPlanningWorkflowRail,
 } from "@/lib/chat/workflowRailVisibility";
+import { findLatestApplicableItinerarySource } from "@/lib/chat/latestItinerarySource";
 import { cn } from "@/lib/utils";
 import { ApiRequestError } from "@/services/apiClient";
 import {
@@ -86,6 +85,7 @@ import {
 } from "@/services/aiClient";
 import { createNewTrip, setActiveTrip } from "@/services/itineraryClient";
 import { geocodeItineraryItemsMissingLocation } from "@/services/geocodeItineraryItems";
+import { reconcileTripMapState } from "@/services/mapSync";
 import { syncService } from "@/services/syncService";
 import {
   fetchVideoRecommendations,
@@ -365,33 +365,6 @@ function buildTripProfileFromPreferenceConfirmation(
     pace: preferences.pace || null,
     interests: preferences.travelStyle || preferences.travelStyles || [],
   });
-}
-
-function findLatestApplicableItinerarySource(
-  messages: ChatMessage[],
-  targetDayCount?: number,
-): { message: ChatMessage; plan?: TripPlanResult } | null {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message?.role !== "assistant") {
-      continue;
-    }
-    if (message.travelPlan) {
-      return { message };
-    }
-    const parsedPlan = textItineraryToTripPlanResult(message.content || "", { targetDayCount });
-    const correctionTexts = messages
-      .slice(index + 1)
-      .map((item) => item.content || "")
-      .filter(Boolean);
-    const plan = parsedPlan
-      ? applyTextItineraryCorrections(parsedPlan, correctionTexts)
-      : null;
-    if (plan && tripPlanHasItems(plan)) {
-      return { message, plan };
-    }
-  }
-  return null;
 }
 
 function hasItineraryItems(days: TripPlanDay[]): boolean {
@@ -1597,7 +1570,6 @@ export default function ChatPage() {
         undefined;
       const latestItinerarySource = findLatestApplicableItinerarySource(
         previousMessages,
-        planningSnapshot.days || activeProfile?.duration_days || tripStore.days,
       );
       if (!hasQuestionAnswers && isApplyPreviousItineraryCommand(message) && latestItinerarySource) {
         const sourceMessage = latestItinerarySource.message;
@@ -2281,14 +2253,12 @@ export default function ChatPage() {
     response: ChatResponsePayload,
     options: { sourceMessageId?: string; silent?: boolean } = {},
   ) {
-    const shouldDirectMergeGeneratedPlan =
+    const shouldApplyGeneratedPlan =
       response.reply.responseType === "travel_plan" &&
-      response.tripProfile?.plan_integration !== "self_merge";
+      response.tripProfile?.plan_integration !== "self_merge" &&
+      Boolean(response.itinerarySuggestion || response.reply.travelPlan);
 
-    if (
-      response.itinerarySuggestion ||
-      (shouldDirectMergeGeneratedPlan && response.reply.travelPlan)
-    ) {
+    if (shouldApplyGeneratedPlan) {
       const applied = await applyGeneratedTripPlan(response, { silent: options.silent });
       if (applied) {
         return;
@@ -2301,6 +2271,7 @@ export default function ChatPage() {
     }
 
     if (response.proposedChanges?.length) {
+      // Legacy fallback only. New structured itinerary edits should arrive via assistantActions.
       await applyAiProposedChanges(response.proposedChanges, {
         navigate: false,
         sourceMessageId: options.sourceMessageId ?? response.reply.id,
@@ -2308,7 +2279,7 @@ export default function ChatPage() {
       return;
     }
 
-    if (shouldDirectMergeGeneratedPlan || response.reply.responseType === "travel_plan") {
+    if (response.reply.responseType === "travel_plan") {
       pushToast({
         variant: "warning",
         title: "沒有可套用的行程變更",
@@ -2374,6 +2345,9 @@ export default function ChatPage() {
         readBudgetAmountFromText(response.tripProfile?.budget),
       title: currentTrip.title || response.tripProfile?.destination || currentTrip.destination,
     });
+    const reconciled = reconcileTripMapState(useTripStore.getState().itinerary, useMapStore.getState().pins);
+    useTripStore.getState().setItinerary(reconciled.itinerary);
+    useMapStore.getState().setPins(reconciled.pins);
     syncService.markLocalTripPayloadAsSynced();
     await syncService.flushTripSyncNow({ force: true });
     setItinerarySyncState({

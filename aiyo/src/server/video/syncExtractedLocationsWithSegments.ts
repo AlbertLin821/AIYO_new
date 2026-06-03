@@ -1,5 +1,4 @@
 import { locationReferencesIncludeName } from "@/lib/locationNameMatch";
-import { serverConfig } from "@/server/config";
 import { findKnownLocationReference } from "@/server/geo/locationCatalog";
 import { geocodePlace, mapGeocodedPlaceResolvedFrom } from "@/server/places/geocodePlace";
 import type { TripDestinationScope } from "@/lib/tripDestinationScope";
@@ -71,7 +70,7 @@ async function resolveHintToLocation(input: {
 }): Promise<LocationReference | null> {
   const description = `${input.hint}，影片中提到的地點。`;
 
-  if (serverConfig.googleMapsApiKey) {
+  if (input.destinationHint?.trim() || input.destinationScope?.countryCodes?.length) {
     const geocoded = await geocodePlace({
       query: input.hint,
       destinationHint: input.destinationHint,
