@@ -140,3 +140,15 @@ export function buildItineraryRouteSegments(days: TripPlanDay[]): ItineraryRoute
     }).filter((segment): segment is ItineraryRouteSegment => segment !== null);
   });
 }
+
+export function filterRouteSegmentsByDayNumbers(
+  segments: ItineraryRouteSegment[],
+  visibleDayNumbers: number[],
+): ItineraryRouteSegment[] {
+  const normalizedDays = [...new Set(visibleDayNumbers.filter((day) => Number.isInteger(day) && day > 0))];
+  if (normalizedDays.length === 0) {
+    return segments;
+  }
+  const visibleDaySet = new Set(normalizedDays);
+  return segments.filter((segment) => visibleDaySet.has(segment.dayNumber));
+}

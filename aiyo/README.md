@@ -25,8 +25,7 @@ This is the active application inside `AIYO_new/aiyo`. It now includes:
 ```bash
 cp .env.example .env.local
 ```
-
-Prisma CLI reads `.env` by default. If you run Prisma commands (migrate/seed) and see `Environment variable not found: DATABASE_URL`, create `.env` with `DATABASE_URL=...` or export the env var before running Prisma.
+開發時請只維護 `.env.local`。本專案內建的 Prisma scripts 也會先載入 `.env.local`。
 
 2. Install packages:
 
@@ -55,15 +54,15 @@ The app container runs `prisma migrate deploy` before `next start`. You can veri
 ```bash
 cd aiyo
 npm run prisma:generate
-npx prisma migrate deploy
+npx dotenvx run -f .env.local -- prisma migrate deploy
 npm run db:seed
 ```
 
 If `prisma migrate deploy` fails, you can apply the migrations manually (in order):
 
 ```bash
-npx prisma db execute --file prisma/migrations/20260416_000001_phase3_init/migration.sql --schema prisma/schema.prisma
-npx prisma db execute --file prisma/migrations/20260416_000002_add_password_hash/migration.sql --schema prisma/schema.prisma
+npx dotenvx run -f .env.local -- prisma db execute --file prisma/migrations/20260416_000001_phase3_init/migration.sql --schema prisma/schema.prisma
+npx dotenvx run -f .env.local -- prisma db execute --file prisma/migrations/20260416_000002_add_password_hash/migration.sql --schema prisma/schema.prisma
 ```
 
 5. Start Ollama:

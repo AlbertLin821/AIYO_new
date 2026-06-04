@@ -16,6 +16,7 @@ import type {
 import {
   AIYO_MAPS_AUTH_FAILURE_EVENT,
   AIYO_MAPS_TARGET_BLOCKED_EVENT,
+  getLoadedGoogleMapsApiKey,
   isGoogleMapsConsoleErrorMessage,
   isGoogleMapsDeletedProjectMessage,
   loadGoogleMapsApi,
@@ -25,7 +26,11 @@ import { fetchItineraryRoutePaths } from "@/lib/fetchItineraryDirections";
 import { logFrontendDebugEvent } from "@/lib/frontendDebug";
 import { cn } from "@/lib/utils";
 import { inferMapsRegionCode } from "@/lib/tripTransportRegion";
-import { buildItineraryRouteSegments, type ItineraryRouteSegment } from "@/lib/routeSegments";
+import {
+  buildItineraryRouteSegments,
+  filterRouteSegmentsByDayNumbers,
+  type ItineraryRouteSegment,
+} from "@/lib/routeSegments";
 import { useMapStore } from "@/stores/useMapStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
@@ -37,7 +42,11 @@ import { MapPinMarker } from "@/components/map/MapPinMarker";
 import MapPinInfoPanel from "@/components/map/MapPinInfoPanel";
 import MapPoiAddOverlay from "@/components/map/MapPoiAddOverlay";
 import { buildPinInfoContent } from "@/components/map/mapPinInfoShared";
-import { resolvePlacePhotoUrl } from "@/lib/placePhotoUrl";
+import {
+  hasUsablePlacePhotoUrl,
+  isPlacePhotoProxyUrl,
+  resolvePlacePhotoUrl,
+} from "@/lib/placePhotoUrl";
 import { MAP_CONTROLS_OFFSET_WITH_PANEL } from "@/lib/mapLayout";
 import { loadMapPreferences, saveMapPreferences } from "@/lib/mapPreferences";
 import {
@@ -100,6 +109,24 @@ type RuntimeMapsConfig = {
   enableMockMaps: boolean;
 };
 
+function buildBuildTimeRuntimeMapsConfig(): RuntimeMapsConfig {
+  return {
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+    googleMapsMapId: GOOGLE_MAPS_MAP_ID,
+    enableMockMaps: FORCE_MOCK_MAP,
+  };
+}
+
+function resolveLocalMapStyles(
+  mapId: string,
+  visibility: ReturnType<typeof loadMapPreferences>["labelVisibility"],
+) {
+  if (mapId.trim()) {
+    return undefined;
+  }
+  return buildMapLabelStyles(visibility);
+}
+
 type PlaceDetailsCacheEntry = {
   cachedAt: number;
   details?: Partial<MapPinType>;
@@ -150,19 +177,39 @@ function buildMarkerPinIcon(maps: GoogleMapsApi, color: string, selected: boolea
 }
 
 function needsPlaceDetails(pin: MapPinType, linkedItem?: { location?: LocationReference }): boolean {
-  const hasImage = Boolean(pin.thumbnail || pin.photoUrl || linkedItem?.location?.thumbnail || linkedItem?.location?.photoUrl);
+  const hasImage = [
+    pin.thumbnail,
+    pin.photoUrl,
+    linkedItem?.location?.thumbnail,
+    linkedItem?.location?.photoUrl,
+  ].some((candidate) => hasUsablePlacePhotoUrl(candidate));
   const hasOpeningHours = Boolean(pin.openingHours || linkedItem?.location?.openingHours);
   const hasPhone = Boolean(pin.phoneNumber || linkedItem?.location?.phoneNumber);
   return !hasImage || !hasOpeningHours || !hasPhone;
 }
 
+function preferFreshImageUrl(current?: string, incoming?: string): string | undefined {
+  if (!current) {
+    return incoming;
+  }
+  if (!incoming) {
+    return current;
+  }
+  if (isPlacePhotoProxyUrl(current) && !isPlacePhotoProxyUrl(incoming)) {
+    return incoming;
+  }
+  return current;
+}
+
 function mergePinDetails(pin: MapPinType, patch: Partial<MapPinType>): MapPinType {
+  const photoUrl = preferFreshImageUrl(pin.photoUrl, patch.photoUrl);
+  const thumbnail = preferFreshImageUrl(pin.thumbnail, patch.thumbnail || patch.photoUrl);
   return {
     ...pin,
     address: pin.address || patch.address,
     placeId: pin.placeId || patch.placeId,
-    photoUrl: pin.photoUrl || patch.photoUrl,
-    thumbnail: pin.thumbnail || patch.thumbnail || patch.photoUrl,
+    photoUrl,
+    thumbnail,
     openingHours: pin.openingHours || patch.openingHours,
     phoneNumber: pin.phoneNumber || patch.phoneNumber,
     website: pin.website || patch.website,
@@ -174,12 +221,14 @@ function mergePinDetails(pin: MapPinType, patch: Partial<MapPinType>): MapPinTyp
 }
 
 function mergeLocationDetails(location: LocationReference, patch: Partial<LocationReference>): LocationReference {
+  const photoUrl = preferFreshImageUrl(location.photoUrl, patch.photoUrl);
+  const thumbnail = preferFreshImageUrl(location.thumbnail, patch.thumbnail || patch.photoUrl);
   return {
     ...location,
     address: location.address || patch.address,
     placeId: location.placeId || patch.placeId,
-    photoUrl: location.photoUrl || patch.photoUrl,
-    thumbnail: location.thumbnail || patch.thumbnail || patch.photoUrl,
+    photoUrl,
+    thumbnail,
     openingHours: location.openingHours || patch.openingHours,
     phoneNumber: location.phoneNumber || patch.phoneNumber,
     website: location.website || patch.website,
@@ -201,10 +250,10 @@ function detailsRequestKey(pin: MapPinType, linkedItem?: { location?: LocationRe
 function normalizePhotoPatch<T extends Partial<MapPinType>>(patch: T): T {
   const next = { ...patch };
   if (patch.photoUrl) {
-    next.photoUrl = resolvePlacePhotoUrl(patch.photoUrl) ?? patch.photoUrl;
+    next.photoUrl = resolvePlacePhotoUrl(patch.photoUrl, patch.placeId) ?? patch.photoUrl;
   }
   if (patch.thumbnail) {
-    next.thumbnail = resolvePlacePhotoUrl(patch.thumbnail) ?? patch.thumbnail;
+    next.thumbnail = resolvePlacePhotoUrl(patch.thumbnail, patch.placeId) ?? patch.thumbnail;
   }
   return next;
 }
@@ -283,6 +332,18 @@ function buildRouteSegmentInfoContent(segment: ItineraryRouteSegment, displayMin
       </dl>
     </article>
   `;
+}
+
+function createRouteLabelMarkerContent(
+  segment: ItineraryRouteSegment,
+  displayMinutes: number,
+): HTMLDivElement {
+  const wrapper = document.createElement("div");
+  wrapper.className = "rounded-full border border-white/90 bg-white/95 px-2.5 py-1 text-[11px] font-bold shadow-md";
+  wrapper.style.color = segment.color;
+  wrapper.style.whiteSpace = "nowrap";
+  wrapper.textContent = `${segment.transport} · ${formatRouteMinutes(displayMinutes)}`;
+  return wrapper;
 }
 
 function segmentTouchesLinkedItem(
@@ -502,16 +563,30 @@ export default function MapView({
   const itinerary = tripStore.itinerary;
   const tripDestination = tripStore.destination;
   const tripId = tripStore.tripId;
-  const { pins, selectedPinId, setSelectedPinId, setPendingPoi, setPanelOpen, clearPins, panelOpen, focusLocation } =
-    useMapStore();
+  const {
+    pins,
+    selectedPinId,
+    setSelectedPinId,
+    setPendingPoi,
+    setPanelOpen,
+    clearPins,
+    panelOpen,
+    focusLocation,
+    visibleRouteDayNumbers,
+    setVisibleRouteDayNumbers,
+    clearVisibleRouteDayNumbers,
+  } = useMapStore();
   const pushToast = useToastStore((state) => state.pushToast);
   const [runtimeMapsConfig, setRuntimeMapsConfig] = useState<RuntimeMapsConfig>({
-    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-    googleMapsMapId: GOOGLE_MAPS_MAP_ID,
+    googleMapsApiKey: "",
+    googleMapsMapId: "",
     enableMockMaps: FORCE_MOCK_MAP,
   });
-  const [runtimeConfigChecked, setRuntimeConfigChecked] = useState(Boolean(GOOGLE_MAPS_API_KEY) || FORCE_MOCK_MAP);
-  const useGoogleSdk = Boolean(runtimeMapsConfig.googleMapsApiKey) && !runtimeMapsConfig.enableMockMaps;
+  const [runtimeConfigChecked, setRuntimeConfigChecked] = useState(FORCE_MOCK_MAP);
+  const useGoogleSdk =
+    runtimeConfigChecked &&
+    Boolean(runtimeMapsConfig.googleMapsApiKey) &&
+    !runtimeMapsConfig.enableMockMaps;
 
   useEffect(() => {
     if (tripStore.tripId || itinerary.length > 0) {
@@ -555,6 +630,17 @@ export default function MapView({
     bicycling: null,
   });
   const requestedPlaceDetailsRef = useRef<Set<string>>(new Set());
+  const placeDetailsScopeKey = useMemo(
+    () =>
+      pins
+        .map((pin) => `${pin.id}:${pin.placeId || ""}:${pin.lat.toFixed(5)}:${pin.lng.toFixed(5)}`)
+        .join("|"),
+    [pins],
+  );
+
+  useEffect(() => {
+    requestedPlaceDetailsRef.current.clear();
+  }, [placeDetailsScopeKey, tripId]);
   const routePolylinesRef = useRef<
     Array<{ polyline: GooglePolylineInstance; segmentId: string; usedDirections: boolean }>
   >([]);
@@ -589,6 +675,18 @@ export default function MapView({
   const highlightedRouteIds = useMemo(
     () => new Set(selectedPinRoutes.map((segment) => segment.id)),
     [selectedPinRoutes],
+  );
+  const visibleRouteSegments = useMemo(
+    () => filterRouteSegmentsByDayNumbers(routeSegments, visibleRouteDayNumbers),
+    [routeSegments, visibleRouteDayNumbers],
+  );
+  const visibleRouteSegmentIds = useMemo(
+    () => new Set(visibleRouteSegments.map((segment) => segment.id)),
+    [visibleRouteSegments],
+  );
+  const visibleHighlightedRouteIds = useMemo(
+    () => new Set([...highlightedRouteIds].filter((segmentId) => visibleRouteSegmentIds.has(segmentId))),
+    [highlightedRouteIds, visibleRouteSegmentIds],
   );
   const [destinationViewport, setDestinationViewport] = useState<MapViewportPoint | null>(null);
   const viewportPoints = useMemo(() => {
@@ -630,8 +728,54 @@ export default function MapView({
   }, [selectedPinId]);
 
   useEffect(() => {
-    highlightedRouteIdsRef.current = highlightedRouteIds;
-  }, [highlightedRouteIds]);
+    if (visibleRouteDayNumbers.length === 0) {
+      return;
+    }
+    const validDayNumbers = new Set(itinerary.map((day) => day.dayNumber));
+    const normalized = visibleRouteDayNumbers.filter((day) => validDayNumbers.has(day));
+    if (normalized.length === visibleRouteDayNumbers.length) {
+      return;
+    }
+    if (normalized.length === 0) {
+      clearVisibleRouteDayNumbers();
+      return;
+    }
+    setVisibleRouteDayNumbers(normalized);
+  }, [clearVisibleRouteDayNumbers, itinerary, setVisibleRouteDayNumbers, visibleRouteDayNumbers]);
+
+  const showRealMap = useGoogleSdk && sdkState !== "error";
+  const mapReady = sdkState === "ready";
+  const mapControlsInsetWhenPanelOpen = panelOpen && !embedded;
+  const mapControlsPositionClass = cn(
+    mapControlsInsetWhenPanelOpen ? "max-lg:left-4 max-lg:right-auto" : "right-4",
+  );
+  const mapControlsRightStyle = mapControlsInsetWhenPanelOpen
+    ? { right: MAP_CONTROLS_OFFSET_WITH_PANEL }
+    : undefined;
+
+  const forceMockFallback = useCallback((message: string) => {
+    mapInstanceRef.current = null;
+    infoWindowRef.current = null;
+    markersRef.current.forEach((marker) => marker.setMap(null));
+    markersRef.current.clear();
+    routeLabelMarkersRef.current.forEach((marker) => marker.setMap(null));
+    routeLabelMarkersRef.current = [];
+    routePolylinesRef.current.forEach(({ polyline }) => polyline.setMap(null));
+    routePolylinesRef.current = [];
+    overlayLayersRef.current.traffic?.setMap(null);
+    overlayLayersRef.current.transit?.setMap(null);
+    overlayLayersRef.current.bicycling?.setMap(null);
+    setGoogleMap(null);
+    setSdkState("error");
+    setProviderError(message);
+    if (mapElementRef.current) {
+      mapElementRef.current.innerHTML = "";
+    }
+  }, []);
+
+  useEffect(() => {
+    highlightedRouteIdsRef.current = visibleHighlightedRouteIds;
+  }, [visibleHighlightedRouteIds]);
 
   const refreshPinInfoContent = useCallback(
     (pinId: string) => {
@@ -773,14 +917,13 @@ export default function MapView({
               : "",
           enableMockMaps: payload.enableMockMaps === true,
         };
-        setRuntimeMapsConfig((prev) => {
-          if (prev.googleMapsApiKey !== nextConfig.googleMapsApiKey) {
-            unloadGoogleMapsApi();
-            mapInstanceRef.current = null;
-            setGoogleMap(null);
-          }
-          return nextConfig;
-        });
+        const loadedApiKey = getLoadedGoogleMapsApiKey();
+        if (loadedApiKey && nextConfig.googleMapsApiKey && loadedApiKey !== nextConfig.googleMapsApiKey) {
+          unloadGoogleMapsApi();
+          mapInstanceRef.current = null;
+          setGoogleMap(null);
+        }
+        setRuntimeMapsConfig(nextConfig);
         setRuntimeConfigChecked(true);
         const shouldUseGoogle = Boolean(nextConfig.googleMapsApiKey && !nextConfig.enableMockMaps);
         if (!shouldUseGoogle) {
@@ -795,8 +938,15 @@ export default function MapView({
         }
       })
       .catch(() => {
+        if (cancelled) {
+          return;
+        }
+        const fallbackConfig = buildBuildTimeRuntimeMapsConfig();
+        setRuntimeMapsConfig(fallbackConfig);
         setRuntimeConfigChecked(true);
-        // Build-time public env remains the fallback when the runtime route is unavailable.
+        setSdkState(
+          fallbackConfig.enableMockMaps || !fallbackConfig.googleMapsApiKey ? "error" : "loading",
+        );
       });
 
     return () => {
@@ -805,6 +955,9 @@ export default function MapView({
   }, []);
 
   useEffect(() => {
+    if (!runtimeConfigChecked) {
+      return;
+    }
     if (runtimeMapsConfig.enableMockMaps) {
       queueMicrotask(() => {
         setSdkState("error");
@@ -861,7 +1014,13 @@ export default function MapView({
           if (useAdvancedMarkers) {
             mapOptions.mapId = runtimeMapsConfig.googleMapsMapId;
           }
-          mapOptions.styles = buildMapLabelStyles(loadMapPreferences().labelVisibility);
+          const initialStyles = resolveLocalMapStyles(
+            runtimeMapsConfig.googleMapsMapId,
+            loadMapPreferences().labelVisibility,
+          );
+          if (initialStyles) {
+            mapOptions.styles = initialStyles;
+          }
           mapInstanceRef.current = new maps.Map(mapElementRef.current, mapOptions);
           setGoogleMap(mapInstanceRef.current);
           infoWindowRef.current = new maps.InfoWindow();
@@ -872,8 +1031,7 @@ export default function MapView({
           if (cancelled) {
             return;
           }
-          setSdkState("error");
-          setProviderError(error instanceof Error ? error.message : t.map.loadFailed);
+          forceMockFallback(error instanceof Error ? error.message : t.map.loadFailed);
           pushToast({
             variant: "error",
             title: t.map.fallbackMode,
@@ -886,15 +1044,14 @@ export default function MapView({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [pushToast, runtimeMapsConfig.enableMockMaps, runtimeMapsConfig.googleMapsApiKey, runtimeMapsConfig.googleMapsMapId, useAdvancedMarkers, useGoogleSdk]);
+  }, [forceMockFallback, pushToast, runtimeConfigChecked, runtimeMapsConfig.enableMockMaps, runtimeMapsConfig.googleMapsApiKey, runtimeMapsConfig.googleMapsMapId, useAdvancedMarkers, useGoogleSdk]);
 
   useEffect(() => {
     if (!useGoogleSdk) {
       return;
     }
     const onAuthFailure = () => {
-      setSdkState("error");
-      setProviderError(t.map.authError);
+      forceMockFallback(t.map.authError);
       pushToast({
         variant: "error",
         title: t.map.fallbackMode,
@@ -903,7 +1060,7 @@ export default function MapView({
     };
     window.addEventListener(AIYO_MAPS_AUTH_FAILURE_EVENT, onAuthFailure);
     return () => window.removeEventListener(AIYO_MAPS_AUTH_FAILURE_EVENT, onAuthFailure);
-  }, [pushToast, useGoogleSdk]);
+  }, [forceMockFallback, pushToast, useGoogleSdk]);
 
   useEffect(() => {
     if (!useGoogleSdk) {
@@ -913,8 +1070,7 @@ export default function MapView({
       const detail = (event as CustomEvent<{ message?: string }>).detail?.message ?? "";
       const deleted = isGoogleMapsDeletedProjectMessage(detail);
       const description = deleted ? t.map.deletedApiProjectError : t.map.apiTargetBlockedError;
-      setSdkState("error");
-      setProviderError(
+      forceMockFallback(
         deleted ? description : `${description} ${t.map.apiTargetBlockedHint}`,
       );
       pushToast({
@@ -938,7 +1094,38 @@ export default function MapView({
       window.removeEventListener(AIYO_MAPS_TARGET_BLOCKED_EVENT, onTargetBlocked);
       window.removeEventListener("error", onWindowError);
     };
-  }, [pushToast, useGoogleSdk]);
+  }, [forceMockFallback, pushToast, useGoogleSdk]);
+
+  useEffect(() => {
+    if (!showRealMap || !mapElementRef.current) {
+      return;
+    }
+
+    const blockedPhrases = [
+      "This page can't load Google Maps correctly",
+      "這個網頁無法正確載入 Google 地圖",
+      "你是否擁有這個網站",
+    ];
+
+    const detectBlockedOverlay = () => {
+      const text = mapElementRef.current?.textContent || "";
+      if (!blockedPhrases.some((phrase) => text.includes(phrase))) {
+        return;
+      }
+      forceMockFallback(t.map.apiTargetBlockedError);
+    };
+
+    detectBlockedOverlay();
+    const observer = new MutationObserver(() => {
+      detectBlockedOverlay();
+    });
+    observer.observe(mapElementRef.current, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    return () => observer.disconnect();
+  }, [forceMockFallback, showRealMap]);
 
   useEffect(() => {
     if (!effectiveAllowPoiAdd || sdkState !== "ready" || !mapInstanceRef.current || !useGoogleSdk) {
@@ -1005,11 +1192,15 @@ export default function MapView({
     if (sdkState !== "ready" || !mapInstanceRef.current) {
       return;
     }
-    mapInstanceRef.current.setOptions?.({
-      styles: buildMapLabelStyles(labelVisibility),
+    const nextOptions: Record<string, unknown> = {
       clickableIcons: effectiveAllowPoiAdd,
-    });
-  }, [effectiveAllowPoiAdd, labelVisibility, sdkState]);
+    };
+    const nextStyles = resolveLocalMapStyles(runtimeMapsConfig.googleMapsMapId, labelVisibility);
+    if (nextStyles) {
+      nextOptions.styles = nextStyles;
+    }
+    mapInstanceRef.current.setOptions?.(nextOptions);
+  }, [effectiveAllowPoiAdd, labelVisibility, runtimeMapsConfig.googleMapsMapId, sdkState]);
 
   useEffect(() => {
     if (!useGoogleSdk || sdkState !== "ready" || !mapInstanceRef.current || !mapElementRef.current) {
@@ -1052,11 +1243,49 @@ export default function MapView({
       return;
     }
 
+    function applyDetailPatches(
+      patches: Map<string, Partial<MapPinType>>,
+      sourceEntries: Array<{
+        pinId: string;
+        key: string;
+        linkedItemId?: string;
+        linkedItemDay?: number;
+      }>,
+    ) {
+      if (patches.size === 0) {
+        return;
+      }
+      const currentPins = useMapStore.getState().pins;
+      const nextPins = currentPins.map((pin) => {
+        const patch = patches.get(pin.id);
+        return patch ? mergePinDetails(pin, patch) : pin;
+      });
+      useMapStore.getState().setPins(nextPins);
+
+      const trip = useTripStore.getState();
+      sourceEntries.forEach((candidate) => {
+        const patch = patches.get(candidate.pinId);
+        if (!patch || !candidate.linkedItemId || !candidate.linkedItemDay) {
+          return;
+        }
+        const day = trip.itinerary.find((entry) => entry.dayNumber === candidate.linkedItemDay);
+        const item = day?.items.find((entry) => entry.id === candidate.linkedItemId);
+        if (!item?.location) {
+          return;
+        }
+        trip.updateItineraryItem(candidate.linkedItemDay, candidate.linkedItemId, {
+          location: mergeLocationDetails(item.location, patch),
+        });
+      });
+    }
+
     const entries = pins
       .map((pin) => ({ pin, linkedItem: findLinkedItineraryItem(itinerary, pin) }))
       .filter(({ pin, linkedItem }) => needsPlaceDetails(pin, linkedItem))
       .map(({ pin, linkedItem }) => ({
         pinId: pin.id,
+        pin,
+        linkedItem,
         key: detailsRequestKey(pin, linkedItem),
         name: pin.name || linkedItem?.location?.name || "",
         placeId: pin.placeId || linkedItem?.location?.placeId || undefined,
@@ -1075,11 +1304,31 @@ export default function MapView({
         if (!cached) {
           return true;
         }
-        requestedPlaceDetailsRef.current.add(entry.key);
-        if (cached.details && Object.values(cached.details).some((value) => value !== undefined && value !== "")) {
-          cachedPatches.set(entry.pinId, normalizePhotoPatch(cached.details));
+        const normalizedDetails =
+          cached.details && Object.values(cached.details).some((value) => value !== undefined && value !== "")
+            ? normalizePhotoPatch(cached.details)
+            : undefined;
+
+        if (normalizedDetails) {
+          cachedPatches.set(entry.pinId, normalizedDetails);
         }
-        return false;
+
+        const mergedPin = normalizedDetails ? mergePinDetails(entry.pin, normalizedDetails) : entry.pin;
+        const mergedLocation =
+          entry.linkedItem?.location && normalizedDetails
+            ? mergeLocationDetails(entry.linkedItem.location, normalizedDetails)
+            : entry.linkedItem?.location;
+        const cacheStillNeedsDetails = needsPlaceDetails(
+          mergedPin,
+          mergedLocation ? { location: mergedLocation } : undefined,
+        );
+        const shouldRetryMiss = Boolean(cached.miss && entry.placeId && sdkState === "ready");
+
+        if (!cacheStillNeedsDetails && !shouldRetryMiss) {
+          requestedPlaceDetailsRef.current.add(entry.key);
+          return false;
+        }
+        return true;
       })
       .slice(0, 6);
 
@@ -1121,23 +1370,120 @@ export default function MapView({
       withPlaceId: candidates.filter((candidate) => candidate.placeId).length,
     });
 
-    void fetch("/api/map/place-details", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        region: tripDestination,
-        places: candidates.map((candidate) => ({
-          id: candidate.pinId,
-          name: candidate.name,
-          placeId: candidate.placeId,
-          lat: candidate.lat,
-          lng: candidate.lng,
-          address: candidate.address,
-        })),
-      }),
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload) => {
+    void (async () => {
+      const clientPatches = new Map<string, Partial<MapPinType>>();
+      const clientCandidates = candidates.filter((candidate) => candidate.placeId);
+      const mapsApi = window.google?.maps;
+      const map = mapInstanceRef.current;
+
+      if (sdkState === "ready" && map && mapsApi?.places?.PlacesService) {
+        try {
+          if (typeof mapsApi.importLibrary === "function") {
+            await mapsApi.importLibrary("places");
+          }
+          const placesApi = window.google?.maps?.places;
+          const PlacesService = placesApi?.PlacesService;
+          const placesStatusOk = placesApi?.PlacesServiceStatus?.OK ?? "OK";
+          if (PlacesService) {
+            const service = new PlacesService(map);
+            await Promise.all(
+              clientCandidates.map(
+                (candidate) =>
+                  new Promise<void>((resolve) => {
+                    service.getDetails(
+                      {
+                        placeId: candidate.placeId!,
+                        fields: [
+                          "name",
+                          "formatted_address",
+                          "formatted_phone_number",
+                          "international_phone_number",
+                          "opening_hours",
+                          "photos",
+                          "website",
+                          "url",
+                          "rating",
+                          "user_ratings_total",
+                        ],
+                      },
+                      (result, status) => {
+                        if (cancelled || status !== placesStatusOk || !result) {
+                          resolve();
+                          return;
+                        }
+                        const photoUrl = result.photos?.[0]?.getUrl({ maxWidth: 480 });
+                        const details: Partial<MapPinType> = normalizePhotoPatch({
+                          name: result.name?.trim() || undefined,
+                          address: result.formatted_address?.trim() || undefined,
+                          description: result.formatted_address?.trim() || undefined,
+                          photoUrl: photoUrl || undefined,
+                          thumbnail: photoUrl || undefined,
+                          openingHours: result.opening_hours?.weekday_text?.join("；"),
+                          phoneNumber:
+                            result.formatted_phone_number ||
+                            result.international_phone_number ||
+                            undefined,
+                          website: result.website,
+                          googleMapsUrl: result.url,
+                          rating: result.rating,
+                          userRatingsTotal: result.user_ratings_total,
+                          verified: true,
+                        });
+                        if (Object.values(details).some((value) => value !== undefined && value !== "")) {
+                          clientPatches.set(candidate.pinId, details);
+                          writePlaceDetailsCache(candidate.key, { details });
+                        }
+                        resolve();
+                      },
+                    );
+                  }),
+              ),
+            );
+          }
+        } catch (error) {
+          logFrontendDebugEvent("map", "place-details-client-failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      if (cancelled && clientPatches.size === 0) {
+        return;
+      }
+
+      if (clientPatches.size > 0) {
+        applyDetailPatches(clientPatches, candidates);
+        logFrontendDebugEvent("map", "place-details-client-applied", {
+          requested: clientCandidates.length,
+          patched: clientPatches.size,
+          names: candidates
+            .filter((candidate) => clientPatches.has(candidate.pinId))
+            .map((candidate) => candidate.name),
+        });
+      }
+
+      const remainingCandidates = candidates.filter((candidate) => !clientPatches.has(candidate.pinId));
+      if (cancelled || remainingCandidates.length === 0) {
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/map/place-details", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            region: tripDestination,
+            places: remainingCandidates.map((candidate) => ({
+              id: candidate.pinId,
+              name: candidate.name,
+              placeId: candidate.placeId,
+              lat: candidate.lat,
+              lng: candidate.lng,
+              address: candidate.address,
+            })),
+          }),
+        });
+        const payload = response.ok ? await response.json() : null;
         if (cancelled || !payload?.success || !Array.isArray(payload.data?.results)) {
           logFrontendDebugEvent("map", "place-details-empty", {
             ok: Boolean(payload?.success),
@@ -1149,7 +1495,7 @@ export default function MapView({
           if (!row.id || !row.details) {
             return;
           }
-          const candidate = candidates.find((entry) => entry.pinId === row.id);
+          const candidate = remainingCandidates.find((entry) => entry.pinId === row.id);
           if (Object.values(row.details).some((value) => value !== undefined && value !== "")) {
             const normalized = normalizePhotoPatch(row.details);
             patches.set(row.id, normalized);
@@ -1162,50 +1508,30 @@ export default function MapView({
         });
         if (patches.size === 0) {
           logFrontendDebugEvent("map", "place-details-no-patches", {
-            requested: candidates.length,
+            requested: remainingCandidates.length,
           });
           return;
         }
 
-        const currentPins = useMapStore.getState().pins;
-        const nextPins = currentPins.map((pin) => {
-          const patch = patches.get(pin.id);
-          return patch ? mergePinDetails(pin, patch) : pin;
-        });
-        useMapStore.getState().setPins(nextPins);
-
-        const trip = useTripStore.getState();
-        candidates.forEach((candidate) => {
-          const patch = patches.get(candidate.pinId);
-          if (!patch || !candidate.linkedItemId || !candidate.linkedItemDay) {
-            return;
-          }
-          const day = trip.itinerary.find((entry) => entry.dayNumber === candidate.linkedItemDay);
-          const item = day?.items.find((entry) => entry.id === candidate.linkedItemId);
-          if (!item?.location) {
-            return;
-          }
-          trip.updateItineraryItem(candidate.linkedItemDay, candidate.linkedItemId, {
-            location: mergeLocationDetails(item.location, patch),
-          });
-        });
-
+        applyDetailPatches(patches, remainingCandidates);
         logFrontendDebugEvent("map", "place-details-applied", {
-          requested: candidates.length,
+          requested: remainingCandidates.length,
           patched: patches.size,
-          names: candidates.filter((candidate) => patches.has(candidate.pinId)).map((candidate) => candidate.name),
+          names: remainingCandidates
+            .filter((candidate) => patches.has(candidate.pinId))
+            .map((candidate) => candidate.name),
         });
-      })
-      .catch((error) => {
+      } catch (error) {
         logFrontendDebugEvent("map", "place-details-failed", {
           error: error instanceof Error ? error.message : String(error),
         });
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [itinerary, pins, readOnly, runtimeConfigChecked, runtimeMapsConfig.googleMapsApiKey, tripDestination]);
+  }, [itinerary, pins, readOnly, runtimeConfigChecked, runtimeMapsConfig.googleMapsApiKey, sdkState, tripDestination]);
 
   useEffect(() => {
     const maps = window.google?.maps;
@@ -1396,7 +1722,7 @@ export default function MapView({
       routeLabelMarkersRef.current = [];
     };
 
-    if (!effectiveShowItineraryRoutes || pins.length === 0 || routeSegments.length === 0) {
+    if (!effectiveShowItineraryRoutes || pins.length === 0 || visibleRouteSegments.length === 0) {
       clearRouteOverlays();
       useMapStore.getState().setItinerarySegmentDurations({});
       return;
@@ -1405,14 +1731,24 @@ export default function MapView({
     directionsTimer = window.setTimeout(() => {
       void (async () => {
         let resolved: Awaited<ReturnType<typeof fetchItineraryRoutePaths>>;
+        let advancedMarkerLib:
+          | {
+              AdvancedMarkerElement: new (options: Record<string, unknown>) => GoogleMarkerInstance;
+            }
+          | null = null;
         try {
-          resolved = await fetchItineraryRoutePaths(mapsApi, routeSegments, {
+          resolved = await fetchItineraryRoutePaths(mapsApi, visibleRouteSegments, {
             cancelled: () => cancelled,
             region: inferMapsRegionCode(tripDestination),
           });
+          if (useAdvancedMarkers && typeof mapsApi.importLibrary === "function") {
+            advancedMarkerLib = (await mapsApi.importLibrary("marker")) as {
+              AdvancedMarkerElement: new (options: Record<string, unknown>) => GoogleMarkerInstance;
+            };
+          }
         } catch {
           logFrontendDebugEvent("map", "routes-fetch-threw", {
-            segments: routeSegments.length,
+            segments: visibleRouteSegments.length,
           });
           return;
         }
@@ -1450,27 +1786,34 @@ export default function MapView({
           path.forEach((p) => routeBounds.extend(p));
 
           const mid = path[Math.floor(path.length / 2)]!;
-          const labelMarker = new mapsApi.Marker({
-            map,
-            position: mid,
-            clickable: !readOnly,
-            title: `${segment.fromName} → ${segment.toName}`,
-            zIndex: 980,
-            icon: {
-              path: mapsApi.SymbolPath.CIRCLE,
-              scale: 0,
-              fillOpacity: 0,
-              strokeOpacity: 0,
-            },
-            label: {
-              text: `${segment.transport} · ${formatRouteMinutes(displayMinutes)}`,
-              color: segment.color,
-              fontSize: "11px",
-              fontWeight: "700",
-            },
-          });
+          const labelMarker = advancedMarkerLib
+            ? new advancedMarkerLib.AdvancedMarkerElement({
+                map,
+                position: mid,
+                title: `${segment.fromName} → ${segment.toName}`,
+                content: createRouteLabelMarkerContent(segment, displayMinutes),
+              })
+            : new mapsApi.Marker({
+                map,
+                position: mid,
+                clickable: !readOnly,
+                title: `${segment.fromName} → ${segment.toName}`,
+                zIndex: 980,
+                icon: {
+                  path: mapsApi.SymbolPath.CIRCLE,
+                  scale: 0,
+                  fillOpacity: 0,
+                  strokeOpacity: 0,
+                },
+                label: {
+                  text: `${segment.transport} · ${formatRouteMinutes(displayMinutes)}`,
+                  color: segment.color,
+                  fontSize: "11px",
+                  fontWeight: "700",
+                },
+              });
           if (!readOnly) {
-            labelMarker.addListener("click", () => {
+            labelMarker.addListener(advancedMarkerLib ? "gmp-click" : "click", () => {
               if (!infoWindowRef.current) {
                 return;
               }
@@ -1491,7 +1834,7 @@ export default function MapView({
 
         useMapStore.getState().setItinerarySegmentDurations(nextMinutes);
         logFrontendDebugEvent("map", "routes-drawn", {
-          requested: routeSegments.length,
+          requested: visibleRouteSegments.length,
           resolved: resolved.length,
           directions: resolved.filter((entry) => entry.usedDirections).length,
           fallback: resolved.filter((entry) => !entry.usedDirections).length,
@@ -1511,7 +1854,7 @@ export default function MapView({
       cancelled = true;
       clearTimeout(directionsTimer);
     };
-  }, [effectiveShowItineraryRoutes, pins, readOnly, routeSegments, sdkState, tripDestination]);
+  }, [effectiveShowItineraryRoutes, pins, readOnly, sdkState, tripDestination, visibleRouteSegments]);
 
   useEffect(() => {
     if (sdkState !== "ready" || !effectiveShowItineraryRoutes) {
@@ -1525,7 +1868,7 @@ export default function MapView({
         zIndex: isHighlighted ? 980 : 950,
       });
     });
-  }, [effectiveShowItineraryRoutes, highlightedRouteIds, sdkState]);
+  }, [effectiveShowItineraryRoutes, sdkState, visibleHighlightedRouteIds]);
 
   useEffect(() => {
     const maps = window.google?.maps;
@@ -1629,16 +1972,6 @@ export default function MapView({
     });
   }
 
-  const showRealMap = useGoogleSdk && sdkState !== "error";
-  const mapReady = sdkState === "ready";
-  const mapControlsInsetWhenPanelOpen = panelOpen && !embedded;
-  const mapControlsPositionClass = cn(
-    mapControlsInsetWhenPanelOpen ? "max-lg:left-4 max-lg:right-auto" : "right-4",
-  );
-  const mapControlsRightStyle = mapControlsInsetWhenPanelOpen
-    ? { right: MAP_CONTROLS_OFFSET_WITH_PANEL }
-    : undefined;
-
   return (
     <div
       data-testid="map-view"
@@ -1662,8 +1995,8 @@ export default function MapView({
           <MockMapFallback
             pins={pins}
             pinStopById={pinStopById}
-            routeSegments={routeSegments}
-            highlightedRouteIds={highlightedRouteIds}
+            routeSegments={visibleRouteSegments}
+            highlightedRouteIds={visibleHighlightedRouteIds}
             showItineraryRoutes={effectiveShowItineraryRoutes}
             viewportPoints={viewportPoints}
             selectedPinId={selectedPinId}

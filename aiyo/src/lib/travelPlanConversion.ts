@@ -247,6 +247,14 @@ type TextDaySection = {
   lines: string[];
 };
 
+function normalizeTextItineraryInput(text: string): string {
+  return text
+    .replace(/\r/g, "")
+    .replace(/\s+(?=(?:Day|第)\s*[\d一二兩两三四五六七八九十]+\s*(?:天)?\s*[：:])/giu, "\n")
+    .replace(/\s*[-–—]\s*(?=(?:早餐|上午|午餐|中午|下午|傍晚|晚餐|晚上|夜間))/gu, "\n")
+    .replace(/[；;。]\s*(?=(?:早餐|上午|午餐|中午|下午|傍晚|晚餐|晚上|夜間))/gu, "\n");
+}
+
 function cleanMarkdownInline(value: string): string {
   return value
     .replace(/\*\*/g, "")
@@ -262,6 +270,16 @@ function cleanTextItineraryTitle(value: string): string {
     .replace(/[，,。；;：:].*$/u, "")
     .replace(/\s*(?:附近|周邊|一帶)$/u, "")
     .trim();
+}
+
+function isGenericTextItineraryTitle(title: string): boolean {
+  const trimmed = cleanMarkdownInline(title);
+  if (!trimmed) {
+    return true;
+  }
+  return /^(文化|歷史|自然|娛樂|購物|市區|在地|特色|休閒)(?:公園|市場|商圈|街區|老街|景點|體驗)$/u.test(
+    trimmed,
+  );
 }
 
 function isTimeLabel(value: string): boolean {
@@ -309,7 +327,7 @@ function inferTimeLabel(line: string): string | undefined {
 function inferTitleFromTextLine(line: string): string | undefined {
   const quotedTitles = [...line.matchAll(/[「『]([^「」『』]{1,40})[」』]/g)]
     .map((match) => cleanTextItineraryTitle(match[1] || ""))
-    .filter((title) => title && !isTimeLabel(title));
+    .filter((title) => title && !isTimeLabel(title) && !isGenericTextItineraryTitle(title));
   const quotedTitle = quotedTitles.find((title) => title.length >= 2);
   if (quotedTitle) {
     return quotedTitle;
@@ -317,7 +335,7 @@ function inferTitleFromTextLine(line: string): string | undefined {
 
   const boldTitles = [...line.matchAll(/\*\*([^*]{1,40})\*\*/g)]
     .map((match) => cleanTextItineraryTitle(match[1] || ""))
-    .filter((title) => title && !isTimeLabel(title));
+    .filter((title) => title && !isTimeLabel(title) && !isGenericTextItineraryTitle(title));
   const boldTitle = boldTitles.find((title) => title.length >= 2);
   if (boldTitle) {
     return boldTitle;
@@ -327,7 +345,8 @@ function inferTitleFromTextLine(line: string): string | undefined {
     /([\p{Script=Han}A-Za-z0-9\s]{2,30}?(?:機場|公園|市場|世界|大樓|城|塔|村|商店街|海遊館|道頓堀|明洞|弘大|酒店|飯店|纜車|樂園|水族館|神社|寺|宮|街|站))/u,
   );
   if (placeMatch?.[1]) {
-    return cleanTextItineraryTitle(placeMatch[1]);
+    const candidate = cleanTextItineraryTitle(placeMatch[1]);
+    return isGenericTextItineraryTitle(candidate) ? undefined : candidate;
   }
 
   if (/早餐/u.test(line)) {
@@ -347,7 +366,7 @@ function inferTitleFromTextLine(line: string): string | undefined {
 
 function parseTextItinerarySections(text: string): TextDaySection[] {
   const sections: TextDaySection[] = [];
-  for (const rawLine of text.replace(/\r/g, "").split("\n")) {
+  for (const rawLine of normalizeTextItineraryInput(text).split("\n")) {
     const line = rawLine.trim();
     const header = line.match(
       /^(?:[-*]\s*)?(?:#{1,6}\s*)?(?:\*\*)?\s*(?:Day|第)\s*([\d一二兩两三四五六七八九十]{1,3})\s*(?:天)?\s*(?:[：:|｜-]\s*(.*?))?(?:\*\*)?\s*$/iu,
@@ -376,7 +395,7 @@ function textSectionToDay(section: TextDaySection): TripPlanDay {
   for (const line of section.lines) {
     const normalizedLine = cleanMarkdownInline(line);
     const isBulletLine = /^\s*(?:[-*]|\d+\.)\s+/u.test(line);
-    const isTimePrefixedLine = /^(?:早餐|上午|午餐|中午|下午|傍晚|晚餐|晚上|夜間)[：:]/u.test(normalizedLine);
+    const isTimePrefixedLine = /^(?:早餐|上午|午餐|中午|下午|傍晚|晚餐|晚上|夜間)/u.test(normalizedLine);
     if (!isBulletLine && !isTimePrefixedLine) {
       continue;
     }
@@ -420,6 +439,52 @@ function textSectionToDay(section: TextDaySection): TripPlanDay {
   };
 }
 
+function textSectionToDayLoose(section: TextDaySection): TripPlanDay {
+  const items: TripPlanItem[] = [];
+  const seenTitles = new Set<string>();
+
+  for (const line of section.lines) {
+    if (/^\s*(?:[-*]\s*)?(?:\*\*)?\s*(?:Day|第)\s*[\d一二兩两三四五六七八九十]{1,3}/iu.test(line)) {
+      continue;
+    }
+
+    const normalizedLine = cleanMarkdownInline(line);
+    if (!normalizedLine || /^(?:住宿|備案|提醒|請問|是否需要|已直接替換|已將|收到)/u.test(normalizedLine)) {
+      continue;
+    }
+
+    const title = inferTitleFromTextLine(line);
+    if (!title || seenTitles.has(title)) {
+      continue;
+    }
+    seenTitles.add(title);
+
+    const timeLabel = inferTimeLabel(line);
+    const timeHour =
+      (timeLabel ? TEXT_ITINERARY_TIME_HOURS[timeLabel] : undefined) ??
+      DEFAULT_SPOT_HOURS[items.length % DEFAULT_SPOT_HOURS.length] ??
+      9 + items.length * 2;
+
+    items.push({
+      id: buildItemId(section.dayNumber, items.length, title),
+      dayNumber: section.dayNumber,
+      time: normalizeTimeValue(undefined, timeHour),
+      title,
+      type: inferItemType(line, title),
+      notes: normalizedLine,
+      source: "ai",
+      confidence: "low",
+    });
+  }
+
+  return {
+    dayNumber: section.dayNumber,
+    theme: section.theme || `Day ${section.dayNumber}`,
+    summary: undefined,
+    items,
+  };
+}
+
 export function textItineraryToTripPlanResult(
   text: string,
   options?: TravelPlanConversionOptions,
@@ -429,13 +494,15 @@ export function textItineraryToTripPlanResult(
     return null;
   }
   const days = sections.map(textSectionToDay).filter((day) => day.items.length > 0);
-  if (!days.length) {
+  const resolvedDays =
+    days.length > 0 ? days : sections.map(textSectionToDayLoose).filter((day) => day.items.length > 0);
+  if (!resolvedDays.length) {
     return null;
   }
   return ensureTripPlanDayCount(
     {
       summary: "AI 文字行程",
-      days,
+      days: resolvedDays,
     },
     options?.targetDayCount,
   );

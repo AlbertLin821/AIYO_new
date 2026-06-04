@@ -2,7 +2,6 @@
 
 import dynamic from "next/dynamic";
 import { CalendarDays } from "lucide-react";
-import { MAP_CONTROLS_OFFSET_WITH_PANEL } from "@/lib/mapLayout";
 import { zhTW as t } from "@/locales/zh-TW";
 import { useMapStore } from "@/stores/useMapStore";
 
@@ -26,8 +25,7 @@ export default function MapPage() {
       {!panelOpen && (
         <button
           onClick={() => setPanelOpen(true)}
-          className="absolute top-4 z-20 flex cursor-pointer items-center gap-2 rounded-xl border-2 border-border bg-surface px-3 py-2 text-sm font-medium text-foreground shadow-soft-lg transition-colors hover:border-primary/40 hover:bg-surface-elevated max-lg:right-14 max-lg:left-auto"
-          style={{ right: MAP_CONTROLS_OFFSET_WITH_PANEL }}
+          className="absolute top-4 right-4 z-20 flex cursor-pointer items-center gap-2 rounded-xl border-2 border-border bg-surface px-3 py-2 text-sm font-medium text-foreground shadow-soft-lg transition-colors hover:border-primary/40 hover:bg-surface-elevated"
         >
           <CalendarDays className="size-4 text-primary" />
           {t.mapPage.openItineraryPanel}

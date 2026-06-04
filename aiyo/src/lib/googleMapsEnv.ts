@@ -1,53 +1,17 @@
-import fs from "node:fs";
 import path from "node:path";
 
 import { normalizeGoogleMapsMapId } from "./googleMapsMapId";
+import { readProjectEnvLocal } from "./projectEnv";
 
 export { normalizeGoogleMapsMapId } from "./googleMapsMapId";
 
 const AIYO_ROOT = path.join(__dirname, "..", "..");
 
-/** Parse KEY=VALUE lines from .env files (no variable expansion). */
-export function parseDotenvContent(content: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) {
-      continue;
-    }
-    const eq = trimmed.indexOf("=");
-    if (eq <= 0) {
-      continue;
-    }
-    const key = trimmed.slice(0, eq).trim();
-    let value = trimmed.slice(eq + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    out[key] = value;
-  }
-  return out;
-}
-
-/** .env then .env.local (local wins), same order as Next.js. */
+/** Reads only aiyo/.env.local so local development has a single source of truth. */
 export function loadMapsKeysFromProjectFiles(
   projectRoot: string = AIYO_ROOT,
 ): { server: string; client: string } {
-  const merged: Record<string, string> = {};
-  for (const name of [".env", ".env.local"] as const) {
-    const filePath = path.join(projectRoot, name);
-    try {
-      if (!fs.existsSync(filePath)) {
-        continue;
-      }
-      Object.assign(merged, parseDotenvContent(fs.readFileSync(filePath, "utf8")));
-    } catch {
-      // ignore unreadable env files
-    }
-  }
+  const merged = readProjectEnvLocal(projectRoot);
   return {
     server: merged.GOOGLE_MAPS_API_KEY?.trim() ?? "",
     client: merged.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() ?? "",
@@ -65,12 +29,12 @@ function warnIfProcessEnvOverridesFiles(
   const processClient = env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() || "";
   if (fromFiles.server && processServer && fromFiles.server !== processServer) {
     console.warn(
-      "[google-maps-env] GOOGLE_MAPS_API_KEY in process env differs from aiyo/.env files; using .env/.env.local. In Docker, run compose with --force-recreate app-dev so image ENV does not keep a deleted-project key.",
+      "[google-maps-env] GOOGLE_MAPS_API_KEY in process env differs from aiyo/.env.local; using .env.local. In Docker, run compose with --force-recreate app-dev so image ENV does not keep a deleted-project key.",
     );
   }
   if (fromFiles.client && processClient && fromFiles.client !== processClient) {
     console.warn(
-      "[google-maps-env] NEXT_PUBLIC_GOOGLE_MAPS_API_KEY in process env differs from aiyo/.env files; using .env/.env.local.",
+      "[google-maps-env] NEXT_PUBLIC_GOOGLE_MAPS_API_KEY in process env differs from aiyo/.env.local; using .env.local.",
     );
   }
 }
@@ -125,18 +89,7 @@ export function resolveGoogleMapsMapId(
     typeof window === "undefined" && env === process.env;
 
   if (shouldPreferProjectFiles) {
-    const merged: Record<string, string> = {};
-    for (const name of [".env", ".env.local"] as const) {
-      const filePath = path.join(AIYO_ROOT, name);
-      try {
-        if (!fs.existsSync(filePath)) {
-          continue;
-        }
-        Object.assign(merged, parseDotenvContent(fs.readFileSync(filePath, "utf8")));
-      } catch {
-        // ignore
-      }
-    }
+    const merged = readProjectEnvLocal(AIYO_ROOT);
     if (merged.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID?.trim()) {
       mapId = merged.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID.trim();
     }

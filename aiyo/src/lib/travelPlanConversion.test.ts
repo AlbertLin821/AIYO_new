@@ -146,3 +146,31 @@ Day 2：阿蘇自然之旅
   assert.equal(result.days[1]?.items[0]?.title, "大觀峰展望所");
   assert.equal(result.days[1]?.items[1]?.title, "草千里之濱");
 });
+
+test("textItineraryToTripPlanResult parses compact inline day prose separated by dashes and semicolons", () => {
+  const result = textItineraryToTripPlanResult(
+    `已直接替換。 Day 1：抵達熊本與市景初探 - 下午入住後前往「八木屋」；晚上去「菊水公園」。 Day 2：阿蘇自然之旅 - 上午前往「大觀峰展望所」；下午去「草千里之濱」。`,
+    { targetDayCount: 2 },
+  );
+
+  assert.ok(result);
+  assert.equal(result.days.length, 2);
+  assert.equal(result.days[0]?.items[0]?.title, "八木屋");
+  assert.equal(result.days[0]?.items[1]?.title, "菊水公園");
+  assert.equal(result.days[1]?.items[0]?.title, "大觀峰展望所");
+  assert.equal(result.days[1]?.items[1]?.title, "草千里之濱");
+});
+
+test("textItineraryToTripPlanResult skips generic fake-sounding park titles", () => {
+  const result = textItineraryToTripPlanResult(
+    `
+Day 1：熊本市區
+下午：前往文化公園散步，晚上再到「熊本城」。
+`,
+    { targetDayCount: 1 },
+  );
+
+  assert.ok(result);
+  assert.equal(result.days[0]?.items.length, 1);
+  assert.equal(result.days[0]?.items[0]?.title, "熊本城");
+});

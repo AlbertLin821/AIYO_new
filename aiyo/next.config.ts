@@ -1,11 +1,11 @@
 import path from "node:path";
-import { loadEnvConfig } from "@next/env";
 import type { NextConfig } from "next";
 
 import { resolveGoogleMapsClientApiKey, resolveGoogleMapsMapId } from "./src/lib/googleMapsEnv";
+import { loadProjectEnvLocalIntoProcess } from "./src/lib/projectEnv";
 
 const repoRoot = path.join(__dirname);
-loadEnvConfig(repoRoot, process.env.NODE_ENV !== "production");
+loadProjectEnvLocalIntoProcess(repoRoot, { override: true });
 
 const mapsKey = resolveGoogleMapsClientApiKey();
 const mapId = resolveGoogleMapsMapId();

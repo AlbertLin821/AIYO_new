@@ -24,6 +24,8 @@ interface MapState {
   focusLocation: MapFocusLocation;
   preferredPoiDay: number;
   panelOpen: boolean;
+  /** 空陣列代表顯示全部天數路線；有值時僅顯示指定天數。 */
+  visibleRouteDayNumbers: number[];
   lastSyncedAt: string | null;
   /** 行程路段 id（見 routeSegments）對應 Google Directions 換算後的分鐘數；缺鍵時 UI 退回直線估算。 */
   segmentDirectionsMinutes: Record<string, number>;
@@ -35,8 +37,17 @@ interface MapState {
   setFocusLocation: (focus: MapFocusLocation) => void;
   setPreferredPoiDay: (dayNumber: number) => void;
   setPanelOpen: (open: boolean) => void;
+  setVisibleRouteDayNumbers: (dayNumbers: number[]) => void;
+  toggleVisibleRouteDayNumber: (dayNumber: number) => void;
+  clearVisibleRouteDayNumbers: () => void;
   clearPins: () => void;
   setItinerarySegmentDurations: (minutesBySegmentId: Record<string, number>) => void;
+}
+
+function normalizeVisibleRouteDayNumbers(dayNumbers: number[]): number[] {
+  return [...new Set(dayNumbers.filter((day) => Number.isInteger(day) && day > 0))].sort(
+    (left, right) => left - right,
+  );
 }
 
 export const useMapStore = create<MapState>((set) => ({
@@ -46,6 +57,7 @@ export const useMapStore = create<MapState>((set) => ({
   focusLocation: null,
   preferredPoiDay: 1,
   panelOpen: true,
+  visibleRouteDayNumbers: [],
   lastSyncedAt: null,
   segmentDirectionsMinutes: {},
   setPins: (pins, source: SyncMutationSource = "local-user-edit") =>
@@ -90,6 +102,20 @@ export const useMapStore = create<MapState>((set) => ({
   setFocusLocation: (focusLocation) => set({ focusLocation }),
   setPreferredPoiDay: (preferredPoiDay) => set({ preferredPoiDay }),
   setPanelOpen: (panelOpen) => set({ panelOpen }),
+  setVisibleRouteDayNumbers: (visibleRouteDayNumbers) =>
+    set({ visibleRouteDayNumbers: normalizeVisibleRouteDayNumbers(visibleRouteDayNumbers) }),
+  toggleVisibleRouteDayNumber: (dayNumber) =>
+    set((state) => {
+      if (!Number.isInteger(dayNumber) || dayNumber <= 0) {
+        return {};
+      }
+      const current = normalizeVisibleRouteDayNumbers(state.visibleRouteDayNumbers);
+      const next = current.includes(dayNumber)
+        ? current.filter((day) => day !== dayNumber)
+        : [...current, dayNumber];
+      return { visibleRouteDayNumbers: normalizeVisibleRouteDayNumbers(next) };
+    }),
+  clearVisibleRouteDayNumbers: () => set({ visibleRouteDayNumbers: [] }),
   clearPins: () =>
     withSyncMutationSource("bootstrap", () =>
       set({
@@ -97,6 +123,7 @@ export const useMapStore = create<MapState>((set) => ({
         selectedPinId: null,
         pendingPoi: null,
         focusLocation: null,
+        visibleRouteDayNumbers: [],
         lastSyncedAt: null,
         segmentDirectionsMinutes: {},
       }),

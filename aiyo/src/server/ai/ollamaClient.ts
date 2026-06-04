@@ -123,7 +123,7 @@ export function formatOllamaErrorMessage(
     parts.push(detail);
   }
   if (error.code === "http_error" || error.code === "network_error") {
-    parts.push(`使用模型：${model}。請確認 Ollama 已啟動、模型已 pull，或調整 aiyo/.env 的 OLLAMA_MODEL / OLLAMA_TRAVEL_CHAT_MODEL。`);
+    parts.push(`使用模型：${model}。請確認 Ollama 已啟動、模型已 pull，或調整 aiyo/.env.local 的 OLLAMA_MODEL / OLLAMA_TRAVEL_CHAT_MODEL。`);
   }
   return parts.join(" ");
 }

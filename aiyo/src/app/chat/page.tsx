@@ -19,7 +19,6 @@ import {
   Square,
 } from "lucide-react";
 import ChatHistorySidebar from "@/components/chat/ChatHistorySidebar";
-import ChatTypingPopup from "@/components/chat/ChatTypingPopup";
 import ChatWorkflowRail from "@/components/chat/ChatWorkflowRail";
 import PlanningWaitGame from "@/components/chat/PlanningWaitGame";
 import PreferenceReusePanel from "@/components/chat/PreferenceReusePanel";
@@ -56,10 +55,6 @@ import {
 } from "@/lib/frontendDebug";
 import { buildWorkflowSteps } from "@/lib/workflowSteps";
 import {
-  buildChatTypingContext,
-  resolveChatTypingLabel,
-} from "@/lib/chat/chatTypingMessages";
-import {
   buildItineraryItemFromAiChange,
   findItineraryItemTarget,
 } from "@/app/chat/itineraryPatchUtils";
@@ -69,6 +64,7 @@ import {
   tripPlanHasItems,
 } from "@/lib/travelPlanConversion";
 import { CHAT_HISTORY_WINDOW } from "@/lib/chatConstants";
+import { isStructuredTripPlanningRequest } from "@/lib/chat/isStructuredTripPlanningRequest";
 import {
   isApplyPreviousItineraryCommand,
   isFullItineraryRevisionCommand,
@@ -426,8 +422,6 @@ export default function ChatPage() {
   const chatSendLockRef = useRef(false);
   const planningWorkflowActiveRef = useRef(false);
   const [planningWorkflowActive, setPlanningWorkflowActive] = useState(false);
-  const typingSeedRef = useRef(Math.floor(Math.random() * 10_000));
-  const [typingTick, setTypingTick] = useState(0);
   const videoSummaryQueueTokenRef = useRef(0);
   const videoSummaryInflightRef = useRef(new Map<string, Promise<VideoSummaryResult>>());
   const autoSummaryActiveRef = useRef(false);
@@ -464,17 +458,6 @@ export default function ChatPage() {
       speechRecognitionRef.current = null;
     };
   }, []);
-
-  useEffect(() => {
-    if (!isSending) {
-      setTypingTick(0);
-      return;
-    }
-    const intervalId = window.setInterval(() => {
-      setTypingTick((current) => current + 1);
-    }, 3000);
-    return () => window.clearInterval(intervalId);
-  }, [isSending]);
 
   useEffect(() => {
     if (!isSending || streamingStatusSteps.length === 0 || !planningWorkflowActiveRef.current) {
@@ -694,29 +677,6 @@ export default function ChatPage() {
     (hasWorkflowRail &&
       !planningComplete &&
       activePlanningSteps.some((step) => step.status === "running"));
-  const showStructuredPlanningProgress =
-    (planningWorkflowActive && Boolean(streamingStatusSteps.length)) ||
-    Boolean(workflowRail.steps.length) ||
-    Boolean(workflowRail.preferenceConfirmation);
-  const assistantTypingLabel = useMemo(() => {
-    const typingContext = buildChatTypingContext({
-      steps: activePlanningSteps,
-      travelAgentMode: workflowRail.travelAgentMode,
-      hasPreferenceConfirmation: Boolean(workflowRail.preferenceConfirmation),
-      isStructuredPlanning: showStructuredPlanningProgress,
-    });
-    return resolveChatTypingLabel(typingContext, {
-      seed: typingSeedRef.current,
-      tick: typingTick,
-    });
-  }, [
-    activePlanningSteps,
-    workflowRail.travelAgentMode,
-    workflowRail.preferenceConfirmation,
-    showStructuredPlanningProgress,
-    typingTick,
-  ]);
-
   useEffect(() => {
     if (itinerarySyncState.status === "syncing" || itinerarySyncState.status === "failed") {
       return;
@@ -1715,6 +1675,7 @@ export default function ChatPage() {
         Boolean(options?.tripProfile) ||
         Boolean(workflowRail.questionMessageId) ||
         isApplyPreviousItineraryCommand(message) ||
+        isStructuredTripPlanningRequest(message) ||
         isPlanningConfirmation ||
         shouldTreatAsStructuredMutation ||
         (currentItineraryHasItems && isFullItineraryRevisionCommand(message));
@@ -2787,6 +2748,27 @@ export default function ChatPage() {
             </m.div>
           ))}
 
+          {isSending ? (
+            <m.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              data-testid="chat-message-ai-thinking"
+              className="flex justify-start"
+            >
+              <div className="flex max-w-[70%] items-end gap-2">
+                <div className="flex size-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-700 text-xs font-bold text-white">
+                  {t.chat.aiShort}
+                </div>
+                <div className="chat-assistant-surface rounded-2xl rounded-bl-md px-4 py-3 text-sm text-slate-800">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="size-4 animate-spin text-slate-500" aria-hidden />
+                    <span>{t.chat.assistantTyping}</span>
+                  </div>
+                </div>
+              </div>
+            </m.div>
+          ) : null}
+
           {errorMessage && (
             <div className="rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger backdrop-blur-sm">
               {errorMessage}
@@ -3009,19 +2991,13 @@ export default function ChatPage() {
         )}
       </div>
 
-      <ChatTypingPopup
-        open={isSending}
-        label={assistantTypingLabel}
-        steps={activePlanningSteps}
-        canOfferWaitGame={isPlanningActive}
-        onOpenWaitGame={() => setSkyDashOpen(true)}
-      />
-
       <PlanningWaitGame
         steps={activePlanningSteps}
         isPlanning={isPlanningActive}
+        isWaiting={isSending}
         planningComplete={planningComplete}
-        suppressFloatingPrompt={isSending}
+        promptDelayMs={15000}
+        suppressFloatingPrompt={false}
         gameOpen={skyDashOpen}
         onGameOpenChange={setSkyDashOpen}
       />

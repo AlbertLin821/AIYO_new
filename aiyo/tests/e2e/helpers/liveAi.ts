@@ -1,10 +1,9 @@
 import { expect, type TestInfo } from "@playwright/test";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import type { ChatApiPayload } from "./chat";
 import { fetchTripItineraryFromBootstrap, sendChatMessage } from "./chat";
 import { forbiddenPlaceholderTitles } from "../../../src/server/ai/planning/itineraryPlanningStandard";
+import { readProjectEnvLocal } from "../../../src/lib/projectEnv";
 
 export type ItineraryBootstrapDay = {
   dayNumber: number;
@@ -346,17 +345,7 @@ function readEnvValue(name: string): string {
   if (fromProcess) {
     return fromProcess;
   }
-  const envPath = join(process.cwd(), ".env");
-  if (!existsSync(envPath)) {
-    return "";
-  }
-  const line = readFileSync(envPath, "utf8")
-    .split(/\r?\n/u)
-    .find((row) => row.startsWith(`${name}=`));
-  if (!line) {
-    return "";
-  }
-  return line.slice(name.length + 1).trim().replace(/^['"]|['"]$/g, "");
+  return readProjectEnvLocal(process.cwd())[name]?.trim() || "";
 }
 
 export function hasLiveSearchApiKeys(): boolean {

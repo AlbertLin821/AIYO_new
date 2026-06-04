@@ -1051,4 +1051,7 @@ export interface MemoryRecord {
   metadata?: Record<string, unknown> | null;
   created_at?: string;
   updated_at?: string;
+  kind?: "mem0" | "trip_summary";
+  editable?: boolean;
+  deletable?: boolean;
 }

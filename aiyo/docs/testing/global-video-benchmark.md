@@ -4,7 +4,7 @@
 
 ## 前置條件
 
-在 `aiyo` 目錄執行。建議設定（唯讀，腳本不會修改 `.env`）：
+在 `aiyo` 目錄執行。建議設定（唯讀，腳本不會修改 `.env.local`）：
 
 - `YOUTUBE_API_KEY`：YouTube 搜尋
 - `GOOGLE_MAPS_API_KEY`：地點 geocode 驗證

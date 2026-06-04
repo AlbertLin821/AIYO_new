@@ -465,7 +465,7 @@ function buildTravelChatTimeoutFallbackText(
       tripProfile: options.tripProfile,
     });
     if (bundle.hasData) {
-      return formatPersonalMemoryDeterministicReply(bundle);
+      return formatPersonalMemoryDeterministicReply(bundle, options.message);
     }
   }
   return TRAVEL_CHAT_TIMEOUT_FALLBACK;
@@ -492,7 +492,7 @@ async function buildPersonalMemoryRecallResponse(input: {
       reply: {
         id: `assistant_${Date.now()}`,
         role: "assistant",
-        content: formatPersonalMemoryDeterministicReply(bundle),
+        content: formatPersonalMemoryDeterministicReply(bundle, input.message),
         timestamp: new Date().toLocaleTimeString("zh-TW", {
           hour: "2-digit",
           minute: "2-digit",
@@ -522,12 +522,12 @@ async function buildPersonalMemoryRecallResponse(input: {
         { role: "user", content: prompt.user },
       ],
     });
-    content = raw.trim() || formatPersonalMemoryDeterministicReply(bundle);
+    content = raw.trim() || formatPersonalMemoryDeterministicReply(bundle, input.message);
   } catch (error) {
     if (!(error instanceof OllamaRequestError) || !error.isTimeout) {
       throw error;
     }
-    content = formatPersonalMemoryDeterministicReply(bundle);
+    content = formatPersonalMemoryDeterministicReply(bundle, input.message);
   }
 
   return {
@@ -1380,7 +1380,33 @@ export function buildQuestionCard(profile: TripProfile, context?: ChatContext): 
     });
   }
 
-  const trimmed = questions.slice(0, 2);
+  if (!merged.travel_dates) {
+    questions.push({
+      slot: "travel_dates",
+      question: merged.destination ? `${destination}預計哪幾天出發？` : "你預計哪幾天出發？",
+      type: "date_range",
+      startLabel: "出發日期",
+      endLabel: "回程日期",
+      helperText: "如果日期還沒完全確定，也可以先選一個大概區間。",
+    });
+  }
+
+  if (!merged.traveler_count && !merged.companions) {
+    questions.push({
+      slot: "traveler_count",
+      question: "這次大概幾個人同行？",
+      type: "single_choice",
+      options: [
+        { label: "1 人", value: "1" },
+        { label: "2 人", value: "2", recommended: true },
+        { label: "3–4 人", value: "4" },
+        { label: "5 人以上", value: "5" },
+      ],
+      helperText: "我會依人數調整交通、用餐和節奏建議。",
+    });
+  }
+
+  const trimmed = questions.slice(0, 4);
   if (!trimmed.length) {
     return null;
   }

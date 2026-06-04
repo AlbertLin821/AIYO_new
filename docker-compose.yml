@@ -3,9 +3,9 @@
 # NEXT_PUBLIC_* 會在 Docker 映像「建置」（npm run build）時打入前端程式；若在 builder 時為空，
 # 之後只靠 env_file 重啟容器也無效。請在 build 時讓 Compose 代入變數，例如：
 #   docker compose --env-file ./aiyo/.env build [--profile dev app-dev | app]
-# 或將同樣鍵放在與本檔同一層資料夾的 .env（Docker Compose 用於 ${} 替換）。
+# 或將同樣鍵放在與本檔同一層資料夾的 shell env / 啟動腳本中（Docker Compose 用於 ${} 替換）。
 # 詳見：https://docs.docker.com/compose/how-tos/environment-variables/set-environment-variables/
-# 啟動時請帶 --env-file ./aiyo/.env（及可選 ./aiyo/.env.local），否則下方 ${GOOGLE_MAPS_*} 可能為空。
+# 啟動時請帶 --env-file ./aiyo/.env.local，否則下方 ${GOOGLE_MAPS_*} 可能為空。
 # 勿只用 docker start app-dev（會脫離 backend 網路且保留映像內舊金鑰）。改 keys 後請 --force-recreate app-dev。
 
 services:
@@ -19,10 +19,7 @@ services:
         NEXT_PUBLIC_ENABLE_MOCK_MAPS: ${NEXT_PUBLIC_ENABLE_MOCK_MAPS:-}
     container_name: aiyo-new-app-dev
     env_file:
-      - ./aiyo/.env
-      # 若存在則覆寫 .env；與 dev-up.ps1 的 --env-file ./aiyo/.env.local 一致
-      - path: ./aiyo/.env.local
-        required: false
+      - ./aiyo/.env.local
     environment:
       DATABASE_URL: postgresql://aiyo:aiyo_password@postgres:5432/aiyo_new_db?schema=public
       NEXTAUTH_URL: http://localhost:3000
@@ -52,6 +49,8 @@ services:
     volumes:
       - ./aiyo:/app
       - /app/node_modules
+      # 避免容器內的 Next runtime 再次讀到宿主 .env.local，把 Compose 注入的容器 env 覆寫回 localhost。
+      - ./docker/empty.env:/app/.env.local:ro
       # 改為繫結到宿主，避免匿名卷長期快取「無 NEXT_PUBLIC_*」時的編譯結果；若仍異常請刪除本機 ./aiyo/.next 資料夾
       - ./aiyo/.next:/app/.next
     restart: unless-stopped
@@ -86,10 +85,7 @@ services:
         NEXT_PUBLIC_ENABLE_MOCK_MAPS: ${NEXT_PUBLIC_ENABLE_MOCK_MAPS:-}
     container_name: aiyo-new-app-prod-live
     env_file:
-      - ./aiyo/.env
-      # 若存在則覆寫 .env；與 prod-live-up.ps1 的 --env-file ./aiyo/.env.local 一致
-      - path: ./aiyo/.env.local
-        required: false
+      - ./aiyo/.env.local
     environment:
       DATABASE_URL: postgresql://aiyo:aiyo_password@postgres:5432/aiyo_new_db?schema=public
       NEXTAUTH_URL: http://localhost:3000
@@ -117,6 +113,7 @@ services:
     volumes:
       - ./aiyo:/app
       - /app/node_modules
+      - ./docker/empty.env:/app/.env.local:ro
       - ./aiyo/.next:/app/.next
     restart: unless-stopped
     healthcheck:
@@ -148,7 +145,7 @@ services:
         NEXT_PUBLIC_ENABLE_MOCK_MAPS: ${NEXT_PUBLIC_ENABLE_MOCK_MAPS:-}
     container_name: aiyo-new-app
     env_file:
-      - ./aiyo/.env
+      - ./aiyo/.env.local
     environment:
       DATABASE_URL: postgresql://aiyo:aiyo_password@postgres:5432/aiyo_new_db?schema=public
       NEXTAUTH_URL: http://localhost:3000

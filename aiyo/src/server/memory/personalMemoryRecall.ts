@@ -173,7 +173,24 @@ export function formatPersonalMemoryBundleForPrompt(bundle: PersonalMemoryBundle
   return sections.join("\n").trim();
 }
 
-export function formatPersonalMemoryDeterministicReply(bundle: PersonalMemoryBundle): string {
+function selectRelevantTrips(bundle: PersonalMemoryBundle, query?: string): PersonalMemoryTripRecord[] {
+  const tripsWithDestination = bundle.recentTrips.filter((trip) => trip.destination?.trim());
+  if (!query?.trim()) {
+    return tripsWithDestination;
+  }
+
+  const normalizedQuery = query.toLowerCase();
+  const matched = tripsWithDestination.filter((trip) => {
+    const haystacks = [trip.title || "", trip.destination || "", ...(trip.representativeItems || [])].map((value) =>
+      value.toLowerCase(),
+    );
+    return haystacks.some((value) => value.includes(normalizedQuery) || normalizedQuery.includes(value));
+  });
+
+  return matched.length ? matched : tripsWithDestination;
+}
+
+export function formatPersonalMemoryDeterministicReply(bundle: PersonalMemoryBundle, query?: string): string {
   if (!bundle.hasData) {
     return "我這邊目前還沒有記錄到你去過的目的地。你可以直接告訴我過去去過哪裡，或開始規劃新行程，我會把偏好記下來。";
   }
@@ -184,7 +201,7 @@ export function formatPersonalMemoryDeterministicReply(bundle: PersonalMemoryBun
     lines.push(`- 目的地：${bundle.destinations.join("、")}`);
   }
 
-  const tripsWithDestination = bundle.recentTrips.filter((trip) => trip.destination?.trim());
+  const tripsWithDestination = selectRelevantTrips(bundle, query);
   if (tripsWithDestination.length) {
     lines.push("- 近期行程：");
     for (const trip of tripsWithDestination.slice(0, 5)) {
@@ -193,6 +210,9 @@ export function formatPersonalMemoryDeterministicReply(bundle: PersonalMemoryBun
         .filter(Boolean)
         .join("，");
       lines.push(`  - ${label}${detail ? `（${detail}）` : ""}`);
+      if (trip.representativeItems?.length) {
+        lines.push(`    去過／排過：${trip.representativeItems.slice(0, 6).join("、")}`);
+      }
     }
   }
 

@@ -182,7 +182,7 @@ export const zhTW = {
     apiTargetBlockedHint:
       "開發者可查看 GET /api/map/setup-check 取得金鑰探測結果。",
     deletedApiProjectError:
-      "此 Google Maps 金鑰所屬的 Cloud 專案已刪除（DeletedApiProjectMapError）。請在 aiyo/.env 設定新金鑰，並以 docker compose --env-file ./aiyo/.env [--env-file ./aiyo/.env.local] --profile dev up -d --force-recreate app-dev 重建容器（勿只用 docker start）。",
+      "此 Google Maps 金鑰所屬的 Cloud 專案已刪除（DeletedApiProjectMapError）。請在 aiyo/.env.local 設定新金鑰，並以 docker compose --env-file ./aiyo/.env.local --profile dev up -d --force-recreate app-dev 重建容器（勿只用 docker start）。",
     advancedMarkerFailTitle: "進階標記無法使用",
     advancedMarkerFailDesc:
       "已改為傳統標記。請確認 Cloud Console 的 Map ID 與 NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID。",

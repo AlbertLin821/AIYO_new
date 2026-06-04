@@ -6,6 +6,7 @@ import {
   formatStepHeading,
   getActiveWorkflowStep,
   getProgressBadge,
+  getProgressLabel,
   type WorkflowStepView,
 } from "@/lib/workflowSteps";
 import { cn } from "@/lib/utils";
@@ -39,9 +40,12 @@ export default function ChatWorkflowRail({
   const workflowSteps = buildWorkflowSteps(steps);
   const activeStep = getActiveWorkflowStep(workflowSteps);
   const progressBadge = getProgressBadge(workflowSteps);
-  const heading = activeStep
-    ? formatStepHeading(activeStep, workflowSteps.length)
-    : t.chat.workflowPlanningTitle;
+  const heading =
+    progressBadge === "已完成"
+      ? getProgressLabel(workflowSteps)
+      : activeStep
+        ? formatStepHeading(activeStep, workflowSteps.length)
+        : t.chat.workflowPlanningTitle;
   const isProcessing = progressBadge === "處理中" || progressBadge === "準備中";
 
   if (!visible || !workflowSteps.length) {

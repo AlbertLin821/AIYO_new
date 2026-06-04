@@ -156,7 +156,7 @@ function makeCurrentTripAiContext(destination: string, days: number): AIContextB
   };
 }
 
-test("東京三天 with stale 台南 context confirms preferences without question card", async () => {
+test("東京三天 with stale 台南 context asks for remaining basics before planning", async () => {
   const response = await chatWithTravelAssistant({
     message: "東京三天",
     structuredTravelPlanning: true,
@@ -177,18 +177,21 @@ test("東京三天 with stale 台南 context confirms preferences without questi
   });
 
   assert.equal(response.travelAgentDecision?.mode, "confirm_preferences");
-  assert.equal(response.reply.responseType, "text_message");
-  assert.equal(response.reply.questionCard, undefined);
-  assert.match(response.reply.content, /東京/);
-  assert.doesNotMatch(response.reply.content, /台南/);
+  assert.equal(response.reply.responseType, "question_card");
+  assert.ok(response.reply.questionCard);
+  assert.ok(response.reply.questionCard?.questions.some((question) => question.slot === "travel_dates"));
+  assert.ok(response.reply.questionCard?.questions.some((question) => question.slot === "traveler_count"));
   assert.equal(response.tripProfile?.destination, "東京");
 });
 
-test("structured chat generates itinerary when destination and duration are already complete", async () => {
+test("structured chat generates itinerary when destination, duration, dates, and traveler count are complete", async () => {
   const response = await chatWithTravelAssistant({
     message: "請幫我規劃熊本行程",
     structuredTravelPlanning: true,
-    tripProfile: makeStructuredProfile(),
+    tripProfile: {
+      ...makeStructuredProfile(),
+      travel_dates: { start: "2026-06-10", end: "2026-06-14" },
+    },
   });
 
   assert.equal(response.reply.responseType, "travel_plan");
@@ -591,26 +594,30 @@ test("question card skips destination when conversation already mentions Kumamot
   );
 });
 
-test("question card does not block on companions when destination and duration are known", () => {
+test("question card asks for dates and traveler count before planning when they are missing", () => {
   const card = buildQuestionCard({
     ...makeStructuredProfile(),
     destination: "熊本",
     duration_days: 5,
     duration_nights: 4,
+    travel_dates: null,
     companions: null,
     traveler_count: null,
     preferences: [],
     pace: null,
   });
-  assert.equal(card, null);
+  assert.ok(card);
+  assert.ok(card?.questions.some((question) => question.slot === "travel_dates"));
+  assert.ok(card?.questions.some((question) => question.slot === "traveler_count"));
 });
 
-test("question card does not block on preferences after companions are known", () => {
+test("question card does not block on preferences after dates and companions are known", () => {
   const card = buildQuestionCard({
     ...makeStructuredProfile(),
     destination: "熊本",
     duration_days: 5,
     duration_nights: 4,
+    travel_dates: { start: "2026-06-10", end: "2026-06-14" },
     companions: "couple_or_friend",
     traveler_count: 2,
     preferences: [],
@@ -637,7 +644,12 @@ test("applyQuestionAnswers maps companions to traveler_count", () => {
 });
 
 test("question card becomes null after core planning fields are complete", () => {
-  const card = buildQuestionCard(makeStructuredProfile());
+  const card = buildQuestionCard({
+    ...makeStructuredProfile(),
+    travel_dates: { start: "2026-06-10", end: "2026-06-14" },
+    companions: "couple_or_friend",
+    traveler_count: 2,
+  });
   assert.equal(card, null);
 });
 

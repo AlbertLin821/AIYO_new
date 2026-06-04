@@ -179,6 +179,10 @@ export function unloadGoogleMapsApi(): void {
   }
 }
 
+export function getLoadedGoogleMapsApiKey(): string | null {
+  return loadedMapsApiKey;
+}
+
 function resetLoaderPromise() {
   googleMapsPromise = null;
 }
