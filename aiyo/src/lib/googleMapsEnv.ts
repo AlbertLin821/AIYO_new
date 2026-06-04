@@ -1,17 +1,17 @@
 import path from "node:path";
 
 import { normalizeGoogleMapsMapId } from "./googleMapsMapId";
-import { readProjectEnvLocal } from "./projectEnv";
+import { describeProjectEnvSource, readProjectEnvFile } from "./projectEnv";
 
 export { normalizeGoogleMapsMapId } from "./googleMapsMapId";
 
 const AIYO_ROOT = path.join(__dirname, "..", "..");
 
-/** Reads only aiyo/.env.local so local development has a single source of truth. */
+/** Reads the active project env file so Docker and local scripts share one source of truth. */
 export function loadMapsKeysFromProjectFiles(
   projectRoot: string = AIYO_ROOT,
 ): { server: string; client: string } {
-  const merged = readProjectEnvLocal(projectRoot);
+  const merged = readProjectEnvFile(projectRoot);
   return {
     server: merged.GOOGLE_MAPS_API_KEY?.trim() ?? "",
     client: merged.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() ?? "",
@@ -25,16 +25,17 @@ function warnIfProcessEnvOverridesFiles(
   if (env.NODE_ENV === "production") {
     return;
   }
+  const envSource = `aiyo/${describeProjectEnvSource(AIYO_ROOT, env)}`;
   const processServer = env.GOOGLE_MAPS_API_KEY?.trim() || "";
   const processClient = env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() || "";
   if (fromFiles.server && processServer && fromFiles.server !== processServer) {
     console.warn(
-      "[google-maps-env] GOOGLE_MAPS_API_KEY in process env differs from aiyo/.env.local; using .env.local. In Docker, run compose with --force-recreate app-dev so image ENV does not keep a deleted-project key.",
+      `[google-maps-env] GOOGLE_MAPS_API_KEY in process env differs from ${envSource}; using ${envSource}. In Docker, recreate the matching app service so the container does not keep a deleted-project key.`,
     );
   }
   if (fromFiles.client && processClient && fromFiles.client !== processClient) {
     console.warn(
-      "[google-maps-env] NEXT_PUBLIC_GOOGLE_MAPS_API_KEY in process env differs from aiyo/.env.local; using .env.local.",
+      `[google-maps-env] NEXT_PUBLIC_GOOGLE_MAPS_API_KEY in process env differs from ${envSource}; using ${envSource}.`,
     );
   }
 }
@@ -89,7 +90,7 @@ export function resolveGoogleMapsMapId(
     typeof window === "undefined" && env === process.env;
 
   if (shouldPreferProjectFiles) {
-    const merged = readProjectEnvLocal(AIYO_ROOT);
+    const merged = readProjectEnvFile(AIYO_ROOT);
     if (merged.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID?.trim()) {
       mapId = merged.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID.trim();
     }

@@ -93,7 +93,7 @@ function buildUserSteps(
 ): string[] {
   if (likelyIssue === "missing_key") {
     return [
-      "在 aiyo/.env.local 設定 GOOGLE_MAPS_API_KEY 與 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY（兩者請用同一組金鑰）。",
+      "在 aiyo/.env.dev（或對應的 aiyo/.env.prod-live）設定 GOOGLE_MAPS_API_KEY 與 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY（兩者請用同一組金鑰）。",
       "重新啟動 npm run dev。",
     ];
   }

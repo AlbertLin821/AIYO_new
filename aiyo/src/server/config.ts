@@ -39,11 +39,19 @@ function readKeepAlive(name: string, fallback: string | number): string | number
   return trimmed;
 }
 
-const ollamaModel = readString("OLLAMA_MODEL", "qwen3.5:9b");
+const openwebuiBaseUrl = readString("OPENWEBUI_BASE_URL", "").replace(/\/$/, "");
+const openwebuiModel = readString("OPENWEBUI_MODEL", "");
+const defaultGatewayAwareOllamaBaseUrl = openwebuiBaseUrl
+  ? `${openwebuiBaseUrl}/ollama`
+  : "http://localhost:11434";
+const ollamaModel = readString("OLLAMA_MODEL", openwebuiModel || "qwen3.5:9b");
 
 export const serverConfig = {
   appName: readString("NEXT_PUBLIC_APP_NAME", "AIYO"),
-  ollamaBaseUrl: readString("OLLAMA_BASE_URL", "http://localhost:11434"),
+  openwebuiBaseUrl,
+  openwebuiApiKey: readString("OPENWEBUI_API_KEY", ""),
+  openwebuiModel,
+  ollamaBaseUrl: readString("OLLAMA_BASE_URL", defaultGatewayAwareOllamaBaseUrl),
   /** 每次 /api/chat、/api/generate 帶入；預設 -1 保持模型載入。 */
   ollamaKeepAlive: readKeepAlive("OLLAMA_KEEP_ALIVE", -1),
   ollamaModel,
@@ -94,7 +102,7 @@ export const serverConfig = {
   videoExtractionChunkConcurrency: readNumber("VIDEO_EXTRACTION_CHUNK_CONCURRENCY", 1),
   videoExtractionOptionalVerify: readBoolean("VIDEO_EXTRACTION_OPTIONAL_VERIFY", false),
   mem0BaseUrl: readString("MEM0_BASE_URL", "http://localhost:8890"),
-  mem0Enabled: readBoolean("MEM0_ENABLED", true),
+  mem0Enabled: readBoolean("MEM0_ENABLED", false),
   mem0TopK: readNumber("MEM0_TOP_K", 5),
   mem0TimeoutMs: readNumber("MEM0_TIMEOUT_MS", 12000),
   enableMockVideoProvider: readBoolean("ENABLE_MOCK_VIDEO_PROVIDER", false),

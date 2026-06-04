@@ -1,9 +1,9 @@
 #Requires -Version 5.1
 param(
-    [switch] $NoMem0,
     [switch] $SkipNpmInstall,
     [switch] $SkipDocker,
-    [switch] $SkipOllama
+    [switch] $SkipOllama,
+    [switch] $NoMem0
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,7 +11,7 @@ $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
 $script:StageIndex = 0
-$script:StageTotal = 4
+$script:StageTotal = 3
 $script:LogDir = Join-Path $Root ".logs\dev-deploy"
 $script:StageStopwatches = @{}
 $script:StageDurations = @{}
@@ -22,7 +22,7 @@ New-Item -ItemType Directory -Force -Path $script:LogDir | Out-Null
 function Read-DotEnvMap {
     param([string] $FilePath)
     $map = @{}
-    if (-not (Test-Path $FilePath)) { return $map }
+    if (-not (Test-Path -LiteralPath $FilePath)) { return $map }
     foreach ($raw in Get-Content -LiteralPath $FilePath -Encoding UTF8) {
         $line = $raw.Trim()
         if ($line.Length -eq 0 -or $line.StartsWith("#")) { continue }
@@ -80,24 +80,13 @@ function Add-UniqueModel {
     [void]$List.Add($trim)
 }
 
-function Get-EnvOrDefaultValue {
-    param(
-        [hashtable] $Map,
-        [hashtable] $Defaults,
-        [string] $Key
-    )
-    if ($Map.ContainsKey($Key) -and -not [string]::IsNullOrWhiteSpace($Map[$Key])) {
-        return $Map[$Key].Trim()
-    }
-    if ($Defaults.ContainsKey($Key)) { return $Defaults[$Key] }
-    return $null
-}
-
 function Write-DeployBanner {
     Write-Host ""
     Write-Host "AIYO dev deploy" -ForegroundColor Cyan
     Write-Host "Root : $Root" -ForegroundColor DarkGray
-    Write-Host "Mem0 : $(if ($mem0On) { 'enabled' } else { 'disabled' })" -ForegroundColor DarkGray
+    if ($NoMem0) {
+        Write-Host "Mem0 : ignored (stack retired from active compose)" -ForegroundColor DarkGray
+    }
     Write-Host ""
 }
 
@@ -110,10 +99,7 @@ function Format-Duration {
 }
 
 function Start-Stage {
-    param(
-        [string] $Title,
-        [string] $Status
-    )
+    param([string] $Title, [string] $Status)
     $script:StageIndex += 1
     $percent = [int](($script:StageIndex - 1) / $script:StageTotal * 100)
     $script:StageStopwatches[$Title] = [System.Diagnostics.Stopwatch]::StartNew()
@@ -123,10 +109,7 @@ function Start-Stage {
 }
 
 function Complete-Stage {
-    param(
-        [string] $Title,
-        [string] $Message
-    )
+    param([string] $Title, [string] $Message)
     $elapsed = [TimeSpan]::Zero
     if ($script:StageStopwatches.ContainsKey($Title)) {
         $script:StageStopwatches[$Title].Stop()
@@ -140,10 +123,7 @@ function Complete-Stage {
 }
 
 function Skip-Stage {
-    param(
-        [string] $Title,
-        [string] $Message
-    )
+    param([string] $Title, [string] $Message)
     if ($script:StageStopwatches.ContainsKey($Title)) {
         $script:StageStopwatches[$Title].Stop()
         $script:StageDurations[$Title] = [TimeSpan]::Zero
@@ -161,10 +141,7 @@ function New-StepLogPath {
 }
 
 function Show-LogTail {
-    param(
-        [string] $LogPath,
-        [int] $Tail = 80
-    )
+    param([string] $LogPath, [int] $Tail = 80)
     if (-not (Test-Path $LogPath)) { return }
     Write-Host "  Last log lines ($LogPath):" -ForegroundColor Yellow
     Get-Content -LiteralPath $LogPath -Tail $Tail
@@ -198,60 +175,6 @@ function Invoke-LoggedCommand {
     }
 }
 
-function Write-ServiceTargetList {
-    param(
-        [string] $Label,
-        [string[]] $Services
-    )
-    Write-Host ("  {0}" -f $Label) -ForegroundColor DarkGray
-    foreach ($service in $Services) {
-        Write-Host ("    - {0}" -f $service) -ForegroundColor DarkGray
-    }
-}
-
-function Get-DockerComposePsRows {
-    param([string[]] $PsArgs)
-    try {
-        $raw = & docker @($PsArgs + @("--format", "json"))
-        if ($LASTEXITCODE -ne 0 -or -not $raw) {
-            return @()
-        }
-        $rows = @()
-        foreach ($line in $raw) {
-            if ([string]::IsNullOrWhiteSpace($line)) { continue }
-            $rows += ($line | ConvertFrom-Json)
-        }
-        return $rows
-    }
-    catch {
-        return @()
-    }
-}
-
-function Write-DockerServiceSummary {
-    param(
-        [string[]] $Services,
-        [string[]] $PsArgs
-    )
-    $rows = Get-DockerComposePsRows -PsArgs $PsArgs
-    if (-not $rows.Count) {
-        return
-    }
-    Write-Host "Service summary:" -ForegroundColor Cyan
-    foreach ($service in $Services) {
-        $row = $rows | Where-Object { $_.Service -eq $service } | Select-Object -First 1
-        if ($null -eq $row) {
-            Write-Host ("  - {0}: not listed" -f $service) -ForegroundColor Yellow
-            continue
-        }
-        $state = if ($row.State) { $row.State } else { "unknown" }
-        $status = if ($row.Status) { $row.Status } else { "" }
-        $name = if ($row.Name) { $row.Name } else { $service }
-        Write-Host ("  - {0}: {1} | {2} | {3}" -f $service, $name, $state, $status) -ForegroundColor DarkGray
-    }
-    Write-Host ""
-}
-
 function Write-FinalStageSummary {
     Write-Host "Stage summary:" -ForegroundColor Cyan
     foreach ($title in $script:StageOrder) {
@@ -261,43 +184,29 @@ function Write-FinalStageSummary {
     Write-Host ""
 }
 
-$envExample = Join-Path $Root "aiyo\.env.example"
-$envFile = Join-Path $Root "aiyo\.env"
-if (-not (Test-Path $envFile)) {
-    if (-not (Test-Path $envExample)) {
-        Write-Error "Missing aiyo/.env.example; cannot create aiyo/.env."
+$envExample = Join-Path $Root "aiyo\.env.dev.example"
+$envFile = Join-Path $Root "aiyo\.env.dev"
+if (-not (Test-Path -LiteralPath $envFile)) {
+    if (-not (Test-Path -LiteralPath $envExample)) {
+        Write-Error "Missing aiyo/.env.dev.example; cannot create aiyo/.env.dev."
         exit 1
     }
     Copy-Item -LiteralPath $envExample -Destination $envFile
-    Write-Host "Created aiyo/.env from .env.example. Edit NEXTAUTH_SECRET and OAuth values." -ForegroundColor Yellow
+    Write-Host "Created aiyo/.env.dev from .env.dev.example. Edit NEXTAUTH_SECRET and OPENWEBUI_API_KEY before live AI verification." -ForegroundColor Yellow
 }
 
 $envMap = Read-DotEnvMap $envFile
-$defaults = @{
-    OLLAMA_MODEL                     = "qwen3.5:9b"
-    OLLAMA_TRIP_PLAN_MODEL           = "qwen3.5:9b"
-    OLLAMA_VIDEO_SUMMARY_MODEL       = "qwen3.5:9b"
-    OLLAMA_VIDEO_SUMMARY_FAST_MODEL  = "qwen3.5:9b"
-    OLLAMA_VIDEO_SUMMARY_FINAL_MODEL = "qwen3.5:9b"
-    OLLAMA_LOCATION_MODEL            = "qwen3.5:9b"
-}
-
-$mem0On = -not $NoMem0
-if ($mem0On -and $envMap.ContainsKey("MEM0_ENABLED")) {
-    $v = $envMap["MEM0_ENABLED"].Trim().ToLowerInvariant()
-    if ($v -eq "false" -or $v -eq "0" -or $v -eq "no") { $mem0On = $false }
-}
-
 $models = New-Object "System.Collections.Generic.List[string]"
-Add-UniqueModel $models (Get-EnvOrDefaultValue $envMap $defaults "OLLAMA_MODEL")
-Add-UniqueModel $models (Get-EnvOrDefaultValue $envMap $defaults "OLLAMA_TRIP_PLAN_MODEL")
-Add-UniqueModel $models (Get-EnvOrDefaultValue $envMap $defaults "OLLAMA_VIDEO_SUMMARY_MODEL")
-Add-UniqueModel $models (Get-EnvOrDefaultValue $envMap $defaults "OLLAMA_VIDEO_SUMMARY_FAST_MODEL")
-Add-UniqueModel $models (Get-EnvOrDefaultValue $envMap $defaults "OLLAMA_VIDEO_SUMMARY_FINAL_MODEL")
-Add-UniqueModel $models (Get-EnvOrDefaultValue $envMap $defaults "OLLAMA_LOCATION_MODEL")
-if ($mem0On) {
-    Add-UniqueModel $models "qwen3.5:9b"
-    Add-UniqueModel $models "nomic-embed-text"
+foreach ($key in @(
+    "OLLAMA_MODEL",
+    "OLLAMA_TRAVEL_CHAT_MODEL",
+    "OLLAMA_TRIP_PLAN_MODEL",
+    "OLLAMA_VIDEO_SUMMARY_MODEL",
+    "OLLAMA_VIDEO_SUMMARY_FAST_MODEL",
+    "OLLAMA_VIDEO_SUMMARY_FINAL_MODEL",
+    "OLLAMA_LOCATION_MODEL"
+)) {
+    Add-UniqueModel $models $envMap[$key]
 }
 
 Write-DeployBanner
@@ -327,42 +236,26 @@ else {
     }
 
     $installed = Get-OllamaTagNames
-    $modelIndex = 0
-    foreach ($m in $models) {
-        $modelIndex += 1
-        $modelPercent = [int]($modelIndex / [Math]::Max($models.Count, 1) * 100)
-        Write-Progress -Id 2 -ParentId 1 -Activity "Ollama models" -Status $m -PercentComplete $modelPercent
+    foreach ($modelName in $models) {
         $have = $false
-        foreach ($t in $installed) {
-            if ($t.Equals($m, [System.StringComparison]::OrdinalIgnoreCase) -or $t.StartsWith($m + ":", [System.StringComparison]::OrdinalIgnoreCase)) {
+        foreach ($tag in $installed) {
+            if ($tag.Equals($modelName, [System.StringComparison]::OrdinalIgnoreCase) -or $tag.StartsWith($modelName + ":", [System.StringComparison]::OrdinalIgnoreCase)) {
                 $have = $true
                 break
             }
         }
         if ($have) {
-            Write-Host ("  present  {0}" -f $m) -ForegroundColor DarkGreen
+            Write-Host ("  present  {0}" -f $modelName) -ForegroundColor DarkGreen
             continue
         }
 
-        Write-Host ("  pulling  {0}" -f $m) -ForegroundColor Yellow
-        & ollama pull $m
+        Write-Host ("  pulling  {0}" -f $modelName) -ForegroundColor Yellow
+        & ollama pull $modelName
         if ($LASTEXITCODE -ne 0) {
-            throw "ollama pull $m failed (exit $LASTEXITCODE)"
+            throw "ollama pull $modelName failed (exit $LASTEXITCODE)"
         }
     }
-    Write-Progress -Id 2 -ParentId 1 -Activity "Ollama models" -Completed
     Complete-Stage -Title "Ollama models" -Message "Ollama models ready"
-}
-
-Start-Stage -Title "Mem0 vendor sync" -Status "Preparing vendor/mem0"
-if ($SkipDocker) {
-    Skip-Stage -Title "Mem0 vendor sync" -Message "Docker and Mem0 sync skipped"
-}
-else {
-    Invoke-LoggedCommand -Name "clone_mem0" -Workdir $Root -Command {
-        & (Join-Path $Root "scripts\clone-mem0.ps1")
-    }
-    Complete-Stage -Title "Mem0 vendor sync" -Message "Mem0 vendor path ready"
 }
 
 Start-Stage -Title "Docker Compose" -Status "Building and starting containers"
@@ -370,40 +263,28 @@ if ($SkipDocker) {
     Skip-Stage -Title "Docker Compose" -Message "Docker compose skipped"
 }
 else {
-    $composeProfiles = @("--profile", "dev")
-    $services = @("postgres", "redis", "app-dev")
-    if ($mem0On) {
-        $composeProfiles += @("--profile", "mem0")
-        $services = @("postgres", "redis", "mem0-memory-postgres", "mem0-memory", "app-dev")
-    }
-
     . (Join-Path $Root "scripts\import-compose-dotenv.ps1")
-    $null = Import-AiyoComposeDotEnv -Root $Root
+    $null = Import-AiyoComposeDotEnv -Root $Root -Mode dev
 
-    $composeEnvArgs = @("--env-file", "./aiyo/.env")
-    $envLocalPath = Join-Path $Root "aiyo\.env.local"
-    if (Test-Path -LiteralPath $envLocalPath) {
-        $composeEnvArgs += @("--env-file", "./aiyo/.env.local")
-    }
-
-    $buildArgs = @("compose") + $composeEnvArgs + $composeProfiles + @("build") + $services
-    $upArgs = @("compose") + $composeEnvArgs + $composeProfiles + @("up", "-d", "--force-recreate", "--no-build") + $services
-    $psArgs = @("compose") + $composeEnvArgs + $composeProfiles + @("ps")
-
-    Write-ServiceTargetList -Label "target services" -Services $services
+    $composeEnvArgs = @("--env-file", "./aiyo/.env.dev")
+    $services = @(
+        "aiyo-new-postgres-dev",
+        "aiyo-new-redis",
+        "open-webui",
+        "aiyo-new-app-dev"
+    )
+    $buildArgs = @("compose") + $composeEnvArgs + @("build") + $services
+    $upArgs = @("compose") + $composeEnvArgs + @("up", "-d", "--force-recreate", "--no-build") + $services
+    $psArgs = @("compose") + $composeEnvArgs + @("ps")
 
     Invoke-LoggedCommand -Name "docker_compose_build" -Workdir $Root -Command {
         & docker @buildArgs
     }
-    Write-ServiceTargetList -Label "built services" -Services $services
-
     Invoke-LoggedCommand -Name "docker_compose_up" -Workdir $Root -Command {
         & docker @upArgs
     }
 
     Complete-Stage -Title "Docker Compose" -Message "Containers are up"
-    Write-DockerServiceSummary -Services $services -PsArgs $psArgs
-    Write-Host "Container status:" -ForegroundColor Cyan
     & docker @psArgs
 }
 
@@ -411,4 +292,4 @@ $script:OverallStopwatch.Stop()
 Write-Progress -Id 1 -Activity "AIYO dev deploy" -Completed
 Write-Host ""
 Write-FinalStageSummary
-Write-Host "Done. App: http://localhost:3000  Mem0: http://localhost:8890" -ForegroundColor Green
+Write-Host "Done. App: http://127.0.0.1:3000  OpenWebUI: http://127.0.0.1:8080" -ForegroundColor Green

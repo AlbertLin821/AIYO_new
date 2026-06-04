@@ -3,7 +3,7 @@
 import { memo, useCallback, useEffect, useState } from "react";
 import { Lock, Mail, KeyRound, UserPlus, LogIn } from "lucide-react";
 import { signIn } from "next-auth/react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -92,8 +92,14 @@ function LoginModal() {
   const setOpen = useUIStore((s) => s.setLoginModalOpen);
   const storeCallbackUrl = useUIStore((s) => s.loginModalCallbackUrl);
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
-  const callbackUrl = storeCallbackUrl || (pathname === "/login" ? "/" : pathname) || "/";
+  const routeCallbackUrl =
+    searchParams.get("callbackUrl") || searchParams.get("redirect") || "/";
+  const forceOpenOnLoginRoute = pathname === "/login";
+  const callbackUrl =
+    storeCallbackUrl || (forceOpenOnLoginRoute ? routeCallbackUrl : pathname) || "/";
+  const dialogOpen = open || forceOpenOnLoginRoute;
 
   const [mode, setMode] = useState<"login" | "register">("login");
   const [name, setName] = useState("");
@@ -104,7 +110,7 @@ function LoginModal() {
   const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!dialogOpen) return;
     let mounted = true;
     void fetch("/api/runtime-config", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
@@ -117,7 +123,7 @@ function LoginModal() {
     return () => {
       mounted = false;
     };
-  }, [open]);
+  }, [dialogOpen]);
 
   const resetForm = useCallback(() => {
     setMode("login");
@@ -181,9 +187,12 @@ function LoginModal() {
 
   return (
     <Dialog
-      open={open}
+      open={dialogOpen}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
+          if (forceOpenOnLoginRoute && !isSubmitting) {
+            window.location.assign(callbackUrl || "/");
+          }
           handleClose();
         }
       }}

@@ -190,7 +190,7 @@ The stores are now split by responsibility:
 ### 1. Database and app boot
 
 1. Start Postgres with Docker.
-2. Set `.env.local` from `.env.example`.
+2. Set `aiyo/.env.dev` from `aiyo/.env.dev.example` (or `aiyo/.env.prod-live` from `aiyo/.env.prod-live.example` for the live stack).
 3. Run `npm run prisma:generate`.
 4. Apply `prisma/migrations/20260416_000001_phase3_init/migration.sql` to your database.
 5. Run `npm run db:seed`.

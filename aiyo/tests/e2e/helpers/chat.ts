@@ -1,6 +1,7 @@
 import { expect, type Page, type Response } from "@playwright/test";
 import type { BootstrapPayload, PersistedTripPayload } from "@/types";
 import { openItineraryEditor } from "./itinerary";
+import { dismissOnboardingIfVisible } from "./auth";
 
 export type ChatApiPayload = {
   success?: boolean;
@@ -254,9 +255,15 @@ async function withStructuredTravelPlanningRoute<T>(
   }
 }
 
-async function waitForAssistantRender(page: Page, timeoutMs: number) {
+async function waitForAssistantRender(
+  page: Page,
+  timeoutMs: number,
+  baseline?: { assistantCount: number; travelPlanCount: number },
+) {
   const assistantBubbles = page.getByTestId("chat-message-ai");
   const travelPlanCards = page.locator("[data-travel-plan-message-id]");
+  const minAssistantCount = baseline?.assistantCount ?? 0;
+  const minTravelPlanCount = baseline?.travelPlanCount ?? 0;
   await expect
     .poll(
       async () => {
@@ -264,7 +271,7 @@ async function waitForAssistantRender(page: Page, timeoutMs: number) {
           assistantBubbles.count(),
           travelPlanCards.count(),
         ]);
-        return assistantCount > 0 || travelPlanCount > 0;
+        return assistantCount > minAssistantCount || travelPlanCount > minTravelPlanCount;
       },
       {
         timeout: timeoutMs,
@@ -283,6 +290,7 @@ async function sendChatMessageOnce(
   return withStructuredTravelPlanningRoute(page, Boolean(options?.structuredTravelPlanning), async () => {
   const chatInput = page.getByTestId("chat-input");
   await expect(chatInput).toBeVisible({ timeout: 40_000 });
+  await dismissOnboardingIfVisible(page);
 
   const stopButton = page.getByTestId("chat-stop-button");
   if (await stopButton.isVisible().catch(() => false)) {
@@ -290,9 +298,13 @@ async function sendChatMessageOnce(
     await expect(page.getByTestId("chat-send-button")).toBeVisible({ timeout: 30_000 });
   }
 
-  await chatInput.click();
   await chatInput.fill(message);
   await expect(page.getByTestId("chat-send-button")).toBeEnabled({ timeout: 20_000 });
+
+  const [assistantCountBeforeSend, travelPlanCountBeforeSend] = await Promise.all([
+    page.getByTestId("chat-message-ai").count(),
+    page.locator("[data-travel-plan-message-id]").count(),
+  ]);
 
   const chatResponse = page.waitForResponse(
     (res) =>
@@ -304,7 +316,10 @@ async function sendChatMessageOnce(
   let chatCompleted = false;
   const tripPutResponse = createTripPutWaiter(page, options, () => chatCompleted);
 
-  await page.getByTestId("chat-send-button").click();
+  await chatInput.focus();
+  await chatInput.press("Enter").catch(async () => {
+    await page.getByTestId("chat-send-button").click();
+  });
   const chatRes = await chatResponse;
   chatCompleted = true;
 
@@ -324,7 +339,10 @@ async function sendChatMessageOnce(
     });
   }
 
-  await waitForAssistantRender(page, 60_000);
+  await waitForAssistantRender(page, 60_000, {
+    assistantCount: assistantCountBeforeSend,
+    travelPlanCount: travelPlanCountBeforeSend,
+  });
 
   if (tripPutResponse) {
     await tripPutResponse;

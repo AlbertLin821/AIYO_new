@@ -1,72 +1,67 @@
 # AIYO_new Architecture
 
-## Repository Layout
+## Repository layout
 
-- `AIYO_new/docs/` — migration and implementation documents
-- `AIYO_new/aiyo/` — active Next.js 16 app (product)
-- `AIYO_new/aiyo/src/components/chat/skyDash/` — in-chat Sky Dash mini-game UI (canonical implementation)
-- `AIYO_new/docker-compose.yml` — Postgres, Redis (reserved), optional Mem0
+- `AIYO_new/aiyo/` — active Next.js 16 app
+- `AIYO_new/docs/` — architecture, migration, rollback, research
+- `AIYO_new/docker-compose.yml` — six-service local stack
+- `AIYO_new/scripts/` — backup, archive, verification, deploy helpers
 
-## Application Structure
+## Runtime topology
 
-Inside `AIYO_new/aiyo/`:
+```mermaid
+flowchart LR
+    Browser -->|127.0.0.1:3000| Dev["aiyo-new-app-dev"]
+    Browser -->|127.0.0.1:3001| Live["aiyo-new-app-prod-live"]
+    Dev -->|SQL| PgDev["aiyo-new-postgres-dev"]
+    Live -->|SQL| PgLive["aiyo-new-postgres-prod"]
+    Dev -->|Redis| Redis["aiyo-new-redis"]
+    Live -->|Redis| Redis
+    Dev -->|HTTP| Owu["open-webui:8080"]
+    Live -->|HTTP| Owu
+    Owu -->|HTTP| HostOllama["host.docker.internal:11434"]
+```
 
-- `src/app/` — App Router pages and `src/app/api/*` route handlers
-- `src/components/` — UI (chat, map, itinerary, home)
-- `src/stores/` — Zustand (trip, map, chat, collab, video)
-- `src/services/` — client API clients, `syncService`, `mapSync`, geocode helpers
-- `src/server/` — server-only domain logic (AI, data, geo, video)
-- `src/types/` — shared domain types
-- `src/lib/` — utilities, auth, Prisma client
-- `src/proxy.ts` — auth gate for `/chat`, `/itinerary`, `/map`, `/profile`
+## Application structure
 
-## Runtime Flow
+Inside `aiyo/`:
 
-### 1. AI chat
+- `src/app/` — App Router pages and API routes
+- `src/components/` — chat, map, itinerary, home UI
+- `src/stores/` — Zustand state
+- `src/services/` — frontend API clients
+- `src/server/` — planner, AI, geo, search, persistence
+- `prisma/` — schema, migrations, seed
 
-- UI: `src/app/chat/page.tsx`
-- Client: `POST /api/ai/chat` via `src/services/aiClient.ts`
-- Server: `travelPlannerService.chatWithTravelAssistant` (routing: inquiry → patch → structured workflow → research chat)
-- Progress: `POST /api/chat/stream/register` then SSE `GET /api/chat/stream/[sessionId]`
-- Persistence: `ChatMessage` rows with optional `metadata` JSON for structured payloads (`travelPlan`, `questionCard`, `proposedChanges`, etc.)
+## AI flow
 
-### 2. Trip planning
+### Chat
 
-- Structured flow: questionnaire in chat → `generateTripPlan` → `travel_plan` card + `itinerarySuggestion`
-- Direct plan: `POST /api/ai/plan` (saves trip + pins server-side)
-- Full revision: `POST /api/trip/revise` or alias `POST /api/trips/revise`
-- Client applies plans via `useTripStore`; `AppDataBridge` runs `reconcileTripMapState`
+- UI sends `POST /api/ai/chat`
+- server entry: `src/app/api/ai/chat/route.ts`
+- orchestration: `src/server/services/travelPlannerService.ts`
+- primary reply generation now goes through Open WebUI chat completions
+- Ollama-specific flows continue through the Open WebUI Ollama proxy
 
-### 3. Video summary and recommendation
+### Trip planning
 
-- `POST /api/videos/recommendations`, `POST /api/videos/summarize` (auth required)
-- Pipeline: transcript → Ollama extraction → geocode → itinerary / map pins
+- direct endpoint: `POST /api/ai/plan`
+- revision endpoint: `POST /api/trip/revise`
+- planner keeps fallback `travel_plan` behavior when AI output is unavailable or invalid
 
-### 4. Sync
+### Health / model checks
 
-- Bootstrap: `GET /api/bootstrap` hydrates stores
-- Trip writes: debounced `PUT /api/trips/current`
-- Realtime: SSE `GET /api/realtime/stream` for collaboration
+- `GET /api/ai/ollama-status` remains the frontend compatibility route
+- when `OPENWEBUI_BASE_URL` is configured, the status route checks Open WebUI `/health` and `/api/models`
 
-## API Surface (selected)
+## Environment expectations
 
-| Route | Auth | Notes |
-|-------|------|--------|
-| `POST /api/ai/chat` | Soft (persist if logged in) | Main assistant |
-| `POST /api/ai/plan` | Required | Direct itinerary generation |
-| `POST /api/trip/revise`, `/api/trips/revise` | Required | Full replan |
-| `POST /api/videos/summarize` | Required | |
-| `POST /api/search/web` | Required | |
-| `POST /api/map/geocode` | Required | |
-| `GET /api/chat/stream/[sessionId]` | Required | Owner-bound session |
+- Docker dev uses `aiyo/.env.dev`
+- Docker prod-live uses `aiyo/.env.prod-live`
+- `MEM0_ENABLED` now defaults to `false`
+- `OPENWEBUI_BASE_URL` activates gateway mode
+- `OPENWEBUI_API_KEY` is required for authenticated gateway calls once Open WebUI auth is enabled
 
-## Environment
+## Legacy note
 
-- Local npm: prefer `aiyo/.env` (see root README); Prisma reads `.env`
-- Docker: `aiyo/.env` via compose `env_file`
-- `MEM0_ENABLED` defaults to `true` in `server/config.ts` (disable if Mem0 profile not used)
-- Redis is started in Compose for future use; app code does not connect yet
-
-## Chat progress storage
-
-In-process `chatProgressStore` with per-user session ownership. Multi-instance deployments should add Redis (or sticky sessions) before scaling horizontally.
+`mem0`, `searxng`, and `pgadmin` are no longer part of the active stack. Their assets are handled by the migration inventory, archive script, and rollback docs instead of the main Compose path.

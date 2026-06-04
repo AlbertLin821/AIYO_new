@@ -93,7 +93,12 @@ export async function runStructuredTripWorkflow(
   const seeded = deps.mergeTripProfile(input.tripProfile, input.context);
   const withText = deps.updateTripProfileFromText(seeded, input.message);
   const profile = deps.applyQuestionAnswers(withText, input.questionAnswers);
-  if (input.forceStructuredRevision && input.context?.itinerary?.length) {
+  const hasExistingItineraryItems = Boolean(
+    input.context?.itinerary?.some((day) => (day.items?.length || 0) > 0),
+  );
+  if (input.forceStructuredRevision && hasExistingItineraryItems) {
+    profile.plan_integration = "direct_merge";
+  } else if (!hasExistingItineraryItems) {
     profile.plan_integration = "direct_merge";
   } else if (profile.plan_integration !== "direct_merge") {
     profile.plan_integration = "self_merge";

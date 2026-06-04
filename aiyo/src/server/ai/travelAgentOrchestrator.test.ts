@@ -225,6 +225,22 @@ test("current itinerary replacement enters modify itinerary mode", () => {
   assert.equal(decision.shouldModifyItinerary, true);
 });
 
+test("current itinerary add request with 加一個 also enters modify itinerary mode", () => {
+  const decision = decideTravelAgentMode({
+    message: "第二天下午幫我加一個晴空塔，安排在逛街後面",
+    context: {
+      destination: "東京",
+      days: 3,
+      itinerary: [
+        { dayNumber: 2, items: [{ id: "ginza", time: "15:00", title: "銀座", type: "shopping" }] },
+      ],
+    },
+  });
+
+  assert.equal(decision.mode, "modify_itinerary");
+  assert.equal(decision.shouldModifyItinerary, true);
+});
+
 test("fresh opening-hour question uses only Serper or Tavily search providers", () => {
   const decision = decideTravelAgentMode({ message: "東京晴空塔今天營業到幾點" });
 

@@ -236,6 +236,16 @@ test("Phase 5 AssistantAction add reorder relaxed day and map focus apply safely
   await applyAssistantActions(addResponse.assistantActions || [], { persist: false });
   assert.ok(useTripStore.getState().itinerary[0]?.items.some((item) => item.title.includes("晴空塔")));
 
+  const addWithInlineVerbResponse = await chatWithTravelAssistant({
+    message: "第二天下午幫我加一個晴空塔，安排在逛街後面。",
+    structuredTravelPlanning: true,
+    context: chatContext(),
+  });
+  assert.equal(addWithInlineVerbResponse.travelAgentDecision?.mode, "modify_itinerary");
+  assert.equal(addWithInlineVerbResponse.assistantActions?.[0]?.type, "itinerary.add_item");
+  await applyAssistantActions(addWithInlineVerbResponse.assistantActions || [], { persist: false });
+  assert.ok(useTripStore.getState().itinerary[1]?.items.some((item) => item.title.includes("晴空塔")));
+
   const reorderResponse = await chatWithTravelAssistant({
     message: "把第二天順序改成銀座、秋葉原",
     structuredTravelPlanning: true,

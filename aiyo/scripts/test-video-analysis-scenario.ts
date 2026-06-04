@@ -1,7 +1,7 @@
 /**
  * Live／整合情境：嘉義市影片搜尋 + 摘要；輸出 JSON 與 Markdown 報告至 aiyo/tmp。
  * 執行：cd aiyo && npx tsx scripts/test-video-analysis-scenario.ts
- * 需視環境設定 YOUTUBE_API_KEY、GOOGLE_MAPS_API_KEY、OLLAMA_*（不會由此腳本修改 .env.local）。
+ * 需視環境設定 YOUTUBE_API_KEY、GOOGLE_MAPS_API_KEY、OLLAMA_*（不會由此腳本修改專案 env 檔）。
  */
 
 import { mkdir, writeFile } from "node:fs/promises";

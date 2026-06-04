@@ -3,6 +3,7 @@ import { filterProposedChangesByVerifiedPlaces } from "@/server/ai/placeNameMatc
 import { normalizeConversationHistory } from "@/server/services/travelPlanner/chatConversation";
 import type { AIContextBuildResult } from "@/server/ai/aiContextBuilder";
 import { chatWithOllama, OllamaRequestError, type OllamaMessage } from "@/server/ai/ollamaClient";
+import { chatWithOpenWebUI } from "@/server/ai/openWebUiClient";
 import { decideTravelAgentMode } from "@/server/ai/travelAgentOrchestrator";
 import {
   chatPlanningOutputJsonSchema,
@@ -580,6 +581,35 @@ async function chatWithOllamaTimeoutRetry(request: Parameters<typeof chatWithOll
   }
 
   throw lastTimeoutError ?? new OllamaRequestError("Ollama request timed out", undefined, "timeout");
+}
+
+async function chatWithOpenWebUiTimeoutRetry(
+  request: Parameters<typeof chatWithOpenWebUI>[0],
+): Promise<string> {
+  const retryCount = Math.max(0, serverConfig.ollamaTimeoutRetryCount);
+  const retryDelayMs = Math.max(0, serverConfig.ollamaTimeoutRetryDelayMs);
+  const maxAttempts = 1 + retryCount;
+  let lastTimeoutError: OllamaRequestError | null = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      return await chatWithOpenWebUI(request);
+    } catch (error) {
+      if (!(error instanceof OllamaRequestError)) {
+        throw error;
+      }
+      if (!error.isTimeout) {
+        throw error;
+      }
+      lastTimeoutError = error;
+      if (attempt >= maxAttempts - 1) {
+        break;
+      }
+      await delay(retryDelayMs);
+    }
+  }
+
+  throw lastTimeoutError ?? new OllamaRequestError("Open WebUI request timed out", undefined, "timeout");
 }
 
 function formatWebSearchDigest(results: WebSearchResult[]): string {
@@ -1659,7 +1689,7 @@ function isExistingItineraryPatchRequest(input: {
     return false;
   }
   const mutatesCurrentItinerary =
-    /新增|加入|加上|加到|刪除|刪掉|移除|取消|去掉|修改|調整|改成|換成|改到|提前|延後|移到/u.test(message) ||
+    /新增|加入|加上|加到|加(?:一個|個)?|刪除|刪掉|移除|取消|去掉|修改|調整|改成|換成|改到|提前|延後|移到/u.test(message) ||
     (/(?:不要了|不用了)/u.test(message) &&
       /(?:(?:最後|最后)\s*(?:一)?\s*天|第\s*[\d一二兩三四五六七八九十]+\s*天|行程)/u.test(message));
   if (!mutatesCurrentItinerary) {
@@ -2610,7 +2640,7 @@ function buildDeterministicItineraryPatchResponse(input: {
   const addMatch = addToDayMatch
     ? [, addToDayMatch[2], addToDayMatch[1]]
     : message.match(
-    /(?:在)?第\s*(\d+|[一二兩三四五六七八九十])\s*天(?:.*?)(?:加入|加上|新增)\s*([^\n，。,]+?)(?:$|[，。,])/u,
+    /(?:在)?第\s*(\d+|[一二兩三四五六七八九十])\s*天(?:.*?)(?:加入|加上|新增|加)(?:一個|個)?\s*([^\n，。,]+?)(?:$|[，。,])/u,
       );
   if (addMatch) {
     const day = parsePatchDayNumber(addMatch[1]);
@@ -4280,17 +4310,27 @@ export async function chatWithTravelAssistant(input: {
     options: { temperature: 0, top_p: 0.9, num_ctx: 12_288 },
     messages: composeMessages,
   };
+  const shouldUseOpenWebUiGateway = Boolean(serverConfig.openwebuiBaseUrl);
 
   let raw: string;
   try {
     try {
+      if (shouldUseOpenWebUiGateway) {
+        raw = await chatWithOpenWebUiTimeoutRetry({
+          ...composeOllamaBase,
+          format: chatPlanningOutputJsonSchema,
+        });
+      } else {
         raw = await chatWithOllamaTimeoutRetry({
-        ...composeOllamaBase,
-        format: chatPlanningOutputJsonSchema,
-      });
+          ...composeOllamaBase,
+          format: chatPlanningOutputJsonSchema,
+        });
+      }
     } catch (error) {
       if (error instanceof OllamaRequestError && error.code === "http_error") {
-        raw = await chatWithOllamaTimeoutRetry(composeOllamaBase);
+        raw = shouldUseOpenWebUiGateway
+          ? await chatWithOpenWebUiTimeoutRetry(composeOllamaBase)
+          : await chatWithOllamaTimeoutRetry(composeOllamaBase);
       } else {
         throw error;
       }

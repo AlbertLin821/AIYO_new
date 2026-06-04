@@ -28,10 +28,10 @@
     "test:e2e:live-ai:ef": "playwright test tests/e2e/live-ai-generalization.spec.ts -g \"E\\.|F\\.\"",
     "e2e:full-qa": "playwright test tests/e2e/full-user-travel-flow.spec.ts tests/e2e/video-summary-map-quality.spec.ts tests/e2e/itinerary-editor-flow.spec.ts --trace on",
     "e2e:ui": "playwright test --ui",
-    "prisma:generate": "tsx scripts/run-with-env-local.ts prisma generate",
-    "prisma:migrate:diff": "tsx scripts/run-with-env-local.ts prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script --output prisma/migrations/20260416_000001_phase3_init/migration.sql",
-    "db:seed": "tsx scripts/run-with-env-local.ts tsx prisma/seed.ts",
-    "db:clear-users": "tsx scripts/run-with-env-local.ts tsx prisma/clear-users.ts"
+    "prisma:generate": "tsx scripts/run-with-project-env.ts prisma generate",
+    "prisma:migrate:diff": "tsx scripts/run-with-project-env.ts prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script --output prisma/migrations/20260416_000001_phase3_init/migration.sql",
+    "db:seed": "tsx scripts/run-with-project-env.ts tsx prisma/seed.ts",
+    "db:clear-users": "tsx scripts/run-with-project-env.ts tsx prisma/clear-users.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
@@ -73,6 +73,6 @@
     "typescript": "^5"
   },
   "prisma": {
-    "seed": "tsx scripts/run-with-env-local.ts tsx prisma/seed.ts"
+    "seed": "tsx scripts/run-with-project-env.ts tsx prisma/seed.ts"
   }
 }

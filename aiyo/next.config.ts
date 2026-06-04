@@ -5,7 +5,7 @@ import { resolveGoogleMapsClientApiKey, resolveGoogleMapsMapId } from "./src/lib
 import { loadProjectEnvLocalIntoProcess } from "./src/lib/projectEnv";
 
 const repoRoot = path.join(__dirname);
-loadProjectEnvLocalIntoProcess(repoRoot, { override: true });
+loadProjectEnvLocalIntoProcess(repoRoot, { override: false });
 
 const mapsKey = resolveGoogleMapsClientApiKey();
 const mapId = resolveGoogleMapsMapId();

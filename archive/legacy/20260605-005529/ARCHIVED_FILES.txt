@@ -1,0 +1,5 @@
+docker/mem0
+scripts/clone-mem0.sh
+scripts/clone-mem0.ps1
+searxng
+vendor/mem0

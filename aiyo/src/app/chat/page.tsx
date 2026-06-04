@@ -70,6 +70,8 @@ import {
   isFullItineraryRevisionCommand,
   isItineraryMutationCommand,
   isPlanningConfirmationCommand,
+  shouldAttachDecisionPreferenceConfirmation,
+  shouldRenderInlinePreferenceReusePanel,
   shouldShowPlanningWorkflowRail,
 } from "@/lib/chat/workflowRailVisibility";
 import { findLatestApplicableItinerarySource } from "@/lib/chat/latestItinerarySource";
@@ -1052,6 +1054,43 @@ export default function ChatPage() {
     return created.tripId;
   }
 
+  async function ensureExistingItineraryContextLoaded(message: string) {
+    const needsExistingItinerary =
+      isItineraryMutationCommand(message) || isFullItineraryRevisionCommand(message);
+    if (!needsExistingItinerary || useTripStore.getState().itinerary.length > 0) {
+      return;
+    }
+
+    if (!syncService.isHydrated()) {
+      const bootstrap = await syncService.loadBootstrap();
+      syncService.applyBootstrap(bootstrap, {
+        source: "chat-preflight-bootstrap",
+        forceTrip: true,
+      });
+      syncService.startRealtime(bootstrap.collaboration?.roomId || null);
+    }
+
+    if (useTripStore.getState().itinerary.length > 0) {
+      return;
+    }
+
+    const currentConversationId = useChatStore.getState().activeConversationId;
+    const currentConversation = useChatStore
+      .getState()
+      .conversations.find((conversation) => conversation.id === currentConversationId);
+    const fallbackTripId =
+      useTripStore.getState().tripId?.trim() ||
+      currentConversation?.tripId?.trim() ||
+      activeConversationTripId;
+    if (!fallbackTripId) {
+      return;
+    }
+
+    const snapshot = await setActiveTrip(fallbackTripId);
+    syncService.applyTripSwitch({ ...snapshot, selectConversation: false });
+    syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
+  }
+
   async function selectConversationForChat(conversationId: string) {
     const conversation = conversations.find((item) => item.id === conversationId);
     selectConversation(conversationId);
@@ -1546,6 +1585,8 @@ export default function ChatPage() {
 
     stopAutoVideoSummaryQueue();
 
+    await ensureExistingItineraryContextLoaded(message);
+
     if (!options?.questionAnswers?.length) {
       applyPlanningUpdateToStores(extractPlanningUpdateFromText(message));
     }
@@ -1781,11 +1822,17 @@ export default function ChatPage() {
       if (requestEpoch !== chatRequestEpochRef.current) {
         return;
       }
+      const decisionPreferenceConfirmation = response.travelAgentDecision?.preferenceConfirmation;
       const replyWithPreferenceConfirmation: ChatMessage =
-        response.travelAgentDecision?.preferenceConfirmation && !response.reply.preferenceConfirmation
+        shouldAttachDecisionPreferenceConfirmation({
+          travelAgentMode: response.travelAgentDecision?.mode ?? null,
+          responseType: response.reply.responseType,
+          replyPreferenceConfirmation: response.reply.preferenceConfirmation,
+          decisionPreferenceConfirmation,
+        })
           ? {
               ...response.reply,
-              preferenceConfirmation: response.travelAgentDecision.preferenceConfirmation,
+              preferenceConfirmation: decisionPreferenceConfirmation,
             }
           : response.reply;
       appendMessage(replyWithPreferenceConfirmation);
@@ -2760,14 +2807,24 @@ export default function ChatPage() {
                       />
                     </div>
                   ) : null}
-                  {message.role === "assistant" &&
-                  index === messages.length - 1 &&
-                  (message.preferenceConfirmation || workflowRail.preferenceConfirmation) &&
-                  !message.questionCard ? (
+                  {shouldRenderInlinePreferenceReusePanel({
+                    role: message.role,
+                    isLastMessage: index === messages.length - 1,
+                    responseType: message.responseType,
+                    hasQuestionCard: Boolean(message.questionCard),
+                    messagePreferenceConfirmation: message.preferenceConfirmation,
+                    workflowRailPreferenceConfirmation: workflowRail.preferenceConfirmation,
+                    workflowRailMode: workflowRail.travelAgentMode,
+                  }) ? (
                     <div className="mt-3 w-full min-w-[min(100%,20rem)] max-w-md">
                       <PreferenceReusePanel
                         variant="inline"
-                        confirmation={(message.preferenceConfirmation || workflowRail.preferenceConfirmation)!}
+                        confirmation={
+                          (workflowRail.travelAgentMode === "confirm_preferences" &&
+                          workflowRail.preferenceConfirmation
+                            ? workflowRail.preferenceConfirmation
+                            : message.preferenceConfirmation)!
+                        }
                         disabled={isSending}
                         currentDestination={tripProfile?.destination || planningSnapshot.destination}
                         currentDays={tripProfile?.duration_days || planningSnapshot.days}

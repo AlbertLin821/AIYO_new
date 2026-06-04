@@ -7,7 +7,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { TripDestinationScope } from "@/lib/tripDestinationScope";
-import { readProjectEnvLocal } from "@/lib/projectEnv";
+import { loadProjectEnvIntoProcess } from "@/lib/projectEnv";
 import type { TripPlanResult } from "@/types";
 
 const ROOT = process.cwd();
@@ -19,12 +19,7 @@ type Check = { name: string; pass: boolean; detail: string };
 const checks: Check[] = [];
 
 function loadDotEnv() {
-  const envLocal = readProjectEnvLocal(ROOT);
-  for (const [key, value] of Object.entries(envLocal)) {
-    if (process.env[key] === undefined) {
-      process.env[key] = value;
-    }
-  }
+  loadProjectEnvIntoProcess(ROOT, { override: false });
 }
 
 function record(name: string, pass: boolean, detail: string) {
