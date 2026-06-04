@@ -18,7 +18,7 @@ import {
   resolveProposedChangesFromContext,
 } from "@/server/services/travelPlannerService";
 import { sanitizeDynamicQuestionCard } from "@/server/ai/validators/questionCardValidator";
-import type { ChatContext, ChatSource, TripPlanDay, TripPlanResult, TripProfile } from "@/types";
+import type { ChatContext, ChatMessage, ChatSource, TripPlanDay, TripPlanResult, TripProfile } from "@/types";
 
 function makeMemoryAiContext(destinations: string[]): AIContextBuildResult {
   return {
@@ -85,6 +85,56 @@ function makeStructuredProfile(): TripProfile {
     disliked_activities: [],
     pace: "relaxed",
     plan_integration: "direct_merge",
+  };
+}
+
+function makeChiayiPreferenceAiContext(): AIContextBuildResult {
+  return {
+    text: "",
+    promptContextText: "",
+    sources: ["user_preferences"],
+    structured: {
+      preferences: {
+        budgetLevel: "medium",
+        travelStyle: ["美食", "coffee", "night view", "購物"],
+        pace: "balanced",
+        transportPreference: "transit",
+        destination: "嘉義",
+      },
+      recentTripCount: 1,
+      recentVideoCount: 0,
+      appliedVideoSummaryCount: 0,
+    },
+    structuredContext: {
+      userId: "user_1",
+      preferences: {
+        destinationPreferences: ["嘉義"],
+        budgetLevel: "medium",
+        travelStyles: ["美食", "coffee", "night view", "購物"],
+        pace: "balanced",
+        transportPreference: "transit",
+        accommodationPreference: null,
+        avoidances: [],
+        confidence: 0.8,
+        source: "mem0",
+        updatedAt: null,
+      },
+      recentTrips: [],
+      tripChatHistory: [],
+      globalChatMemory: [],
+      videoInteractions: [],
+      appliedVideoSummaries: [],
+      memorySnippets: [],
+      contextWarnings: [],
+    },
+    debug: {
+      sources: [],
+      includedSources: [],
+      excludedSources: [],
+      counts: {},
+      limits: {},
+      vectorStore: "mem0",
+    },
   };
 }
 
@@ -301,6 +351,87 @@ test("travel chat falls back to replyText when model returns invalid itinerary J
     assert.equal(response.reply.content, "收到，先幫你整理成舒適預算加大眾運輸方向。");
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("preference override message is not treated as itinerary item replacement", async () => {
+  const originalSkip = process.env.AIYO_SKIP_LLM_PATCH;
+  const originalFetch = globalThis.fetch;
+  process.env.AIYO_SKIP_LLM_PATCH = "1";
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        message: {
+          content: JSON.stringify({
+            mode: "answer_question",
+            replyText: "好的，我會依你調整後的偏好來規劃嘉義行程。",
+            itinerary: null,
+            assistantActions: [],
+            proposedChanges: [],
+          }),
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  try {
+    const response = await chatWithTravelAssistant({
+      message:
+        "這次想改成：高預算、美食、輕鬆步調、Transit，請依這些偏好直接開始規劃嘉義 3 天完整行程。",
+      structuredTravelPlanning: true,
+      context: {
+        destination: "嘉義",
+        days: 3,
+        itinerary: [
+          {
+            dayNumber: 1,
+            items: [
+              {
+                id: "seed_item",
+                time: "09:00",
+                title: "阿里山森林遊樂區",
+                type: "attraction",
+                transport: "步行",
+              },
+            ],
+          },
+        ],
+      },
+      tripProfile: {
+        destination: "嘉義",
+        duration_days: 3,
+        budget: "mid_range",
+        companions: null,
+        traveler_count: 4,
+        transportation: "Transit",
+        pace: "relaxed",
+        preferences: ["food"],
+        avoid_places: [],
+        notes: null,
+        departure_location: null,
+        travel_dates: null,
+        special_population: {
+          has_elderly: false,
+          has_children: false,
+          mobility_issue: false,
+        },
+        accommodation: null,
+        visited_before: [],
+        dietary_restrictions: [],
+        disliked_activities: [],
+        plan_integration: "direct_merge",
+      },
+      aiContext: makeCurrentTripAiContext("嘉義", 3),
+    });
+
+    assert.equal(response.travelAgentDecision?.mode, "generate_itinerary");
+    assert.doesNotMatch(response.reply.content, /無法唯一確認要替換的「這次想」/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalSkip === undefined) {
+      delete process.env.AIYO_SKIP_LLM_PATCH;
+    } else {
+      process.env.AIYO_SKIP_LLM_PATCH = originalSkip;
+    }
   }
 });
 
@@ -624,6 +755,96 @@ test("question card does not block on preferences after dates and companions are
     pace: null,
   });
   assert.equal(card, null);
+});
+
+test("question card skips traveler_count when party size is already known", () => {
+  const card = buildQuestionCard({
+    ...makeStructuredProfile(),
+    destination: "嘉義",
+    duration_days: 3,
+    duration_nights: 2,
+    travel_dates: null,
+    companions: "small_group",
+    traveler_count: 4,
+    preferences: ["food"],
+    pace: "balanced",
+  });
+  assert.ok(card);
+  assert.ok(card?.questions.some((question) => question.slot === "travel_dates"));
+  assert.equal(
+    card?.questions.some((question) => question.slot === "traveler_count"),
+    false,
+  );
+});
+
+test("Chiayi 3d2n four travelers then accept preferences skips traveler_count question", async () => {
+  const opening = "我想要去嘉義三天兩夜總共四個人去玩幫我規劃一下行程";
+  const first = await chatWithTravelAssistant({
+    message: opening,
+    aiContext: makeChiayiPreferenceAiContext(),
+  });
+
+  assert.equal(first.travelAgentDecision?.mode, "confirm_preferences");
+  assert.equal(first.tripProfile?.destination, "嘉義");
+  assert.equal(first.tripProfile?.duration_days, 3);
+  assert.equal(first.tripProfile?.traveler_count, 4);
+
+  const confirmationOnlyProfile: TripProfile = {
+    destination: "嘉義",
+    duration_days: 3,
+    duration_nights: 2,
+    departure_location: null,
+    travel_dates: null,
+    companions: null,
+    traveler_count: null,
+    budget: "50000",
+    special_population: {
+      has_elderly: false,
+      has_children: false,
+      mobility_issue: false,
+    },
+    preferences: ["food", "coffee"],
+    transportation: "transit",
+    accommodation: null,
+    visited_before: [],
+    avoid_places: [],
+    dietary_restrictions: [],
+    disliked_activities: [],
+    pace: "balanced",
+    plan_integration: "direct_merge",
+  };
+
+  const history: ChatMessage[] = [
+    {
+      id: "user_opening",
+      role: "user",
+      content: opening,
+      timestamp: "17:58",
+    },
+    {
+      id: "assistant_confirm",
+      role: "assistant",
+      content: first.reply.content,
+      timestamp: "17:59",
+      tripProfile: first.tripProfile,
+    },
+  ];
+
+  const second = await chatWithTravelAssistant({
+    message: "沿用先前偏好，請直接開始規劃嘉義 3 天完整行程。",
+    structuredTravelPlanning: true,
+    tripProfile: confirmationOnlyProfile,
+    messages: history,
+    aiContext: makeChiayiPreferenceAiContext(),
+  });
+
+  assert.equal(second.reply.responseType, "question_card");
+  assert.ok(second.reply.questionCard?.questions.some((question) => question.slot === "travel_dates"));
+  assert.equal(
+    second.reply.questionCard?.questions.some((question) => question.slot === "traveler_count"),
+    false,
+  );
+  assert.equal(second.tripProfile?.traveler_count, 4);
 });
 
 test("applyQuestionAnswers maps traveler_count to companions", () => {

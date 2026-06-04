@@ -123,6 +123,29 @@ function resolveScenario(message: string, seed: Phase7TokyoSeed, body?: ChatRout
     };
   }
 
+  if (/嘉義.*(三天|3天|三天兩夜)/.test(text) && /四個人|4\s*個人|總共\s*4/.test(text)) {
+    return {
+      content:
+        "嘉義三天兩夜、四個人聽起來很棒！我找到可沿用的偏好：美食、coffee、night view、購物、適中步調、Transit。這次也要沿用嗎？",
+      responseType: "text_message",
+      travelAgentDecision: {
+        mode: "confirm_preferences",
+        preferenceConfirmation: {
+          summary: "美食、coffee、night view、購物、適中步調、Transit",
+          preferences: {
+            budgetLevel: "medium",
+            travelStyle: ["美食", "coffee", "night view", "購物"],
+            pace: "balanced",
+            transportPreference: "transit",
+            destination: "嘉義",
+            days: 3,
+          },
+          prompt: "這次嘉義 3 天也要沿用這些設定嗎？",
+        },
+      },
+    };
+  }
+
   if (/東京.*(三天|3天)/.test(text) || /去東京玩/.test(text)) {
     return {
       content:
@@ -148,6 +171,26 @@ function resolveScenario(message: string, seed: Phase7TokyoSeed, body?: ChatRout
     return {
       content: "好的，我會沿用中等預算與美食、購物偏好，並把步調調整為較輕鬆的節奏，開始準備東京三天行程。",
       responseType: "general",
+    };
+  }
+
+  if (/沿用/.test(text) && /嘉義/.test(text)) {
+    return {
+      content: "收到，我再確認嘉義出發日期後就開始規劃。",
+      responseType: "question_card",
+      questionCard: {
+        response_type: "question_card",
+        title: "再確認一下嘉義行程偏好",
+        description: "選好後我會依你的偏好繼續規劃。",
+        questions: [
+          {
+            slot: "travel_dates",
+            question: "嘉義預計哪幾天出發？",
+            type: "date_range",
+          },
+        ],
+        action: { label: "送出並繼續", shortcut: "Enter" },
+      },
     };
   }
 

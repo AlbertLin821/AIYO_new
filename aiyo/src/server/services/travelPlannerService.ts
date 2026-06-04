@@ -1,3 +1,4 @@
+import { isPreferenceOverrideMessage } from "@/lib/personalization/preferenceDisplay";
 import { filterProposedChangesByVerifiedPlaces } from "@/server/ai/placeNameMatch";
 import { normalizeConversationHistory } from "@/server/services/travelPlanner/chatConversation";
 import type { AIContextBuildResult } from "@/server/ai/aiContextBuilder";
@@ -1339,11 +1340,27 @@ function mergeTripProfileWithContext(
         ? normalizeDestinationLabel(inferred.destination)
         : null;
 
+  const conversationTexts = collectConversationTexts({
+    message: options?.message,
+    messages: options?.messages,
+    extraTexts: options?.replyText ? [options.replyText] : undefined,
+  });
+  let fromConversation = base;
+  for (const text of conversationTexts) {
+    fromConversation = updateTripProfileFromText(fromConversation, text);
+  }
+
   return normalizeTripProfile({
-    ...base,
-    destination: activeDestination || base.destination || destinationFromContext || null,
+    ...fromConversation,
+    destination:
+      activeDestination ||
+      fromConversation.destination ||
+      base.destination ||
+      destinationFromContext ||
+      null,
     duration_days:
       messageInferred.days ??
+      fromConversation.duration_days ??
       base.duration_days ??
       daysFromContext ??
       inferred.days ??
@@ -1626,6 +1643,9 @@ function isExistingItineraryPatchRequest(input: {
   context?: ChatContext;
 }): boolean {
   const message = input.message.trim();
+  if (isPreferenceOverrideMessage(message)) {
+    return false;
+  }
   if (/(?:地圖|地图).{0,12}(?:定位到|移到|顯示|聚焦)/u.test(input.message)) {
     return true;
   }
@@ -2471,6 +2491,23 @@ function buildDeterministicItineraryPatchResponse(input: {
       title: originalTitle,
     });
     if (!target) {
+      // #region agent log
+      if (process.env.AIYO_DEBUG_AGENT_LOG === "1") {
+        fetch("http://127.0.0.1:7685/ingest/65560261-863b-4a32-a6ca-5302ff0f0ae4", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "3cb8fb" },
+          body: JSON.stringify({
+            sessionId: "3cb8fb",
+            runId: "pre-fix",
+            hypothesisId: "H1",
+            location: "travelPlannerService.ts:buildDeterministicItineraryPatchResponse",
+            message: "replace match missed itinerary item",
+            data: { originalTitle, nextTitle, day, messagePreview: message.slice(0, 120) },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+      }
+      // #endregion
       return buildItineraryPatchResponsePayload({
         content: day
           ? `我目前無法唯一確認第 ${day} 天要替換的「${originalTitle}」。請再告訴我更完整的景點名稱。`
@@ -4007,6 +4044,30 @@ export async function chatWithTravelAssistant(input: {
     aiContext: input.aiContext,
     memoryContext: input.memoryContext,
   });
+  // #region agent log
+  if (process.env.AIYO_DEBUG_AGENT_LOG === "1") {
+    fetch("http://127.0.0.1:7685/ingest/65560261-863b-4a32-a6ca-5302ff0f0ae4", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "3cb8fb" },
+      body: JSON.stringify({
+        sessionId: "3cb8fb",
+        runId: "pre-fix",
+        hypothesisId: "H1-H3",
+        location: "travelPlannerService.ts:chatWithTravelAssistant",
+        message: "travel agent decision",
+        data: {
+          messagePreview: input.message.slice(0, 120),
+          mode: travelAgentDecision.mode,
+          debugReason: travelAgentDecision.debugReason,
+          hasItinerary: Boolean(context?.itinerary?.length),
+          isPreferenceOverride: isPreferenceOverrideMessage(input.message),
+          patchRequest: isExistingItineraryPatchRequest({ message: input.message, context }),
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+  }
+  // #endregion
   const generalReplyContext = contextWithoutItineraryForGeneralReply(context, travelAgentDecision);
   const itineraryInquiryResponse = buildExistingItineraryInquiryResponse({
     message: input.message,
@@ -4079,11 +4140,25 @@ export async function chatWithTravelAssistant(input: {
     };
   }
 
+  if (
+    !skipNaturalShortcut &&
+    isPreferenceOverrideMessage(input.message) &&
+    travelAgentDecision.mode === "generate_itinerary" &&
+    travelAgentDecision.userFacingGuidance &&
+    !input.structuredTravelPlanning &&
+    !input.tripProfile
+  ) {
+    return {
+      ...buildNaturalTravelAgentResponse(travelAgentDecision),
+      tripProfile: resolvedTripProfile,
+    };
+  }
+
   if (input.structuredTravelPlanning) {
     const structuredTripResponse = await handleStructuredTripWorkflow({
       message: input.message,
       context,
-      tripProfile: input.tripProfile,
+      tripProfile: resolvedTripProfile,
       questionAnswers: input.questionAnswers,
       progressSessionId: input.progressSessionId,
       memoryContext: input.memoryContext,

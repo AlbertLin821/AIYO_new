@@ -144,6 +144,23 @@ test("東京三天 with stale 台南 profile prefers 東京 in confirm copy", ()
   assert.doesNotMatch(decision.preferenceConfirmation?.prompt || "", /台南/);
 });
 
+test("preference reuse panel override routes to generate_itinerary", () => {
+  const decision = decideTravelAgentMode({
+    message: "這次想改成：高預算、美食、輕鬆步調、Transit",
+    context: { destination: "嘉義", days: 3 },
+    aiContext: makeAiContext({
+      budgetLevel: "medium",
+      travelStyle: ["food", "shopping"],
+      pace: "balanced",
+    }),
+  });
+
+  assert.equal(decision.mode, "generate_itinerary");
+  assert.equal(decision.shouldGenerateItinerary, true);
+  assert.match(decision.debugReason || "", /override submit/);
+  assert.doesNotMatch(decision.userFacingGuidance || "", /無法唯一確認/);
+});
+
 test("reuse preference follow-up can generate with relaxed pace", () => {
   const decision = decideTravelAgentMode({
     message: "沿用，排輕鬆一點",

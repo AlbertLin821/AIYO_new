@@ -162,6 +162,11 @@ export function hasMeaningfulReusablePreferences(preferences?: {
   );
 }
 
+export function isPreferenceOverrideMessage(message: string): boolean {
+  const normalized = message.trim();
+  return /^這次想改成[:：]/u.test(normalized) || /^這次想重新填寫偏好/u.test(normalized);
+}
+
 export function buildPreferenceOverrideMessage(preferences: TravelAgentKnownPreferences): string {
   const parts = [
     formatBudgetLevelLabel(preferences.budgetLevel),

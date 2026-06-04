@@ -4,6 +4,7 @@ import { decideSearchIntent } from "@/server/search/searchIntent";
 import {
   formatPreferenceSummary,
   hasMeaningfulReusablePreferences,
+  isPreferenceOverrideMessage,
 } from "@/lib/personalization/preferenceDisplay";
 import { extractDestinationFromPlanningText } from "@/lib/tripPlanningSignals";
 import type {
@@ -318,6 +319,36 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
     return buildDecision("modify_itinerary", {
       searchDecision,
       debugReason: "matched map focus action intent",
+    });
+  }
+
+  if (isPreferenceOverrideMessage(message)) {
+    if (/^這次想重新填寫偏好/u.test(message)) {
+      return buildDecision("collect_requirements", {
+        missingRequirements: collectMissingRequirements(hints, knownPreferences),
+        searchDecision,
+        userFacingGuidance: `可以，${hints.destination || knownPreferences.destination || "這趟"}我們重新整理偏好。想走小資、中等還是高預算？交通偏好大眾運輸、計程車或自駕？`,
+        debugReason: "preference reuse panel reset",
+      });
+    }
+    const overrideHints = extractTripRequestHints(message);
+    const overriddenPreferences: TravelAgentKnownPreferences = {
+      ...mergedPreferences,
+      budgetLevel: overrideHints.budgetLevel || mergedPreferences.budgetLevel,
+      pace: overrideHints.pace || mergedPreferences.pace,
+    };
+    const destinationLabel = hints.destination || knownPreferences.destination || "這趟";
+    const summary = formatPreferenceSummary(overriddenPreferences);
+    return buildDecision("generate_itinerary", {
+      searchDecision,
+      shouldGenerateItinerary: true,
+      preferenceConfirmation: {
+        summary,
+        preferences: overriddenPreferences,
+        prompt: "已套用你修改後的偏好。",
+      },
+      userFacingGuidance: `好的，我會依你調整後的偏好（${summary}）來規劃${destinationLabel}行程。`,
+      debugReason: "preference reuse panel override submit",
     });
   }
 

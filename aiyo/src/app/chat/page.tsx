@@ -107,6 +107,7 @@ import type {
   TripPlanResult,
   TripProfile,
   TravelAgentDecision,
+  TravelAgentKnownPreferences,
   TravelAgentPreferenceConfirmation,
   VideoRecommendation,
   VideoSummaryResult,
@@ -353,13 +354,65 @@ function buildTripProfileFromPreferenceConfirmation(
     return null;
   }
 
+  return buildTripProfileFromPreferenceDraft(confirmation, preferences);
+}
+
+/** Keep traveler/dates from chat; overlay budget/pace/transport from preference confirmation. */
+function mergePreferenceWithExistingTripProfile(
+  confirmationProfile: TripProfile | null,
+  existing: TripProfile | null,
+): TripProfile | undefined {
+  if (!confirmationProfile && !existing) {
+    return undefined;
+  }
+  if (!confirmationProfile) {
+    return existing ?? undefined;
+  }
+  if (!existing) {
+    return confirmationProfile;
+  }
+  return {
+    ...existing,
+    ...confirmationProfile,
+    travel_dates: existing.travel_dates ?? confirmationProfile.travel_dates,
+    traveler_count: existing.traveler_count ?? confirmationProfile.traveler_count,
+    companions: existing.companions ?? confirmationProfile.companions,
+    departure_location: existing.departure_location ?? confirmationProfile.departure_location,
+  };
+}
+
+function buildTripProfileFromPreferenceDraft(
+  confirmation: TravelAgentPreferenceConfirmation | null,
+  draft: TravelAgentKnownPreferences,
+): TripProfile | null {
+  const confirmed = confirmation?.preferences;
+  const destination = draft.destination || confirmed?.destination;
+  const days = draft.days || confirmed?.days;
+  const budget =
+    draft.budgetLevel === "high"
+      ? 80_000
+      : draft.budgetLevel === "low"
+        ? 30_000
+        : draft.budgetLevel === "medium"
+          ? 50_000
+          : typeof draft.budget === "number"
+            ? draft.budget
+            : typeof confirmed?.budget === "number"
+              ? confirmed.budget
+              : undefined;
+
   return buildTripProfileFallback({
-    destination: preferences.destination,
-    days: preferences.days,
-    budget: typeof preferences.budget === "number" ? preferences.budget : undefined,
-    transportPreference: preferences.transportPreference || null,
-    pace: preferences.pace || null,
-    interests: preferences.travelStyle || preferences.travelStyles || [],
+    destination,
+    days,
+    budget,
+    transportPreference: draft.transportPreference || confirmed?.transportPreference || null,
+    pace: draft.pace || confirmed?.pace || null,
+    interests:
+      draft.travelStyle?.length
+        ? draft.travelStyle
+        : draft.travelStyles?.length
+          ? draft.travelStyles
+          : confirmed?.travelStyle || confirmed?.travelStyles || [],
   });
 }
 
@@ -1126,7 +1179,7 @@ export default function ChatPage() {
     }));
     void handleSend(scopedInstruction, {
       displayMessage: "沿用先前偏好",
-      tripProfile: confirmationProfile ?? tripProfile ?? undefined,
+      tripProfile: mergePreferenceWithExistingTripProfile(confirmationProfile, tripProfile),
     });
   }
 
@@ -1138,12 +1191,32 @@ export default function ChatPage() {
     void handleSend("這次不用沿用", { displayMessage: "這次重新填寫偏好" });
   }
 
-  function handlePreferenceEditSubmit(message: string, displayMessage: string) {
+  function handlePreferenceEditSubmit(
+    message: string,
+    displayMessage: string,
+    draft: TravelAgentKnownPreferences,
+  ) {
+    const confirmation = workflowRail.preferenceConfirmation;
+    const confirmationProfile = buildTripProfileFromPreferenceDraft(confirmation, draft);
+    const destination = confirmationProfile?.destination?.trim();
+    const days = confirmationProfile?.duration_days;
+    const scopedInstruction = [
+      message,
+      "請依這些偏好直接開始規劃",
+      destination || "",
+      days ? `${days} 天` : "",
+      "完整行程。",
+    ]
+      .filter(Boolean)
+      .join("，");
     setWorkflowRail((prev) => ({
       ...prev,
       preferenceConfirmation: null,
     }));
-    void handleSend(message, { displayMessage });
+    void handleSend(scopedInstruction, {
+      displayMessage,
+      tripProfile: mergePreferenceWithExistingTripProfile(confirmationProfile, tripProfile),
+    });
   }
 
   function handleToggleVoiceInput() {

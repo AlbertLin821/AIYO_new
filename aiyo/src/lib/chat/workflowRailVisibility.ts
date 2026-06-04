@@ -1,3 +1,4 @@
+import { isPreferenceOverrideMessage } from "@/lib/personalization/preferenceDisplay";
 import type { ChatMessage, ConversationMode } from "@/types";
 
 const PLANNING_VERB_PATTERN =
@@ -50,6 +51,9 @@ export function isPersonalMemoryRecallIntent(message: string): boolean {
 }
 
 export function isItineraryMutationCommand(message: string): boolean {
+  if (isPreferenceOverrideMessage(message)) {
+    return false;
+  }
   return ITINERARY_MUTATION_PATTERN.test(message);
 }
 

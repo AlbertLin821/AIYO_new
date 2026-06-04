@@ -97,6 +97,17 @@ test.describe("Phase 7 travel agent browser flow", () => {
     await expect(reply).toContainText(/沿用|東京|偏好|輕鬆|中等/);
   });
 
+  test("C2. 嘉義四人沿用偏好後不再問人數", async ({ page }) => {
+    test.setTimeout(120_000);
+    await openChatWithHarness(page);
+    await sendChatMessage(page, "我想要去嘉義三天兩夜總共四個人去玩幫我規劃一下行程");
+    await expect(page.getByTestId("preference-reuse-panel")).toBeVisible();
+    await page.getByTestId("preference-reuse-accept").click();
+    const reply = page.getByTestId("chat-message-ai").last();
+    await expect(reply).toContainText(/出發|日期|嘉義/);
+    await expect(reply).not.toContainText(/幾個人同行/);
+  });
+
   test("D. 條件式搜尋：晴空塔營業時間", async ({ page }) => {
     test.setTimeout(120_000);
     await openChatWithHarness(page);
