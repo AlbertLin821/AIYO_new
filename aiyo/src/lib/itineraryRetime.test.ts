@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { reorderItemsWithRetime, retimeDayItems, toMinutes } from "@/lib/itineraryRetime";
+import {
+  cascadeDayItemsAfterTravelEdit,
+  reorderItemsWithRetime,
+  retimeDayItems,
+  toMinutes,
+} from "@/lib/itineraryRetime";
 import type { TripPlanItem } from "@/types";
 
 function makeItem(
@@ -110,4 +115,35 @@ test("reorderItemsWithRetime matches manual swap retime", () => {
     viaHelper.map((item) => item.time),
     manual.map((item) => item.time),
   );
+});
+
+test("transport edit cascades next item start time from previous stop", () => {
+  const items = [
+    makeItem("a", "16:00", { location: { name: "A", lat: 23.4637, lng: 120.4427, description: "A" } }),
+    makeItem("b", "17:11", {
+      transport: "Driving",
+      location: { name: "B", lat: 23.4773, lng: 120.4469, description: "B" },
+    }),
+  ];
+
+  const result = cascadeDayItemsAfterTravelEdit(items, "b", { transport: "Walking" });
+
+  assert.equal(result[1]?.time, "16:23");
+  assert.equal(result[1]?.transport, "Walking");
+  assert.equal(result[1]?.transportDurationMinutes, 23);
+});
+
+test("editing the first stop time cascades following items by travel duration", () => {
+  const items = [
+    makeItem("a", "09:00", { location: { name: "A", lat: 23.4637, lng: 120.4427, description: "A" } }),
+    makeItem("b", "10:00", {
+      location: { name: "B", lat: 23.4773, lng: 120.4469, description: "B" },
+      transport: "Walking",
+    }),
+  ];
+
+  const result = cascadeDayItemsAfterTravelEdit(items, "a", { time: "16:00" });
+
+  assert.equal(result[0]?.time, "16:00");
+  assert.equal(result[1]?.time, "16:23");
 });

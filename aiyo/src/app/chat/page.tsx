@@ -60,9 +60,9 @@ import {
 } from "@/app/chat/itineraryPatchUtils";
 import { applyAssistantActions } from "@/lib/assistantActions/applyAssistantActions";
 import {
-  travelPlanResponseToTripPlanResult,
   tripPlanHasItems,
 } from "@/lib/travelPlanConversion";
+import { pickPreferredGeneratedTripPlan } from "@/lib/generatedTripPlan";
 import { CHAT_HISTORY_WINDOW } from "@/lib/chatConstants";
 import { isStructuredTripPlanningRequest } from "@/lib/chat/isStructuredTripPlanningRequest";
 import {
@@ -2314,20 +2314,7 @@ export default function ChatPage() {
   }
 
   function resolveGeneratedTripPlan(response: ChatResponsePayload): TripPlanResult | null {
-    if (response.itinerarySuggestion) {
-      return response.itinerarySuggestion;
-    }
-    if (!response.reply.travelPlan) {
-      return null;
-    }
-    const currentTrip = useTripStore.getState();
-    const targetDayCount =
-      response.tripProfile?.duration_days ??
-      planningSnapshot.days ??
-      currentTrip.itinerary?.length;
-    return travelPlanResponseToTripPlanResult(response.reply.travelPlan, {
-      targetDayCount: targetDayCount && targetDayCount > 0 ? targetDayCount : undefined,
-    });
+    return pickPreferredGeneratedTripPlan(response);
   }
 
   async function applyItineraryUpdateFromResponse(
@@ -2417,15 +2404,41 @@ export default function ChatPage() {
       detail: "AI 正在把新的每日行程寫入右側行程欄。",
     });
     const currentTrip = useTripStore.getState();
+    const geocodedPlan: TripPlanResult = {
+      ...plan,
+      days: plan.days.map((day) => ({
+        ...day,
+        items: day.items.map((item) => ({ ...item })),
+      })),
+    };
+    const missingLocationItems = geocodedPlan.days.flatMap((day) =>
+      day.items
+        .filter((item) => !item.location || !item.location.verified || !item.location.placeId)
+        .map((item) => ({ dayNumber: day.dayNumber, item })),
+    );
+    if (missingLocationItems.length > 0) {
+      const geocodeUpdates = await geocodeItineraryItemsMissingLocation(
+        missingLocationItems,
+        currentTrip.destination || response.tripProfile?.destination || planningSnapshot.destination,
+      );
+      for (const update of geocodeUpdates) {
+        const day = geocodedPlan.days.find((entry) => entry.dayNumber === update.dayNumber);
+        const item = day?.items.find((entry) => entry.id === update.itemId);
+        if (item) {
+          item.location = update.location;
+        }
+      }
+    }
     currentTrip.replaceTripPlan(plan, {
       destination: currentTrip.destination || response.tripProfile?.destination || planningSnapshot.destination,
-      days: plan.days.length,
+      days: geocodedPlan.days.length,
       budget:
         currentTrip.budget ||
         planningSnapshot.budget ||
         readBudgetAmountFromText(response.tripProfile?.budget),
       title: currentTrip.title || response.tripProfile?.destination || currentTrip.destination,
     });
+    currentTrip.setItinerary(geocodedPlan.days);
     const reconciled = reconcileTripMapState(useTripStore.getState().itinerary, useMapStore.getState().pins);
     useTripStore.getState().setItinerary(reconciled.itinerary);
     useMapStore.getState().setPins(reconciled.pins);
@@ -2434,7 +2447,7 @@ export default function ChatPage() {
     setItinerarySyncState({
       status: "synced",
       title: "已同步到目前行程",
-      detail: `已更新 ${plan.days.length} 天行程內容。`,
+      detail: `已更新 ${geocodedPlan.days.length} 天行程內容。`,
     });
     if (!options.silent) {
       pushToast({

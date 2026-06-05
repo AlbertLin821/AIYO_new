@@ -29,6 +29,7 @@ if (enableMockMaps) {
 const nextConfig: NextConfig = {
   // Enable after removing route-level `export const dynamic = "force-dynamic"` conflicts.
   // cacheComponents: true,
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
   reactCompiler: {
     compilationMode: "annotation",
   },

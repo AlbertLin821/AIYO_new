@@ -1,9 +1,11 @@
 import { serverConfig } from "@/server/config";
+import { cleanPlaceMentionName } from "@/server/video/placeMentionNormalizer";
 import { extractPlacesAndFoodsFromChunk, resolveSimpleExtractionModel } from "@/server/video/simpleExtraction/simpleOllamaExtractor";
 import { mergeSimpleExtractionResults } from "@/server/video/simpleExtraction/mergeExtractionResults";
 import { buildTranscriptChunks } from "@/server/video/simpleExtraction/transcriptChunker";
 import type { TranscriptChunk } from "@/server/video/simpleExtraction/transcriptChunker";
 import type { SimpleVideoExtractionChunkResult, SimpleVideoExtractionResult } from "@/server/video/simpleExtraction/types";
+import { selectTravelExtractionProfile } from "@/server/video/travelExtractionProfiles";
 import type { NormalizedTranscriptLine } from "@/server/video/transcriptProcessing";
 
 const SIMPLE_VIDEO_PIPELINE_VERSION = "video-simple-ollama-v1";
@@ -101,11 +103,47 @@ async function retryFailedTranscriptChunks(input: {
   }
 }
 
+function postProcessSimplePlaces(input: {
+  places: SimpleVideoExtractionResult["places"];
+  destinationHint?: string;
+  transcriptLanguage?: string;
+  title: string;
+}): SimpleVideoExtractionResult["places"] {
+  const profile = selectTravelExtractionProfile({
+    destinationHint: input.destinationHint,
+    transcriptLanguage: input.transcriptLanguage,
+    title: input.title,
+  });
+  const seen = new Set<string>();
+  const out: SimpleVideoExtractionResult["places"] = [];
+
+  for (const place of input.places) {
+    const cleaned = cleanPlaceMentionName(place.name, profile, input.destinationHint);
+    const name = cleaned.cleanedName.trim();
+    if (!name || cleaned.rejectedReason) {
+      continue;
+    }
+    const key = name.replace(/\s+/g, "").toLowerCase();
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push({
+      ...place,
+      name,
+    });
+  }
+
+  return out;
+}
+
 export async function extractSimpleVideoPlacesAndFoods(input: {
   title: string;
   description?: string;
   transcriptLines: NormalizedTranscriptLine[];
   model?: string;
+  destinationHint?: string;
+  transcriptLanguage?: string;
 }): Promise<SimpleVideoExtractionResult> {
   const chunkTimeoutMs = Math.max(120_000, serverConfig.ollamaTimeoutMs);
   const chunks = buildTranscriptChunks({
@@ -155,9 +193,15 @@ export async function extractSimpleVideoPlacesAndFoods(input: {
   const rawPlaceCount = chunkResults.reduce((sum, result) => sum + result.places.length, 0);
   const rawFoodCount = chunkResults.reduce((sum, result) => sum + result.foods.length, 0);
   const merged = mergeSimpleExtractionResults({ chunkResults });
+  const postProcessedPlaces = postProcessSimplePlaces({
+    places: merged.places,
+    destinationHint: input.destinationHint,
+    transcriptLanguage: input.transcriptLanguage,
+    title: input.title,
+  });
 
   return {
-    places: merged.places,
+    places: postProcessedPlaces,
     foods: merged.foods,
     debug: {
       chunkCount: chunks.length,
@@ -165,7 +209,7 @@ export async function extractSimpleVideoPlacesAndFoods(input: {
       pipelineVersion: SIMPLE_VIDEO_PIPELINE_VERSION,
       rawPlaceCount,
       rawFoodCount,
-      finalPlaceCount: merged.places.length,
+      finalPlaceCount: postProcessedPlaces.length,
       finalFoodCount: merged.foods.length,
       failedChunkCount: failedChunks.length,
       failedChunks: failedChunks.length ? failedChunks : undefined,

@@ -1023,6 +1023,50 @@ export default function ItineraryPage() {
     [roomId, tripId],
   );
 
+  const clearSharedTripCursor = useCallback(() => {
+    if (!roomId || !tripId) {
+      return;
+    }
+    void syncService.sendPresenceHeartbeat({
+      roomId,
+      activeSection: "itinerary-editor",
+      selectedEntityId: tripId,
+      cursorX: null,
+      cursorY: null,
+    });
+  }, [roomId, tripId]);
+
+  useEffect(() => {
+    if (!showEditor || !roomId || !tripId || status !== "authenticated") {
+      return;
+    }
+
+    void syncService.sendPresenceHeartbeat({
+      roomId,
+      activeSection: "itinerary-editor",
+      selectedEntityId: tripId,
+    });
+
+    const heartbeat = window.setInterval(() => {
+      void syncService.sendPresenceHeartbeat({
+        roomId,
+        activeSection: "itinerary-editor",
+        selectedEntityId: tripId,
+      });
+    }, 10_000);
+
+    return () => {
+      window.clearInterval(heartbeat);
+      void syncService.sendPresenceHeartbeat({
+        roomId,
+        activeSection: "itinerary",
+        selectedEntityId: tripId,
+        cursorX: null,
+        cursorY: null,
+      });
+    };
+  }, [roomId, showEditor, status, tripId]);
+
   const visibleItineraries = useMemo(
     () => sortItineraries(filterItineraries(tripLibrary, deferredItinerarySearch), tripLibrarySort),
     [deferredItinerarySearch, tripLibrary, tripLibrarySort],
@@ -1452,13 +1496,14 @@ export default function ItineraryPage() {
                     itinerary={itinerary}
                     tripId={tripId}
                     isAuthenticated={status === "authenticated"}
-                    isSharedTrips={isCurrentTripShared}
+                    showCollaboratorCursors={Boolean(roomId)}
                     canEdit={canEdit}
                     recoveringTrip={recoveringTrip}
                     addingToDay={addingToDay}
                     addDraft={addDraft}
                     othersEditorPresence={othersEditorPresence}
                     onMouseMove={sendSharedTripCursor}
+                    onMouseLeave={clearSharedTripCursor}
                     onAddDay={() => void handleAddDay()}
                     onAddDraftChange={setAddDraft}
                     onStartAddActivity={handleStartAddActivity}

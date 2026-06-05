@@ -1,7 +1,20 @@
 "use client";
 
 import { memo, useId, useMemo, useState } from "react";
-import { GripVertical, MapPin, PencilLine, Save, Train, Trash2, X } from "lucide-react";
+import {
+  Bike,
+  Bus,
+  Car,
+  CarTaxiFront,
+  Footprints,
+  GripVertical,
+  MapPin,
+  PencilLine,
+  Save,
+  Train,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
@@ -9,7 +22,7 @@ import { zhTW as t } from "@/locales/zh-TW";
 import type { TripPlanItem } from "@/types";
 import { useTripStore } from "@/stores/useTripStore";
 import { getRegionalTransitOptions } from "@/lib/tripTransportRegion";
-import { transportDisplayLabel } from "@/lib/transportDisplay";
+import { transportDisplayIcon, transportDisplayLabel } from "@/lib/transportDisplay";
 import { activityTypeColors, activityTypeLabel, activityTypeOptions } from "./itineraryUi";
 
 type EditDraft = {
@@ -78,6 +91,7 @@ function SortableActivityItem({
 
   const isDark = tone === "dark";
   const colorClass = activityTypeColors[item.type];
+  const transportIcon = item.transport ? transportDisplayIcon(item.transport) : null;
 
   function updateDraft(patch: Partial<EditDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -114,6 +128,23 @@ function SortableActivityItem({
         : undefined,
     });
     setIsEditing(false);
+  }
+
+  function renderTransportIcon() {
+    switch (transportIcon) {
+      case "walk":
+        return <Footprints className="size-3" />;
+      case "bike":
+        return <Bike className="size-3" />;
+      case "bus":
+        return <Bus className="size-3" />;
+      case "taxi":
+        return <CarTaxiFront className="size-3" />;
+      case "train":
+        return <Train className="size-3" />;
+      default:
+        return <Car className="size-3" />;
+    }
   }
 
   return (
@@ -178,7 +209,7 @@ function SortableActivityItem({
           <div className="mt-2 grid gap-1 text-xs">
             {item.transport && (
               <p className={cn("flex items-center gap-1", isDark ? "text-zinc-400" : "text-muted")}>
-                <Train className="size-3" />
+                {renderTransportIcon()}
                 {transportDisplayLabel(item.transport, transportChoices)}
               </p>
             )}

@@ -61,8 +61,10 @@ test("travelPlanResponseToTripPlanResult maps spots and food into items", () => 
   assert.equal(result.days.length, 3);
   assert.equal(result.days[0]?.items[0]?.title, "淺草寺");
   assert.equal(result.days[0]?.items[0]?.type, "attraction");
+  assert.equal(result.days[0]?.items[0]?.location?.name, "淺草寺");
   assert.equal(result.days[0]?.items[2]?.title, "大黑家天婦羅");
   assert.equal(result.days[0]?.items[2]?.type, "restaurant");
+  assert.equal(result.days[0]?.items[2]?.location?.name, "大黑家天婦羅");
   assert.equal(result.days[2]?.items[0]?.title, "築地場外市場");
   assert.ok(tripPlanHasItems(result));
 });

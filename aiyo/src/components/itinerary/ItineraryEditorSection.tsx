@@ -14,13 +14,14 @@ type Props = {
   itinerary: TripPlanDay[];
   tripId: string | null;
   isAuthenticated: boolean;
-  isSharedTrips: boolean;
+  showCollaboratorCursors: boolean;
   canEdit: boolean;
   recoveringTrip: boolean;
   addingToDay: number | null;
   addDraft: AddActivityDraft;
   othersEditorPresence: EditingPresence[];
   onMouseMove: (clientX: number, clientY: number, rect: DOMRect) => void;
+  onMouseLeave: () => void;
   onAddDay: () => void;
   onAddDraftChange: (draft: AddActivityDraft) => void;
   onStartAddActivity: (dayNumber: number) => void;
@@ -37,13 +38,14 @@ function ItineraryEditorSection({
   itinerary,
   tripId,
   isAuthenticated,
-  isSharedTrips,
+  showCollaboratorCursors,
   canEdit,
   recoveringTrip,
   addingToDay,
   addDraft,
   othersEditorPresence,
   onMouseMove,
+  onMouseLeave,
   onAddDay,
   onAddDraftChange,
   onStartAddActivity,
@@ -63,12 +65,14 @@ function ItineraryEditorSection({
           const rect = event.currentTarget.getBoundingClientRect();
           onMouseMove(event.clientX, event.clientY, rect);
         }}
+        onMouseLeave={onMouseLeave}
       >
-        {isSharedTrips && othersEditorPresence.length > 0 && (
+        {showCollaboratorCursors && othersEditorPresence.length > 0 && (
           <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden" aria-hidden>
             {othersEditorPresence.map((entry) => (
               <div
                 key={entry.userId}
+                data-testid={`presence-cursor-${entry.userId}`}
                 className="pointer-events-none absolute z-10"
                 style={{
                   left: `${entry.cursorPosition.x}%`,
@@ -77,12 +81,17 @@ function ItineraryEditorSection({
                 }}
               >
                 <MousePointer2 className="size-4 -rotate-12" style={{ color: entry.color }} fill={entry.color} />
-                <span
-                  className="absolute left-4 top-3 max-w-[min(280px,48vw)] whitespace-normal rounded-md px-2 py-0.5 text-[10px] font-medium leading-snug text-white"
-                  style={{ backgroundColor: entry.color }}
+                <div
+                  className="absolute left-4 top-3 flex max-w-[min(280px,48vw)] items-center gap-2 rounded-full border border-white/35 px-2.5 py-1 text-[10px] font-medium leading-snug text-white shadow-lg backdrop-blur-sm"
+                  style={{ backgroundColor: `${entry.color}E6` }}
                 >
-                  {entry.userName} · {presenceActionLabel(entry.activeSection)}
-                </span>
+                  <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-white/20 text-[9px] font-semibold uppercase">
+                    {entry.userName.slice(0, 1)}
+                  </span>
+                  <span className="whitespace-nowrap">{entry.userName}</span>
+                  <span className="h-1 w-1 shrink-0 rounded-full bg-white/80" />
+                  <span className="whitespace-nowrap text-white/90">{presenceActionLabel(entry.activeSection)}</span>
+                </div>
               </div>
             ))}
           </div>
