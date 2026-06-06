@@ -1287,6 +1287,113 @@ test("existing itinerary delete item request respects the requested day", async 
   assert.deepEqual(response.proposedChanges, []);
 });
 
+test("existing itinerary move item request moves item from one day to another", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "把第一天的新港漁市場移到第二天",
+    structuredTravelPlanning: true,
+    context: {
+      destination: "札幌",
+      days: 3,
+      itinerary: [
+        {
+          dayNumber: 1,
+          items: [
+            { id: "d1-market", time: "10:00", title: "新港漁市場", type: "attraction" as const },
+            { id: "d1-lunch", time: "12:00", title: "午餐", type: "restaurant" as const },
+          ],
+        },
+        {
+          dayNumber: 2,
+          items: [{ id: "d2-park", time: "09:00", title: "大通公園", type: "attraction" as const }],
+        },
+      ],
+    },
+  });
+
+  assert.equal(response.reply.responseType, "text_message");
+  assert.match(response.reply.content, /把第 1 天的「新港漁市場」移到第 2 天/);
+  assert.equal(response.assistantActions?.length, 2);
+  assert.equal(response.assistantActions?.[0]?.type, "itinerary.remove_item");
+  assert.deepEqual(response.assistantActions?.[0]?.payload, {
+    dayId: "day-1",
+    itemId: "d1-market",
+  });
+  assert.equal(response.assistantActions?.[1]?.type, "itinerary.add_item");
+  assert.equal(response.assistantActions?.[1]?.payload.dayId, "day-2");
+  assert.equal(response.assistantActions?.[1]?.payload.item.title, "新港漁市場");
+  assert.equal(response.assistantActions?.[1]?.payload.item.startTime, "10:00");
+  assert.deepEqual(response.proposedChanges, []);
+});
+
+test("existing itinerary move item request auto-creates missing target day", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "把第一天的新港漁市場移到第二天",
+    structuredTravelPlanning: true,
+    context: {
+      destination: "札幌",
+      days: 1,
+      itinerary: [
+        {
+          dayNumber: 1,
+          items: [{ id: "d1-market", time: "10:00", title: "新港漁市場", type: "attraction" as const }],
+        },
+      ],
+    },
+  });
+
+  assert.equal(response.reply.responseType, "text_message");
+  assert.match(response.reply.content, /先新增第 2 天/);
+  assert.match(response.reply.content, /移到第 2 天/);
+  assert.equal(response.assistantActions?.length, 3);
+  assert.equal(response.assistantActions?.[0]?.type, "trip.update_metadata");
+  assert.equal(response.assistantActions?.[0]?.payload.days, 2);
+  assert.equal(response.assistantActions?.[1]?.type, "itinerary.remove_item");
+  assert.equal(response.assistantActions?.[2]?.type, "itinerary.add_item");
+  assert.equal(response.assistantActions?.[2]?.payload.dayId, "day-2");
+  assert.deepEqual(response.proposedChanges, []);
+});
+
+test("existing itinerary move item keeps extend actions after server validation", async () => {
+  const baseContext = makeTainanPreferenceAiContext();
+  const response = await chatWithTravelAssistant({
+    message: "把第一天的新港漁市場移到第二天",
+    structuredTravelPlanning: true,
+    aiContext: {
+      ...baseContext,
+      structuredContext: {
+        ...baseContext.structuredContext!,
+        currentTrip: {
+          id: "trip-current",
+          title: "札幌 行程",
+          destination: "札幌",
+          days: [
+            {
+              id: "day-1",
+              dayNumber: 1,
+              items: [{ id: "d1-market", title: "新港漁市場" }],
+            },
+          ],
+        },
+      },
+    },
+    context: {
+      destination: "札幌",
+      days: 1,
+      itinerary: [
+        {
+          dayNumber: 1,
+          items: [{ id: "d1-market", time: "10:00", title: "新港漁市場", type: "attraction" as const }],
+        },
+      ],
+    },
+  });
+
+  assert.equal(response.assistantActions?.length, 3);
+  assert.equal(response.assistantActions?.[0]?.type, "trip.update_metadata");
+  assert.equal(response.assistantActions?.[1]?.type, "itinerary.remove_item");
+  assert.equal(response.assistantActions?.[2]?.type, "itinerary.add_item");
+});
+
 test("existing itinerary delete item request reports missing item on requested day", async () => {
   const response = await chatWithTravelAssistant({
     message: "刪掉第7天的熊本城",

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cleanYouTubeDescription } from "@/server/providers/youtubeProvider";
+import {
+  cleanYouTubeDescription,
+  parseTranscriptVtt,
+} from "@/server/providers/youtubeProvider";
 
 test("cleanYouTubeDescription keeps useful travel text and removes CTA noise", () => {
   const cleaned = cleanYouTubeDescription(
@@ -20,5 +23,23 @@ test("cleanYouTubeDescription keeps useful travel text and removes CTA noise", (
   assert.match(cleaned, /林聰明砂鍋魚頭/);
   assert.doesNotMatch(cleaned, /訂閱|按讚|https?:\/\/|business@example\.com|#嘉義美食|00:00/);
   assert.ok(cleaned.length <= 90);
+});
+
+test("parseTranscriptVtt keeps timed cues and strips inline tags", () => {
+  const entries = parseTranscriptVtt(`WEBVTT
+
+00:00:01.000 --> 00:00:03.500 align:start position:0%
+<c.colorE5E5E5>嘉義大學 新民校區</c>
+
+00:00:04.000 --> 00:00:06.000
+<00:00:04.200><c>工具車</c>
+`);
+
+  assert.equal(entries.length, 2);
+  assert.equal(entries[0]?.timestamp, "00:01");
+  assert.equal(entries[0]?.text, "嘉義大學 新民校區");
+  assert.equal(entries[1]?.timestamp, "00:04");
+  assert.equal(entries[1]?.text, "工具車");
+  assert.equal(entries[1]?.durationSeconds, 2);
 });
 

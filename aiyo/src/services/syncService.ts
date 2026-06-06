@@ -1,4 +1,5 @@
 import { zhTW as t } from "@/locales/zh-TW";
+import { repairSparseItineraryFromLatestChatTravelPlan } from "@/lib/generatedTripPlan";
 import { markPersistenceServerHydrated, persistActiveUserSnapshotNow } from "@/services/persistence";
 import { reconcileTripMapState } from "@/services/mapSync";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/services/apiClient";
@@ -202,6 +203,14 @@ class SyncService {
     const localKey = this.getPayloadKey(localPayload);
 
     if (snapshot.trip) {
+      const repairedItinerary = repairSparseItineraryFromLatestChatTravelPlan(
+        snapshot.trip.itinerary,
+        snapshot.chatMessages,
+        snapshot.trip.days,
+      );
+      const nextSnapshotTrip = repairedItinerary
+        ? { ...snapshot.trip, itinerary: repairedItinerary }
+        : snapshot.trip;
       const remoteKey = this.getPayloadKey(snapshot.trip);
       const localUpdatedAt = useTripStore.getState().lastUpdatedAt;
       const remoteUpdatedAt = snapshot.trip.updatedAt;
@@ -231,7 +240,7 @@ class SyncService {
         this.isApplyingRemote = true;
         try {
           const nextTrip = this.applyReconciledTripSnapshot(
-            snapshot.trip,
+            nextSnapshotTrip,
             snapshot.profile.budget,
             tripSnapshotSource,
           );
@@ -313,15 +322,25 @@ class SyncService {
     collaboration: CollaborationPresenceState | null;
     selectConversation?: boolean;
   }) {
+    const repairedItinerary = snapshot.chatMessages
+      ? repairSparseItineraryFromLatestChatTravelPlan(
+          snapshot.trip.itinerary,
+          snapshot.chatMessages,
+          snapshot.trip.days,
+        )
+      : null;
+    const nextSnapshotTrip = repairedItinerary
+      ? { ...snapshot.trip, itinerary: repairedItinerary }
+      : snapshot.trip;
     this.isApplyingRemote = true;
     try {
       const nextTrip = this.applyReconciledTripSnapshot(
-        snapshot.trip,
-        snapshot.trip.budget,
+        nextSnapshotTrip,
+        nextSnapshotTrip.budget,
         "bootstrap",
       );
       this.lastSyncedPayloadKey = this.getPayloadKey(nextTrip);
-      this.log("trip switch snapshot applied", { tripId: snapshot.trip.tripId });
+      this.log("trip switch snapshot applied", { tripId: nextSnapshotTrip.tripId });
     } finally {
       this.isApplyingRemote = false;
     }
@@ -329,13 +348,13 @@ class SyncService {
     useChatStore.getState().setMessages(
       snapshot.chatMessages || [],
       {
-        tripId: snapshot.trip.tripId,
-        title: snapshot.trip.title,
+        tripId: nextSnapshotTrip.tripId,
+        title: nextSnapshotTrip.title,
       },
       { force: true },
     );
     if (snapshot.selectConversation !== false) {
-      useChatStore.getState().selectConversation(getRemoteConversationId(snapshot.trip.tripId));
+      useChatStore.getState().selectConversation(getRemoteConversationId(nextSnapshotTrip.tripId));
     }
 
     if (snapshot.collaboration) {

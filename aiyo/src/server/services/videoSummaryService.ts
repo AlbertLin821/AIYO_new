@@ -1,4 +1,11 @@
 import { randomUUID } from "crypto";
+import "@/server/bootstrap/videoPipelineBootstrap";
+import {
+  extractYouTubeVideoId,
+  fetchYouTubeMetadata,
+  fetchYouTubeTranscript,
+  type TranscriptEntry,
+} from "@/server/providers/youtubeProvider";
 import { prisma } from "@/lib/prisma";
 import { serverConfig } from "@/server/config";
 import { findKnownLocationReference } from "@/server/geo/locationCatalog";
@@ -7,12 +14,6 @@ import {
   resolveTripDestinationScope,
   type TripDestinationScope,
 } from "@/lib/tripDestinationScope";
-import {
-  extractYouTubeVideoId,
-  fetchYouTubeMetadata,
-  fetchYouTubeTranscript,
-  type TranscriptEntry,
-} from "@/server/providers/youtubeProvider";
 import {
   buildSegmentsFromVerifiedPlaces,
   mergeVideoSummarySegmentsByStartSeconds,
@@ -36,7 +37,7 @@ import type {
 } from "@/types";
 
 const VIDEO_PIPELINE_VERSION =
-  serverConfig.videoExtractionMode === "simple-ollama" ? "video-simple-ollama-v2" : "video-quality-v7";
+  serverConfig.videoExtractionMode === "simple-ollama" ? "video-simple-ollama-v3" : "video-quality-v7";
 const NO_VERIFIED_PLACES_MESSAGE = "此影片未擷取到足夠明確且可驗證的地點名稱。";
 const NO_SIMPLE_RESULTS_MESSAGE = "此影片未擷取到明確地點或食物名稱。";
 
@@ -144,10 +145,20 @@ async function invalidateVideoSummaryCache(cacheKey: string): Promise<void> {
   }
 }
 
+function isAcceptableVideoSummaryCache(result: VideoSummaryResult): boolean {
+  if (result.segments.length === 0) {
+    return false;
+  }
+  if ((result.debug?.failedChunkCount ?? 0) > 0) {
+    return false;
+  }
+  return true;
+}
+
 async function getCachedVideoSummary(cacheKey: string): Promise<VideoSummaryResult | null> {
   const cached = videoSummaryCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
-    if (cached.result.segments.length === 0) {
+    if (!isAcceptableVideoSummaryCache(cached.result)) {
       videoSummaryCache.delete(cacheKey);
     } else {
       return {
@@ -158,7 +169,10 @@ async function getCachedVideoSummary(cacheKey: string): Promise<VideoSummaryResu
   }
 
   const persisted = await readPersistedVideoSummary(cacheKey);
-  if (!persisted || persisted.segments.length === 0) {
+  if (!persisted || !isAcceptableVideoSummaryCache(persisted)) {
+    if (persisted && !isAcceptableVideoSummaryCache(persisted)) {
+      await invalidateVideoSummaryCache(cacheKey);
+    }
     return null;
   }
 
@@ -173,6 +187,9 @@ async function getCachedVideoSummary(cacheKey: string): Promise<VideoSummaryResu
 }
 
 async function cacheVideoSummary(cacheKey: string, result: VideoSummaryResult): Promise<void> {
+  if (!isAcceptableVideoSummaryCache(result)) {
+    return;
+  }
   videoSummaryCache.set(cacheKey, {
     expiresAt: Date.now() + VIDEO_SUMMARY_CACHE_MS,
     result,

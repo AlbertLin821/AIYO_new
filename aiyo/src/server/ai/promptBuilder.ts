@@ -133,6 +133,7 @@ export function buildItineraryPatchIntentPrompt(input: {
       "- If location changes but coordinates are unknown, omit lat/lng; do not reuse old coordinates.",
       "- Use at most 6 assistantActions. Do not emit raw SQL, script, or HTML.",
       "- When the user names a day (第N天; 地N天 is a common typo for 第N天), scope remove/update to that day only.",
+      "- Cross-day move (e.g. 把第一天的新港漁市場移到第二天): if the target day does not exist yet, emit trip.update_metadata to extend days first, then itinerary.remove_item on the source day, then itinerary.add_item on the target day with the same title/time/location/notes.",
       "- To delete a whole day, use itinerary.replace_day with items: [] is NOT allowed; instead ask for clarification or use trip.update_metadata only when changing day count. Do not emit legacy remove-day payloads here.",
       "- Do not replan the entire trip; do not add research tool requests.",
       '- If you cannot identify one unique target item, ask one short confirmation question and return: { "mode": "modify_itinerary", "replyText": string, "itinerary": null, "assistantActions": [], "proposedChanges": [] }.',

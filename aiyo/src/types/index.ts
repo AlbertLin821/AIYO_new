@@ -807,7 +807,11 @@ export interface VideoSummaryDebugMeta {
     | "unavailable";
   captionLanguage?: string;
   captionKind?: "manual" | "asr";
-  captionSource?: "watch-page-captions" | "timedtext" | "youtube-transcript-package";
+  captionSource?:
+    | "watch-page-captions"
+    | "timedtext"
+    | "youtube-transcript-package"
+    | "yt-dlp-vtt";
   cacheStatus?: "memory-hit" | "persisted-hit" | "miss";
   pipelineVersion?: string;
   finalPlaceCount?: number;

@@ -1,6 +1,5 @@
 import { chatWithOllama, resolveModelForTask } from "@/server/ai/ollamaClient";
 import { extractJsonBlock } from "@/server/ai/responseParser";
-import { serverConfig } from "@/server/config";
 import type {
   SimpleExtractedFood,
   SimpleExtractedPlace,
@@ -146,7 +145,7 @@ export async function extractPlacesAndFoodsFromChunk(input: {
       },
     ],
     format: "json",
-    model: input.model || serverConfig.ollamaLocationModel,
+    model: input.model,
     timeoutMs: input.timeoutMs ?? 120_000,
     task: "video-place-candidate-extract",
   });
@@ -162,5 +161,5 @@ export async function extractPlacesAndFoodsFromChunk(input: {
 }
 
 export function resolveSimpleExtractionModel(explicitModel?: string): string {
-  return resolveModelForTask("video-place-candidate-extract", explicitModel || serverConfig.ollamaLocationModel);
+  return resolveModelForTask("video-place-candidate-extract", explicitModel);
 }

@@ -81,6 +81,7 @@ import {
 import type {
   AiProposedChange,
   AssistantAction,
+  AssistantActionItemInput,
   ChatPlanningOutput,
   ChatContext,
   ChatMessage,
@@ -1979,6 +1980,150 @@ function parseRemoveItineraryItemRequest(message: string): { day: number; title:
   return { day, title };
 }
 
+function parseMoveItineraryItemRequest(
+  message: string,
+): { fromDay: number; toDay: number; title: string } | null {
+  const fromToDayPattern = new RegExp(
+    `(?:把)?\\s*(.+?)\\s*從\\s*${DAY_PREFIX_PATTERN}\\s*移到\\s*${DAY_PREFIX_PATTERN}`,
+    "u",
+  );
+  const fromTitleToDayPattern = new RegExp(
+    `(?:把)?\\s*${DAY_PREFIX_PATTERN}(?:的)?\\s*(.+?)\\s*移到\\s*${DAY_PREFIX_PATTERN}`,
+    "u",
+  );
+
+  const fromToMatch = message.match(fromToDayPattern);
+  if (fromToMatch?.[1] && fromToMatch[2] && fromToMatch[3]) {
+    const title = cleanupPatchTitle(fromToMatch[1]);
+    const fromDay = parsePatchDayNumber(fromToMatch[2]);
+    const toDay = parsePatchDayNumber(fromToMatch[3]);
+    if (title && fromDay && toDay && fromDay !== toDay) {
+      return { fromDay, toDay, title };
+    }
+  }
+
+  const fromTitleMatch = message.match(fromTitleToDayPattern);
+  if (fromTitleMatch?.[1] && fromTitleMatch[2] && fromTitleMatch[3]) {
+    const fromDay = parsePatchDayNumber(fromTitleMatch[1]);
+    const title = cleanupPatchTitle(fromTitleMatch[2]);
+    const toDay = parsePatchDayNumber(fromTitleMatch[3]);
+    if (title && fromDay && toDay && fromDay !== toDay) {
+      return { fromDay, toDay, title };
+    }
+  }
+
+  return null;
+}
+
+function tripPlanItemToAssistantActionInput(item: TripPlanItem): AssistantActionItemInput {
+  const category =
+    item.type === "restaurant"
+      ? "restaurant"
+      : item.type === "hotel"
+        ? "hotel"
+        : item.type === "transport"
+          ? "transport"
+          : "attraction";
+  return {
+    title: item.title,
+    location: item.location?.name || item.title,
+    address: item.location?.address || null,
+    startTime: item.time,
+    notes: item.notes || null,
+    category,
+    transport: item.transport || null,
+    lat: item.location?.lat ?? null,
+    lng: item.location?.lng ?? null,
+    source: item.source === "video" ? "video" : item.source === "manual" ? "manual" : "assistant",
+  };
+}
+
+function buildMoveItineraryItemPatchResponse(input: {
+  message: string;
+  context?: ChatContext;
+}): ChatResponsePayload | null {
+  const parsed = parseMoveItineraryItemRequest(input.message);
+  if (!parsed || !input.context?.itinerary?.length) {
+    return null;
+  }
+
+  const target = matchItineraryItemFromContext({
+    context: input.context,
+    day: parsed.fromDay,
+    title: parsed.title,
+  });
+  if (!target) {
+    return {
+      reply: {
+        id: `assistant_${Date.now()}`,
+        role: "assistant",
+        content: `第 ${parsed.fromDay} 天找不到「${parsed.title}」。請確認天數或景點名稱是否正確。`,
+        timestamp: nowChatTimestamp(),
+        responseType: "text_message",
+      },
+    };
+  }
+
+  if (target.dayNumber === parsed.toDay) {
+    return {
+      reply: {
+        id: `assistant_${Date.now()}`,
+        role: "assistant",
+        content: `「${target.item.title}」本來就在第 ${parsed.toDay} 天，不需要移動。`,
+        timestamp: nowChatTimestamp(),
+        responseType: "text_message",
+      },
+    };
+  }
+
+  const targetDayExists = input.context.itinerary.some((day) => day.dayNumber === parsed.toDay);
+  const requiredDayCount = Math.max(
+    parsed.toDay,
+    getCurrentTripDayCount(input.context),
+    ...input.context.itinerary.map((day) => day.dayNumber),
+  );
+  const assistantActions: AssistantAction[] = [];
+
+  if (!targetDayExists) {
+    assistantActions.push({
+      type: "trip.update_metadata",
+      payload: { days: requiredDayCount },
+    });
+  }
+
+  assistantActions.push(
+    {
+      type: "itinerary.remove_item",
+      payload: {
+        dayId: `day-${parsed.fromDay}`,
+        itemId: target.item.id,
+      },
+    },
+    {
+      type: "itinerary.add_item",
+      payload: {
+        dayId: `day-${parsed.toDay}`,
+        item: tripPlanItemToAssistantActionInput(target.item),
+      },
+    },
+  );
+
+  const extensionPrefix = !targetDayExists ? `我會先新增第 ${parsed.toDay} 天，` : "";
+
+  return {
+    reply: {
+      id: `assistant_${Date.now()}`,
+      role: "assistant",
+      content: `可以，${extensionPrefix}我會把第 ${parsed.fromDay} 天的「${target.item.title}」移到第 ${parsed.toDay} 天。`,
+      timestamp: nowChatTimestamp(),
+      responseType: "text_message",
+      assistantActions,
+    },
+    assistantActions,
+    proposedChanges: [],
+  };
+}
+
 function buildRemoveItineraryItemPatchResponse(input: {
   message: string;
   context?: ChatContext;
@@ -2407,6 +2552,14 @@ function buildDeterministicItineraryPatchResponse(input: {
   });
   if (removeItemResponse) {
     return removeItemResponse;
+  }
+
+  const moveItemResponse = buildMoveItineraryItemPatchResponse({
+    message,
+    context: input.context,
+  });
+  if (moveItemResponse) {
+    return moveItemResponse;
   }
 
   const reorderMatch = message.match(
@@ -3311,6 +3464,14 @@ async function buildExistingItineraryPatchResponse(input: {
   });
   if (durationReductionPatch) {
     return durationReductionPatch;
+  }
+
+  const moveItemPatch = buildMoveItineraryItemPatchResponse({
+    message: input.message,
+    context: input.context,
+  });
+  if (moveItemPatch) {
+    return moveItemPatch;
   }
 
   publishProgressStep(input.progressSessionId, {

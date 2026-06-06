@@ -315,6 +315,20 @@ function findLinkedItineraryItem(
     });
 }
 
+function resolvePinDayNumber(
+  itinerary: ReturnType<typeof useTripStore.getState>["itinerary"],
+  pin: MapPinType,
+): number | null {
+  if (Number.isInteger(pin.dayNumber) && (pin.dayNumber ?? 0) > 0) {
+    return pin.dayNumber ?? null;
+  }
+  const linkedItem = findLinkedItineraryItem(itinerary, pin);
+  if (linkedItem?.dayNumber && Number.isInteger(linkedItem.dayNumber) && linkedItem.dayNumber > 0) {
+    return linkedItem.dayNumber;
+  }
+  return null;
+}
+
 function buildRouteSegmentInfoContent(segment: ItineraryRouteSegment, displayMinutes: number): string {
   return `
     <article style="min-width:240px;max-width:320px;padding:10px 8px;font-family:inherit;color:#1f2937;">
@@ -630,17 +644,6 @@ export default function MapView({
     bicycling: null,
   });
   const requestedPlaceDetailsRef = useRef<Set<string>>(new Set());
-  const placeDetailsScopeKey = useMemo(
-    () =>
-      pins
-        .map((pin) => `${pin.id}:${pin.placeId || ""}:${pin.lat.toFixed(5)}:${pin.lng.toFixed(5)}`)
-        .join("|"),
-    [pins],
-  );
-
-  useEffect(() => {
-    requestedPlaceDetailsRef.current.clear();
-  }, [placeDetailsScopeKey, tripId]);
   const routePolylinesRef = useRef<
     Array<{ polyline: GooglePolylineInstance; segmentId: string; usedDirections: boolean }>
   >([]);
@@ -652,14 +655,31 @@ export default function MapView({
   const lastPinsGeometryKeyRef = useRef("");
   const prevSelectedPinIdForInfoRef = useRef<string | null>(null);
 
+  const visiblePins = useMemo(() => {
+    if (visibleRouteDayNumbers.length === 0) {
+      return pins;
+    }
+    const visibleDaySet = new Set(visibleRouteDayNumbers);
+    return pins.filter((pin) => {
+      const dayNumber = resolvePinDayNumber(itinerary, pin);
+      return dayNumber != null && visibleDaySet.has(dayNumber);
+    });
+  }, [itinerary, pins, visibleRouteDayNumbers]);
+  const placeDetailsScopeKey = useMemo(
+    () =>
+      visiblePins
+        .map((pin) => `${pin.id}:${pin.placeId || ""}:${pin.lat.toFixed(5)}:${pin.lng.toFixed(5)}`)
+        .join("|"),
+    [visiblePins],
+  );
   const selectedPin = useMemo(
-    () => pins.find((pin) => pin.id === selectedPinId) || null,
-    [pins, selectedPinId],
+    () => visiblePins.find((pin) => pin.id === selectedPinId) || null,
+    [visiblePins, selectedPinId],
   );
   const routeSegments = useMemo(() => buildItineraryRouteSegments(itinerary), [itinerary]);
   const pinStopById = useMemo(
-    () => buildPinStopOrderByPinId(itinerary, pins),
-    [itinerary, pins],
+    () => buildPinStopOrderByPinId(itinerary, visiblePins),
+    [itinerary, visiblePins],
   );
   const highlightedItem = useMemo(
     () => findLinkedItineraryItem(itinerary, selectedPin),
@@ -688,18 +708,21 @@ export default function MapView({
     () => new Set([...highlightedRouteIds].filter((segmentId) => visibleRouteSegmentIds.has(segmentId))),
     [highlightedRouteIds, visibleRouteSegmentIds],
   );
+  useEffect(() => {
+    requestedPlaceDetailsRef.current.clear();
+  }, [placeDetailsScopeKey, tripId]);
   const [destinationViewport, setDestinationViewport] = useState<MapViewportPoint | null>(null);
   const viewportPoints = useMemo(() => {
-    const fromPinsAndItinerary = collectMapViewportPoints(pins, itinerary);
+    const fromPinsAndItinerary = collectMapViewportPoints(visiblePins, itinerary);
     if (fromPinsAndItinerary.length > 0) {
       return fromPinsAndItinerary;
     }
     return destinationViewport ? [destinationViewport] : fromPinsAndItinerary;
-  }, [destinationViewport, pins, itinerary]);
+  }, [destinationViewport, visiblePins, itinerary]);
 
   useEffect(() => {
     const destination = tripDestination?.trim();
-    if (!destination || collectMapViewportPoints(pins, itinerary).length > 0) {
+    if (!destination || collectMapViewportPoints(visiblePins, itinerary).length > 0) {
       setDestinationViewport(null);
       return;
     }
@@ -721,7 +744,13 @@ export default function MapView({
     return () => {
       cancelled = true;
     };
-  }, [itinerary, pins, tripDestination]);
+  }, [itinerary, tripDestination, visiblePins]);
+
+  useEffect(() => {
+    if (selectedPinId && !visiblePins.some((pin) => pin.id === selectedPinId)) {
+      setSelectedPinId(null);
+    }
+  }, [selectedPinId, setSelectedPinId, visiblePins]);
 
   useEffect(() => {
     selectedPinIdRef.current = selectedPinId;
@@ -787,7 +816,7 @@ export default function MapView({
       if (!map || !infoWindow) {
         return;
       }
-      const pin = pins.find((entry) => entry.id === pinId);
+      const pin = visiblePins.find((entry) => entry.id === pinId);
       if (!pin) {
         return;
       }
@@ -799,7 +828,7 @@ export default function MapView({
       infoWindow.setContent(buildPinInfoContent(pin, linkedItem));
       infoWindow.open({ map, anchor: marker });
     },
-    [itinerary, pins, sdkState],
+    [itinerary, sdkState, visiblePins],
   );
 
   const openPinInfoForPinId = useCallback(
@@ -811,14 +840,14 @@ export default function MapView({
       if (!map) {
         return;
       }
-      const pin = pins.find((entry) => entry.id === pinId);
+      const pin = visiblePins.find((entry) => entry.id === pinId);
       if (!pin) {
         return;
       }
       map.panTo({ lat: pin.lat, lng: pin.lng });
       refreshPinInfoContent(pinId);
     },
-    [pins, refreshPinInfoContent, sdkState],
+    [refreshPinInfoContent, sdkState, visiblePins],
   );
 
   const panMapToPinId = useCallback(
@@ -827,14 +856,14 @@ export default function MapView({
         return;
       }
       const map = mapInstanceRef.current;
-      const pin = pins.find((entry) => entry.id === pinId);
+      const pin = visiblePins.find((entry) => entry.id === pinId);
       if (!map || !pin) {
         return;
       }
       map.panTo({ lat: pin.lat, lng: pin.lng });
       map.setZoom(Math.max(map.getZoom() || 12, 15));
     },
-    [pins, sdkState],
+    [sdkState, visiblePins],
   );
 
   useEffect(() => {
@@ -886,11 +915,11 @@ export default function MapView({
   }, [
     itinerary,
     openPinInfoForPinId,
-    pins,
     readOnly,
     refreshPinInfoContent,
     sdkState,
     selectedPinId,
+    visiblePins,
   ]);
 
   useEffect(() => {
@@ -1239,7 +1268,7 @@ export default function MapView({
   }, [sdkState, useGoogleSdk]);
 
   useEffect(() => {
-    if (readOnly || !runtimeConfigChecked || !runtimeMapsConfig.googleMapsApiKey || pins.length === 0) {
+    if (readOnly || !runtimeConfigChecked || !runtimeMapsConfig.googleMapsApiKey || visiblePins.length === 0) {
       return;
     }
 
@@ -1279,7 +1308,7 @@ export default function MapView({
       });
     }
 
-    const entries = pins
+    const entries = visiblePins
       .map((pin) => ({ pin, linkedItem: findLinkedItineraryItem(itinerary, pin) }))
       .filter(({ pin, linkedItem }) => needsPlaceDetails(pin, linkedItem))
       .map(({ pin, linkedItem }) => ({
@@ -1531,7 +1560,7 @@ export default function MapView({
     return () => {
       cancelled = true;
     };
-  }, [itinerary, pins, readOnly, runtimeConfigChecked, runtimeMapsConfig.googleMapsApiKey, sdkState, tripDestination]);
+  }, [itinerary, readOnly, runtimeConfigChecked, runtimeMapsConfig.googleMapsApiKey, sdkState, tripDestination, visiblePins]);
 
   useEffect(() => {
     const maps = window.google?.maps;
@@ -1540,11 +1569,11 @@ export default function MapView({
     }
     const mapsApi = maps;
 
-    const geometryKey = pinsGeometryKey(pins);
+    const geometryKey = pinsGeometryKey(visiblePins);
     if (
       geometryKey === lastPinsGeometryKeyRef.current &&
       markersRef.current.size > 0 &&
-      pins.length > 0
+      visiblePins.length > 0
     ) {
       return;
     }
@@ -1589,7 +1618,7 @@ export default function MapView({
       map.fitBounds(bounds, 72);
     }
 
-    if (pins.length === 0) {
+    if (visiblePins.length === 0) {
       applyMapViewport();
       return () => {
         cancelled = true;
@@ -1623,7 +1652,7 @@ export default function MapView({
             AdvancedMarkerElement: new (options: Record<string, unknown>) => GoogleMarkerInstance;
           };
 
-          pins.forEach((pin) => {
+          visiblePins.forEach((pin) => {
             const stopN = pinStopById.get(pin.id);
             const content = createMapPinElement(pin.color || "#5a7ea3", false, stopN);
             const marker = new lib.AdvancedMarkerElement({
@@ -1650,7 +1679,7 @@ export default function MapView({
             description: t.map.advancedMarkerFailDesc,
           });
           const fallbackBounds = new mapsApi.LatLngBounds();
-          pins.forEach((pin) => {
+          visiblePins.forEach((pin) => {
             const marker = new mapsApi.Marker({
               map,
               position: { lat: pin.lat, lng: pin.lng },
@@ -1661,8 +1690,8 @@ export default function MapView({
             markersRef.current.set(pin.id, marker);
             fallbackBounds.extend({ lat: pin.lat, lng: pin.lng });
           });
-          if (pins.length === 1) {
-            map.setCenter({ lat: pins[0].lat, lng: pins[0].lng });
+          if (visiblePins.length === 1) {
+            map.setCenter({ lat: visiblePins[0].lat, lng: visiblePins[0].lng });
             map.setZoom(14);
           } else {
             map.fitBounds(fallbackBounds, 72);
@@ -1674,7 +1703,7 @@ export default function MapView({
       };
     }
 
-    pins.forEach((pin) => {
+    visiblePins.forEach((pin) => {
       const marker = new mapsApi.Marker({
         map,
         position: { lat: pin.lat, lng: pin.lng },
@@ -1695,7 +1724,8 @@ export default function MapView({
   }, [
     focusLocation,
     handlePinMarkerClick,
-    pins,
+    pinStopById,
+    visiblePins,
     pushToast,
     sdkState,
     tripDestination,
@@ -1713,7 +1743,6 @@ export default function MapView({
     const mapsApi = maps;
 
     let cancelled = false;
-    let directionsTimer: number | NodeJS.Timeout | undefined;
 
     const clearRouteOverlays = () => {
       routePolylinesRef.current.forEach(({ polyline }) => polyline.setMap(null));
@@ -1722,13 +1751,13 @@ export default function MapView({
       routeLabelMarkersRef.current = [];
     };
 
-    if (!effectiveShowItineraryRoutes || pins.length === 0 || visibleRouteSegments.length === 0) {
+    if (!effectiveShowItineraryRoutes || visiblePins.length === 0 || visibleRouteSegments.length === 0) {
       clearRouteOverlays();
       useMapStore.getState().setItinerarySegmentDurations({});
       return;
     }
 
-    directionsTimer = window.setTimeout(() => {
+    const directionsTimer = window.setTimeout(() => {
       void (async () => {
         let resolved: Awaited<ReturnType<typeof fetchItineraryRoutePaths>>;
         let advancedMarkerLib:
@@ -1757,7 +1786,7 @@ export default function MapView({
         }
         const map = mapInstanceRef.current;
         const routeBounds = new mapsApi.LatLngBounds();
-        pins.forEach((pin) => {
+        visiblePins.forEach((pin) => {
           routeBounds.extend({ lat: pin.lat, lng: pin.lng });
         });
 
@@ -1854,7 +1883,7 @@ export default function MapView({
       cancelled = true;
       clearTimeout(directionsTimer);
     };
-  }, [effectiveShowItineraryRoutes, pins, readOnly, sdkState, tripDestination, visibleRouteSegments]);
+  }, [effectiveShowItineraryRoutes, readOnly, sdkState, tripDestination, visiblePins, visibleRouteSegments]);
 
   useEffect(() => {
     if (sdkState !== "ready" || !effectiveShowItineraryRoutes) {
@@ -1876,7 +1905,7 @@ export default function MapView({
       return;
     }
 
-    pins.forEach((pin) => {
+    visiblePins.forEach((pin) => {
       const marker = markersRef.current.get(pin.id);
       if (!marker) {
         return;
@@ -1889,7 +1918,7 @@ export default function MapView({
       }
       marker.setIcon(buildMarkerPinIcon(maps, pin.color || "#5a7ea3", selected, stopN));
     });
-  }, [pinStopById, pins, sdkState, selectedPinId, useAdvancedMarkers]);
+  }, [pinStopById, sdkState, selectedPinId, useAdvancedMarkers, visiblePins]);
 
   useEffect(
     () => () => {
@@ -1921,7 +1950,7 @@ export default function MapView({
     if (sdkState !== "ready" || !mapInstanceRef.current) {
       return;
     }
-    const target = selectedPin || pins[0];
+    const target = selectedPin || visiblePins[0];
     if (!target) {
       return;
     }
@@ -1993,7 +2022,7 @@ export default function MapView({
       ) : (
         <div className={cn("relative z-0 min-h-0 overflow-hidden", embedded ? "h-full" : "flex-1")}>
           <MockMapFallback
-            pins={pins}
+            pins={visiblePins}
             pinStopById={pinStopById}
             routeSegments={visibleRouteSegments}
             highlightedRouteIds={visibleHighlightedRouteIds}
@@ -2104,7 +2133,7 @@ export default function MapView({
               <button
                 type="button"
                 onClick={focusSelectedPin}
-                disabled={showRealMap && (!mapReady || pins.length === 0)}
+                disabled={showRealMap && (!mapReady || visiblePins.length === 0)}
                 aria-label={t.map.mapFocusSelectedPin}
                 title={t.map.mapFocusSelectedPin}
                 className="flex h-9 w-full items-center justify-center rounded-xl border border-border-light bg-white text-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-45"

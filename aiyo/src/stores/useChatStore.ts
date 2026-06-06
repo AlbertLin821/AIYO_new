@@ -405,15 +405,17 @@ export const useChatStore = create<ChatState>((set) => ({
   clearProposedChangesForMessage: (messageId) =>
     withSyncMutationSource("local-user-edit", () => {
       set((state) => {
-        const stripProposedChanges = (messages: ChatMessage[]) =>
+        const stripPendingItineraryChanges = (messages: ChatMessage[]) =>
           messages.map((message) =>
-            message.id === messageId ? { ...message, proposedChanges: undefined } : message,
+            message.id === messageId
+              ? { ...message, proposedChanges: undefined, assistantActions: undefined }
+              : message,
           );
         return {
-          messages: stripProposedChanges(state.messages),
+          messages: stripPendingItineraryChanges(state.messages),
           conversations: state.conversations.map((conversation) =>
             conversation.id === state.activeConversationId
-              ? { ...conversation, messages: stripProposedChanges(conversation.messages) }
+              ? { ...conversation, messages: stripPendingItineraryChanges(conversation.messages) }
               : conversation,
           ),
         };

@@ -2334,7 +2334,11 @@ export default function ChatPage() {
     }
 
     if (response.assistantActions?.length) {
-      await applyAssistantActions(response.assistantActions, { persist: true });
+      const result = await applyAssistantActions(response.assistantActions, { persist: true });
+      const messageId = options.sourceMessageId ?? response.reply.id;
+      if (messageId && result.appliedCount > 0) {
+        clearProposedChangesForMessage(messageId);
+      }
       return;
     }
 
@@ -2878,8 +2882,17 @@ export default function ChatPage() {
                       data-testid="chat-apply-proposed-changes"
                       onClick={() =>
                         message.assistantActions?.length
-                          ? void applyAssistantActions(message.assistantActions, { persist: true })
-                          : void applyAiProposedChanges(message.proposedChanges || [], { navigate: false })
+                          ? void applyAssistantActions(message.assistantActions, { persist: true }).then(
+                              (result) => {
+                                if (result.appliedCount > 0) {
+                                  clearProposedChangesForMessage(message.id);
+                                }
+                              },
+                            )
+                          : void applyAiProposedChanges(message.proposedChanges || [], {
+                              navigate: false,
+                              sourceMessageId: message.id,
+                            })
                       }
                       className="mt-2 rounded-2xl border border-slate-900 bg-slate-900 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-slate-800"
                     >

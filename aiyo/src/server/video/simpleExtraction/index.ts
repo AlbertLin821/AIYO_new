@@ -8,7 +8,7 @@ import type { SimpleVideoExtractionChunkResult, SimpleVideoExtractionResult } fr
 import { selectTravelExtractionProfile } from "@/server/video/travelExtractionProfiles";
 import type { NormalizedTranscriptLine } from "@/server/video/transcriptProcessing";
 
-const SIMPLE_VIDEO_PIPELINE_VERSION = "video-simple-ollama-v1";
+const SIMPLE_VIDEO_PIPELINE_VERSION = "video-simple-ollama-v2";
 
 type ChunkFailure = {
   chunkIndex: number;

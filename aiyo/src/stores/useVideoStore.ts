@@ -24,7 +24,11 @@ export type SummaryDiagnostics = {
     | "unavailable";
   captionLanguage?: string;
   captionKind?: "manual" | "asr";
-  captionSource?: "watch-page-captions" | "timedtext" | "youtube-transcript-package";
+  captionSource?:
+    | "watch-page-captions"
+    | "timedtext"
+    | "youtube-transcript-package"
+    | "yt-dlp-vtt";
   mapsProvenance?: "google-geocoding" | "catalog-fallback" | "mixed";
   geocodeWarnings?: string[];
   summaryUnavailable?: boolean;

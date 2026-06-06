@@ -105,9 +105,16 @@ export async function applyAssistantActions(
     }
 
     const dayNumber = dayNumberFromDayId(action.payload.dayId);
-    const day = dayNumber
+    let day = dayNumber
       ? useTripStore.getState().itinerary.find((candidate) => candidate.dayNumber === dayNumber)
       : null;
+    if (action.type === "itinerary.add_item" && dayNumber && !day) {
+      const tripStore = useTripStore.getState();
+      if (dayNumber > tripStore.itinerary.length) {
+        tripStore.resizeItineraryToDayCount(dayNumber);
+        day = useTripStore.getState().itinerary.find((candidate) => candidate.dayNumber === dayNumber) ?? null;
+      }
+    }
     if (!dayNumber || !day) {
       skippedCount += 1;
       continue;

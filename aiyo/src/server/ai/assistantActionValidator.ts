@@ -50,6 +50,40 @@ function findDay(context: PersonalizedAIContext, dayId: string) {
   return context.currentTrip.days.find((day) => day.dayNumber === dayNumber) || null;
 }
 
+function resolveDayForValidation(input: {
+  context: PersonalizedAIContext;
+  dayId: string;
+  simulatedDayCount: number;
+  allowVirtualEmptyDay?: boolean;
+}) {
+  const existing = findDay(input.context, input.dayId);
+  if (existing) {
+    return existing;
+  }
+  if (!input.allowVirtualEmptyDay) {
+    return null;
+  }
+  const dayNumber = dayNumberFromDayId(input.dayId);
+  if (!dayNumber || dayNumber < 1 || dayNumber > input.simulatedDayCount) {
+    return null;
+  }
+  return {
+    id: input.dayId,
+    dayNumber,
+    items: [] as Array<{ id: string; title: string }>,
+  };
+}
+
+function initialSimulatedDayCount(context: PersonalizedAIContext | null | undefined): number {
+  if (!context?.currentTrip?.days.length) {
+    return 0;
+  }
+  return Math.max(
+    context.currentTrip.days.length,
+    ...context.currentTrip.days.map((day) => day.dayNumber),
+  );
+}
+
 function isKnownAction(value: unknown): value is AssistantAction {
   if (!value || typeof value !== "object") return false;
   const type = (value as { type?: unknown }).type;
@@ -88,6 +122,8 @@ export function validateAssistantActions(input: {
     };
   }
 
+  let simulatedDayCount = initialSimulatedDayCount(context);
+
   for (const action of input.actions.slice(0, MAX_ACTIONS)) {
     if (!isKnownAction(action)) {
       pushRejected(action, "unknown action type");
@@ -111,6 +147,12 @@ export function validateAssistantActions(input: {
     }
 
     if (action.type === "trip.update_metadata") {
+      if (typeof action.payload.days === "number") {
+        simulatedDayCount = Math.max(
+          simulatedDayCount,
+          Math.max(1, Math.min(30, Math.floor(action.payload.days))),
+        );
+      }
       validActions.push({ ...action, payload: { ...action.payload, tripId: ownedTripId } });
       continue;
     }
@@ -120,7 +162,12 @@ export function validateAssistantActions(input: {
       continue;
     }
 
-    const day = findDay(context!, action.payload.dayId);
+    const day = resolveDayForValidation({
+      context: context!,
+      dayId: action.payload.dayId,
+      simulatedDayCount,
+      allowVirtualEmptyDay: action.type === "itinerary.add_item",
+    });
     if (!day) {
       pushRejected(action, "dayId does not exist in current trip");
       continue;
