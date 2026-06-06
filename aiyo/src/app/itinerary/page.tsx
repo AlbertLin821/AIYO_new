@@ -19,7 +19,7 @@ import {
 } from "@/lib/tripMetaEdit";
 import { zhTW as t } from "@/locales/zh-TW";
 import { AnimatePresence, m } from "@/lib/motion";
-import { ArrowLeft, ArrowUpDown, CalendarDays, LinkIcon, Plus, Search } from "lucide-react";
+import { ArrowLeft, CalendarDays, LinkIcon, Plus, Search } from "lucide-react";
 import DeleteTripDialog from "@/components/itinerary/DeleteTripDialog";
 import ItineraryEditorSection from "@/components/itinerary/ItineraryEditorSection";
 import ItineraryLibraryPanel, { type TripLibrarySort } from "@/components/itinerary/ItineraryLibraryPanel";
@@ -1240,30 +1240,17 @@ export default function ItineraryPage() {
               <p className="text-xs text-muted">
                 共 {visibleItineraries.length} 個行程
               </p>
-              <div className="flex items-center gap-1.5">
-                <ArrowUpDown className="size-3.5 text-muted" aria-hidden />
-                {(
-                  [
-                    { value: "createdAt_desc", label: t.itineraryPage.librarySortByCreated },
-                    { value: "updatedAt_desc", label: t.itineraryPage.librarySortByTime },
-                    { value: "title_asc", label: t.itineraryPage.librarySortByTitle },
-                    { value: "days_asc", label: t.itineraryPage.librarySortByTripDays },
-                  ] as const
-                ).map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setTripLibrarySort(opt.value)}
-                    className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                      tripLibrarySort === opt.value
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted hover:bg-cream/60 hover:text-foreground"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
+              <select
+                value={tripLibrarySort}
+                onChange={(event) => setTripLibrarySort(event.target.value as TripLibrarySort)}
+                aria-label={t.itineraryPage.librarySortSelectAria}
+                className="min-h-[36px] rounded-xl border border-border-light bg-surface px-3 py-1.5 text-xs font-medium text-foreground"
+              >
+                <option value="createdAt_desc">{t.itineraryPage.librarySortByCreated}</option>
+                <option value="updatedAt_desc">{t.itineraryPage.librarySortByTime}</option>
+                <option value="title_asc">{t.itineraryPage.librarySortByTitle}</option>
+                <option value="days_asc">{t.itineraryPage.librarySortByTripDays}</option>
+              </select>
             </div>
 
             {libraryLoading && visibleItineraries.length === 0 ? (

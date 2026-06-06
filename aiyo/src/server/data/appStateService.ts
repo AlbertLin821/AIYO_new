@@ -32,6 +32,7 @@ export function toUserProfile(input: {
 }): User {
   const preferences = (input.preferences || {}) as {
     interests?: string[];
+    interestIcons?: Record<string, string>;
     preferredTransport?: string;
     pace?: User["travelPace"] | null;
     travelDays?: number;
@@ -56,6 +57,10 @@ export function toUserProfile(input: {
     preferredTransport: preferences.preferredTransport?.trim() || "",
     travelPace,
     interests: preferences.interests || [],
+    interestIcons:
+      preferences.interestIcons && typeof preferences.interestIcons === "object"
+        ? preferences.interestIcons
+        : {},
   };
 }
 
@@ -717,6 +722,11 @@ export async function updateProfile(userId: string, input: Partial<User> & { wel
         ? Math.max(0, Math.min(30, Math.floor(prev.travelDays as number)))
         : undefined;
 
+  const prevInterestIcons =
+    prev.interestIcons && typeof prev.interestIcons === "object" && !Array.isArray(prev.interestIcons)
+      ? (prev.interestIcons as Record<string, string>)
+      : {};
+
   const preferences: Record<string, unknown> = {
     ...prev,
     interests: input.interests ?? input.travelPreferences ?? prevInterests,
@@ -727,6 +737,16 @@ export async function updateProfile(userId: string, input: Partial<User> & { wel
           ? prev.preferredTransport
           : "",
   };
+
+  if (input.interestIcons !== undefined) {
+    if (Object.keys(input.interestIcons).length === 0) {
+      delete preferences.interestIcons;
+    } else {
+      preferences.interestIcons = input.interestIcons;
+    }
+  } else if (Object.keys(prevInterestIcons).length > 0) {
+    preferences.interestIcons = prevInterestIcons;
+  }
 
   if (nextPace === null) {
     delete preferences.pace;

@@ -37,6 +37,8 @@ test("authenticated user can review, edit, and delete AI memory", async ({ page 
   expect(chatResponse.payload.success).toBe(true);
 
   await page.goto("/profile");
+  await page.getByTestId("settings-open-button").click();
+  await page.getByTestId("settings-memory-tab").click();
   await page.getByTestId("memory-refresh-button").click();
   const initialMemories = await page.evaluate(async () => {
     const response = await fetch("/api/memories", { cache: "no-store" });

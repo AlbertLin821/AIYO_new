@@ -232,11 +232,11 @@ const VideoSearchBar = forwardRef<HTMLInputElement, VideoSearchBarProps>(functio
   const submitAria = mode === "itinerary" ? t.home.recommendedItineraries : isUrl ? t.video.summarize : t.video.search;
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
+    <div className="search-bar-shell mx-auto w-full max-w-2xl">
       <div
         className={cn(
-          "flex min-h-[50px] items-stretch overflow-hidden rounded-full border border-border bg-surface shadow-soft transition-colors",
-          "focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/25",
+          "relative z-[1] flex items-center gap-1 rounded-full bg-surface p-1.5 shadow-soft-lg transition-shadow",
+          "focus-within:shadow-[0_8px_24px_rgba(74,109,145,0.18)]",
         )}
       >
         <Input
@@ -248,7 +248,7 @@ const VideoSearchBar = forwardRef<HTMLInputElement, VideoSearchBarProps>(functio
           onKeyDown={(event) => event.key === "Enter" && void handleSearch()}
           data-testid="video-search-input"
           placeholder={placeholder}
-          className="h-auto min-h-[50px] flex-1 rounded-none border-0 bg-transparent px-5 py-2.5 text-base font-medium shadow-none ring-0 focus-visible:ring-0 sm:px-6"
+          className="h-11 min-h-0 flex-1 rounded-full border-0 bg-transparent px-4 text-base font-normal text-foreground shadow-none ring-0 placeholder:text-muted-foreground focus-visible:ring-0 sm:px-5"
         />
         <Button
           type="button"
@@ -256,12 +256,12 @@ const VideoSearchBar = forwardRef<HTMLInputElement, VideoSearchBarProps>(functio
           disabled={isBusy || !trimmed}
           aria-label={submitAria}
           data-testid="video-search-submit"
-          className="h-auto min-h-[50px] w-16 shrink-0 rounded-none rounded-r-full border-0 border-l border-border bg-primary px-0 text-white hover:bg-primary-dark sm:w-18"
+          className="size-11 shrink-0 rounded-full border-0 bg-primary-dark p-0 text-white shadow-sm hover:bg-primary-dark/90 disabled:opacity-45"
         >
           {isBusy ? (
-            <Loader2 className="size-6 animate-spin" aria-hidden />
+            <Loader2 className="size-5 animate-spin" aria-hidden />
           ) : (
-            <Search className="size-6" strokeWidth={2.25} aria-hidden />
+            <Search className="size-5" strokeWidth={2.25} aria-hidden />
           )}
         </Button>
       </div>
