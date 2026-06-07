@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { itineraryHasPlaceId } from "@/lib/addPlaceToItinerary";
 import {
@@ -38,16 +38,8 @@ export function usePendingPoiPreview({
   const setPendingPoi = useMapStore((state) => state.setPendingPoi);
   const itinerary = useTripStore((state) => state.itinerary);
   const pushToast = useToastStore((state) => state.pushToast);
-  const onDismissRef = useRef(onDismiss);
-  const pushToastRef = useRef(pushToast);
-  const tripDestinationRef = useRef(tripDestination);
-  onDismissRef.current = onDismiss;
-  pushToastRef.current = pushToast;
-  tripDestinationRef.current = tripDestination;
 
   const poiKey = pendingPoiKey(pendingPoi);
-  const pendingPoiRef = useRef(pendingPoi);
-  pendingPoiRef.current = pendingPoi;
 
   const [dayNumber, setDayNumber] = useState(defaultDayNumber);
   const [loading, setLoading] = useState(false);
@@ -75,11 +67,11 @@ export function usePendingPoiPreview({
     setPreview(null);
     setError(null);
     setLoading(false);
-    onDismissRef.current?.();
-  }, [setPendingPoi]);
+    onDismiss?.();
+  }, [onDismiss, setPendingPoi]);
 
   const rejectUnresolvedPick = useCallback(() => {
-    pushToastRef.current({
+    pushToast({
       variant: "error",
       title: t.map.poiAddTitle,
       description: t.map.poiAddNotResolvable,
@@ -88,35 +80,41 @@ export function usePendingPoiPreview({
     setPreview(null);
     setError(null);
     setLoading(false);
-    onDismissRef.current?.();
-  }, [setPendingPoi]);
+    onDismiss?.();
+  }, [onDismiss, pushToast, setPendingPoi]);
 
   useEffect(() => {
-    setDayNumber(defaultDayNumber);
+    queueMicrotask(() => {
+      setDayNumber(defaultDayNumber);
+    });
   }, [defaultDayNumber, poiKey]);
 
   useEffect(() => {
     if (!poiKey) {
-      setPreview(null);
-      setError(null);
-      setLoading(false);
+      queueMicrotask(() => {
+        setPreview(null);
+        setError(null);
+        setLoading(false);
+      });
       return;
     }
-    const activePoi = pendingPoiRef.current;
+    const activePoi = pendingPoi;
     if (!activePoi) {
       return;
     }
     if (status === "unauthenticated") {
-      pushToastRef.current({
+      pushToast({
         variant: "error",
         title: t.map.poiAddTitle,
         description: t.map.poiAddLoginRequired,
       });
       setPendingPoi(null);
-      setPreview(null);
-      setError(null);
-      setLoading(false);
-      onDismissRef.current?.();
+      queueMicrotask(() => {
+        setPreview(null);
+        setError(null);
+        setLoading(false);
+        onDismiss?.();
+      });
       return;
     }
     if (status !== "authenticated") {
@@ -124,11 +122,16 @@ export function usePendingPoiPreview({
     }
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setPreview(null);
+    queueMicrotask(() => {
+      if (cancelled) {
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      setPreview(null);
+    });
 
-    void fetchPendingPoiLocation(activePoi, tripDestinationRef.current)
+    void fetchPendingPoiLocation(activePoi, tripDestination)
       .then((location) => {
         if (cancelled) {
           return;
@@ -162,7 +165,7 @@ export function usePendingPoiPreview({
     return () => {
       cancelled = true;
     };
-  }, [poiKey, rejectUnresolvedPick, setPendingPoi, status]);
+  }, [onDismiss, pendingPoi, poiKey, pushToast, rejectUnresolvedPick, setPendingPoi, status, tripDestination]);
 
   return useMemo(
     () => ({

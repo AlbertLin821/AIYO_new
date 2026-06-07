@@ -4,6 +4,7 @@ import {
   type UserTravelPreference,
   type VideoCandidate,
 } from "@/lib/recommendation";
+import { mergeCachedSummaryIntoVideo } from "@/lib/mergeVideoSummaries";
 import {
   isTextInTripDestinationScope,
   resolveTripDestinationScope,
@@ -17,6 +18,7 @@ import {
 import { getPreloadedDestinationVideos, resolvePreloadedDestinationHint } from "@/server/data/preloadedDestinations";
 import { resolveTripDestinationScopeWithGeocode } from "@/server/places/resolveTripDestinationScope";
 import { searchYouTubeVideos, type VideoSearchDebugInfo } from "@/server/providers/youtubeProvider";
+import { getCachedVideoSummaryForVideoId } from "@/server/services/videoSummaryService";
 import type { VideoRecommendation } from "@/types";
 
 interface RecommendationInput {
@@ -702,6 +704,27 @@ async function normalizeRecommendationInput(input: RecommendationInput): Promise
   return { ...input, destination: resolvedDestination };
 }
 
+async function hydrateVideosFromSummaryCache(
+  videos: VideoRecommendation[],
+): Promise<VideoRecommendation[]> {
+  if (videos.length === 0) {
+    return videos;
+  }
+  return Promise.all(
+    videos.map(async (video) => {
+      const videoId = video.videoId?.trim() || video.id?.trim();
+      if (!videoId) {
+        return video;
+      }
+      const cached = await getCachedVideoSummaryForVideoId(videoId);
+      if (!cached) {
+        return video;
+      }
+      return mergeCachedSummaryIntoVideo(video, cached);
+    }),
+  );
+}
+
 export async function getVideoRecommendations(
   input: RecommendationInput,
 ): Promise<VideoRecommendationOutcome> {
@@ -720,10 +743,12 @@ export async function getVideoRecommendations(
       const scopedPreloaded = filterPreloadedVideosByScope(preloaded, destinationScope);
       if (scopedPreloaded.length > 0) {
         return {
-          videos: scopedPreloaded.map((video) => ({
-            ...video,
-            listProvenance: "preloaded-destination-seed",
-          })),
+          videos: await hydrateVideosFromSummaryCache(
+            scopedPreloaded.map((video) => ({
+              ...video,
+              listProvenance: "preloaded-destination-seed",
+            })),
+          ),
           source: "preloaded-destination-seed",
           debug: {
             rawInput:
@@ -790,7 +815,9 @@ export async function getVideoRecommendations(
       );
       const byId = new Map(providerResult.videos.map((video) => [video.videoId || video.id, video]));
       return {
-        videos: ranked.map((video) => byId.get(video.videoId)).filter((video): video is VideoRecommendation => Boolean(video)),
+        videos: await hydrateVideosFromSummaryCache(
+          ranked.map((video) => byId.get(video.videoId)).filter((video): video is VideoRecommendation => Boolean(video)),
+        ),
         source: "youtube-data-api",
         debug: providerResult.debug,
       };

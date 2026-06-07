@@ -17,7 +17,7 @@ $null = Import-AiyoComposeDotEnv -Root $PSScriptRoot -Mode "prod-live"
 
 $composeEnvArgs = @("--env-file", "./aiyo/.env.prod-live")
 $services = @(
-    "aiyo-new-postgres-prod",
+    "aiyo-new-postgres",
     "aiyo-new-redis",
     "open-webui",
     "aiyo-new-app-prod-live"

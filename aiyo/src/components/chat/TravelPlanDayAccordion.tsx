@@ -6,6 +6,7 @@ import { m } from "@/lib/motion";
 
 import { ChevronDown } from "lucide-react";
 
+import { resolveTripItemDisplayNote } from "@/lib/tripItemNotes";
 import { cn } from "@/lib/utils";
 
 import type { TravelPlanResponse } from "@/types";
@@ -63,6 +64,24 @@ export default function TravelPlanDayAccordion({
 }) {
 
   const routeNames = uniqueByName(day.spots).map((spot) => spot.name);
+  const displaySpots = uniqueByName(day.spots)
+    .map((spot) => ({
+      ...spot,
+      feature: resolveTripItemDisplayNote(spot.feature, spot.name) || "",
+    }))
+    .filter((spot) => spot.name.trim().length > 0);
+  const displayFoods = uniqueByName(day.food_recommendations)
+    .map((food) => ({
+      ...food,
+      description: resolveTripItemDisplayNote(food.description, food.name) || "",
+    }))
+    .filter((food) => food.name.trim().length > 0);
+  const displayTips = day.tips
+    .map((tip) => ({
+      ...tip,
+      text: resolveTripItemDisplayNote(tip.text)?.trim() || "",
+    }))
+    .filter((tip) => tip.text.length > 0);
 
 
 
@@ -168,7 +187,7 @@ export default function TravelPlanDayAccordion({
 
 
 
-            {uniqueByName(day.spots).map((spot, index) => (
+            {displaySpots.map((spot, index) => (
 
                   <div
 
@@ -180,7 +199,9 @@ export default function TravelPlanDayAccordion({
 
                     <p className="text-sm font-semibold text-slate-900">{spot.name}</p>
 
-                    <p className="mt-2 text-sm leading-6 text-slate-700">{spot.feature}</p>
+                    {spot.feature ? (
+                      <p className="mt-2 text-sm leading-6 text-slate-700">{spot.feature}</p>
+                    ) : null}
 
                   </div>
 
@@ -188,7 +209,7 @@ export default function TravelPlanDayAccordion({
 
 
 
-            {uniqueByName(day.food_recommendations).length > 0 && (
+            {displayFoods.length > 0 && (
 
               <div className="rounded-xl border border-slate-200/90 bg-slate-50/60 px-4 py-3">
 
@@ -196,13 +217,15 @@ export default function TravelPlanDayAccordion({
 
                 <div className="space-y-2">
 
-                  {uniqueByName(day.food_recommendations).map((food, index) => (
+                  {displayFoods.map((food, index) => (
 
                     <div key={`${day.day}_food_${index}_${food.name}`} className="rounded-xl bg-white/85 px-3 py-3">
 
                       <p className="text-sm font-semibold text-foreground">{food.name}</p>
 
-                      <p className="mt-1 text-xs leading-6 text-muted">{food.description}</p>
+                      {food.description ? (
+                        <p className="mt-1 text-xs leading-6 text-muted">{food.description}</p>
+                      ) : null}
 
                     </div>
 
@@ -216,7 +239,7 @@ export default function TravelPlanDayAccordion({
 
 
 
-            {day.tips.length > 0 && (
+            {displayTips.length > 0 && (
 
               <div className="rounded-xl border border-slate-200/90 bg-slate-50/60 px-4 py-3">
 
@@ -224,7 +247,7 @@ export default function TravelPlanDayAccordion({
 
                 <ul className="space-y-2">
 
-                  {day.tips.map((tip, index) => (
+                  {displayTips.map((tip, index) => (
 
                     <li key={`${day.day}_tip_${index}_${tip.text}`} className="rounded-xl bg-white/85 px-3 py-2 text-xs leading-6 text-muted">
 

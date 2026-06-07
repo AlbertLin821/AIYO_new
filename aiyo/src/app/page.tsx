@@ -39,7 +39,6 @@ import {
   fetchVideoRecommendations,
   recordVideoWatch,
   shouldSkipClientVideoSummarize,
-  summarizeVideo,
 } from "@/services/videoClient";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
@@ -171,6 +170,8 @@ const AD_PREVIEWS = [
   },
 ];
 
+void AD_PREVIEWS;
+
 export default function HomePage() {
   const router = useRouter();
   const { status: sessionStatus } = useSession();
@@ -185,15 +186,15 @@ export default function HomePage() {
   const {
     videos,
     selectedVideo,
+    summaryStatusByVideoKey,
     setSelectedVideo,
     errorMessage,
     isSearching,
     recommendationSource,
     lastRecommendationRequest,
     setSummaryDiagnostics,
+    clearSummaryDiagnosticsForVideo,
     searchQuery,
-    upsertVideo,
-    setIsSummarizing,
     setInitialVideoList,
     appendToVideoList,
     replaceVideoAtIndex,
@@ -321,74 +322,63 @@ export default function HomePage() {
   ]);
 
   const openVideoSummary = useCallback(async (video: VideoRecommendation) => {
-    setSummaryDiagnostics(null);
-    setSelectedVideo(video);
-    if (video.videoId?.trim()) {
+    const state = useVideoStore.getState();
+    const key = video.videoId || video.id;
+    const resolved =
+      state.videos.find((item) => (item.videoId || item.id) === key) ?? video;
+    setSelectedVideo(resolved);
+    if (resolved.videoId?.trim()) {
       void recordVideoWatch({
-        videoId: video.videoId,
-        videoUrl: video.url,
-        title: video.title,
+        videoId: resolved.videoId,
+        videoUrl: resolved.url,
+        title: resolved.title,
         currentTripId: useTripStore.getState().tripId,
       }).catch(() => undefined);
     }
     logFrontendDebugEvent("home-video", "open-summary-click", {
-      videoId: video.videoId,
-      title: video.title,
-      skipClientSummary: shouldSkipClientVideoSummarize(video),
+      videoId: resolved.videoId,
+      title: resolved.title,
+      skipClientSummary: shouldSkipClientVideoSummarize(resolved),
     });
 
-    if (shouldSkipClientVideoSummarize(video)) {
+    if (shouldSkipClientVideoSummarize(resolved)) {
       return;
     }
 
-    setIsSummarizing(true);
-    try {
-      const job = enqueueVideoSummary(video, {
-        destination: tripDestination,
-        background: false,
-      });
-      if (!job) {
-        return;
-      }
-      const result = await job;
-      upsertVideo(result.video);
-      setSelectedVideo(result.video);
-      setSummaryDiagnostics({
-        transcriptSource: result.transcriptSource,
-        summarySource: result.summarySource,
-        segmentSource: result.segmentSource,
-        captionLanguage: result.debug?.captionLanguage,
-        captionKind: result.debug?.captionKind,
-        captionSource: result.debug?.captionSource,
-        mapsProvenance: result.mapsProvenance,
-        geocodeWarnings: result.geocodeWarnings,
-        summaryUnavailable: result.summaryUnavailable,
-        unavailableReason: result.unavailableReason,
-        fallbackReason: result.fallbackReason,
-        failedChunkCount: result.debug?.failedChunkCount,
-      });
-      logFrontendDebugEvent("home-video", "summary-ready", {
-        videoId: result.video.videoId,
-        title: result.video.title,
-        locations: result.video.extractedLocations.length,
-        segments: result.video.summarySegments?.length || 0,
-      });
-    } catch (error) {
-      pushToast({
-        variant: "error",
-        title: t.video.requestFailed,
-        description: error instanceof Error ? error.message : t.video.requestFailedGeneric,
-      });
-    } finally {
-      setIsSummarizing(false);
+    const videoKey = (resolved.videoId || resolved.id || "").trim();
+    if (videoKey) {
+      clearSummaryDiagnosticsForVideo(videoKey);
     }
+    setSummaryDiagnostics(null);
+    const job = enqueueVideoSummary(resolved, {
+      destination: tripDestination,
+      background: false,
+    });
+    if (!job) {
+      return;
+    }
+    job
+      .then((result) => {
+        logFrontendDebugEvent("home-video", "summary-ready", {
+          videoId: result.video.videoId,
+          title: result.video.title,
+          locations: result.video.extractedLocations.length,
+          segments: result.video.summarySegments?.length || 0,
+        });
+      })
+      .catch((error) => {
+        pushToast({
+          variant: "error",
+          title: t.video.requestFailed,
+          description: error instanceof Error ? error.message : t.video.requestFailedGeneric,
+        });
+      });
   }, [
+    clearSummaryDiagnosticsForVideo,
     pushToast,
-    setIsSummarizing,
     setSelectedVideo,
     setSummaryDiagnostics,
     tripDestination,
-    upsertVideo,
   ]);
 
   const appendUniqueVideos = useCallback((incoming: VideoRecommendation[]) => {
@@ -613,7 +603,7 @@ export default function HomePage() {
   ]);
 
   const refreshVideoSummary = useCallback(
-    async (video: VideoRecommendation) => {
+    (video: VideoRecommendation) => {
       if (!video.videoId?.trim()) {
         return;
       }
@@ -621,57 +611,38 @@ export default function HomePage() {
         videoId: video.videoId,
         title: video.title,
       });
-      setSummaryDiagnostics(null);
-      setIsSummarizing(true);
-      try {
-        const result = await summarizeVideo({
-          videoId: video.videoId,
-          title: video.title,
-          destination: tripDestination,
-          refresh: true,
-        });
-        upsertVideo(result.video);
-        setSelectedVideo(result.video);
-        setSummaryDiagnostics({
-          transcriptSource: result.transcriptSource,
-          summarySource: result.summarySource,
-          segmentSource: result.segmentSource,
-          captionLanguage: result.debug?.captionLanguage,
-          captionKind: result.debug?.captionKind,
-          captionSource: result.debug?.captionSource,
-          mapsProvenance: result.mapsProvenance,
-          geocodeWarnings: result.geocodeWarnings,
-          summaryUnavailable: result.summaryUnavailable,
-          unavailableReason: result.unavailableReason,
-          fallbackReason: result.fallbackReason,
-          failedChunkCount: result.debug?.failedChunkCount,
-        });
-        logFrontendDebugEvent("home-video", "refresh-summary-ready", {
-          videoId: result.video.videoId,
-          title: result.video.title,
-          locations: result.video.extractedLocations.length,
-          segments: result.video.summarySegments?.length || 0,
-          failedChunkCount: result.debug?.failedChunkCount ?? 0,
-          cacheStatus: result.debug?.cacheStatus,
-        });
-      } catch (error) {
-        pushToast({
-          variant: "error",
-          title: t.video.requestFailed,
-          description: error instanceof Error ? error.message : t.video.requestFailedGeneric,
-        });
-      } finally {
-        setIsSummarizing(false);
+      if (useVideoStore.getState().selectedVideo?.videoId === video.videoId) {
+        setSummaryDiagnostics(null);
       }
+      clearSummaryDiagnosticsForVideo(video.videoId || video.id);
+      const job = enqueueVideoSummary(video, {
+        destination: tripDestination,
+        background: false,
+        refresh: true,
+      });
+      if (!job) {
+        return;
+      }
+      job
+        .then((result) => {
+          logFrontendDebugEvent("home-video", "refresh-summary-ready", {
+            videoId: result.video.videoId,
+            title: result.video.title,
+            locations: result.video.extractedLocations.length,
+            segments: result.video.summarySegments?.length || 0,
+            failedChunkCount: result.debug?.failedChunkCount ?? 0,
+            cacheStatus: result.debug?.cacheStatus,
+          });
+        })
+        .catch((error) => {
+          pushToast({
+            variant: "error",
+            title: t.video.requestFailed,
+            description: error instanceof Error ? error.message : t.video.requestFailedGeneric,
+          });
+        });
     },
-    [
-      pushToast,
-      setIsSummarizing,
-      setSelectedVideo,
-      setSummaryDiagnostics,
-      tripDestination,
-      upsertVideo,
-    ],
+    [clearSummaryDiagnosticsForVideo, pushToast, setSummaryDiagnostics, tripDestination],
   );
 
   useEffect(() => {
@@ -710,29 +681,45 @@ export default function HomePage() {
         return;
       }
       setSummaryDiagnostics(null);
-      setSelectedVideo(null);
-      setIsSummarizing(true);
-      try {
-        const result = await summarizeVideo({
+      clearSummaryDiagnosticsForVideo(pending.videoId);
+      setSelectedVideo({
+        id: pending.videoId,
+        videoId: pending.videoId,
+        title: pending.videoId,
+        thumbnail: "",
+        url: `https://www.youtube.com/watch?v=${pending.videoId}`,
+        duration: "",
+        summary: "",
+        description: "",
+        source: "youtube-data-api",
+        timestamps: [],
+        extractedLocations: [],
+      });
+      const job = enqueueVideoSummary(
+        {
+          id: pending.videoId,
           videoId: pending.videoId,
+          title: pending.videoId,
+          thumbnail: "",
+          url: `https://www.youtube.com/watch?v=${pending.videoId}`,
+          duration: "",
+          summary: "",
+          description: "",
+          source: "youtube-data-api",
+          timestamps: [],
+          extractedLocations: [],
+        },
+        {
           destination: tripDestination,
-        });
-        upsertVideo(result.video);
-        setSelectedVideo(result.video);
-        setSummaryDiagnostics({
-          transcriptSource: result.transcriptSource,
-          summarySource: result.summarySource,
-          segmentSource: result.segmentSource,
-          captionLanguage: result.debug?.captionLanguage,
-          captionKind: result.debug?.captionKind,
-          captionSource: result.debug?.captionSource,
-          mapsProvenance: result.mapsProvenance,
-          geocodeWarnings: result.geocodeWarnings,
-          summaryUnavailable: result.summaryUnavailable,
-          unavailableReason: result.unavailableReason,
-          fallbackReason: result.fallbackReason,
-          failedChunkCount: result.debug?.failedChunkCount,
-        });
+          background: false,
+        },
+      );
+      if (!job) {
+        finishFrontendDebugProcess(processId, { resumedFrom: "skipped" });
+        return;
+      }
+      try {
+        const result = await job;
         if (result.summaryUnavailable) {
           pushToast({
             variant: "info",
@@ -767,8 +754,6 @@ export default function HomePage() {
           title: t.video.requestFailed,
           description: error instanceof Error ? error.message : t.video.requestFailedGeneric,
         });
-      } finally {
-        setIsSummarizing(false);
       }
     })();
   }, [
@@ -776,11 +761,10 @@ export default function HomePage() {
     pushToast,
     router,
     sessionStatus,
-    setIsSummarizing,
+    clearSummaryDiagnosticsForVideo,
     setSelectedVideo,
     setSummaryDiagnostics,
     tripDestination,
-    upsertVideo,
   ]);
 
   const handleCloseVideoDrawer = useCallback(() => {
@@ -848,6 +832,7 @@ export default function HomePage() {
           canLoadMoreVideos,
           isLoadingMoreVideos,
           replacingVideoIndex,
+          videoProcessingByKey: summaryStatusByVideoKey,
           onVideoClick: (video) => void openVideoSummary(video),
           onLoadMoreVideos: () => void handleLoadMoreVideos(),
           onDismissVideo: (video, index) => void handleDismissVideo(video, index),

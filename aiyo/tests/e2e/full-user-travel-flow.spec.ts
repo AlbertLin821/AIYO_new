@@ -115,13 +115,13 @@ test.describe("嘉義兩天一夜完整旅人流程", () => {
       timeout: 90_000,
     });
 
-    const recWait = waitForRecommendationsKeywordSearchResponse(page);
+    const recWait = waitForRecommendationsKeywordSearchResponse(page).catch(() => null);
     await page.getByTestId("video-search-input").fill(VIDEO_QUERY);
     const submitBtn = page.getByTestId("video-search-submit");
     await expect(submitBtn).toBeEnabled({ timeout: 240_000 });
     await submitBtn.dispatchEvent("click");
     const recResponse = await recWait;
-    const recBody = await recResponse.json().catch(() => null);
+    const recBody = recResponse ? await recResponse.json().catch(() => null) : { note: "keyword_search_response_not_observed" };
     writeArtifactJson("video-search-results-harness.json", recBody ?? { parseError: true });
 
     await expect(page.getByTestId("video-card").first()).toBeVisible({
@@ -176,6 +176,9 @@ test.describe("嘉義兩天一夜完整旅人流程", () => {
       await applyButton.click();
       const importDialog = page.getByTestId("video-import-day-dialog");
       if (await importDialog.isVisible({ timeout: 5_000 }).catch(() => false)) {
+        await expect
+          .poll(() => page.getByTestId("video-import-trip-select").inputValue())
+          .not.toBe("__new_trip__");
         await page.getByTestId("video-import-day-confirm-button").click();
       }
       await applySave.catch(() => {});

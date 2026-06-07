@@ -331,12 +331,12 @@ function normalizeName(value: string): string {
 }
 
 function inferAnchorList(destinationHint?: string): LocationReference[] {
-  const key = normalizeName(destinationHint || "taiwan");
+  const hint = destinationHint || "";
+  const key = normalizeName(hint || "taiwan");
   const direct = DESTINATION_ANCHORS[key];
   if (direct) {
     return direct;
   }
-  const hint = destinationHint || "";
   if (/嘉義/i.test(hint)) {
     return CHIAYI_ANCHORS;
   }
@@ -345,6 +345,15 @@ function inferAnchorList(destinationHint?: string): LocationReference[] {
   }
   if (/大阪|osaka/i.test(hint)) {
     return DESTINATION_ANCHORS.osaka;
+  }
+  if (/北海道|hokkaido|sapporo|札幌|小樽|otaru/i.test(hint)) {
+    return DESTINATION_ANCHORS.tokyo;
+  }
+  if (/日本|japan|nippon/i.test(hint)) {
+    return DESTINATION_ANCHORS.tokyo;
+  }
+  if (/台灣|臺灣|taiwan|taipei|台北|臺北/i.test(hint)) {
+    return TAIWAN_FALLBACK_ANCHORS;
   }
   return TAIWAN_FALLBACK_ANCHORS;
 }

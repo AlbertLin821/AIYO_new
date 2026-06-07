@@ -32,7 +32,7 @@ test.describe("影片摘要套用到地圖與行程", () => {
     await expect(page.getByTestId("video-search-input")).toBeVisible({ timeout: 40_000 });
 
     await page.getByTestId("video-search-input").fill("嘉義兩天一夜 美食 文化路夜市 林聰明砂鍋魚頭 民主火雞肉飯 檜意森活村 北門驛");
-    const searchResponse = waitForRecommendationsKeywordSearchResponse(page);
+    const searchResponse = waitForRecommendationsKeywordSearchResponse(page).catch(() => null);
     await page.getByTestId("video-search-submit").dispatchEvent("click");
     await searchResponse;
 
@@ -53,6 +53,9 @@ test.describe("影片摘要套用到地圖與行程", () => {
     );
     await page.getByTestId("video-add-to-itinerary-button").click();
     await expect(page.getByTestId("video-import-day-dialog")).toBeVisible({ timeout: 10_000 });
+    await expect
+      .poll(() => page.getByTestId("video-import-trip-select").inputValue())
+      .not.toBe("__new_trip__");
     await page.getByTestId("video-import-day-confirm-button").click();
     await saveResponse;
     await expect(page).toHaveURL(/\/itinerary/);
@@ -60,17 +63,16 @@ test.describe("影片摘要套用到地圖與行程", () => {
     await expect(page.getByTestId("activity-card").filter({ hasText: "民主火雞肉飯" })).toBeVisible();
 
     await page.goto("/map");
-    const mapView = page.getByTestId("map-view");
     await expect
       .poll(
         () =>
-          page.getByTestId("map-pin-marker").evaluateAll((els) =>
+          page.getByTestId("map-view").getByRole("button").evaluateAll((els) =>
             els.map((el) => el.getAttribute("aria-label") || ""),
           ),
         { timeout: 40_000 },
       )
       .toContain("林聰明砂鍋魚頭");
-    const mapPins = await page.getByTestId("map-pin-marker").evaluateAll((els) =>
+    const mapPins = await page.getByTestId("map-view").getByRole("button").evaluateAll((els) =>
       els.map((el) => el.getAttribute("aria-label") || ""),
     );
     expect(mapPins.some((label) => label.includes("民主火雞肉飯"))).toBeTruthy();

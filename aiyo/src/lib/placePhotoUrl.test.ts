@@ -55,12 +55,18 @@ test("resolvePlacePhotoUrl returns undefined for invalid input", () => {
   assert.equal(resolvePlacePhotoUrl("javascript:alert(1)"), undefined);
 });
 
-test("hasUsablePlacePhotoUrl rejects proxy-backed place photos", () => {
+test("hasUsablePlacePhotoUrl rejects proxy-backed place photos without placeId", () => {
   assert.equal(hasUsablePlacePhotoUrl(`/api/map/place-photo?ref=${SAMPLE_REF}&maxwidth=480`), false);
   assert.equal(
     hasUsablePlacePhotoUrl(`https://maps.googleapis.com/maps/api/place/photo?maxwidth=480&photo_reference=${SAMPLE_REF}`),
     false,
   );
+});
+
+test("hasUsablePlacePhotoUrl accepts proxy-backed photos when placeId is present", () => {
+  const proxy = buildPlacePhotoProxyUrl(SAMPLE_REF);
+  assert.equal(hasUsablePlacePhotoUrl(`${proxy}&placeId=place-123`), true);
+  assert.equal(hasUsablePlacePhotoUrl(proxy, "place-123"), true);
 });
 
 test("hasUsablePlacePhotoUrl accepts direct image URLs", () => {

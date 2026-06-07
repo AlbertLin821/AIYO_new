@@ -54,6 +54,26 @@ function isMealItem(type: string, title: string): boolean {
   return /午餐|晚餐|Lunch|Dinner/i.test(title);
 }
 
+function normalizeConcreteTitle(title: string): string {
+  return title.trim().toLowerCase();
+}
+
+function shouldCheckDuplicateTitle(type: string, title: string): boolean {
+  if (!title.trim()) {
+    return false;
+  }
+  if (type === "transport" || type === "hotel") {
+    return false;
+  }
+  if (isMealItem(type, title)) {
+    return false;
+  }
+  if (/^(早餐|午餐|晚餐)$/u.test(title.trim())) {
+    return false;
+  }
+  return true;
+}
+
 function dayHasMeal(
   day: TripPlanResult["days"][number],
   kind: "lunch" | "dinner",
@@ -76,6 +96,7 @@ export function validateItineraryQuality(
 ): ItineraryQualityIssue[] {
   const issues: ItineraryQualityIssue[] = [];
   const totalDays = request.days;
+  const titleUsage = new Map<string, number[]>();
 
   if (plan.days.length !== totalDays) {
     issues.push(issue("days", `Expected ${totalDays} days but got ${plan.days.length}.`));
@@ -166,6 +187,11 @@ export function validateItineraryQuality(
       if (pollutedAvoid) {
         issues.push(issue(`days.${dayIndex}.items.${itemIndex}`, `Avoid term appeared: ${pollutedAvoid}.`));
       }
+
+      if (shouldCheckDuplicateTitle(item.type, item.title)) {
+        const normalizedTitle = normalizeConcreteTitle(item.title);
+        titleUsage.set(normalizedTitle, [...(titleUsage.get(normalizedTitle) || []), dayNumber]);
+      }
     });
 
     const role = resolveTripDayRole(dayNumber, totalDays);
@@ -195,6 +221,18 @@ export function validateItineraryQuality(
     }
     if (day3 && !dayHasMeal(day3, "lunch")) {
       issues.push(issue("days.2.items", "Day 3 should include lunch for a 3-day trip."));
+    }
+  }
+
+  for (const [title, dayNumbers] of titleUsage.entries()) {
+    const uniqueDays = [...new Set(dayNumbers)];
+    if (uniqueDays.length > 1) {
+      issues.push(
+        issue(
+          "days",
+          `Concrete place should not repeat across days without explicit revisit request: ${title}.`,
+        ),
+      );
     }
   }
 

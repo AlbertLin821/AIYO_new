@@ -292,10 +292,10 @@ export function isTravelRelatedVideo(
       combined.includes(raw) ||
       lowerIncludesPhrase(combined, raw) ||
       TRAVEL_POSITIVE.test(combined);
-    return base && isInTripDestinationScope(meta, scope, originalQuery);
+    return base && isInTripDestinationScope(meta, scope);
   }
 
-  return isInTripDestinationScope(meta, scope, originalQuery);
+  return isInTripDestinationScope(meta, scope);
 }
 
 /**
@@ -361,7 +361,6 @@ export function scoreVideoPlaceTravelRank(
 export function isInTripDestinationScope(
   meta: TravelVideoMeta,
   scope: TripDestinationScope | null | undefined,
-  _originalQuery?: string,
 ): boolean {
   if (!scope?.countryCodes.length && !scope?.positiveTokens.length) {
     return true;
@@ -403,7 +402,7 @@ export function isLoosePlaceRelatedVideo(
   if (BODY_STRONG_EXCLUDE.test(combined)) {
     return false;
   }
-  if (!isInTripDestinationScope(meta, scope, originalQuery)) {
+  if (!isInTripDestinationScope(meta, scope)) {
     return false;
   }
   return true;

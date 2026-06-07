@@ -35,6 +35,24 @@ const COUNTRY_POSITIVE_ALIASES: Record<string, string[]> = {
   ES: ["西班牙", "spain", "españa"],
   IT: ["義大利", "意大利", "italy", "italia"],
   AU: ["澳洲", "澳大利亚", "australia"],
+  NZ: [
+    "紐西蘭",
+    "新西蘭",
+    "new zealand",
+    "aotearoa",
+    "queenstown",
+    "皇后鎮",
+    "christchurch",
+    "基督城",
+    "wanaka",
+    "te anau",
+    "milford",
+    "但尼丁",
+    "dunedin",
+    "rotorua",
+    "奧克蘭",
+    "auckland",
+  ],
   ID: ["印尼", "印度尼西亚", "indonesia", "bali", "峇里島"],
   VN: ["越南", "vietnam", "việt nam"],
   HK: ["香港", "hong kong"],
@@ -70,6 +88,16 @@ const NEGATIVE_REGION_BY_COUNTRY: Record<string, string[]> = {
     "bangkok",
     "台北",
     "taipei",
+    "台灣",
+    "臺灣",
+    "taiwan",
+    "formosa",
+    "桃園",
+    "taoyuan",
+    "高雄",
+    "kaohsiung",
+    "台中",
+    "taichung",
   ],
   TW: [
     "tokyo",
@@ -83,6 +111,18 @@ const NEGATIVE_REGION_BY_COUNTRY: Record<string, string[]> = {
     "new york",
     "美國",
     "usa",
+  ],
+  NZ: [
+    "taipei",
+    "台北",
+    "臺北",
+    "台灣",
+    "臺灣",
+    "taiwan",
+    "tokyo",
+    "東京",
+    "japan",
+    "日本",
   ],
   KR: [
     "tokyo",
@@ -364,18 +404,195 @@ export function isGeocodePointInScope(
   return distanceKm <= scope.radiusKm;
 }
 
+type CountryCoordBounds = {
+  latMin: number;
+  latMax: number;
+  lngMin: number;
+  lngMax: number;
+};
+
+const COUNTRY_COORD_BOUNDS: Record<string, CountryCoordBounds> = {
+  TW: { latMin: 21.85, latMax: 25.55, lngMin: 118.0, lngMax: 122.05 },
+  JP: { latMin: 24.0, latMax: 46.5, lngMin: 122.0, lngMax: 154.5 },
+  KR: { latMin: 33.0, latMax: 39.5, lngMin: 124.5, lngMax: 132.5 },
+  NZ: { latMin: -47.5, latMax: -34.0, lngMin: 166.0, lngMax: 179.0 },
+};
+
+const VIDEO_METADATA_DESTINATION_RULES: Array<{ label: string; pattern: RegExp }> = [
+  {
+    label: "New Zealand",
+    pattern:
+      /(紐西蘭|新西蘭|new\s*zealand|aotearoa|queenstown|皇后鎮|christchurch|基督城|te\s*anau|wanaka|milford|但尼丁|dunedin|rotorua|奧克蘭|auckland|庫克山|库克山|瓦卡蒂普|格林諾奇|fergburger)/i,
+  },
+  {
+    label: "Japan",
+    pattern:
+      /(日本|japan|nippon|北海道|東京|大阪|京都|札幌|小樽|函館|沖繩|福岡|奈良|廣島|sapporo|osaka|kyoto|tokyo|hokkaido|okinawa)/i,
+  },
+  {
+    label: "Korea",
+    pattern: /(韓國|韩国|korea|seoul|首爾|首尔|busan|釜山|jeju|濟州)/i,
+  },
+  {
+    label: "Thailand",
+    pattern: /(泰國|泰国|thailand|bangkok|曼谷|chiang\s*mai|清邁|phuket|普吉)/i,
+  },
+  {
+    label: "Taiwan",
+    pattern: /(台灣|臺灣|taiwan|formosa)/i,
+  },
+];
+
+/** Infer primary destination country/region from video title + description (not user trip). */
+export function inferTripDestinationLabelFromVideoMetadata(input: {
+  title?: string;
+  description?: string;
+}): string | null {
+  const haystack = [input.title, input.description].filter(Boolean).join("\n");
+  if (!haystack.trim()) {
+    return null;
+  }
+  for (const rule of VIDEO_METADATA_DESTINATION_RULES) {
+    if (rule.pattern.test(haystack)) {
+      return rule.label;
+    }
+  }
+  return null;
+}
+
+function pointInCountryBounds(lat: number, lng: number, bounds: CountryCoordBounds): boolean {
+  return lat >= bounds.latMin && lat <= bounds.latMax && lng >= bounds.lngMin && lng <= bounds.lngMax;
+}
+
+/** Rough country guess from coordinates when Geocoding API omits countryCode (e.g. Places text search). */
+export function inferCountryCodeFromCoordinates(lat: number, lng: number): string | null {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+  const hits = Object.entries(COUNTRY_COORD_BOUNDS)
+    .filter(([, bounds]) => pointInCountryBounds(lat, lng, bounds))
+    .map(([code]) => code);
+  if (hits.length === 1) {
+    return hits[0] ?? null;
+  }
+  if (hits.includes("TW") && hits.includes("JP")) {
+    return lng <= 122.05 ? "TW" : "JP";
+  }
+  return hits[0] ?? null;
+}
+
+export function coordinatesMatchDestinationCountryScope(
+  lat: number,
+  lng: number,
+  scope: TripDestinationScope | null | undefined,
+): boolean {
+  if (!scope?.countryCodes.length) {
+    return true;
+  }
+  const inferred = inferCountryCodeFromCoordinates(lat, lng);
+  if (!inferred) {
+    return true;
+  }
+  return scope.countryCodes.includes(inferred);
+}
+
+const EXPLICIT_DEPARTURE_TOKENS_BY_COUNTRY: Record<string, string[]> = {
+  TW: [
+    "桃園",
+    "taoyuan",
+    "松山機場",
+    "songshan airport",
+    "高雄",
+    "kaohsiung",
+    "台中",
+    "taichung",
+    "台北",
+    "臺北",
+    "taipei",
+    "台灣",
+    "臺灣",
+    "taiwan",
+    "formosa",
+    "出境",
+    "返台",
+    "回台",
+  ],
+};
+
+/** True when place name/address clearly indicates a departure or foreign stop (e.g. 桃園機場 on a Japan video). */
+export function isExplicitDepartureOrForeignPlace(
+  placeText: string,
+  inferredCountry: string | null | undefined,
+): boolean {
+  const country = inferredCountry?.trim().toUpperCase();
+  if (!country) {
+    return false;
+  }
+  const tokens = EXPLICIT_DEPARTURE_TOKENS_BY_COUNTRY[country];
+  if (!tokens?.length) {
+    return false;
+  }
+  const haystack = placeText.trim();
+  if (!haystack) {
+    return false;
+  }
+  return tokens.some((token) => haystackIncludesToken(haystack, token));
+}
+
 export function geocodeResultFailsDestinationScope(
-  result: { countryCode?: string | null; lat: number; lng: number },
+  result: {
+    countryCode?: string | null;
+    lat: number;
+    lng: number;
+    formattedAddress?: string | null;
+    placeName?: string | null;
+  },
   scope: TripDestinationScope | null | undefined,
 ): string | null {
   if (!scope?.countryCodes.length) {
     return null;
   }
-  if (result.countryCode && !isGeocodeCountryInScope(result.countryCode, scope)) {
-    return `Geocoded country (${result.countryCode}) is outside trip destination scope.`;
+  const placeHaystack = [result.placeName, result.formattedAddress].filter(Boolean).join(" ");
+  const departureHaystack = result.placeName?.trim() || placeHaystack;
+  const effectiveCountry =
+    result.countryCode?.trim().toUpperCase() ||
+    inferCountryCodeFromCoordinates(result.lat, result.lng) ||
+    null;
+  if (effectiveCountry && !isGeocodeCountryInScope(effectiveCountry, scope)) {
+    if (isExplicitDepartureOrForeignPlace(departureHaystack, effectiveCountry)) {
+      return null;
+    }
+    if (
+      placeHaystack &&
+      isTextInTripDestinationScope(placeHaystack, scope, { strictCountryLevel: true })
+    ) {
+      return `Geocoded country (${effectiveCountry}) conflicts with place name for video scope.`;
+    }
+    return `Geocoded country (${effectiveCountry}) is outside trip destination scope.`;
+  }
+  if (!effectiveCountry && result.formattedAddress?.trim()) {
+    if (
+      !isTextInTripDestinationScope(result.formattedAddress, scope, { strictCountryLevel: true })
+    ) {
+      return "Geocoded address is outside trip destination scope.";
+    }
   }
   if (!isGeocodePointInScope(result.lat, result.lng, scope)) {
     return "Geocoded coordinates are outside trip destination radius.";
+  }
+  if (scope.countryCodes.includes("TW") && effectiveCountry === "TW") {
+    const placeName = result.placeName?.trim() || "";
+    if (
+      placeName &&
+      !isTextInTripDestinationScope(placeName, scope, { strictCountryLevel: true }) &&
+      !isExplicitDepartureOrForeignPlace(placeName, "TW")
+    ) {
+      return "Place name is outside Taiwan video scope.";
+    }
+    const compactAddress = (result.formattedAddress || "").replace(/\s/g, "");
+    if (/^(台灣|臺灣|台湾){2}$/i.test(compactAddress) || /^taiwan$/i.test(compactAddress)) {
+      return "Geocoded address is too vague for Taiwan place.";
+    }
   }
   return null;
 }

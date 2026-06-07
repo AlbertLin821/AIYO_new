@@ -1,7 +1,8 @@
+import "@/server/bootstrap/videoPipelineBootstrap";
+import { extractYouTubeVideoId } from "@/server/providers/youtubeProvider";
 import { getMockVideoSummaryResult } from "@/lib/mocks/videoSummaryResultFixture";
 import { summarizeVideo } from "@/server/services/videoSummaryService";
 import type { VideoSummaryResult } from "@/types";
-import { extractYouTubeVideoId } from "@/server/providers/youtubeProvider";
 
 type SummarizeBody = {
   url?: string;

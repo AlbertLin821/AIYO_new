@@ -22,11 +22,13 @@ type TravelAgentOrchestratorInput = {
   tripProfile?: TripProfile;
   aiContext?: AIContextBuildResult | null;
   memoryContext?: string;
+  forceStructuredRevision?: boolean;
 };
 
 type TripRequestHints = {
   destination?: string;
   days?: number;
+  travelerCount?: number;
   budgetLevel?: TravelAgentKnownPreferences["budgetLevel"];
   pace?: TravelPace;
 };
@@ -74,6 +76,13 @@ function extractTripRequestHints(message: string): TripRequestHints {
   const daysMatch = message.match(/([\d一二兩两三四五六七八九十]+)\s*(?:天|日)(?:\s*[\d一二兩两三四五六七八九十]+\s*夜)?/u);
   if (daysMatch?.[1]) {
     hints.days = chineseNumberToInt(daysMatch[1]);
+  }
+
+  const travelerCountMatch =
+    message.match(/(?:總共|一共|共)\s*([一二兩两三四五六七八九十\d]+)\s*(?:個人|人)/u) ||
+    message.match(/([一二兩两三四五六七八九十\d]+)\s*(?:個人|人)(?:同行|一起|出遊|旅遊|旅行|去玩)?/u);
+  if (travelerCountMatch?.[1]) {
+    hints.travelerCount = chineseNumberToInt(travelerCountMatch[1]);
   }
 
   const catalogDestination = extractDestinationFromPlanningText(message);
@@ -134,7 +143,7 @@ function mergeKnownPreferences(input: TravelAgentOrchestratorInput): TravelAgent
         : input.tripProfile?.budget === "budget"
           ? "low"
           : undefined;
-  return {
+  const merged: TravelAgentKnownPreferences = {
     ...mergedAiPreferences,
     destination: input.context?.destination || input.tripProfile?.destination || mergedAiPreferences.destination,
     days: input.context?.days || input.tripProfile?.duration_days || mergedAiPreferences.days,
@@ -150,6 +159,21 @@ function mergeKnownPreferences(input: TravelAgentOrchestratorInput): TravelAgent
     mustVisit: contextPreferences?.mustVisit || mergedAiPreferences.mustVisit,
     avoid: contextPreferences?.avoid || input.tripProfile?.avoid_places || mergedAiPreferences.avoid || mergedAiPreferences.avoidances,
     notes: contextPreferences?.notes || mergedAiPreferences.notes,
+  };
+  if (!input.forceStructuredRevision) {
+    return merged;
+  }
+  return {
+    ...mergedAiPreferences,
+    ...merged,
+    destination: input.tripProfile?.destination || input.context?.destination || merged.destination,
+    days: input.tripProfile?.duration_days || input.context?.days || merged.days,
+    travelStyle: input.tripProfile?.preferences?.length
+      ? input.tripProfile.preferences
+      : merged.travelStyle,
+    pace: (input.tripProfile?.pace as TravelPace | null) || merged.pace,
+    transportPreference: input.tripProfile?.transportation || merged.transportPreference,
+    avoid: input.tripProfile?.avoid_places?.length ? input.tripProfile.avoid_places : merged.avoid,
   };
 }
 
@@ -222,27 +246,39 @@ function isTripPlanningIntent(message: string): boolean {
   return /(?:想去|我要去|我想去|幫我|請|可以|能不能|想要|需要).{0,24}(?:規劃|安排|排|行程|自由行|旅遊|旅行|玩[\d一二兩两三四五六七八九十]+\s*(?:天|日))|(?:規劃|安排|排).{0,16}(?:行程|旅行|旅遊|自由行)|[\d一二兩两三四五六七八九十]+\s*(?:天|日).{0,10}(?:行程|旅行|旅遊|自由行)?/u.test(message);
 }
 
-function hasMessageLevelPlanningPreferences(message: string, hints: TripRequestHints): boolean {
-  return Boolean(
-    hints.budgetLevel ||
-      hints.pace ||
-      /預算|小資|舒適|舒服|豪華|交通|計程車|包車|自駕|大眾運輸|捷運|巴士|公車|火車|美食|料理|餐廳|自然|景觀|購物|娛樂|體驗|親子|長輩|老人|小孩|飯店|住宿|日期|出發|回程|不想|避免/u.test(
-        message,
-      ),
-  );
-}
-
-function isExplicitImmediatePlanningRequest(message: string): boolean {
-  return /(?:直接|現在|馬上|立刻|完整|整份|詳細).{0,10}(?:規劃|安排|生成|產生|排)|(?:規劃|安排|生成|產生|排).{0,10}(?:完整|整份|詳細)(?:行程)?/u.test(
-    message,
-  );
-}
-
 function isGeneralTravelQuestion(message: string): boolean {
   return /適合|推薦|建議|怎麼看|好玩嗎|第一次|自由行|親子|蜜月|美食|購物|景點|地點|有哪些|查看|目前行程|交通/u.test(message);
 }
 
+function hasKnownTravelDates(input: TravelAgentOrchestratorInput): boolean {
+  return Boolean(
+    input.tripProfile?.travel_dates?.start?.trim() ||
+      input.tripProfile?.travel_dates?.end?.trim() ||
+      input.context?.tripStartDate?.trim() ||
+      input.context?.tripEndDate?.trim(),
+  );
+}
+
+function hasKnownTravelerCount(input: TravelAgentOrchestratorInput): boolean {
+  return Boolean(
+    (typeof input.tripProfile?.traveler_count === "number" && input.tripProfile.traveler_count > 0) ||
+      input.tripProfile?.companions,
+  );
+}
+
+function hasKnownDietaryPreferences(
+  input: TravelAgentOrchestratorInput,
+  knownPreferences: TravelAgentKnownPreferences,
+): boolean {
+  return Boolean(
+    input.tripProfile?.dietary_restrictions?.length ||
+      knownPreferences.foodPreferences?.length ||
+      /\b(?:無特殊飲食限制|沒有飲食限制|都可以吃)\b/u.test(knownPreferences.notes || ""),
+  );
+}
+
 function collectMissingRequirements(
+  input: TravelAgentOrchestratorInput,
   hints: TripRequestHints,
   knownPreferences: TravelAgentKnownPreferences,
 ): string[] {
@@ -253,24 +289,52 @@ function collectMissingRequirements(
   if (!hints.days && !knownPreferences.days) {
     missing.push("天數");
   }
+  if (!hasKnownTravelDates(input)) {
+    missing.push("出發日期");
+  }
+  if (!hasKnownTravelerCount(input) && !hints.travelerCount) {
+    missing.push("旅客人數");
+  }
+  if (!hasKnownDietaryPreferences(input, knownPreferences)) {
+    missing.push("飲食偏好");
+  }
   return missing;
 }
 
 function buildFollowUpGuidance(hints: TripRequestHints, missingRequirements: string[]): string {
   const destinationPart = hints.destination ? `${hints.destination}` : "這趟旅行";
-  if (missingRequirements.includes("旅客人數")) {
-    return `可以，${destinationPart}${hints.days ? ` ${hints.days} 天` : ""}我先記下來。這趟幾個人一起去？`;
-  }
-  if (missingRequirements.includes("預算") && missingRequirements.includes("旅遊風格")) {
-    return `可以，我先抓到你想安排${destinationPart}${hints.days ? ` ${hints.days} 天` : ""}。想走中等預算、較高預算，還是小資一點？另外這趟比較想偏美食購物、景點打卡，還是輕鬆散步？`;
-  }
-  if (missingRequirements.includes("預算")) {
-    return `可以，我先抓到${destinationPart}${hints.days ? ` ${hints.days} 天` : ""}。預算想抓小資、中等，還是舒服一點的高預算？`;
-  }
-  if (missingRequirements.includes("旅遊風格")) {
-    return `可以，${destinationPart}${hints.days ? ` ${hints.days} 天` : ""}我先記下來。這次比較想偏美食購物、景點打卡，還是輕鬆散步？`;
+  const dayText = hints.days ? ` ${hints.days} 天` : "";
+  const labels = missingRequirements.filter((item) =>
+    ["出發日期", "旅客人數", "飲食偏好"].includes(item),
+  );
+  if (labels.length) {
+    return `可以，我先抓到你想安排${destinationPart}${dayText}。現在還差${labels.join("、")}，補完後我就直接幫你排完整行程。`;
   }
   return `可以，我需要再確認 ${missingRequirements.slice(0, 2).join("、")}，這樣行程會比較貼近你。`;
+}
+
+function hasExistingItinerary(context?: ChatContext): boolean {
+  return Boolean(context?.itinerary?.some((day) => (day.items?.length || 0) > 0));
+}
+
+function buildRevisionFollowUpGuidance(input: {
+  tripProfile?: TripProfile;
+  context?: ChatContext;
+  missingRequirements: string[];
+}): string {
+  const destination =
+    input.tripProfile?.destination?.trim() || input.context?.destination?.trim() || "這趟旅程";
+  const days =
+    input.tripProfile?.duration_days ||
+    (typeof input.context?.days === "number" && input.context.days > 0 ? input.context.days : undefined);
+  const labels = input.missingRequirements.filter((item) =>
+    ["出發日期", "旅客人數", "飲食偏好"].includes(item),
+  );
+  const tripLabel = days ? `${destination} ${days} 天行程` : `${destination}行程`;
+  if (labels.length) {
+    return `我會依目前這份${tripLabel}重新安排，現在只差${labels.join("、")}，補完後我就直接幫你重排完整行程。`;
+  }
+  return `我會依目前這份${tripLabel}重新安排，接下來直接幫你重排完整行程。`;
 }
 
 export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): TravelAgentDecision {
@@ -292,6 +356,7 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
     budgetLevel: hints.budgetLevel || knownPreferences.budgetLevel,
     pace: hints.pace || knownPreferences.pace,
   };
+  const forcedRevision = Boolean(input.forceStructuredRevision && hasExistingItinerary(input.context));
 
   if (!message) {
     return buildDecision("casual_chat", {
@@ -325,9 +390,9 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
   if (isPreferenceOverrideMessage(message)) {
     if (/^這次想重新填寫偏好/u.test(message)) {
       return buildDecision("collect_requirements", {
-        missingRequirements: collectMissingRequirements(hints, knownPreferences),
+        missingRequirements: collectMissingRequirements(input, hints, knownPreferences),
         searchDecision,
-        userFacingGuidance: `可以，${hints.destination || knownPreferences.destination || "這趟"}我們重新整理偏好。想走小資、中等還是高預算？交通偏好大眾運輸、計程車或自駕？`,
+        userFacingGuidance: buildFollowUpGuidance(hints, collectMissingRequirements(input, hints, knownPreferences)),
         debugReason: "preference reuse panel reset",
       });
     }
@@ -370,6 +435,21 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
   }
 
   if (isPreferenceAcceptance(message)) {
+    if (forcedRevision) {
+      const missingRequirements = collectMissingRequirements(input, hints, knownPreferences);
+      if (missingRequirements.length) {
+        return buildDecision("collect_requirements", {
+          missingRequirements,
+          searchDecision,
+          userFacingGuidance: buildRevisionFollowUpGuidance({
+            tripProfile: input.tripProfile,
+            context: input.context,
+            missingRequirements,
+          }),
+          debugReason: "accepted revision context but missing key requirements",
+        });
+      }
+    }
     return buildDecision("generate_itinerary", {
       searchDecision,
       preferenceConfirmation: {
@@ -382,13 +462,41 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
   }
 
   if (isTripPlanningIntent(message)) {
-    const missingRequirements = collectMissingRequirements(hints, knownPreferences);
+    const missingRequirements = collectMissingRequirements(input, hints, knownPreferences);
+    if (forcedRevision) {
+      if (missingRequirements.length) {
+        return buildDecision("collect_requirements", {
+          missingRequirements,
+          searchDecision,
+          userFacingGuidance: buildRevisionFollowUpGuidance({
+            tripProfile: input.tripProfile,
+            context: input.context,
+            missingRequirements,
+          }),
+          debugReason: "forced revision missing key requirements",
+        });
+      }
+      return buildDecision("generate_itinerary", {
+        searchDecision,
+        preferenceConfirmation: {
+          summary: formatPreferenceSummary(mergedPreferences),
+          preferences: mergedPreferences,
+          prompt: "需求已足夠，可以重新生成目前行程。",
+        },
+        userFacingGuidance: buildRevisionFollowUpGuidance({
+          tripProfile: input.tripProfile,
+          context: input.context,
+          missingRequirements: [],
+        }),
+        debugReason: "forced revision has enough requirements",
+      });
+    }
     if (hasMeaningfulPreferences(reusablePreferences) && !isPreferenceRejectionOrOverride(message)) {
       const reusable = reusablePreferences || {};
       const summary = formatPreferenceSummary(reusable);
       const promptDestination = hints.destination || knownPreferences.destination || "這趟";
       const dayText = hints.days || knownPreferences.days ? ` ${hints.days || knownPreferences.days} 天` : "";
-      const prompt = `我找到可沿用的偏好：${summary}。這次${promptDestination}${dayText}也要沿用這些設定嗎？`;
+      const prompt = `我找到您的偏好：${summary}。這次${promptDestination}${dayText}也要使用這些設定嗎？`;
       return buildDecision("confirm_preferences", {
         missingRequirements,
         searchDecision,
@@ -408,21 +516,6 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
         searchDecision,
         userFacingGuidance: buildFollowUpGuidance(hints, missingRequirements),
         debugReason: "planning intent missing key requirements",
-      });
-    }
-
-    if (
-      !hasMessageLevelPlanningPreferences(message, hints) &&
-      !hasMeaningfulPreferences(reusablePreferences) &&
-      !isExplicitImmediatePlanningRequest(message)
-    ) {
-      const destinationPart = hints.destination || knownPreferences.destination || "這趟旅行";
-      const dayText = hints.days || knownPreferences.days ? ` ${hints.days || knownPreferences.days} 天` : "";
-      return buildDecision("collect_requirements", {
-        missingRequirements: [],
-        searchDecision,
-        userFacingGuidance: `可以，${destinationPart}${dayText}我先建立基本框架。想走小資、舒適還是高預算？交通偏好大眾運輸、計程車或自駕？另外比較想偏自然景觀、美食購物，還是娛樂體驗？`,
-        debugReason: "planning intent has basics but lacks preference detail",
       });
     }
 

@@ -4,6 +4,7 @@ import type { ChatResponsePayload, TravelPlanResponse, TripPlanResult } from "@/
 import {
   countTripPlanItems,
   pickPreferredGeneratedTripPlan,
+  repairSparseItineraryFromLatestChatTravelPlan,
   repairSparseItineraryDaysFromTravelPlan,
 } from "./generatedTripPlan";
 
@@ -105,5 +106,120 @@ test("repairSparseItineraryDaysFromTravelPlan fills only auto-generated empty da
 
   assert.ok(repaired);
   assert.equal(repaired?.[0]?.items.length, 3);
-  assert.equal(repaired?.[1]?.items.length, 0);
+  assert.equal(repaired?.[1]?.items.length, 1);
+});
+
+test("pickPreferredGeneratedTripPlan fills empty structured days from reply travel plan", () => {
+  const response = {
+    itinerarySuggestion: {
+      summary: "structured",
+      days: [
+        { dayNumber: 1, theme: "森林之歌", summary: "尚未安排內容", items: [] },
+        { dayNumber: 2, theme: "嘉義公園", summary: "第 2 天以 嘉義公園 為主。", items: [] },
+      ],
+    },
+    reply: {
+      id: "msg",
+      role: "assistant",
+      content: "",
+      timestamp: "",
+      responseType: "travel_plan",
+      travelPlan,
+    },
+    tripProfile: {
+      destination: "嘉義",
+      duration_days: 2,
+      duration_nights: 1,
+      departure_location: null,
+      travel_dates: null,
+      companions: null,
+      traveler_count: null,
+      budget: null,
+      special_population: { has_elderly: false, has_children: false, mobility_issue: false },
+      preferences: [],
+      transportation: null,
+      accommodation: null,
+      visited_before: [],
+      avoid_places: [],
+      dietary_restrictions: [],
+      disliked_activities: [],
+      pace: null,
+      plan_integration: "direct_merge" as const,
+    },
+  } satisfies Pick<ChatResponsePayload, "itinerarySuggestion" | "reply" | "tripProfile">;
+
+  const picked = pickPreferredGeneratedTripPlan(response);
+  assert.ok(picked);
+  assert.equal(picked.days[0]?.items.length, 3);
+  assert.equal(picked.days[1]?.items.length, 1);
+});
+
+test("repairSparseItineraryDaysFromTravelPlan also fills placeholder summaries when theme matches first place", () => {
+  const repaired = repairSparseItineraryDaysFromTravelPlan(
+    [
+      {
+        dayNumber: 1,
+        theme: "森林之歌",
+        summary: "尚未安排內容",
+        items: [],
+      },
+      {
+        dayNumber: 2,
+        theme: "嘉義公園",
+        summary: "尚未安排內容",
+        items: [],
+      },
+    ],
+    travelPlan,
+    2,
+  );
+
+  assert.ok(repaired);
+  assert.equal(repaired?.[0]?.items[0]?.title, "森林之歌");
+  assert.equal(repaired?.[1]?.items[0]?.title, "嘉義公園");
+});
+
+test("repairSparseItineraryFromLatestChatTravelPlan uses the newest travel plan message", () => {
+  const repaired = repairSparseItineraryFromLatestChatTravelPlan(
+    [
+      {
+        dayNumber: 1,
+        theme: "森林之歌",
+        summary: "尚未安排內容",
+        items: [],
+      },
+      {
+        dayNumber: 2,
+        theme: "嘉義公園",
+        summary: "尚未安排內容",
+        items: [],
+      },
+    ],
+    [
+      {
+        id: "old",
+        role: "assistant",
+        content: "",
+        timestamp: "",
+        responseType: "travel_plan",
+        travelPlan: {
+          ...travelPlan,
+          days: [travelPlan.days[1]!, travelPlan.days[0]!],
+        },
+      },
+      {
+        id: "latest",
+        role: "assistant",
+        content: "",
+        timestamp: "",
+        responseType: "travel_plan",
+        travelPlan,
+      },
+    ],
+    2,
+  );
+
+  assert.ok(repaired);
+  assert.equal(repaired?.[0]?.items[0]?.title, "森林之歌");
+  assert.equal(repaired?.[1]?.items[0]?.title, "嘉義公園");
 });

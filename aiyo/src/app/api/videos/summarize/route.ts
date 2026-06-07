@@ -1,3 +1,4 @@
+import "@/server/bootstrap/videoPipelineBootstrap";
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
 import { requireSessionUser } from "@/server/auth";

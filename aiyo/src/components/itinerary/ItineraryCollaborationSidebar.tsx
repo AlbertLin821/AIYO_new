@@ -18,6 +18,22 @@ const avatarColors = [
   "bg-peach",
 ];
 
+function memberDisplayAvatar(
+  member: { id: string; name: string; avatar: string },
+  sessionUserId: string | undefined,
+  sessionImage: string | null | undefined,
+): string | null {
+  if (member.id === sessionUserId && sessionImage) {
+    return sessionImage;
+  }
+  return member.avatar.trim() || null;
+}
+
+function memberInitial(name: string): string {
+  const trimmed = name.trim();
+  return trimmed ? trimmed[0]!.toUpperCase() : "?";
+}
+
 type Props = {
   /** 與行程頁深色資料夾區一致 */
   variant?: "light" | "dark";
@@ -117,7 +133,9 @@ export default function ItineraryCollaborationSidebar({ variant = "light" }: Pro
           {t.collab.teamMembers}
         </h3>
         <div className="flex max-h-40 flex-col gap-2 overflow-y-auto">
-          {members.map((member, index) => (
+          {members.map((member, index) => {
+            const avatarUrl = memberDisplayAvatar(member, myUserId, session?.user?.image);
+            return (
             <div
               key={member.id}
               className={cn(
@@ -125,14 +143,23 @@ export default function ItineraryCollaborationSidebar({ variant = "light" }: Pro
                 isDark ? "bg-zinc-800/80" : "bg-cream/40",
               )}
             >
-              <div
-                className={cn(
-                  "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white",
-                  avatarColors[index % avatarColors.length],
-                )}
-              >
-                {member.name[0]}
-              </div>
+              {avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- member avatar URL
+                <img
+                  src={avatarUrl}
+                  alt=""
+                  className="size-8 shrink-0 rounded-full object-cover"
+                />
+              ) : (
+                <div
+                  className={cn(
+                    "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white",
+                    avatarColors[index % avatarColors.length],
+                  )}
+                >
+                  {memberInitial(member.name)}
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <p className={cn("truncate text-xs font-medium", isDark ? "text-zinc-100" : "text-foreground")}>
                   {member.name}
@@ -140,7 +167,8 @@ export default function ItineraryCollaborationSidebar({ variant = "light" }: Pro
                 <p className={cn("text-[10px]", mutedClass)}>{member.online ? t.collab.online : t.collab.offline}</p>
               </div>
             </div>
-          ))}
+            );
+          })}
           {members.length === 0 && (
             <p className={cn("py-2 text-center text-xs", mutedClass)}>{t.collab.noMembersHint}</p>
           )}

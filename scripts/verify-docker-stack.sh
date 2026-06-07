@@ -9,13 +9,13 @@ case "${MODE}" in
     ENV_FILE="${ROOT_DIR}/aiyo/.env.dev"
     APP_HEALTH_URL="http://127.0.0.1:3000/api/health"
     APP_SERVICE="aiyo-new-app-dev"
-    DB_SERVICE="aiyo-new-postgres-dev"
+    DB_SERVICE="aiyo-new-postgres"
     ;;
   prod-live)
     ENV_FILE="${ROOT_DIR}/aiyo/.env.prod-live"
     APP_HEALTH_URL="http://127.0.0.1:3001/api/health"
     APP_SERVICE="aiyo-new-app-prod-live"
-    DB_SERVICE="aiyo-new-postgres-prod"
+    DB_SERVICE="aiyo-new-postgres"
     ;;
   *)
     echo "Usage: $0 [dev|prod-live]" >&2

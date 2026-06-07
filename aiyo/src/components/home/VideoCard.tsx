@@ -3,10 +3,11 @@
 import { memo, useState, type KeyboardEvent } from "react";
 import Image from "next/image";
 import { m } from "@/lib/motion";
-import { AlertCircle, Clock, ExternalLink, Play, X } from "lucide-react";
+import { AlertCircle, Clock, ExternalLink, Loader2, Play, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Video } from "@/types";
+import type { VideoSummaryStatus } from "@/stores/useVideoStore";
 import { zhTW as t } from "@/locales/zh-TW";
 
 interface VideoCardProps {
@@ -14,6 +15,7 @@ interface VideoCardProps {
   index: number;
   onClick: () => void;
   onDismiss?: () => void;
+  processingState?: VideoSummaryStatus | null;
 }
 
 const gradients = [
@@ -38,10 +40,11 @@ function sourceLabel(source: string) {
   return source;
 }
 
-function VideoCard({ video, index, onClick, onDismiss }: VideoCardProps) {
+function VideoCard({ video, index, onClick, onDismiss, processingState = null }: VideoCardProps) {
   const thumbLabels = t.videoCard.thumbLabels;
   const [imageFailed, setImageFailed] = useState(false);
   const showThumbnail = Boolean(video.thumbnail) && !imageFailed;
+  const isProcessing = processingState === "queued" || processingState === "running";
   function handleActivate() {
     onClick();
   }
@@ -110,11 +113,26 @@ function VideoCard({ video, index, onClick, onDismiss }: VideoCardProps) {
           </button>
         ) : null}
 
-        <div className="absolute inset-0 flex items-center justify-center bg-foreground/0 transition-all duration-300 group-hover:bg-foreground/10 motion-reduce:group-hover:bg-foreground/0">
-          <div className="flex size-12 scale-75 items-center justify-center rounded-full bg-white/90 opacity-0 shadow-lg transition-all duration-300 group-hover:scale-100 group-hover:opacity-100 group-focus-within:scale-100 group-focus-within:opacity-100 motion-reduce:group-hover:scale-75 motion-reduce:group-hover:opacity-0">
-            <Play className="size-5 text-primary ml-0.5" fill="currentColor" />
+        {isProcessing ? (
+          <>
+            <div className="pointer-events-none absolute inset-0 z-[1] bg-foreground/18 transition-all duration-300 group-hover:bg-foreground/24" />
+            <div className="pointer-events-none absolute left-2 top-2 z-[2] inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-[10px] font-medium text-foreground shadow-sm">
+              <Loader2 className="size-3 animate-spin text-primary" aria-hidden />
+              <span>{t.videoCard.processingVideo}</span>
+            </div>
+            <div className="pointer-events-none absolute inset-0 z-[2] flex items-center justify-center">
+              <div className="flex size-12 items-center justify-center rounded-full bg-white/92 shadow-lg transition-transform duration-300 group-hover:scale-105">
+                <Loader2 className="size-5 animate-spin text-primary" aria-hidden />
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center bg-foreground/0 transition-all duration-300 group-hover:bg-foreground/10 motion-reduce:group-hover:bg-foreground/0">
+            <div className="flex size-12 scale-75 items-center justify-center rounded-full bg-white/90 opacity-0 shadow-lg transition-all duration-300 group-hover:scale-100 group-hover:opacity-100 group-focus-within:scale-100 group-focus-within:opacity-100 motion-reduce:group-hover:scale-75 motion-reduce:group-hover:opacity-0">
+              <Play className="ml-0.5 size-5 text-primary" fill="currentColor" />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <CardContent className="p-4">

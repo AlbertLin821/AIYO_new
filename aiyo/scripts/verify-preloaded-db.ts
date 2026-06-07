@@ -97,7 +97,6 @@ async function main() {
   }
 
   const rows: CheckRow[] = [];
-  let dbHit = 0;
   let dbMiss = 0;
 
   for (const [, entry] of allKeys) {
@@ -109,9 +108,7 @@ async function main() {
       | { segments?: unknown[]; video?: { extractedLocations?: unknown[] } }
       | undefined;
     const inDb = Boolean(result && Array.isArray(result.segments) && result.segments.length > 0);
-    if (inDb) {
-      dbHit += 1;
-    } else {
+    if (!inDb) {
       dbMiss += 1;
     }
     rows.push({

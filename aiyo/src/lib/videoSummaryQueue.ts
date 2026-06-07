@@ -7,46 +7,82 @@ import {
   warnAndFinishFrontendDebugProcess,
 } from "@/lib/frontendDebug";
 import { shouldSkipClientVideoSummarize, summarizeVideo } from "@/services/videoClient";
-import { useVideoStore } from "@/stores/useVideoStore";
+import { useVideoStore, type SummaryDiagnostics } from "@/stores/useVideoStore";
 import type { VideoRecommendation, VideoSummaryResult } from "@/types";
 
 type VideoSummaryJob = {
   key: string;
+  videoKey: string;
   video: VideoRecommendation;
   destination?: string;
   background: boolean;
+  refresh: boolean;
   resolve: (result: VideoSummaryResult) => void;
   reject: (error: unknown) => void;
 };
 
 const activeJobs = new Map<string, Promise<VideoSummaryResult>>();
 const queue: VideoSummaryJob[] = [];
+const runningVideoKeys = new Set<string>();
 let isRunning = false;
 
-function buildJobKey(video: VideoRecommendation, destination?: string): string {
-  return [video.videoId || video.id, destination?.trim() || "any-destination"].join(":");
+function buildVideoKey(video: VideoRecommendation): string {
+  return (video.videoId || video.id || "").trim();
+}
+
+function buildJobKey(
+  video: VideoRecommendation,
+  destination?: string,
+  refresh = false,
+): string {
+  return [
+    buildVideoKey(video),
+    destination?.trim() || "any-destination",
+    refresh ? "refresh" : "default",
+  ].join(":");
+}
+
+function buildSummaryDiagnostics(result: VideoSummaryResult): SummaryDiagnostics {
+  return {
+    transcriptSource: result.transcriptSource,
+    summarySource: result.summarySource,
+    segmentSource: result.segmentSource,
+    captionLanguage: result.debug?.captionLanguage,
+    captionKind: result.debug?.captionKind,
+    captionSource: result.debug?.captionSource,
+    mapsProvenance: result.mapsProvenance,
+    geocodeWarnings: result.geocodeWarnings,
+    summaryUnavailable: result.summaryUnavailable,
+    unavailableReason: result.unavailableReason,
+    fallbackReason: result.fallbackReason,
+    failedChunkCount: result.debug?.failedChunkCount,
+  };
+}
+
+function syncVideoSummaryStatus(videoKey: string): void {
+  const state = useVideoStore.getState();
+  if (runningVideoKeys.has(videoKey)) {
+    state.setVideoSummaryStatus(videoKey, "running");
+    return;
+  }
+  if (queue.some((job) => job.videoKey === videoKey)) {
+    state.setVideoSummaryStatus(videoKey, "queued");
+    return;
+  }
+  state.clearVideoSummaryStatus(videoKey);
 }
 
 function applySummaryResult(result: VideoSummaryResult): void {
   const state = useVideoStore.getState();
   state.upsertVideo(result.video);
+  const videoKey = buildVideoKey(result.video);
+  if (videoKey) {
+    state.setSummaryDiagnosticsForVideo(videoKey, buildSummaryDiagnostics(result));
+  }
 
   if (state.selectedVideo?.videoId && state.selectedVideo.videoId === result.video.videoId) {
     state.setSelectedVideo(result.video);
-    state.setSummaryDiagnostics({
-      transcriptSource: result.transcriptSource,
-      summarySource: result.summarySource,
-      segmentSource: result.segmentSource,
-      captionLanguage: result.debug?.captionLanguage,
-      captionKind: result.debug?.captionKind,
-      captionSource: result.debug?.captionSource,
-      mapsProvenance: result.mapsProvenance,
-      geocodeWarnings: result.geocodeWarnings,
-      summaryUnavailable: result.summaryUnavailable,
-      unavailableReason: result.unavailableReason,
-      fallbackReason: result.fallbackReason,
-      failedChunkCount: result.debug?.failedChunkCount,
-    });
+    state.setSummaryDiagnostics(buildSummaryDiagnostics(result));
   }
 }
 
@@ -74,6 +110,8 @@ async function runQueue(): Promise<void> {
       );
 
       try {
+        runningVideoKeys.add(job.videoKey);
+        syncVideoSummaryStatus(job.videoKey);
         updateFrontendDebugProcess(processId, "pipeline-start", {
           videoId: job.video.videoId,
           title: job.video.title,
@@ -82,6 +120,7 @@ async function runQueue(): Promise<void> {
           videoId: job.video.videoId,
           title: job.video.title,
           destination: job.destination,
+          refresh: job.refresh,
           debug: false,
         });
         applySummaryResult(result);
@@ -109,7 +148,9 @@ async function runQueue(): Promise<void> {
         }
         job.reject(error);
       } finally {
+        runningVideoKeys.delete(job.videoKey);
         activeJobs.delete(job.key);
+        syncVideoSummaryStatus(job.videoKey);
       }
     }
   } finally {
@@ -122,9 +163,15 @@ export function enqueueVideoSummary(
   options?: {
     destination?: string;
     background?: boolean;
+    refresh?: boolean;
   },
 ): Promise<VideoSummaryResult> | null {
-  if (shouldSkipClientVideoSummarize(video)) {
+  const videoKey = buildVideoKey(video);
+  if (!videoKey) {
+    return null;
+  }
+
+  if (!options?.refresh && shouldSkipClientVideoSummarize(video)) {
     logFrontendDebugEvent("video-summary-background", "skip-already-processed", {
       videoId: video.videoId,
       title: video.title,
@@ -135,7 +182,7 @@ export function enqueueVideoSummary(
     return null;
   }
 
-  const key = buildJobKey(video, options?.destination);
+  const key = buildJobKey(video, options?.destination, options?.refresh === true);
   const existing = activeJobs.get(key);
   if (existing) {
     logFrontendDebugEvent("video-summary-background", "reuse-active-job", {
@@ -149,14 +196,17 @@ export function enqueueVideoSummary(
   const promise = new Promise<VideoSummaryResult>((resolve, reject) => {
     queue.push({
       key,
+      videoKey,
       video,
       destination: options?.destination,
       background: options?.background ?? true,
+      refresh: options?.refresh === true,
       resolve,
       reject,
     });
   });
   activeJobs.set(key, promise);
+  useVideoStore.getState().setVideoSummaryStatus(videoKey, "queued");
   logFrontendDebugEvent("video-summary-background", "queued", {
     videoId: video.videoId,
     title: video.title,

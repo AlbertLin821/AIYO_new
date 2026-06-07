@@ -1,7 +1,8 @@
 import { locationReferencesIncludeName } from "@/lib/locationNameMatch";
 import { findKnownLocationReference } from "@/server/geo/locationCatalog";
-import { geocodePlace, mapGeocodedPlaceResolvedFrom } from "@/server/places/geocodePlace";
-import type { TripDestinationScope } from "@/lib/tripDestinationScope";
+import { geocodeVideoPlaceName } from "@/server/places/geocodeVideoPlace";
+import { mapGeocodedPlaceResolvedFrom } from "@/server/places/geocodePlace";
+import { isTextInTripDestinationScope, type TripDestinationScope } from "@/lib/tripDestinationScope";
 import { canonicalizeSimplePlaceName } from "@/server/video/simpleExtraction/mergeExtractionResults";
 import type { LocationReference, VideoSummarySegment } from "@/types";
 
@@ -71,7 +72,7 @@ async function resolveHintToLocation(input: {
   const description = `${input.hint}，影片中提到的地點。`;
 
   if (input.destinationHint?.trim() || input.destinationScope?.countryCodes?.length) {
-    const geocoded = await geocodePlace({
+    const geocoded = await geocodeVideoPlaceName({
       query: input.hint,
       destinationHint: input.destinationHint,
       destinationScope: input.destinationScope,
@@ -100,20 +101,20 @@ async function resolveHintToLocation(input: {
 
   const known = findKnownLocationReference(input.hint, description);
   if (known) {
+    if (
+      input.destinationScope?.countryCodes.length &&
+      !isTextInTripDestinationScope(
+        [known.name, known.address, known.description].filter(Boolean).join(" "),
+        input.destinationScope,
+        { strictCountryLevel: true },
+      )
+    ) {
+      return buildUnverifiedLocationReference(input.hint);
+    }
     return {
-      ...known,
-      name: input.hint,
+      ...buildUnverifiedLocationReference(input.hint),
       description,
-      rawQuery: input.hint,
-      raw: input.hint,
-      normalized: input.hint,
-      normalizedName: input.hint,
-      cleanedName: input.hint,
-      rawMention: input.hint,
-      confidence: 0.42,
-      verified: false,
-      resolvedFrom: "llm",
-      extractionSource: "ai-polished",
+      address: known.address,
     };
   }
 

@@ -138,3 +138,55 @@ describe("useChatStore remote sync guards", () => {
     assert.equal(state.activeConversationId, getRemoteConversationId("trip_empty"));
   });
 });
+
+describe("clearProposedChangesForMessage", () => {
+  it("clears proposedChanges and assistantActions from the target message", () => {
+    useChatStore.setState({
+      isSending: false,
+      activeConversationId: "conv_1",
+      messages: [
+        {
+          id: "assistant_1",
+          role: "assistant",
+          content: "已移動行程。",
+          timestamp: "12:00",
+          proposedChanges: [{ type: "update_itinerary_item", title: "新港漁市場" }],
+          assistantActions: [
+            {
+              type: "itinerary.remove_item",
+              payload: { dayId: "day_1", itemId: "item_1" },
+            },
+          ],
+        },
+      ],
+      conversations: [
+        {
+          id: "conv_1",
+          title: "測試",
+          messages: [
+            {
+              id: "assistant_1",
+              role: "assistant",
+              content: "已移動行程。",
+              timestamp: "12:00",
+              proposedChanges: [{ type: "update_itinerary_item", title: "新港漁市場" }],
+              assistantActions: [
+                {
+                  type: "itinerary.remove_item",
+                  payload: { dayId: "day_1", itemId: "item_1" },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      errorMessage: null,
+    });
+
+    useChatStore.getState().clearProposedChangesForMessage("assistant_1");
+
+    const message = useChatStore.getState().messages[0];
+    assert.equal(message?.proposedChanges, undefined);
+    assert.equal(message?.assistantActions, undefined);
+  });
+});

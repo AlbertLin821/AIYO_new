@@ -1,3 +1,8 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import { serverConfig } from "@/server/config";
 import type { TripDestinationScope } from "@/lib/tripDestinationScope";
 import {
@@ -46,7 +51,11 @@ export interface TranscriptFetchResult {
   fallbackReason?: string;
   captionLanguage?: string;
   captionKind?: "manual" | "asr";
-  captionSource?: "watch-page-captions" | "timedtext" | "youtube-transcript-package";
+  captionSource?:
+    | "watch-page-captions"
+    | "timedtext"
+    | "youtube-transcript-package"
+    | "yt-dlp-vtt";
 }
 
 interface SearchInput {
@@ -90,8 +99,10 @@ const CAPTION_LANGUAGE_PRIORITY = [
   "zh-CN",
   "zh-Hans",
   "ja",
+  "en-US",
   "en",
 ] as const;
+const execFileAsync = promisify(execFile);
 
 function toQuery(params: Record<string, string | number | undefined>) {
   const query = new URLSearchParams();
@@ -532,7 +543,7 @@ export async function searchYouTubeVideos(input: SearchInput): Promise<{
   });
 
   const passesScope = (video: VideoRecommendation) =>
-    isInTripDestinationScope(metaFor(video), destinationScope, rawUserQuery);
+    isInTripDestinationScope(metaFor(video), destinationScope);
 
   const buildPool = (mapped: VideoRecommendation[]): VideoRecommendation[] => {
     const strictFiltered = mapped.filter((video) =>
@@ -852,6 +863,87 @@ function parseTranscriptXml(xml: string): TranscriptEntry[] {
   return entries;
 }
 
+function parseTimestampToSeconds(input: string): number | null {
+  const normalized = input.trim().replace(",", ".");
+  const match = normalized.match(/^(?:(\d+):)?(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/);
+  if (!match) {
+    return null;
+  }
+
+  const hours = Number(match[1] || 0);
+  const minutes = Number(match[2] || 0);
+  const seconds = Number(match[3] || 0);
+  const milliseconds = Number((match[4] || "0").padEnd(3, "0"));
+
+  return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000;
+}
+
+export function parseTranscriptVtt(vtt: string): TranscriptEntry[] {
+  const lines = vtt.replace(/^\uFEFF/, "").split(/\r?\n/);
+  const entries: TranscriptEntry[] = [];
+  const cueTimePattern =
+    /^(?:(\d+):)?(\d{2}):(\d{2})\.\d{1,3}\s+-->\s+(?:(\d+):)?(\d{2}):(\d{2})\.\d{1,3}/;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]?.trim() || "";
+    if (!line) {
+      continue;
+    }
+    if (
+      line === "WEBVTT" ||
+      line.startsWith("NOTE") ||
+      line.startsWith("STYLE") ||
+      line.startsWith("REGION")
+    ) {
+      continue;
+    }
+    if (!cueTimePattern.test(line)) {
+      continue;
+    }
+
+    const [rawStart, rawEndWithSettings] = line.split(/\s+-->\s+/);
+    const rawEnd = (rawEndWithSettings || "").split(/\s+/)[0] || "";
+    const startSeconds = parseTimestampToSeconds(rawStart);
+    const endSeconds = parseTimestampToSeconds(rawEnd);
+    if (startSeconds === null || endSeconds === null || endSeconds <= startSeconds) {
+      continue;
+    }
+
+    const cueLines: string[] = [];
+    while (index + 1 < lines.length) {
+      const nextLine = lines[index + 1] || "";
+      if (!nextLine.trim()) {
+        index += 1;
+        break;
+      }
+      if (cueTimePattern.test(nextLine.trim())) {
+        break;
+      }
+      cueLines.push(nextLine);
+      index += 1;
+    }
+
+    const text = decodeTranscriptText(
+      cueLines
+        .join(" ")
+        .replace(/<\d{2}:\d{2}:\d{2}\.\d{3}>/g, " ")
+        .replace(/<\d{2}:\d{2}\.\d{3}>/g, " "),
+    );
+    if (!text) {
+      continue;
+    }
+
+    entries.push({
+      timestamp: formatSeconds(startSeconds),
+      startSeconds,
+      durationSeconds: Math.max(0.25, endSeconds - startSeconds),
+      text,
+    });
+  }
+
+  return entries;
+}
+
 function normalizeLanguageCode(code?: string): string {
   return (code || "").trim();
 }
@@ -1030,6 +1122,93 @@ async function tryFetchTimedTextXml(
   return { xml: null };
 }
 
+async function runYtDlpSubtitleFetch(args: string[]): Promise<void> {
+  const commands: Array<{ file: string; args: string[] }> = [
+    { file: "yt-dlp", args },
+    { file: "python", args: ["-m", "yt_dlp", ...args] },
+  ];
+
+  let lastError: Error | null = null;
+  for (const command of commands) {
+    try {
+      await execFileAsync(command.file, command.args, {
+        timeout: 60_000,
+        windowsHide: true,
+      });
+      return;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+}
+
+async function tryFetchTranscriptViaYtDlp(
+  videoId: string,
+): Promise<{
+  entries: TranscriptEntry[];
+  language?: string;
+  kind?: "manual" | "asr";
+  source?: "yt-dlp-vtt";
+}> {
+  const tempDir = await mkdtemp(join(tmpdir(), "aiyo-yt-dlp-"));
+  const outputTemplate = join(tempDir, "%(id)s.%(ext)s");
+  const baseArgs = [
+    "--ignore-config",
+    "--skip-download",
+    "--sub-format",
+    "vtt",
+    "--output",
+    outputTemplate,
+    `https://www.youtube.com/watch?v=${videoId}`,
+  ];
+
+  try {
+    for (const kind of ["manual", "asr"] as const) {
+      for (const language of CAPTION_LANGUAGE_PRIORITY) {
+        try {
+          await runYtDlpSubtitleFetch([
+            ...(kind === "manual" ? ["--write-sub"] : ["--write-auto-sub"]),
+            "--sub-langs",
+            language,
+            ...baseArgs,
+          ]);
+        } catch {
+          continue;
+        }
+
+        const files = await readdir(tempDir);
+        const vttFile = files
+          .filter((file) => file.startsWith(`${videoId}.`) && file.endsWith(".vtt"))
+          .sort((left, right) => right.length - left.length)[0];
+        if (!vttFile) {
+          continue;
+        }
+
+        const vtt = await readFile(join(tempDir, vttFile), "utf8");
+        const entries = parseTranscriptVtt(vtt);
+        if (entries.length === 0) {
+          continue;
+        }
+
+        return {
+          entries,
+          language,
+          kind: kind === "manual" ? "manual" : "asr",
+          source: "yt-dlp-vtt",
+        };
+      }
+    }
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+
+  return { entries: [] };
+}
+
 export async function fetchYouTubeTranscript(videoId: string): Promise<TranscriptFetchResult> {
   try {
     const html = await fetchText(`https://www.youtube.com/watch?v=${videoId}&hl=zh-TW`);
@@ -1114,6 +1293,17 @@ export async function fetchYouTubeTranscript(videoId: string): Promise<Transcrip
       }
     } catch {
       // Keep the explicit no-transcript response below.
+    }
+
+    const ytDlpResult = await tryFetchTranscriptViaYtDlp(videoId);
+    if (ytDlpResult.entries.length > 0) {
+      return {
+        entries: ytDlpResult.entries,
+        source: "youtube",
+        captionLanguage: ytDlpResult.language,
+        captionKind: ytDlpResult.kind,
+        captionSource: ytDlpResult.source,
+      };
     }
 
     return {

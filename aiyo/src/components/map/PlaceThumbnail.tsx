@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { resolvePlacePhotoUrl } from "@/lib/placePhotoUrl";
 import { cn } from "@/lib/utils";
 
@@ -21,14 +21,9 @@ export default function PlaceThumbnail({
   className,
   imageClassName,
 }: PlaceThumbnailProps) {
-  const [failed, setFailed] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const resolved = resolvePlacePhotoUrl(src, placeId);
-
-  useEffect(() => {
-    setFailed(false);
-  }, [src]);
-
-  const showImage = Boolean(resolved) && !failed;
+  const showImage = Boolean(resolved) && failedSrc !== resolved;
 
   return (
     <div
@@ -43,7 +38,7 @@ export default function PlaceThumbnail({
           src={resolved}
           alt={alt}
           className={cn("size-full object-cover", imageClassName)}
-          onError={() => setFailed(true)}
+          onError={() => setFailedSrc(resolved ?? null)}
         />
       ) : (
         <span className="text-xs text-muted">{placeholder}</span>

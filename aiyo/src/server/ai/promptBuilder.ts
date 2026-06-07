@@ -133,6 +133,7 @@ export function buildItineraryPatchIntentPrompt(input: {
       "- If location changes but coordinates are unknown, omit lat/lng; do not reuse old coordinates.",
       "- Use at most 6 assistantActions. Do not emit raw SQL, script, or HTML.",
       "- When the user names a day (第N天; 地N天 is a common typo for 第N天), scope remove/update to that day only.",
+      "- Cross-day move (e.g. 把第一天的新港漁市場移到第二天): if the target day does not exist yet, emit trip.update_metadata to extend days first, then itinerary.remove_item on the source day, then itinerary.add_item on the target day with the same title/time/location/notes.",
       "- To delete a whole day, use itinerary.replace_day with items: [] is NOT allowed; instead ask for clarification or use trip.update_metadata only when changing day count. Do not emit legacy remove-day payloads here.",
       "- Do not replan the entire trip; do not add research tool requests.",
       '- If you cannot identify one unique target item, ask one short confirmation question and return: { "mode": "modify_itinerary", "replyText": string, "itinerary": null, "assistantActions": [], "proposedChanges": [] }.',
@@ -309,9 +310,12 @@ export function buildItineraryPrompt(
     "- Follow the AIYO itinerary planning standard above for day rhythm, item counts, meals, transport, and titles.",
     "- Item times must be chronological within each day.",
     "- `transport` should align with transport preference unless a clear local reason requires a change.",
+    "- Do not repeat the same concrete attraction, shop, or restaurant across multiple days unless the user explicitly asked to revisit it.",
+    "- Do not duplicate the same concrete place within the same day.",
     "- `mustVisit` places must be covered in the nearest appropriate day(s).",
     "- `avoid` terms must not appear in `title`, `notes`, or `location.name`.",
     "- Prefer complete `location` objects (name, lat, lng, description, address). If unknown, you may omit `location` for that item instead of inventing nonsense.",
+    "- If required trip basics are missing, do not fabricate a full itinerary. Return only valid JSON for a grounded itinerary when dates, traveler count, and dietary preferences are already known to the planner.",
     "",
     "TITLE & LOCATION RULES (critical for map geocoding):",
     "- Each item `title` must be ONE searchable place or venue name only (Google Maps style).",
@@ -330,6 +334,9 @@ export function buildItineraryPrompt(
     `Must visit: ${request.preferences.mustVisit?.join(", ") || "none"}`,
     `Avoid: ${request.preferences.avoid?.join(", ") || "none"}`,
     request.preferences.notes ? `Notes: ${request.preferences.notes}` : "",
+    request.preferences.notes?.includes("飲食限制：")
+      ? "Dietary preference status: already provided in Notes."
+      : "Dietary preference status: missing (planner should not generate a final itinerary in this state).",
     itineraryDraftSummary
       ? `Existing itinerary draft to revise/preserve when reasonable:\n${itineraryDraftSummary}`
       : "",
@@ -340,6 +347,7 @@ export function buildItineraryPrompt(
     "- `days` length matches requested number of days.",
     "- `mustVisit` covered and `avoid` excluded.",
     "- Times are sorted and types are from allowed enum.",
+    "- No duplicate concrete place titles across different days unless explicitly requested by the user.",
     "- Every item title is a single searchable place/venue name with no interest prefix, meal suffix, or `・` multi-stop join.",
     ...(itineraryDraftSummary
       ? [

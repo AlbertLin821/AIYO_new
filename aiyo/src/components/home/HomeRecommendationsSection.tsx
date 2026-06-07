@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, m } from "@/lib/motion";
-import { Loader2, Map, TrendingUp, Video } from "lucide-react";
+import { Loader2, Map, Video } from "lucide-react";
 import VideoCard from "@/components/home/VideoCard";
 import RecommendedItineraryCard from "@/components/home/RecommendedItineraryCard";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -13,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { listPublicItineraries } from "@/services/publicItineraryClient";
 import { zhTW as t } from "@/locales/zh-TW";
+import type { VideoSummaryStatus } from "@/stores/useVideoStore";
 import type { PublicItinerarySummary, VideoRecommendation } from "@/types";
 
 export type HomeRecommendPanel = "videos" | "itineraries";
@@ -27,6 +28,7 @@ type VideoPanelProps = {
   canLoadMoreVideos: boolean;
   isLoadingMoreVideos: boolean;
   replacingVideoIndex: number | null;
+  videoProcessingByKey: Record<string, VideoSummaryStatus | undefined>;
   onVideoClick: (video: VideoRecommendation) => void;
   onLoadMoreVideos: () => void;
   onDismissVideo: (video: VideoRecommendation, index: number) => void;
@@ -161,7 +163,6 @@ function HomeRecommendationsSection({
               transition={{ duration: 0.2 }}
             >
               <div className="mb-5 flex flex-wrap items-center gap-2">
-                <TrendingUp className="size-4 text-secondary" />
                 {sourceBadge(videoPanel.recommendationSource)}
                 {videoPanel.videos.length > 0 &&
                   videoPanel.canLoadMoreVideos &&
@@ -217,6 +218,9 @@ function HomeRecommendationsSection({
                         key={video.id}
                         video={video}
                         index={index}
+                        processingState={
+                          videoPanel.videoProcessingByKey[(video.videoId || video.id || "").trim()] ?? null
+                        }
                         onClick={() => videoPanel.onVideoClick(video)}
                         onDismiss={() => videoPanel.onDismissVideo(video, index)}
                       />
@@ -239,7 +243,6 @@ function HomeRecommendationsSection({
                   data-testid="public-itinerary-login-cta"
                 >
                   <CardContent className="px-6 py-16 text-center">
-                    <TrendingUp className="mx-auto mb-3 size-8 text-primary/50" />
                     <p className="text-base font-medium text-foreground">
                       {t.home.publicItineraryLoginTitle}
                     </p>

@@ -3,7 +3,7 @@
 `AIYO_new/aiyo` is the main application. The active runtime model is:
 
 - AIYO app containers for `dev` and `prod-live`
-- split PostgreSQL databases
+- shared PostgreSQL database
 - shared Redis
 - Open WebUI as the authenticated AI gateway
 - Ollama on the host machine
@@ -41,8 +41,18 @@ Or run Compose directly:
 
 ```bash
 docker compose --env-file ./aiyo/.env.dev up -d --build --force-recreate \
-  aiyo-new-postgres-dev aiyo-new-redis open-webui aiyo-new-app-dev
+  aiyo-new-postgres aiyo-new-redis open-webui aiyo-new-app-dev
 ```
+
+Additional root scripts:
+
+```powershell
+.\all-up.ps1
+.\frontend-up.ps1
+```
+
+- `all-up.ps1`: recreate shared services plus both app containers
+- `frontend-up.ps1`: recreate only `aiyo-new-app-dev` and `aiyo-new-app-prod-live`
 
 3. Open:
 

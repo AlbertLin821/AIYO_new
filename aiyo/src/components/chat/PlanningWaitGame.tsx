@@ -15,7 +15,6 @@ import {
   type WorkflowStepView,
 } from "@/lib/workflowSteps";
 import { getSkyDashHighScore, saveSkyDashHighScore } from "@/lib/skyDashStorage";
-import { cn } from "@/lib/utils";
 import type { StatusStepPayload } from "@/types";
 
 const WAIT_GAME_PHASES = new Set(["research", "compose"]);
@@ -53,7 +52,7 @@ export default function PlanningWaitGame({
   promptTitle = "等太久了嗎？玩一下小遊戲等待完成規劃吧！",
   promptDescription,
   gameTitle = "Sky Dash",
-  gameDescription = "規劃進行中，先玩小遊戲打發時間。",
+  gameDescription = "",
   completionTitle = "旅遊規劃完成囉！",
   completionDescription,
   suppressFloatingPrompt = false,
@@ -196,7 +195,7 @@ export default function PlanningWaitGame({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [gameOpen, waitingDone]);
+  }, [gameOpen, setGameOpen, waitingDone]);
 
   useEffect(() => {
     if (waitingDone && escHint) {
@@ -289,8 +288,12 @@ export default function PlanningWaitGame({
             <div>
               <p className="text-sm font-semibold text-slate-900">{gameTitle}</p>
               <p className="mt-1 text-xs leading-5 text-slate-500">
-                {gameDescription}
-                <br />
+                {gameDescription ? (
+                  <>
+                    {gameDescription}
+                    <br />
+                  </>
+                ) : null}
                 按 ESC 保存分數{waitingDone ? "並關閉遊戲" : "，規劃完成後即可關閉"}。
               </p>
             </div>

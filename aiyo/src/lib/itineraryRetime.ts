@@ -167,8 +167,15 @@ export function cascadeDayItemsAfterTravelEdit(
   const patched = items.map((item) =>
     item.id === itemId ? buildTravelPatchedItem(item, patch) : { ...item },
   );
-  const timeChanged = typeof patch.time === "string" && patch.time.trim().length > 0;
-  const transportChanged = Object.prototype.hasOwnProperty.call(patch, "transport");
+  const originalItem = items[targetIndex]!;
+  const nextPatchedItem = patched[targetIndex]!;
+  const patchTime = typeof patch.time === "string" ? patch.time.trim() : "";
+  const originalTime = originalItem.time.trim();
+  const timeChanged = patchTime.length > 0 && patchTime !== originalTime;
+  const hasTransportPatch = Object.prototype.hasOwnProperty.call(patch, "transport");
+  const originalTransport = (originalItem.transport ?? "").trim();
+  const nextTransport = (nextPatchedItem.transport ?? "").trim();
+  const transportChanged = hasTransportPatch && nextTransport !== originalTransport;
 
   if (!timeChanged && !transportChanged) {
     return patched;

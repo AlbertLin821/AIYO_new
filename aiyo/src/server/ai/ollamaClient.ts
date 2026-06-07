@@ -1,3 +1,4 @@
+import "@/server/bootstrap/videoPipelineBootstrap";
 import { serverConfig } from "@/server/config";
 import { normalizeOllamaResponseContent } from "@/server/ai/ollamaResponseNormalizer";
 
@@ -102,48 +103,32 @@ function shouldUseThinkingForTask(task: OllamaChatOptions["task"] = "default"): 
   return serverConfig.ollamaThink;
 }
 
-export function formatOllamaErrorMessage(
-  error: OllamaRequestError,
-  task: OllamaChatOptions["task"] = "default",
-): string {
-  const model = resolveModelForTask(task);
-  let detail = "";
-  if (typeof error.details === "string" && error.details.trim()) {
-    detail = error.details.trim().slice(0, 280);
-  } else if (error.details !== undefined) {
-    try {
-      detail = JSON.stringify(error.details).slice(0, 280);
-    } catch {
-      detail = "";
-    }
+function resolveDirectOllamaFallbackBaseUrl(): string | null {
+  const explicit = process.env.OLLAMA_DIRECT_BASE_URL?.trim();
+  if (explicit) {
+    return explicit.replace(/\/$/, "");
   }
-
-  const parts = [`Ollama 回應失敗（${error.message}）`];
-  if (detail) {
-    parts.push(detail);
+  if (serverConfig.openwebuiBaseUrl) {
+    return "http://host.docker.internal:11434";
   }
-  if (error.code === "http_error" || error.code === "network_error") {
-    if (serverConfig.openwebuiBaseUrl) {
-      parts.push(
-        `使用模型：${model}。請確認 Open WebUI 已啟動、OPENWEBUI_API_KEY 有效，且宿主 Ollama 可被 Open WebUI 存取。`,
-      );
-    } else {
-      parts.push(
-        `使用模型：${model}。請確認 Ollama 已啟動、模型已 pull，或調整 aiyo/.env.dev / aiyo/.env.prod-live 的 OLLAMA_MODEL 設定。`,
-      );
-    }
-  }
-  return parts.join(" ");
+  return null;
 }
 
-export async function chatWithOllama({
-  messages,
-  format,
-  model,
-  timeoutMs,
-  options,
-  task = "default",
-}: OllamaChatOptions): Promise<string> {
+function buildOllamaChatHeaders(useOpenWebUiAuth: boolean): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (useOpenWebUiAuth && serverConfig.openwebuiBaseUrl && serverConfig.openwebuiApiKey.trim()) {
+    headers.Authorization = `Bearer ${serverConfig.openwebuiApiKey}`;
+  }
+  return headers;
+}
+
+async function chatWithOllamaOnce(
+  input: OllamaChatOptions & { baseUrl: string; useOpenWebUiAuth: boolean },
+): Promise<string> {
+  const { messages, format, model, timeoutMs, options, task = "default", baseUrl, useOpenWebUiAuth } =
+    input;
   const controller = new AbortController();
   const cap = Math.max(5000, serverConfig.ollamaTimeoutCapMs);
   const effectiveTimeout = Math.min(
@@ -151,18 +136,12 @@ export async function chatWithOllama({
     cap,
   );
   const timeout = setTimeout(() => controller.abort(), effectiveTimeout);
-  const baseUrl = serverConfig.ollamaBaseUrl.replace(/\/$/, "");
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (serverConfig.openwebuiBaseUrl && serverConfig.openwebuiApiKey.trim()) {
-    headers.Authorization = `Bearer ${serverConfig.openwebuiApiKey}`;
-  }
+  const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
 
   try {
-    const response = await fetch(`${baseUrl}/api/chat`, {
+    const response = await fetch(`${normalizedBaseUrl}/api/chat`, {
       method: "POST",
-      headers,
+      headers: buildOllamaChatHeaders(useOpenWebUiAuth),
       body: JSON.stringify({
         model: resolveModelForTask(task, model),
         stream: false,
@@ -218,4 +197,75 @@ export async function chatWithOllama({
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export function formatOllamaErrorMessage(
+  error: OllamaRequestError,
+  task: OllamaChatOptions["task"] = "default",
+): string {
+  const model = resolveModelForTask(task);
+  let detail = "";
+  if (typeof error.details === "string" && error.details.trim()) {
+    detail = error.details.trim().slice(0, 280);
+  } else if (error.details !== undefined) {
+    try {
+      detail = JSON.stringify(error.details).slice(0, 280);
+    } catch {
+      detail = "";
+    }
+  }
+
+  const parts = [`Ollama 回應失敗（${error.message}）`];
+  if (detail) {
+    parts.push(detail);
+  }
+  if (error.code === "http_error" || error.code === "network_error") {
+    if (serverConfig.openwebuiBaseUrl) {
+      parts.push(
+        `使用模型：${model}。請確認 Open WebUI 已啟動、OPENWEBUI_API_KEY 有效，且宿主 Ollama 可被 Open WebUI 存取。`,
+      );
+    } else {
+      parts.push(
+        `使用模型：${model}。請確認 Ollama 已啟動、模型已 pull，或調整 aiyo/.env.dev / aiyo/.env.prod-live 的 OLLAMA_MODEL 設定。`,
+      );
+    }
+  }
+  return parts.join(" ");
+}
+
+export async function chatWithOllama(input: OllamaChatOptions): Promise<string> {
+  const primaryBaseUrl = serverConfig.ollamaBaseUrl.replace(/\/$/, "");
+  const useOpenWebUiAuth = Boolean(serverConfig.openwebuiBaseUrl && serverConfig.openwebuiApiKey.trim());
+  const fallbackBaseUrl = resolveDirectOllamaFallbackBaseUrl();
+  const attempts: Array<{ baseUrl: string; useOpenWebUiAuth: boolean }> = [
+    { baseUrl: primaryBaseUrl, useOpenWebUiAuth },
+  ];
+  if (fallbackBaseUrl && fallbackBaseUrl !== primaryBaseUrl) {
+    attempts.push({ baseUrl: fallbackBaseUrl, useOpenWebUiAuth: false });
+  }
+
+  let lastError: OllamaRequestError | null = null;
+  for (const attempt of attempts) {
+    try {
+      return await chatWithOllamaOnce({ ...input, ...attempt });
+    } catch (error) {
+      if (!(error instanceof OllamaRequestError)) {
+        throw error;
+      }
+      lastError = error;
+      const shouldRetry =
+        error.code === "network_error" ||
+        error.code === "timeout" ||
+        (error.code === "http_error" && attempt.useOpenWebUiAuth);
+      if (!shouldRetry) {
+        throw error;
+      }
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+
+  throw new OllamaRequestError("Failed to reach Ollama", undefined, "network_error");
 }

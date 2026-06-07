@@ -268,7 +268,7 @@ else {
 
     $composeEnvArgs = @("--env-file", "./aiyo/.env.dev")
     $services = @(
-        "aiyo-new-postgres-dev",
+        "aiyo-new-postgres",
         "aiyo-new-redis",
         "open-webui",
         "aiyo-new-app-dev"

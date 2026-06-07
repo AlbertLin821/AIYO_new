@@ -66,3 +66,28 @@ export type PlacesGeocodeFailure = {
 };
 
 export type PlacesGeocodeResponse = PlacesGeocodeSuccess | PlacesGeocodeFailure;
+
+export type PlaceSuggestion = GeocodedPlace & {
+  rating?: number;
+  userRatingsTotal?: number;
+  photoUrl?: string;
+  thumbnail?: string;
+  openingHours?: string;
+  phoneNumber?: string;
+  website?: string;
+  googleMapsUrl?: string;
+  /** True when the candidate bypassed strict confidence gate and needs user confirmation. */
+  needsUserConfirm?: boolean;
+};
+
+export type PlacesSuggestRequest = {
+  query: string;
+  destinationHint?: string;
+  countryHint?: string;
+  maxResults?: number;
+};
+
+export type PlacesSuggestData = {
+  suggestions: PlaceSuggestion[];
+  autoResolve: PlaceSuggestion | null;
+};

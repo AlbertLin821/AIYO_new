@@ -72,8 +72,9 @@ function emit(
   if (!isBrowser()) {
     return;
   }
-  const consoleMethod = console[level] ?? console.log;
-  consoleMethod(`${PREFIX} ${message}`, payload || {});
+  // Debug console output disabled — uncomment when tracing frontend processes.
+  // const consoleMethod = console[level] ?? console.log;
+  // consoleMethod(`${PREFIX} ${message}`, payload || {});
 }
 
 function emitSnapshot(reason: string) {

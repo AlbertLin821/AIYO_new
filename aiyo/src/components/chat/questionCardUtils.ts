@@ -39,7 +39,24 @@ export function formatQuestionAnswerSummary(
     );
     return `${question?.question || answer.slot}：${labels.join("、") || "未填寫"}`;
   });
-  return `已收到你的需求：\n${lines.map((line) => `- ${line}`).join("\n")}`;
+  if (answers.length === 1) {
+    const answer = answers[0];
+    if (answer?.slot === "dietary_restrictions") {
+      const rawValue = Array.isArray(answer.value)
+        ? answer.value.join("、")
+        : String(answer.value || "").trim();
+      if (/^(?:無|沒有|都可以|不限|無特殊|沒有飲食限制|無特殊飲食限制|no|none|no restrictions?|no allergies?)$/iu.test(rawValue)) {
+        return "沒有飲食限制，請繼續幫我安排。";
+      }
+      if (rawValue) {
+        return `飲食偏好是${rawValue}，請依這個條件繼續安排。`;
+      }
+    }
+  }
+  if (lines.length === 1) {
+    return `${lines[0]}，請繼續幫我安排。`;
+  }
+  return `我已補充以下資訊：${lines.join("；")}。請依這些條件繼續安排。`;
 }
 
 export function formatIsoDateLabel(value: string | undefined): string {

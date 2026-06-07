@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { Check, Clock, Plus, X } from "lucide-react";
+import { Check, Clock, Loader2, Plus, X } from "lucide-react";
 import { zhTW as t } from "@/locales/zh-TW";
 import type { TripPlanItem } from "@/types";
 import { activityTypeOptions } from "./itineraryUi";
@@ -16,18 +16,19 @@ export type AddActivityDraft = {
 
 type Props = {
   draft: AddActivityDraft;
+  saving?: boolean;
   onDraftChange: (draft: AddActivityDraft) => void;
   onSave: () => void;
   onCancel: () => void;
 };
 
-function AddActivityForm({ draft, onDraftChange, onSave, onCancel }: Props) {
+function AddActivityForm({ draft, saving = false, onDraftChange, onSave, onCancel }: Props) {
   function updateDraft(patch: Partial<AddActivityDraft>) {
     onDraftChange({ ...draft, ...patch });
   }
 
   function saveOnEnter(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "Enter") {
+    if (event.key === "Enter" && !saving) {
       onSave();
     }
   }
@@ -43,7 +44,8 @@ function AddActivityForm({ draft, onDraftChange, onSave, onCancel }: Props) {
           <button
             type="button"
             onClick={onCancel}
-            className="cursor-pointer rounded-lg p-1 text-muted transition-colors hover:bg-border-light hover:text-foreground"
+            disabled={saving}
+            className="cursor-pointer rounded-lg p-1 text-muted transition-colors hover:bg-border-light hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
           >
             <X className="size-4" />
           </button>
@@ -115,11 +117,11 @@ function AddActivityForm({ draft, onDraftChange, onSave, onCancel }: Props) {
             type="button"
             data-testid="activity-save-button"
             onClick={onSave}
-            disabled={!draft.title.trim()}
+            disabled={!draft.title.trim() || saving}
             className="sm:col-span-2 flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Check className="size-4" />
-            {t.itineraryPage.saveItem}
+            {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" />}
+            {saving ? t.itineraryPage.addActivityLocating : t.itineraryPage.saveItem}
           </button>
         </div>
       </div>

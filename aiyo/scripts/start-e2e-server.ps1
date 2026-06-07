@@ -1,6 +1,6 @@
 param(
     [int] $Port = 3015,
-    [string] $DatabaseUrl = "postgresql://aiyo:aiyo_password_change_me@127.0.0.1:5432/aiyo_new_dev_db?schema=public",
+    [string] $DatabaseUrl = "postgresql://aiyo:aiyo_password_change_me@127.0.0.1:5432/aiyo_new_db?schema=public",
     [string] $RedisUrl = "redis://127.0.0.1:6379/0",
     [string] $OpenWebUiBaseUrl = "http://127.0.0.1:8080",
     [string] $NextAuthSecret = "",

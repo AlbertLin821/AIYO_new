@@ -65,13 +65,17 @@ function buildVideoSummarySnippet(video: Video, location: LocationReference) {
     .join("\n");
 }
 
-export function getVerifiedGeocodedVideoLocations(video: Video) {
-  return video.extractedLocations.filter(
-    (location) =>
-      Number.isFinite(location.lat) &&
-      Number.isFinite(location.lng) &&
-      location.name.trim().length > 0,
+function isVerifiedMapLocation(location: LocationReference) {
+  return (
+    location.verified === true &&
+    Number.isFinite(location.lat) &&
+    Number.isFinite(location.lng) &&
+    location.name.trim().length > 0
   );
+}
+
+export function getVerifiedGeocodedVideoLocations(video: Video) {
+  return video.extractedLocations.filter(isVerifiedMapLocation);
 }
 
 /** 可透過「加入地圖與行程」匯入的地點（已驗證、非泛用美食名）。 */
@@ -141,15 +145,21 @@ export async function importVideoVerifiedPlacesToTrip(
     return { addedItems: 0, addedPins: 0 };
   }
 
+  const itemMetaByLocationName = new Map(
+    itemsToPin.map((entry) => [normalizeLocationName(entry.location.name), entry]),
+  );
   const pins = buildPinsFromLocations(
     itemsToPin.map((entry) => entry.location),
     "video",
-  ).map((pin, index) => ({
-    ...pin,
-    id: `video_pin_${video.id}_${index}`,
-    dayNumber: itemsToPin[index]?.dayNumber,
-    linkedTripItemId: itemsToPin[index]?.itemId,
-  }));
+  ).map((pin, index) => {
+    const matchedEntry = itemMetaByLocationName.get(normalizeLocationName(pin.name));
+    return {
+      ...pin,
+      id: `video_pin_${video.id}_${index}`,
+      dayNumber: matchedEntry?.dayNumber,
+      linkedTripItemId: matchedEntry?.itemId,
+    };
+  });
   useMapStore.getState().addPins(pins);
   await syncService.flushTripSyncNow({ force: true });
   await recordAppliedVideoSummary({

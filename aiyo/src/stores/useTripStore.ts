@@ -45,6 +45,12 @@ interface TripState {
   insertDayAfter: (afterDayNumber: number) => void;
   removeDay: (dayNumber: number) => void;
   reorderItineraryItem: (dayNumber: number, oldIndex: number, newIndex: number) => void;
+  moveItineraryItemBetweenDays: (
+    fromDayNumber: number,
+    toDayNumber: number,
+    itemId: string,
+    toIndex: number,
+  ) => void;
   resetTrip: (source?: SyncMutationSource) => void;
 }
 
@@ -294,6 +300,58 @@ export const useTripStore = create<TripState>((set) => ({
         }),
         lastUpdatedAt: new Date().toISOString(),
       }));
+    }),
+  moveItineraryItemBetweenDays: (fromDayNumber, toDayNumber, itemId, toIndex) =>
+    withSyncMutationSource("local-user-edit", () => {
+      set((state) => {
+        if (fromDayNumber === toDayNumber) {
+          return state;
+        }
+
+        const fromDay = state.itinerary.find((day) => day.dayNumber === fromDayNumber);
+        const toDay = state.itinerary.find((day) => day.dayNumber === toDayNumber);
+        if (!fromDay || !toDay) {
+          return state;
+        }
+
+        const fromIndex = fromDay.items.findIndex((item) => item.id === itemId);
+        if (fromIndex === -1) {
+          return state;
+        }
+
+        const movedItem = fromDay.items[fromIndex]!;
+        const sourceItems = fromDay.items.filter((item) => item.id !== itemId);
+        const targetItems = [...toDay.items];
+        const insertAt = Math.max(0, Math.min(toIndex, targetItems.length));
+        targetItems.splice(insertAt, 0, { ...movedItem, dayNumber: toDayNumber });
+
+        return {
+          itinerary: state.itinerary.map((day) => {
+            if (day.dayNumber === fromDayNumber) {
+              return {
+                ...day,
+                items: retimeDayItems(sourceItems, {
+                  dayStartMinutes: toMinutes(fromDay.items[0]?.time),
+                  previousItems: fromDay.items,
+                }),
+              };
+            }
+            if (day.dayNumber === toDayNumber) {
+              const dayStartMinutes =
+                toDay.items.length > 0 ? toMinutes(toDay.items[0]?.time) : toMinutes(movedItem.time);
+              return {
+                ...day,
+                items: retimeDayItems(targetItems, {
+                  dayStartMinutes,
+                  previousItems: toDay.items,
+                }),
+              };
+            }
+            return day;
+          }),
+          lastUpdatedAt: new Date().toISOString(),
+        };
+      });
     }),
   resetTrip: (source = "bootstrap") =>
     withSyncMutationSource(source, () => {

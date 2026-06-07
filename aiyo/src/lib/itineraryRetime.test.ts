@@ -133,6 +133,24 @@ test("transport edit cascades next item start time from previous stop", () => {
   assert.equal(result[1]?.transportDurationMinutes, 23);
 });
 
+test("transport edit still retimes when patch also carries the unchanged original time", () => {
+  const items = [
+    makeItem("a", "16:00", { location: { name: "A", lat: 23.4637, lng: 120.4427, description: "A" } }),
+    makeItem("b", "17:11", {
+      transport: "Driving",
+      location: { name: "B", lat: 23.4773, lng: 120.4469, description: "B" },
+    }),
+  ];
+
+  const result = cascadeDayItemsAfterTravelEdit(items, "b", {
+    time: "17:11",
+    transport: "Walking",
+  });
+
+  assert.equal(result[1]?.time, "16:23");
+  assert.equal(result[1]?.transport, "Walking");
+});
+
 test("editing the first stop time cascades following items by travel duration", () => {
   const items = [
     makeItem("a", "09:00", { location: { name: "A", lat: 23.4637, lng: 120.4427, description: "A" } }),

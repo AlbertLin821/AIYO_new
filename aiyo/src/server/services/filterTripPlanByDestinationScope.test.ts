@@ -21,7 +21,7 @@ afterEach(() => {
 
 test("filterTripPlanByDestinationScope removes Golden Gate Bridge for Japan trip", async () => {
   process.env.GOOGLE_MAPS_API_KEY = "test-key";
-  globalThis.fetch = async (_input, init) => {
+  globalThis.fetch = async (_input) => {
     const url =
       typeof _input === "string"
         ? _input

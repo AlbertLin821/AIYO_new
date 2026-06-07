@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { AnimatePresence, m } from "@/lib/motion";
+import { m } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -156,8 +156,12 @@ export default function VideoSummaryDrawer({
 }: VideoSummaryDrawerProps) {
   const router = useRouter();
   const { status: sessionStatus } = useSession();
-  const summaryDiagnostics = useVideoStore((state: VideoState) => state.summaryDiagnostics);
-  const isSummarizing = useVideoStore((state: VideoState) => state.isSummarizing);
+  const summaryDiagnosticsByVideoKey = useVideoStore(
+    (state: VideoState) => state.summaryDiagnosticsByVideoKey,
+  );
+  const summaryStatusByVideoKey = useVideoStore(
+    (state: VideoState) => state.summaryStatusByVideoKey,
+  );
   const pushToast = useToastStore((state) => state.pushToast);
   const [toast, setToast] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -166,6 +170,7 @@ export default function VideoSummaryDrawer({
   const [selectedLocationNames, setSelectedLocationNames] = useState<Set<string>>(() => new Set());
   const [selectedPreviewLocationName, setSelectedPreviewLocationName] = useState<string | null>(null);
   const [importTargetTripId, setImportTargetTripId] = useState<string>("");
+  const [importTargetExplicitlySelected, setImportTargetExplicitlySelected] = useState(false);
   const [importTargetDay, setImportTargetDay] = useState(1);
   const [importExtraDays, setImportExtraDays] = useState(0);
   const [importNewTripTitle, setImportNewTripTitle] = useState("");
@@ -173,13 +178,19 @@ export default function VideoSummaryDrawer({
   const [importTripList, setImportTripList] = useState<ItineraryListItem[]>([]);
   const [importTripListLoading, setImportTripListLoading] = useState(false);
   const [importTripListError, setImportTripListError] = useState<string | null>(null);
-  const [refreshingSummary, setRefreshingSummary] = useState(false);
   const currentTripId = useTripStore((state) => state.tripId);
   const currentTripTitle = useTripStore((state) => state.title);
   const currentTripDestination = useTripStore((state) => state.destination);
   const currentTripDays = useTripStore((state) => state.days);
   const tripItinerary = useTripStore((state) => state.itinerary);
   const videoId = video?.videoId;
+  const activeVideoKey = (video?.videoId?.trim() || video?.id?.trim() || null);
+  const summaryDiagnostics = activeVideoKey
+    ? summaryDiagnosticsByVideoKey[activeVideoKey] ?? null
+    : null;
+  const activeVideoSummaryStatus = activeVideoKey
+    ? summaryStatusByVideoKey[activeVideoKey] ?? null
+    : null;
 
   const importCandidates = useMemo(
     () => (video ? getVideoImportCandidateLocations(video) : []),
@@ -208,7 +219,8 @@ export default function VideoSummaryDrawer({
       const days = useTripStore.getState().itinerary.map((d) => d.dayNumber);
       const dayOk = days.includes(pending.targetDay);
       setImportTargetDay(dayOk ? pending.targetDay : (days[0] ?? pending.targetDay));
-      setImportTargetTripId(useTripStore.getState().tripId || NEW_TRIP_OPTION);
+      setImportTargetTripId(useTripStore.getState().tripId || "");
+      setImportTargetExplicitlySelected(false);
       setSelectedPreviewLocationName(null);
       setImportNewTripTitle(buildImportedTripTitle(video, inferDestinationFromVideoImport(video, names), names));
       setImportExtraDays(0);
@@ -218,7 +230,8 @@ export default function VideoSummaryDrawer({
       setSelectedPreviewLocationName(null);
       const firstDay = useTripStore.getState().itinerary[0]?.dayNumber ?? 1;
       setImportTargetDay(firstDay);
-      setImportTargetTripId(useTripStore.getState().tripId || NEW_TRIP_OPTION);
+      setImportTargetTripId(useTripStore.getState().tripId || "");
+      setImportTargetExplicitlySelected(false);
       const defaultNames = candidates.map((loc) => loc.name);
       setImportNewTripTitle(
         buildImportedTripTitle(video, inferDestinationFromVideoImport(video, defaultNames), defaultNames),
@@ -247,14 +260,16 @@ export default function VideoSummaryDrawer({
           return;
         }
         setImportTripList(rows);
-        const fallbackTripId = currentTripId || rows[0]?.id || NEW_TRIP_OPTION;
-        setImportTargetTripId((current) =>
-          current === NEW_TRIP_OPTION ||
-          rows.some((row) => row.id === current) ||
-          current === currentTripId
-            ? current
-            : fallbackTripId,
-        );
+        const preferredTripId = currentTripId || rows[0]?.id || NEW_TRIP_OPTION;
+        setImportTargetTripId((current) => {
+          if (importTargetExplicitlySelected && current) {
+            return current;
+          }
+          if (current && current !== NEW_TRIP_OPTION && rows.some((row) => row.id === current)) {
+            return current;
+          }
+          return preferredTripId;
+        });
       })
       .catch((error) => {
         if (!cancelled) {
@@ -269,7 +284,19 @@ export default function VideoSummaryDrawer({
     return () => {
       cancelled = true;
     };
-  }, [currentTripId, importDayPickerOpen, sessionStatus]);
+  }, [currentTripId, importDayPickerOpen, importTargetExplicitlySelected, sessionStatus]);
+
+  useEffect(() => {
+    if (
+      !open ||
+      importTargetExplicitlySelected ||
+      !currentTripId ||
+      (importTargetTripId && importTargetTripId !== NEW_TRIP_OPTION)
+    ) {
+      return;
+    }
+    setImportTargetTripId(currentTripId);
+  }, [currentTripId, importTargetExplicitlySelected, importTargetTripId, open]);
 
   const importTripOptions = useMemo(() => {
     const rows = [...importTripList];
@@ -323,18 +350,24 @@ export default function VideoSummaryDrawer({
     setImportTargetDay(importDayOptions[0] ?? 1);
   }, [importDayOptions, importDayPickerOpen, importTargetDay]);
 
-  const extractedLocationRows = video?.extractedLocations ?? [];
+  const extractedLocationRows = useMemo(() => video?.extractedLocations ?? [], [video?.extractedLocations]);
   const geocodedLocations = useMemo(
     () =>
       extractedLocationRows.filter(
-        (location) => Number.isFinite(location.lat) && Number.isFinite(location.lng),
+        (location) =>
+          location.verified === true &&
+          Number.isFinite(location.lat) &&
+          Number.isFinite(location.lng),
       ),
     [extractedLocationRows],
   );
   const unmappedLocations = useMemo(
     () =>
       extractedLocationRows.filter(
-        (location) => !Number.isFinite(location.lat) || !Number.isFinite(location.lng),
+        (location) =>
+          location.verified !== true ||
+          !Number.isFinite(location.lat) ||
+          !Number.isFinite(location.lng),
       ),
     [extractedLocationRows],
   );
@@ -365,9 +398,10 @@ export default function VideoSummaryDrawer({
   const hasSummarySegments = (activeVideo.summarySegments || []).length > 0;
   const hasExtractedLocationRows = extractedLocationRows.length > 0;
   const hasMapReadyLocations = geocodedLocations.length > 0;
-  const isProcessingVideo =
-    isSummarizing && !summaryDiagnostics?.summaryUnavailable;
-  const drawerProcessingWaitKey = isProcessingVideo ? `drawer-processing:${videoId || activeVideo.id}` : null;
+  const isProcessingVideo = activeVideoSummaryStatus === "queued" || activeVideoSummaryStatus === "running";
+  const drawerProcessingWaitKey = isProcessingVideo
+    ? `drawer-processing:${activeVideoKey}:${activeVideoSummaryStatus}`
+    : null;
   const failedChunkCount = summaryDiagnostics?.failedChunkCount ?? 0;
   const hasPartialChunkFailure = failedChunkCount > 0;
   const isPartialVideoSummary =
@@ -486,7 +520,7 @@ export default function VideoSummaryDrawer({
     setImportDayPickerOpen(true);
     setImportExtraDays(0);
     if (!importTargetTripId) {
-      setImportTargetTripId(currentTripId || NEW_TRIP_OPTION);
+      setImportTargetTripId(currentTripId || importTripOptions[0]?.id || NEW_TRIP_OPTION);
     }
   }
 
@@ -595,75 +629,22 @@ export default function VideoSummaryDrawer({
               <div className="flex min-w-0 flex-1 items-start gap-2">
                 <div className="flex min-w-0 flex-1 flex-col gap-2">
                 <h2 className="font-semibold text-foreground">{t.drawer.title}</h2>
-                {summaryDiagnostics && (
-                  <div className="flex flex-wrap gap-2">
-                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-primary">
-                      {summaryDiagnostics.transcriptSource === "youtube"
-                        ? t.video.transcriptYoutube
-                        : summaryDiagnostics.transcriptSource === "none"
-                          ? t.video.transcriptNone
-                          : t.video.transcriptFallback}
-                    </span>
-                    {summaryDiagnostics.mapsProvenance === "catalog-fallback" && (
-                      <span className="rounded-full bg-secondary/15 px-2 py-0.5 text-[10px] tracking-wide text-foreground/80">
-                        {t.video.mapsCatalog}
-                      </span>
-                    )}
-                    {summaryDiagnostics.mapsProvenance === "google-geocoding" && (
-                      <span className="rounded-full bg-tertiary/15 px-2 py-0.5 text-[10px] tracking-wide text-foreground/80">
-                        {t.video.mapsGoogle}
-                      </span>
-                    )}
-                    {summaryDiagnostics.mapsProvenance === "mixed" && (
-                      <span className="rounded-full bg-tertiary/15 px-2 py-0.5 text-[10px] tracking-wide text-foreground/80">
-                        {t.video.mapsMixed}
-                      </span>
-                    )}
-                    {drawerSummarySourceLabel(summaryDiagnostics.summarySource) && (
-                      <span className="rounded-full bg-border-light px-2 py-0.5 text-[10px] tracking-wide text-foreground/70">
-                        {drawerSummarySourceLabel(summaryDiagnostics.summarySource)}
-                      </span>
-                    )}
-                    {drawerSegmentSourceLabel(summaryDiagnostics.segmentSource) && (
-                      <span className="rounded-full bg-border-light px-2 py-0.5 text-[10px] tracking-wide text-foreground/70">
-                        {drawerSegmentSourceLabel(summaryDiagnostics.segmentSource)}
-                      </span>
-                    )}
-                    {process.env.NODE_ENV !== "production" && summaryDiagnostics.captionLanguage && (
-                      <span className="rounded-full bg-border-light px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/70">
-                        {`caption:${summaryDiagnostics.captionLanguage}`}
-                      </span>
-                    )}
-                    {process.env.NODE_ENV !== "production" && summaryDiagnostics.captionKind && (
-                      <span className="rounded-full bg-border-light px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/70">
-                        {summaryDiagnostics.captionKind}
-                      </span>
-                    )}
-                  </div>
-                )}
                 </div>
                 {onRefreshSummary && videoId ? (
                   <button
                     type="button"
                     title={t.drawer.refreshSummaryTitle}
                     aria-label={t.drawer.refreshSummaryAria}
-                    disabled={isSummarizing || refreshingSummary}
+                    disabled={isProcessingVideo}
                     onClick={() => {
-                      void (async () => {
-                        setRefreshingSummary(true);
-                        try {
-                          await onRefreshSummary();
-                        } finally {
-                          setRefreshingSummary(false);
-                        }
-                      })();
+                      void onRefreshSummary();
                     }}
                     className="mt-0.5 shrink-0 cursor-pointer rounded-full p-2 text-muted transition-colors hover:bg-border-light hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
                   >
                     <RefreshCw
                       className={cn(
                         "size-4",
-                        (isSummarizing || refreshingSummary) && "animate-spin",
+                        isProcessingVideo && "animate-spin",
                       )}
                       aria-hidden
                     />
@@ -1063,6 +1044,7 @@ export default function VideoSummaryDrawer({
                     value={importTargetTripId}
                     onChange={(event) => {
                       const nextTripId = event.target.value;
+                      setImportTargetExplicitlySelected(true);
                       setImportTargetTripId(nextTripId);
                       if (nextTripId === NEW_TRIP_OPTION && !importNewTripTitle.trim()) {
                         const selectedNames = importCandidates

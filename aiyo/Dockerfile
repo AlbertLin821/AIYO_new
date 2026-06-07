@@ -1,6 +1,8 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 
+RUN apk add --no-cache yt-dlp
+
 COPY package.json package-lock.json ./
 RUN npm ci
 
@@ -26,6 +28,8 @@ RUN npm run build
 
 FROM node:22-alpine AS runner
 WORKDIR /app
+
+RUN apk add --no-cache yt-dlp
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

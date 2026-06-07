@@ -116,6 +116,67 @@ test("trip.update_metadata can extend trip days without changing existing items"
   assert.deepEqual(state.itinerary[2]?.items, []);
 });
 
+test("move item to missing day extends itinerary before add_item", async () => {
+  useTripStore.setState({
+    days: 1,
+    itinerary: [
+      {
+        dayNumber: 1,
+        theme: "Day 1",
+        summary: "",
+        items: [{ id: "market", time: "10:00", title: "新港漁市場", type: "attraction" }],
+      },
+    ],
+  });
+
+  const result = await applyAssistantActions([
+    { type: "trip.update_metadata", payload: { days: 2 } },
+    { type: "itinerary.remove_item", payload: { dayId: "day-1", itemId: "market" } },
+    {
+      type: "itinerary.add_item",
+      payload: {
+        dayId: "day-2",
+        item: { title: "新港漁市場", startTime: "10:00", source: "assistant" },
+      },
+    },
+  ], { persist: false, geocode: false });
+
+  assert.equal(result.appliedCount, 3);
+  assert.equal(result.skippedCount, 0);
+  const state = useTripStore.getState();
+  assert.equal(state.itinerary.length, 2);
+  assert.deepEqual(state.itinerary[0]?.items, []);
+  assert.equal(state.itinerary[1]?.items[0]?.title, "新港漁市場");
+});
+
+test("add_item auto-extends itinerary when target day is missing but dayNumber is valid", async () => {
+  useTripStore.setState({
+    days: 1,
+    itinerary: [
+      {
+        dayNumber: 1,
+        theme: "Day 1",
+        summary: "",
+        items: [],
+      },
+    ],
+  });
+
+  const result = await applyAssistantActions([
+    {
+      type: "itinerary.add_item",
+      payload: {
+        dayId: "day-2",
+        item: { title: "新港漁市場", startTime: "10:00", source: "assistant" },
+      },
+    },
+  ], { persist: false, geocode: false });
+
+  assert.equal(result.appliedCount, 1);
+  assert.equal(useTripStore.getState().itinerary.length, 2);
+  assert.equal(useTripStore.getState().itinerary[1]?.items[0]?.title, "新港漁市場");
+});
+
 test("updates item time and transport fields", async () => {
   await applyAssistantActions([
     {

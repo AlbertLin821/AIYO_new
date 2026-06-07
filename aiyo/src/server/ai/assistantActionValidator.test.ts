@@ -64,6 +64,29 @@ test("missing dayId is rejected", () => {
   assert.ok(result.warnings.includes("dayId does not exist in current trip"));
 });
 
+test("add_item to newly extended day passes after trip.update_metadata", () => {
+  const singleDayContext: PersonalizedAIContext = {
+    ...context(),
+    currentTrip: {
+      id: "trip-1",
+      title: "札幌行",
+      destination: "札幌",
+      days: [{ id: "day-1", dayNumber: 1, items: [{ id: "market", title: "新港漁市場" }] }],
+    },
+  };
+  const result = validateAssistantActions({
+    userId: "user-1",
+    structuredContext: singleDayContext,
+    actions: [
+      { type: "trip.update_metadata", payload: { days: 2 } },
+      { type: "itinerary.remove_item", payload: { dayId: "day-1", itemId: "market" } },
+      { type: "itinerary.add_item", payload: { dayId: "day-2", item: { title: "新港漁市場", startTime: "10:00" } } },
+    ],
+  });
+  assert.equal(result.validActions.length, 3);
+  assert.equal(result.rejectedActions.length, 0);
+});
+
 test("missing itemId is rejected", () => {
   const result = validateAssistantActions({
     userId: "user-1",

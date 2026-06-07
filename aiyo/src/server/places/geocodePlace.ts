@@ -1,8 +1,6 @@
 import { isUsableMapCoordinate } from "@/lib/geoCoordinates";
 import {
-  isGeocodeCountryInScope,
-  isGeocodePointInScope,
-  isTextInTripDestinationScope,
+  geocodeResultFailsDestinationScope,
   resolveTripDestinationScope,
   type TripDestinationScope,
 } from "@/lib/tripDestinationScope";
@@ -11,7 +9,7 @@ import {
   type GeocodeResult,
 } from "@/server/geo/geocodeService";
 import { searchPlacesByText, type PlaceSearchHit } from "@/server/geo/placesSearchService";
-import type { GeocodeProvider, GeocodedPlace } from "@/types/geocode";
+import type { GeocodeProvider, GeocodedPlace, PlaceSuggestion } from "@/types/geocode";
 
 export type GeocodePlaceInput = {
   query: string;
@@ -76,19 +74,18 @@ function candidatePassesDestinationScope(
   if (!scope?.countryCodes.length) {
     return true;
   }
-  if (candidate.countryCode && !isGeocodeCountryInScope(candidate.countryCode, scope)) {
-    return false;
-  }
-  if (!isGeocodePointInScope(candidate.lat, candidate.lng, scope)) {
-    return false;
-  }
-  if (!candidate.countryCode) {
-    const addressBlob = `${candidate.formattedAddress} ${candidate.query}`;
-    if (!isTextInTripDestinationScope(addressBlob, scope, { strictCountryLevel: false })) {
-      return false;
-    }
-  }
-  return true;
+  return (
+    geocodeResultFailsDestinationScope(
+      {
+        countryCode: candidate.countryCode,
+        lat: candidate.lat,
+        lng: candidate.lng,
+        formattedAddress: candidate.formattedAddress,
+        placeName: candidate.query,
+      },
+      scope,
+    ) === null
+  );
 }
 
 function buildRegionBias(input: GeocodePlaceInput): string | undefined {
@@ -495,9 +492,323 @@ export async function geocodePlace(input: GeocodePlaceInput): Promise<GeocodePla
   return pickBestCandidate(query, fetched.candidates, input.destinationHint, scope);
 }
 
-/** Map GeocodedPlace provider to LocationReference.resolvedFrom. */
-export function mapGeocodedPlaceResolvedFrom(
-  provider: GeocodeProvider,
-): "google-geocode" | "google-place-details" {
-  return provider === "google-places" ? "google-place-details" : "google-geocode";
+export type SuggestPlacesResult =
+  | { ok: true; suggestions: PlaceSuggestion[]; autoResolve: PlaceSuggestion | null }
+  | { ok: false; code: GeocodePlaceFailure["code"]; message: string };
+
+const AUTO_RESOLVE_MIN_CONFIDENCE = 0.82;
+const AUTO_RESOLVE_MIN_GAP = 0.06;
+const EXACT_MATCH_MIN_CONFIDENCE = 0.72;
+
+function candidateToSuggestion(
+  query: string,
+  candidate: GeocodeResult,
+  score: number,
+): PlaceSuggestion {
+  const displayName = candidate.formattedAddress?.split(",")[0]?.trim() || query;
+  return {
+    placeName: displayName,
+    formattedAddress: candidate.formattedAddress,
+    placeId: candidate.placeId ?? null,
+    lat: candidate.lat,
+    lng: candidate.lng,
+    provider: "google-geocoding",
+    confidence: score,
+    sourceQuery: query,
+    countryCode: candidate.countryCode ?? null,
+  };
 }
+
+function hitToSuggestion(query: string, hit: PlaceSearchHit, score: number): PlaceSuggestion {
+  return {
+    placeName: hit.name,
+    formattedAddress: hit.formattedAddress,
+    placeId: hit.placeId.startsWith("noid_") ? null : hit.placeId,
+    lat: hit.lat,
+    lng: hit.lng,
+    provider: "google-places",
+    confidence: score,
+    sourceQuery: query,
+    rating: hit.rating,
+    userRatingsTotal: hit.userRatingsTotal,
+    photoUrl: hit.photoUrl,
+    thumbnail: hit.photoUrl,
+    openingHours: hit.openingHours,
+    phoneNumber: hit.phoneNumber,
+    website: hit.website,
+    googleMapsUrl: hit.googleMapsUrl,
+  };
+}
+
+function rankCandidatesForSuggestions(
+  query: string,
+  candidates: GeocodeResult[],
+  destinationHint: string | undefined,
+  scope: TripDestinationScope | null,
+): PlaceSuggestion[] {
+  return candidates
+    .filter((candidate) => candidatePassesDestinationScope(candidate, scope))
+    .map((candidate) => ({
+      candidate,
+      score: scoreCandidate(query, candidate, destinationHint),
+      gate: gateForCandidate(query, candidate),
+    }))
+    .filter(
+      (entry) =>
+        entry.gate.accepted || canAcceptCrossLocale(query, entry.candidate, scope),
+    )
+    .sort((left, right) => right.score - left.score)
+    .map((entry) => candidateToSuggestion(query, entry.candidate, entry.score));
+}
+
+function rankHitsForSuggestions(
+  query: string,
+  hits: PlaceSearchHit[],
+  destinationHint: string | undefined,
+  scope: TripDestinationScope | null,
+): PlaceSuggestion[] {
+  return hits
+    .map((hit) => {
+      const candidate = placeSearchHitToGeocodeResult(query, hit);
+      return {
+        hit,
+        score: scoreCandidate(query, candidate, destinationHint),
+        gate: gateForCandidate(query, candidate),
+        candidate,
+      };
+    })
+    .filter((entry) => candidatePassesDestinationScope(entry.candidate, scope))
+    .filter(
+      (entry) =>
+        entry.gate.accepted || canAcceptCrossLocale(query, entry.candidate, scope),
+    )
+    .sort((left, right) => right.score - left.score)
+    .map((entry) => hitToSuggestion(query, entry.hit, entry.score));
+}
+
+function rankCandidatesForSuggestionsRelaxed(
+  query: string,
+  candidates: GeocodeResult[],
+  destinationHint: string | undefined,
+): PlaceSuggestion[] {
+  return candidates
+    .map((candidate) => ({
+      candidate,
+      score: Math.min(0.68, scoreCandidate(query, candidate, destinationHint) * 0.8),
+    }))
+    .sort((left, right) => right.score - left.score)
+    .map((entry) => ({
+      ...candidateToSuggestion(query, entry.candidate, entry.score),
+      needsUserConfirm: true,
+    }));
+}
+
+function rankHitsForSuggestionsRelaxed(
+  query: string,
+  hits: PlaceSearchHit[],
+  destinationHint: string | undefined,
+): PlaceSuggestion[] {
+  return hits
+    .map((hit) => {
+      const candidate = placeSearchHitToGeocodeResult(query, hit);
+      return {
+        hit,
+        score: Math.min(0.68, scoreCandidate(query, candidate, destinationHint) * 0.8),
+      };
+    })
+    .sort((left, right) => right.score - left.score)
+    .map((entry) => ({
+      ...hitToSuggestion(query, entry.hit, entry.score),
+      needsUserConfirm: true,
+    }));
+}
+
+function countryOnlyScope(scope: TripDestinationScope | null): TripDestinationScope | null {
+  if (!scope?.countryCodes.length) {
+    return null;
+  }
+  return {
+    ...scope,
+    positiveTokens: [],
+    negativeRegionTokens: [],
+    isCountryLevel: true,
+  };
+}
+
+export function mergeStrictAndRelaxedSuggestions(
+  strict: PlaceSuggestion[],
+  relaxed: PlaceSuggestion[],
+  maxResults: number,
+): PlaceSuggestion[] {
+  const strictDeduped = dedupePlaceSuggestions(strict);
+  const strictKeys = new Set(
+    strictDeduped.map((item) => item.placeId?.trim() || `${item.lat.toFixed(4)},${item.lng.toFixed(4)}`),
+  );
+  const relaxedOnly = dedupePlaceSuggestions(relaxed).filter((item) => {
+    const key = item.placeId?.trim() || `${item.lat.toFixed(4)},${item.lng.toFixed(4)}`;
+    return !strictKeys.has(key);
+  });
+  return dedupePlaceSuggestions([...strictDeduped, ...relaxedOnly]).slice(0, maxResults);
+}
+
+function dedupePlaceSuggestions(items: PlaceSuggestion[]): PlaceSuggestion[] {
+  const seen = new Set<string>();
+  const ranked = [...items].sort((left, right) => (right.confidence ?? 0) - (left.confidence ?? 0));
+  const out: PlaceSuggestion[] = [];
+  for (const item of ranked) {
+    const key = item.placeId?.trim() || `${item.lat.toFixed(4)},${item.lng.toFixed(4)}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
+
+export function pickAutoResolveSuggestion(
+  query: string,
+  suggestions: PlaceSuggestion[],
+): PlaceSuggestion | null {
+  if (!suggestions.length) {
+    return null;
+  }
+
+  const top = suggestions[0]!;
+  const runnerUp = suggestions[1];
+  const normalizedQuery = normalizeQuery(query).toLowerCase();
+  const topName = normalizeQuery(top.placeName).toLowerCase();
+  const topAddress = normalizeQuery(top.formattedAddress || "").toLowerCase();
+  const exactNameMatch = topName === normalizedQuery;
+  const addressContainsQuery = normalizedQuery.length >= 2 && topAddress.includes(normalizedQuery);
+  const topScore = top.confidence ?? 0;
+  const runnerScore = runnerUp?.confidence ?? 0;
+
+  if (exactNameMatch && topScore >= EXACT_MATCH_MIN_CONFIDENCE) {
+    return top;
+  }
+
+  if (addressContainsQuery && topScore >= EXACT_MATCH_MIN_CONFIDENCE && topScore - runnerScore >= AUTO_RESOLVE_MIN_GAP) {
+    return top;
+  }
+
+  if (topScore >= AUTO_RESOLVE_MIN_CONFIDENCE && topScore - runnerScore >= AUTO_RESOLVE_MIN_GAP) {
+    return top;
+  }
+
+  return null;
+}
+
+export async function suggestPlacesForQuery(
+  input: GeocodePlaceInput,
+  options?: { maxResults?: number },
+): Promise<SuggestPlacesResult> {
+  const query = normalizeQuery(input.query);
+  if (query.length < 2) {
+    return { ok: false, code: "invalid_request", message: "地點名稱過短。" };
+  }
+
+  const maxResults = Math.min(8, Math.max(1, options?.maxResults ?? 5));
+  const scope = resolveScope(input);
+  const regionBias = buildRegionBias(input);
+  const language = geocodeLanguageForScope(scope);
+  const countryCode = primaryCountryCode(scope) || input.countryHint?.trim().toUpperCase();
+  const locationHint =
+    input.destinationHint?.trim() ||
+    input.countryHint?.trim() ||
+    scope?.canonicalLabel?.trim() ||
+    undefined;
+  const destinationHint = input.destinationHint || undefined;
+
+  const strictSuggestions: PlaceSuggestion[] = [];
+  const relaxedSuggestions: PlaceSuggestion[] = [];
+  const fetched = await fetchGeocodeCandidates(query, regionBias, {
+    countryCode,
+    language,
+  });
+
+  if (!fetched.ok && fetched.code === "missing_api_key") {
+    return { ok: false, code: fetched.code, message: fetched.message };
+  }
+
+  if (fetched.ok) {
+    strictSuggestions.push(
+      ...rankCandidatesForSuggestions(query, fetched.candidates, destinationHint, scope),
+    );
+    relaxedSuggestions.push(
+      ...rankCandidatesForSuggestionsRelaxed(query, fetched.candidates, destinationHint),
+    );
+  }
+
+  const search = await searchPlacesByText(query, locationHint, { maxResults: 6 });
+  if (search.ok && search.places.length) {
+    strictSuggestions.push(
+      ...rankHitsForSuggestions(query, search.places, locationHint, scope),
+    );
+    relaxedSuggestions.push(
+      ...rankHitsForSuggestionsRelaxed(query, search.places, locationHint),
+    );
+  }
+
+  const strictDeduped = dedupePlaceSuggestions(strictSuggestions);
+  let merged = mergeStrictAndRelaxedSuggestions(strictDeduped, relaxedSuggestions, maxResults);
+
+  if (!merged.length && search.ok && search.places.length) {
+    merged = rankHitsForSuggestionsRelaxed(query, search.places, locationHint).slice(0, maxResults);
+  }
+
+  if (!merged.length && scope?.countryCodes.length) {
+    const countryScope = countryOnlyScope(scope);
+    const countryStrict: PlaceSuggestion[] = [];
+    const countryRelaxed: PlaceSuggestion[] = [];
+    if (fetched.ok) {
+      countryStrict.push(
+        ...rankCandidatesForSuggestions(query, fetched.candidates, destinationHint, countryScope),
+      );
+      countryRelaxed.push(
+        ...rankCandidatesForSuggestionsRelaxed(query, fetched.candidates, destinationHint),
+      );
+    }
+    if (search.ok && search.places.length) {
+      countryStrict.push(
+        ...rankHitsForSuggestions(query, search.places, locationHint, countryScope),
+      );
+      countryRelaxed.push(
+        ...rankHitsForSuggestionsRelaxed(query, search.places, locationHint),
+      );
+    }
+    merged = mergeStrictAndRelaxedSuggestions(
+      dedupePlaceSuggestions(countryStrict),
+      countryRelaxed,
+      maxResults,
+    );
+    if (!merged.length && search.ok) {
+      merged = rankHitsForSuggestionsRelaxed(query, search.places, locationHint).slice(0, maxResults);
+    }
+  }
+
+  if (!merged.length) {
+    const searchFallback = await searchPlacesByText(query, undefined, { maxResults: 6 });
+    if (searchFallback.ok && searchFallback.places.length) {
+      merged = rankHitsForSuggestionsRelaxed(query, searchFallback.places, undefined).slice(
+        0,
+        maxResults,
+      );
+    }
+  }
+
+  if (!merged.length) {
+    if (!fetched.ok) {
+      return { ok: false, code: fetched.code, message: fetched.message };
+    }
+    return { ok: false, code: "not_found", message: "找不到符合的地點。" };
+  }
+
+  return {
+    ok: true,
+    suggestions: merged,
+    autoResolve: pickAutoResolveSuggestion(query, strictDeduped),
+  };
+}
+
+export { mapGeocodedPlaceResolvedFrom } from "@/lib/places/geocodeUtils";

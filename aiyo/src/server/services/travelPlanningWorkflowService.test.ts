@@ -110,6 +110,7 @@ test("runStructuredTripWorkflow returns dynamic question card before planning wh
   assert.equal(response?.reply.responseType, "question_card");
   assert.equal(response?.reply.questionCard?.title, "AI 動態確認旅遊條件");
   assert.equal(response?.reply.statusSteps?.[0]?.status, "waiting_input");
+  assert.match(response?.reply.content || "", /補完後我就直接幫你排完整行程|再補充/);
 });
 
 test("runStructuredTripWorkflow generates travel plan when no question card is needed", async () => {

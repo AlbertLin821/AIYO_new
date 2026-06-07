@@ -807,8 +807,12 @@ export interface VideoSummaryDebugMeta {
     | "unavailable";
   captionLanguage?: string;
   captionKind?: "manual" | "asr";
-  captionSource?: "watch-page-captions" | "timedtext" | "youtube-transcript-package";
-  cacheStatus?: "memory-hit" | "persisted-hit" | "miss";
+  captionSource?:
+    | "watch-page-captions"
+    | "timedtext"
+    | "youtube-transcript-package"
+    | "yt-dlp-vtt";
+  cacheStatus?: "memory-hit" | "persisted-hit" | "persisted-hit-legacy" | "miss";
   pipelineVersion?: string;
   finalPlaceCount?: number;
   finalFoodCount?: number;

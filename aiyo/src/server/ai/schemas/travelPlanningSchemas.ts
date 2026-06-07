@@ -342,14 +342,14 @@ export const TravelPlanResponseSchema = z.object({
       spots: z.array(
         z.object({
           name: z.string().trim().min(1),
-          feature: z.string().trim().min(1),
+          feature: z.string().trim(),
           citations: z.array(z.string().trim().min(1)).optional(),
         }),
       ),
       food_recommendations: z.array(
         z.object({
           name: z.string().trim().min(1),
-          description: z.string().trim().min(1),
+          description: z.string().trim(),
           citations: z.array(z.string().trim().min(1)).optional(),
         }),
       ),

@@ -61,3 +61,29 @@ test("syncExtractedLocationsWithSegments does not duplicate names already in map
   assert.equal(synced.length, 1);
   assert.equal(synced[0]?.name, "熊本城");
 });
+
+test("syncExtractedLocationsWithSegments keeps known-location fallback out of map-ready coordinates when unverified", async () => {
+  const segments: VideoSummarySegment[] = [
+    {
+      id: "seg_2",
+      timestamp: "2:00",
+      title: "嘉義",
+      text: "主持人提到嘉義",
+      summary: "主持人提到嘉義",
+      locationHints: ["嘉義"],
+    },
+  ];
+
+  const synced = await syncExtractedLocationsWithSegments({
+    segments,
+    mapReadyLocations: [],
+  });
+
+  assert.equal(synced.length, 1);
+  const fallback = synced[0];
+  assert.equal(fallback?.name, "嘉義");
+  assert.equal(fallback?.verified, false);
+  assert.ok(!Number.isFinite(fallback?.lat));
+  assert.ok(!Number.isFinite(fallback?.lng));
+  assert.equal(fallback?.geocodeRejectedReason, "segment-hint-no-geocode");
+});
