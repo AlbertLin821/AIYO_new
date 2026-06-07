@@ -1,5 +1,17 @@
 import { expect, type Page } from "@playwright/test";
 
+export async function expandAllItineraryDays(page: Page) {
+  const dayCards = page.getByTestId("itinerary-day-card");
+  const dayCount = await dayCards.count();
+  for (let index = 0; index < dayCount; index += 1) {
+    const card = dayCards.nth(index);
+    const toggle = card.getByRole("button", { expanded: false }).first();
+    if (await toggle.isVisible().catch(() => false)) {
+      await toggle.click();
+    }
+  }
+}
+
 export async function openItineraryEditor(page: Page) {
   const editor = page.getByTestId("itinerary-editor");
   const landingCards = page.getByTestId("trip-landing-card");
