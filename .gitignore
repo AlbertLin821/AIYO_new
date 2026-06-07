@@ -11,3 +11,9 @@ youtube-proj/
 
 # Environment files are local-only; app templates live under aiyo/.env.example.
 .env*
+
+# Local database backups (never commit dumps)
+backup/
+
+# Local screenshot / debug artifacts
+aiyo/tmp-*.png
