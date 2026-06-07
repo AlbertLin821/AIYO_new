@@ -64,3 +64,68 @@ test("importVideoVerifiedPlacesToTrip creates days up to targetDayNumber", async
   assert.equal(itinerary[2]?.items[0]?.dayNumber, 3);
   assert.equal(itinerary[2]?.items[0]?.title, sampleLocation.name);
 });
+
+test("importVideoVerifiedPlacesToTrip ignores unverified fallback coordinates", async () => {
+  const result = await importVideoVerifiedPlacesToTrip(
+    buildVideo({
+      extractedLocations: [
+        {
+          ...sampleLocation,
+          name: "嘉義",
+          verified: false,
+          resolvedFrom: "llm",
+          geocodeRejectedReason: "segment-hint-no-geocode",
+        },
+      ],
+    }),
+    {
+      selectedNames: ["嘉義"],
+      targetDayNumber: 1,
+    },
+  );
+
+  assert.equal(result.addedItems, 0);
+  assert.equal(result.addedPins, 0);
+  assert.equal(useTripStore.getState().itinerary.length, 0);
+  assert.equal(useMapStore.getState().pins.length, 0);
+});
+
+test("importVideoVerifiedPlacesToTrip keeps pin linked to the matching place after pin sorting", async () => {
+  const lowerConfidenceLocation = {
+    ...sampleLocation,
+    name: "文化路夜市",
+    confidence: 0.7,
+  };
+  const higherConfidenceLocation = {
+    ...sampleLocation,
+    name: "檜意森活村",
+    lat: 23.485,
+    lng: 120.456,
+    confidence: 0.95,
+  };
+
+  const result = await importVideoVerifiedPlacesToTrip(
+    buildVideo({
+      extractedLocations: [lowerConfidenceLocation, higherConfidenceLocation],
+    }),
+    {
+      selectedNames: [lowerConfidenceLocation.name, higherConfidenceLocation.name],
+      targetDayNumber: 1,
+    },
+  );
+
+  assert.equal(result.addedItems, 2);
+  assert.equal(result.addedPins, 2);
+
+  const itinerary = useTripStore.getState().itinerary[0]?.items ?? [];
+  const pins = useMapStore.getState().pins;
+  const itemById = new Map(itinerary.map((item) => [item.id, item]));
+
+  for (const pin of pins) {
+    const item = pin.linkedTripItemId ? itemById.get(pin.linkedTripItemId) : null;
+    assert.ok(item, `expected linked item for pin ${pin.name}`);
+    assert.equal(item?.location?.name, pin.name);
+    assert.equal(item?.location?.lat, pin.lat);
+    assert.equal(item?.location?.lng, pin.lng);
+  }
+});

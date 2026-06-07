@@ -172,6 +172,8 @@ export function mealRequiresAreaNotes(title: string, notes?: string | null): boo
   return !(notes || "").trim();
 }
 
+export { isCannedTripItemNote, resolveTripItemDisplayNote } from "@/lib/tripItemNotes";
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

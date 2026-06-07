@@ -92,9 +92,9 @@ class SyncService {
   }
 
   private log(message: string, payload?: Record<string, unknown>) {
-    if (process.env.NODE_ENV !== "production") {
-      console.info(`[sync] ${message}`, payload || {});
-    }
+    // if (process.env.NODE_ENV !== "production") {
+    //   console.info(`[sync] ${message}`, payload || {});
+    // }
   }
 
   private applyReconciledTripSnapshot(
@@ -299,6 +299,7 @@ class SyncService {
       preferredTransport: userStore.preferredTransport,
       travelPace: userStore.travelPace,
       interests: userStore.interests,
+      interestIcons: userStore.interestIcons,
     };
 
     if (JSON.stringify(currentProfile) !== JSON.stringify(snapshot.profile)) {
@@ -515,6 +516,22 @@ class SyncService {
 
   async saveProfile(input: Partial<User> & { welcomeCompleted?: boolean }) {
     return withRetry(() => apiPut<Partial<User> & { welcomeCompleted?: boolean }, User>("/api/profile", input));
+  }
+
+  async uploadAvatar(file: Blob) {
+    const formData = new FormData();
+    formData.append("avatar", file, "avatar.jpg");
+    const response = await fetch("/api/profile/avatar", {
+      method: "POST",
+      body: formData,
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const payload = (await response.json()) as { error?: { message?: string } };
+      throw new Error(payload.error?.message || t.api.postFailed);
+    }
+    const payload = (await response.json()) as { data: { image: string } };
+    return payload.data;
   }
 
   async addComment(roomId: string, content: string) {

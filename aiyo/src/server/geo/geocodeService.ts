@@ -1,6 +1,6 @@
 import { serverConfig } from "@/server/config";
 import { isUsableMapCoordinate } from "@/lib/geoCoordinates";
-import { buildPlacePhotoProxyUrl } from "@/lib/placePhotoUrl";
+import { buildPlacePhotoProxyUrl, resolvePlacePhotoUrl } from "@/lib/placePhotoUrl";
 import {
   geocodeResultFailsDestinationScope,
   isGeocodeCountryInScope,
@@ -315,11 +315,11 @@ function buildKnownCatalogLocation(
   };
 }
 
-function buildPhotoUrl(photoReference?: string): string | undefined {
+function buildPhotoUrl(photoReference?: string, placeId?: string): string | undefined {
   if (!photoReference || !serverConfig.googleMapsApiKey) {
     return undefined;
   }
-  return buildPlacePhotoProxyUrl(photoReference, 480);
+  return resolvePlacePhotoUrl(buildPlacePhotoProxyUrl(photoReference, 480), placeId);
 }
 
 export async function fetchGooglePlaceDetailsByPlaceId(
@@ -345,7 +345,7 @@ export async function fetchGooglePlaceDetailsByPlaceId(
       );
       return {};
     }
-    const photoUrl = buildPhotoUrl(payload.result.photos?.[0]?.photo_reference);
+    const photoUrl = buildPhotoUrl(payload.result.photos?.[0]?.photo_reference, placeId);
     const lat = payload.result.geometry?.location?.lat;
     const lng = payload.result.geometry?.location?.lng;
     return {

@@ -47,6 +47,10 @@ yarn-error.log*
 # local scenario outputs
 /tmp
 
+# user-uploaded avatars
+/public/avatars/*
+!/public/avatars/.gitkeep
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

@@ -295,6 +295,33 @@ export const thailandProfile: TravelExtractionProfile = {
   ],
 };
 
+export const newZealandProfile: TravelExtractionProfile = {
+  id: "new-zealand",
+  country: "New Zealand",
+  supportedLanguages: ["en", "zh-TW", "zh-Hant"],
+  genericLocationNames: [
+    "紐西蘭",
+    "新西蘭",
+    "new zealand",
+    "queenstown",
+    "皇后鎮",
+    "christchurch",
+    "基督城",
+    "wanaka",
+    "te anau",
+    "milford",
+    "auckland",
+    "奧克蘭",
+  ],
+  genericTravelTerms: [...COMMON_GENERIC_TRAVEL_TERMS],
+  placeSuffixes: ["lake", "mount", "bay", "glen", "碼頭", "湖", "山", "灣"],
+  foodTerms: ["fergburger", "pie", "seafood", "漢堡"],
+  fillerPrefixes: [...COMMON_FILLERS],
+  poiPatterns: [
+    /[A-Za-z][A-Za-z\s]{1,28}(Lake|Bay|Glen|Park|Hill|Sound|Jetty|Wharf)/gi,
+  ],
+};
+
 export const englishGlobalProfile: TravelExtractionProfile = {
   id: "english-global",
   country: "Global",
@@ -339,8 +366,12 @@ export function selectTravelExtractionProfile(input: {
   const description = normalize(input.description);
   const haystack = [destination, language, title, description].filter(Boolean).join(" ");
 
-  if (/(台灣|臺灣|台北|臺北|台中|臺中|台南|臺南|高雄|嘉義|taiwan|taipei|kaohsiung|tainan|chiayi)/i.test(haystack)) {
-    return taiwanProfile;
+  if (
+    /(紐西蘭|新西蘭|new\s*zealand|aotearoa|queenstown|皇后鎮|christchurch|基督城|te\s*anau|wanaka|milford|庫克山|库克山|瓦卡蒂普|fergburger)/i.test(
+      haystack,
+    )
+  ) {
+    return newZealandProfile;
   }
 
   if (
@@ -357,6 +388,10 @@ export function selectTravelExtractionProfile(input: {
 
   if (/(泰國|曼谷|清邁|普吉|thailand|bangkok|chiang mai|phuket)/i.test(haystack)) {
     return thailandProfile;
+  }
+
+  if (/(台灣|臺灣|台北|臺北|台中|臺中|台南|臺南|高雄|嘉義|taiwan|taipei|kaohsiung|tainan|chiayi)/i.test(haystack)) {
+    return taiwanProfile;
   }
 
   if (language.startsWith("en")) {

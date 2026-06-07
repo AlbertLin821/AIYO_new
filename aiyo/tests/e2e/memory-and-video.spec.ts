@@ -14,7 +14,7 @@ test("authenticated user can review, edit, and delete AI memory", async ({ page 
   const { owner } = await seedAuthUsers();
   await seedTripForUser(owner.id, "E2E Memory Trip");
 
-  await loginAs(page, E2E_OWNER, "/profile");
+  await loginAs(page, E2E_OWNER, "/");
 
   const token = `MEM${Date.now()}`;
   const chatResponse = await page.evaluate(async (value) => {
@@ -36,7 +36,8 @@ test("authenticated user can review, edit, and delete AI memory", async ({ page 
   expect(chatResponse.status).toBe(200);
   expect(chatResponse.payload.success).toBe(true);
 
-  await page.goto("/profile");
+  await page.getByTestId("settings-open-button").click();
+  await page.getByTestId("settings-memory-tab").click();
   await page.getByTestId("memory-refresh-button").click();
   const initialMemories = await page.evaluate(async () => {
     const response = await fetch("/api/memories", { cache: "no-store" });

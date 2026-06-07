@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -11,7 +11,6 @@ import {
   CalendarDays,
   ChevronDown,
   DollarSign,
-  Heart,
   Loader2,
   MapPin,
   Mic,
@@ -76,6 +75,8 @@ import {
 } from "@/lib/chat/workflowRailVisibility";
 import { findLatestApplicableItinerarySource } from "@/lib/chat/latestItinerarySource";
 import { cn } from "@/lib/utils";
+import { enqueueVideoSummary } from "@/lib/videoSummaryQueue";
+import { mergeVideoSummaryResult } from "@/lib/mergeVideoSummaries";
 import { ApiRequestError } from "@/services/apiClient";
 import {
   reviseTripPlan,
@@ -89,7 +90,6 @@ import {
   fetchVideoRecommendations,
   recordVideoWatch,
   shouldSkipClientVideoSummarize,
-  summarizeVideo,
 } from "@/services/videoClient";
 import { useChatStore } from "@/stores/useChatStore";
 import { useToastStore } from "@/stores/useToastStore";
@@ -155,18 +155,6 @@ type ChatSpeechRecognition = {
 
 type ChatSpeechRecognitionConstructor = new () => ChatSpeechRecognition;
 
-function buildVideoSummaryKey(input: {
-  videoId?: string;
-  destination?: string;
-  refresh?: boolean;
-}) {
-  return [
-    input.refresh ? "refresh" : "summary",
-    input.videoId?.trim() || "unknown-video",
-    input.destination?.trim() || "any-destination",
-  ].join(":");
-}
-
 function videoMatches(candidate: VideoRecommendation | null, source: VideoRecommendation) {
   if (!candidate) {
     return false;
@@ -225,7 +213,27 @@ function shouldFetchVideoRecommendations(input: {
   return false;
 }
 
-function buildChatVideoSearchKeyword(userMessage: string, itinerary: TripPlanDay[]): string {
+function shouldPreserveUserVideoIntent(message: string, destination?: string): boolean {
+  const trimmed = message.trim();
+  if (!trimmed) {
+    return false;
+  }
+  if (destination && trimmed.includes(destination)) {
+    return true;
+  }
+  if (shouldRecommendVideos(trimmed)) {
+    return true;
+  }
+  return /美食|購物|親子|溫泉|自駕|秘境|自然|咖啡|甜點|夜景|海景|山景|博物館|景點|文化/u.test(
+    trimmed,
+  );
+}
+
+function buildChatVideoSearchKeyword(
+  userMessage: string,
+  itinerary: TripPlanDay[],
+  destination?: string,
+): string {
   const genericLabel = /午餐|晚餐|早餐|休息|飯店入住|Check-in|交通|移動|自由行|自由活動|回程|出發|前往/i;
   const hints: string[] = [];
   const seen = new Set<string>();
@@ -252,7 +260,14 @@ function buildChatVideoSearchKeyword(userMessage: string, itinerary: TripPlanDay
       }
     }
   }
-  return [userMessage.trim(), ...hints].filter(Boolean).join(" ").slice(0, 420);
+  const normalizedDestination = destination?.trim() || "";
+  const preservedUserIntent = shouldPreserveUserVideoIntent(userMessage, normalizedDestination)
+    ? userMessage.trim()
+    : "";
+  return [normalizedDestination, preservedUserIntent, ...hints]
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, 420);
 }
 
 type WorkflowRailState = {
@@ -318,6 +333,8 @@ function buildTripProfileFallback(input: {
   transportPreference?: string | null;
   pace?: string | null;
   interests?: string[];
+  accommodation?: string | null;
+  dietaryRestrictions?: string[];
 }): TripProfile | null {
   if (!input.destination?.trim() && !input.days && !input.budget) {
     return null;
@@ -338,10 +355,10 @@ function buildTripProfileFallback(input: {
     },
     preferences: input.interests || [],
     transportation: input.transportPreference || null,
-    accommodation: null,
+    accommodation: input.accommodation || null,
     visited_before: [],
     avoid_places: [],
-    dietary_restrictions: [],
+    dietary_restrictions: input.dietaryRestrictions || [],
     disliked_activities: [],
     pace: input.pace || null,
     plan_integration: "direct_merge",
@@ -383,6 +400,34 @@ function mergePreferenceWithExistingTripProfile(
   };
 }
 
+function resolvePreferenceContinuationTripProfile(input: {
+  confirmationProfile: TripProfile | null;
+  workflowTripProfile: TripProfile | null;
+  existingTripProfile: TripProfile | null;
+}): TripProfile | undefined {
+  return mergePreferenceWithExistingTripProfile(
+    input.confirmationProfile,
+    input.workflowTripProfile ?? input.existingTripProfile,
+  );
+}
+
+function clearInheritedPlanningPreferences(profile: TripProfile | null): TripProfile | undefined {
+  if (!profile) {
+    return undefined;
+  }
+  return {
+    ...profile,
+    budget: null,
+    preferences: [],
+    transportation: null,
+    accommodation: null,
+    avoid_places: [],
+    dietary_restrictions: [],
+    disliked_activities: [],
+    pace: null,
+  };
+}
+
 function buildTripProfileFromPreferenceDraft(
   confirmation: TravelAgentPreferenceConfirmation | null,
   draft: TravelAgentKnownPreferences,
@@ -409,6 +454,8 @@ function buildTripProfileFromPreferenceDraft(
     budget,
     transportPreference: draft.transportPreference || confirmed?.transportPreference || null,
     pace: draft.pace || confirmed?.pace || null,
+    accommodation: draft.accommodationPreference || confirmed?.accommodationPreference || null,
+    dietaryRestrictions: draft.foodPreferences || confirmed?.foodPreferences || [],
     interests:
       draft.travelStyle?.length
         ? draft.travelStyle
@@ -459,7 +506,6 @@ export default function ChatPage() {
   });
 
   const [isStartingNewConversation, setIsStartingNewConversation] = useState(false);
-  const [expandedContextDays, setExpandedContextDays] = useState<Record<number, boolean>>({});
   const [contextPanelWidth, setContextPanelWidth] = useState(288);
   const [autoSummaryProgress, setAutoSummaryProgress] = useState<{ current: number; total: number } | null>(null);
   const [sourceDrawerSource, setSourceDrawerSource] = useState<SourceReference | null>(null);
@@ -478,10 +524,10 @@ export default function ChatPage() {
   const planningWorkflowActiveRef = useRef(false);
   const [planningWorkflowActive, setPlanningWorkflowActive] = useState(false);
   const videoSummaryQueueTokenRef = useRef(0);
-  const videoSummaryInflightRef = useRef(new Map<string, Promise<VideoSummaryResult>>());
   const autoSummaryActiveRef = useRef(false);
   const conversationVideosRef = useRef<Map<string, VideoRecommendation[]>>(new Map());
   const conversationVideosLoadedMoreRef = useRef<Map<string, boolean>>(new Map());
+  const conversationVideoDestinationRef = useRef<Map<string, string>>(new Map());
   const hydratedConversationTripRef = useRef<string | null>(null);
   const contextTripResyncAttemptRef = useRef<string | null>(null);
   const lastTravelPlanScrollIdRef = useRef<string | null>(null);
@@ -504,7 +550,11 @@ export default function ChatPage() {
   const tripStore = useTripStore();
   const userStore = useUserStore();
   const pushToast = useToastStore((state) => state.pushToast);
+  const summaryStatusByVideoKey = useVideoStore((state: VideoState) => state.summaryStatusByVideoKey);
   const setSummaryDiagnostics = useVideoStore((state: VideoState) => state.setSummaryDiagnostics);
+  const clearSummaryDiagnosticsForVideo = useVideoStore(
+    (state: VideoState) => state.clearSummaryDiagnosticsForVideo,
+  );
   const setIsSummarizing = useVideoStore((state: VideoState) => state.setIsSummarizing);
 
   useEffect(() => {
@@ -665,23 +715,7 @@ export default function ChatPage() {
   useEffect(() => () => {
     statusStreamRef.current?.close();
     videoSummaryQueueTokenRef.current += 1;
-    videoSummaryInflightRef.current.clear();
   }, []);
-
-  useEffect(() => {
-    const firstDay = tripStore.itinerary[0]?.dayNumber;
-    if (!firstDay) {
-      setExpandedContextDays({});
-      return;
-    }
-    setExpandedContextDays((prev) => {
-      const next: Record<number, boolean> = {};
-      for (const day of tripStore.itinerary) {
-        next[day.dayNumber] = prev[day.dayNumber] ?? day.dayNumber === firstDay;
-      }
-      return next;
-    });
-  }, [tripStore.tripId, tripStore.itinerary]);
 
   const planningSnapshot = derivePlanningSnapshot({
     trip: tripStore,
@@ -789,12 +823,12 @@ export default function ChatPage() {
       ? `${tripStore.days} ${t.chat.daysUnit}`
       : tripProfile?.duration_days
         ? `${tripProfile.duration_days} ${t.chat.daysUnit}`
-      : t.chat.valueUnset,
+        : t.chat.valueUnset,
     tripStore.budget > 0 || planningSnapshot.hasBudget
       ? `${t.chat.currencyPrefix}${(tripStore.budget || planningSnapshot.budget).toLocaleString()}`
       : tripProfile?.budget?.trim()
         ? tripProfile.budget.trim()
-      : t.chat.valueUnset,
+        : t.chat.valueUnset,
   ];
 
   useEffect(() => {
@@ -899,6 +933,28 @@ export default function ChatPage() {
     }
     return conversationVideosRef.current.get(conversationId) ?? [];
   }
+
+  function buildLivePlanningSnapshot() {
+    const currentTrip = useTripStore.getState();
+    const currentUser = useUserStore.getState();
+    const pinCount = useMapStore.getState().pins.length;
+    return derivePlanningSnapshot({
+      trip: {
+        title: currentTrip.title,
+        destination: currentTrip.destination,
+        days: currentTrip.days,
+        budget: currentTrip.budget,
+        itinerary: currentTrip.itinerary,
+      },
+      user: {
+        destination: currentUser.destination,
+        travelDays: currentUser.travelDays,
+        budget: currentUser.budget,
+        interests: currentUser.interests,
+      },
+      pinCount,
+    });
+  }
   const isCitationList = (
     sources: ChatMessage["sources"],
   ): sources is Array<{ title: string; url: string }> => Array.isArray(sources);
@@ -910,13 +966,6 @@ export default function ChatPage() {
     } catch {
       /* ignore */
     }
-  }
-
-  function toggleContextDay(dayNumber: number) {
-    setExpandedContextDays((prev) => ({
-      ...prev,
-      [dayNumber]: !(prev[dayNumber] ?? false),
-    }));
   }
 
   function stopAutoVideoSummaryQueue() {
@@ -1217,8 +1266,12 @@ export default function ChatPage() {
       preferenceConfirmation: null,
     }));
     void handleSend(scopedInstruction, {
-      displayMessage: "沿用先前偏好",
-      tripProfile: mergePreferenceWithExistingTripProfile(confirmationProfile, tripProfile),
+      displayMessage: scopedInstruction,
+      tripProfile: resolvePreferenceContinuationTripProfile({
+        confirmationProfile,
+        workflowTripProfile: workflowRail.tripProfile,
+        existingTripProfile: tripProfile,
+      }),
     });
   }
 
@@ -1227,7 +1280,10 @@ export default function ChatPage() {
       ...prev,
       preferenceConfirmation: null,
     }));
-    void handleSend("這次不用沿用", { displayMessage: "這次重新填寫偏好" });
+    void handleSend("這次不用沿用", {
+      displayMessage: "這次重新填寫偏好",
+      tripProfile: clearInheritedPlanningPreferences(workflowRail.tripProfile ?? tripProfile),
+    });
   }
 
   function handlePreferenceEditSubmit(
@@ -1253,8 +1309,12 @@ export default function ChatPage() {
       preferenceConfirmation: null,
     }));
     void handleSend(scopedInstruction, {
-      displayMessage,
-      tripProfile: mergePreferenceWithExistingTripProfile(confirmationProfile, tripProfile),
+      displayMessage: scopedInstruction,
+      tripProfile: resolvePreferenceContinuationTripProfile({
+        confirmationProfile,
+        workflowTripProfile: workflowRail.tripProfile,
+        existingTripProfile: tripProfile,
+      }),
     });
   }
 
@@ -1350,9 +1410,25 @@ export default function ChatPage() {
     chatProcessId?: string;
     append?: boolean;
     scrollAfterLoad?: boolean;
+    resetExistingVideos?: boolean;
   }) {
     const conversationIdAtStart = useChatStore.getState().activeConversationId;
-    const existingVideos = getStoredConversationVideos(conversationIdAtStart);
+    const activePlanningSnapshot = input.planningSnapshot;
+    const previousRecommendationDestination = conversationIdAtStart
+      ? conversationVideoDestinationRef.current.get(conversationIdAtStart) || ""
+      : "";
+    const destinationChanged =
+      Boolean(
+        previousRecommendationDestination &&
+          activePlanningSnapshot.destination &&
+          previousRecommendationDestination !== activePlanningSnapshot.destination,
+      );
+    const shouldResetExistingVideos = Boolean(
+      input.resetExistingVideos || (!input.append && destinationChanged),
+    );
+    const existingVideos = shouldResetExistingVideos
+      ? []
+      : getStoredConversationVideos(conversationIdAtStart);
     const videoSummaryQueueToken = videoSummaryQueueTokenRef.current + 1;
     videoSummaryQueueTokenRef.current = videoSummaryQueueToken;
     autoSummaryActiveRef.current = false;
@@ -1366,17 +1442,28 @@ export default function ChatPage() {
     try {
       if (input.chatProcessId) {
         updateFrontendDebugProcess(input.chatProcessId, "video-recommendation-start", {
-          destination: input.planningSnapshot.destination,
+          destination: activePlanningSnapshot.destination,
+          resetExistingVideos: shouldResetExistingVideos,
         });
+      }
+      if (shouldResetExistingVideos) {
+        setSelectedVideo(null);
+        if (conversationIdAtStart) {
+          conversationVideosRef.current.set(conversationIdAtStart, []);
+          conversationVideosLoadedMoreRef.current.set(conversationIdAtStart, false);
+          conversationVideoDestinationRef.current.delete(conversationIdAtStart);
+        }
+        setRecommendedVideos([]);
       }
       const videoKeyword = buildChatVideoSearchKeyword(
         input.userMessage,
         useTripStore.getState().itinerary,
+        activePlanningSnapshot.destination,
       );
       const outcome = await fetchVideoRecommendations({
-        destination: input.planningSnapshot.destination,
+        destination: activePlanningSnapshot.destination,
         keyword: videoKeyword,
-        days: input.planningSnapshot.days,
+        days: activePlanningSnapshot.days,
         preferences: useUserStore.getState().interests,
         limit: 6,
         excludeVideoIds: existingVideos.map(getVideoIdentity).filter(Boolean),
@@ -1397,6 +1484,10 @@ export default function ChatPage() {
       });
       if (cacheConversationId) {
         conversationVideosRef.current.set(cacheConversationId, mergedVideos);
+        conversationVideoDestinationRef.current.set(
+          cacheConversationId,
+          activePlanningSnapshot.destination,
+        );
       }
       setRecommendedVideos(mergedVideos);
       if (input.scrollAfterLoad && mergedVideos.length > 0) {
@@ -1417,7 +1508,7 @@ export default function ChatPage() {
       if (autoSummaryStarted) {
         void processRecommendedVideoSummaries(
           newlyAdded,
-          input.planningSnapshot.destination,
+          activePlanningSnapshot.destination,
           videoSummaryQueueToken,
         );
       } else if (newlyAdded.length === 0 && existingVideos.length > 0) {
@@ -1463,7 +1554,7 @@ export default function ChatPage() {
       [...messages].reverse().find((item) => item.role === "user")?.content?.trim() || "";
     await fetchChatVideoRecommendations({
       userMessage: lastUserMessage,
-      planningSnapshot,
+      planningSnapshot: buildLivePlanningSnapshot(),
       append: true,
     });
   }
@@ -1481,14 +1572,16 @@ export default function ChatPage() {
 
     const lastUserMessage =
       [...messages].reverse().find((item) => item.role === "user")?.content?.trim() || "";
+    const currentPlanningSnapshot = buildLivePlanningSnapshot();
     const videoKeyword = buildChatVideoSearchKeyword(
       lastUserMessage,
       useTripStore.getState().itinerary,
+      currentPlanningSnapshot.destination,
     );
     const baseRequest = {
-      destination: planningSnapshot.destination,
+      destination: currentPlanningSnapshot.destination,
       keyword: videoKeyword,
-      days: planningSnapshot.days,
+      days: currentPlanningSnapshot.days,
       preferences: useUserStore.getState().interests,
       limit: 1,
     };
@@ -1743,11 +1836,29 @@ export default function ChatPage() {
         await applyItineraryUpdateFromResponse(response, {
           sourceMessageId: response.reply.id,
         });
+        const revisedPlanningSnapshot = buildLivePlanningSnapshot();
         updateFrontendDebugProcess(chatProcessId, "reply-received", {
           replyType: response.reply.responseType,
           replyId: response.reply.id,
           tripRevisionFlow: true,
         });
+        if (shouldFetchVideoRecommendations({
+          userMessage: message,
+          replyResponseType: response.reply.responseType,
+          hadItinerarySuggestion: Boolean(response.itinerarySuggestion),
+        })) {
+          await fetchChatVideoRecommendations({
+            userMessage: message,
+            planningSnapshot: revisedPlanningSnapshot,
+            chatProcessId,
+            scrollAfterLoad:
+              response.reply.responseType === "travel_plan" ||
+              Boolean(response.itinerarySuggestion),
+            resetExistingVideos:
+              response.reply.responseType === "travel_plan" ||
+              Boolean(response.itinerarySuggestion),
+          });
+        }
         finishFrontendDebugProcess(chatProcessId, {
           progressSessionId,
           finalReplyType: response.reply.responseType,
@@ -1882,6 +1993,12 @@ export default function ChatPage() {
         setWorkflowRail((prev) => ({
           ...prev,
           visible: true,
+          tripProfile:
+            response.tripProfile ??
+            options?.tripProfile ??
+            prev.tripProfile ??
+            tripProfile ??
+            null,
           ...workflowRailFromTravelDecision(response.travelAgentDecision),
         }));
       } else if (
@@ -1948,6 +2065,9 @@ export default function ChatPage() {
         replyType: response.reply.responseType,
         replyId: response.reply.id,
       });
+      const updatedPlanningSnapshot = shouldApplyItineraryUpdate
+        ? buildLivePlanningSnapshot()
+        : planningSnapshot;
 
       if (shouldFetchVideoRecommendations({
         userMessage: message,
@@ -1959,12 +2079,13 @@ export default function ChatPage() {
           Boolean(response.itinerarySuggestion);
         await fetchChatVideoRecommendations({
           userMessage: message,
-          planningSnapshot,
+          planningSnapshot: updatedPlanningSnapshot,
           chatProcessId,
           scrollAfterLoad,
+          resetExistingVideos: scrollAfterLoad,
         });
       } else {
-        startAutoVideoSummaryQueue(recommendedVideos, planningSnapshot.destination);
+        startAutoVideoSummaryQueue(recommendedVideos, updatedPlanningSnapshot.destination);
       }
       finishFrontendDebugProcess(chatProcessId, {
         progressSessionId,
@@ -2465,9 +2586,17 @@ export default function ChatPage() {
 
   function applyVideoSummaryResult(sourceVideo: VideoRecommendation, result: VideoSummaryResult) {
     updateRecommendedVideos((videos) =>
-      videos.map((item) => (videoMatches(item, sourceVideo) ? result.video : item)),
+      videos.map((item) =>
+        videoMatches(item, sourceVideo)
+          ? mergeVideoSummaryResult(item, result.video, result)
+          : item,
+      ),
     );
-    setSelectedVideo((current) => (videoMatches(current, sourceVideo) ? result.video : current));
+    setSelectedVideo((current) =>
+      videoMatches(current, sourceVideo)
+        ? mergeVideoSummaryResult(current ?? sourceVideo, result.video, result)
+        : current,
+    );
   }
 
   function buildSummaryDiagnostics(result: VideoSummaryResult) {
@@ -2487,34 +2616,6 @@ export default function ChatPage() {
     };
   }
 
-  async function summarizeVideoOnce(input: {
-    video: VideoRecommendation;
-    destination: string;
-    refresh?: boolean;
-    debug?: boolean;
-  }) {
-    const key = buildVideoSummaryKey({
-      videoId: input.video.videoId,
-      destination: input.destination,
-      refresh: input.refresh,
-    });
-    const existing = videoSummaryInflightRef.current.get(key);
-    if (existing) {
-      return existing;
-    }
-    const request = summarizeVideo({
-      videoId: input.video.videoId,
-      title: input.video.title,
-      destination: input.destination,
-      refresh: input.refresh,
-      debug: input.debug,
-    }).finally(() => {
-      videoSummaryInflightRef.current.delete(key);
-    });
-    videoSummaryInflightRef.current.set(key, request);
-    return request;
-  }
-
   async function processRecommendedVideoSummaries(
     videos: VideoRecommendation[],
     destination: string,
@@ -2527,8 +2628,6 @@ export default function ChatPage() {
 
     autoSummaryActiveRef.current = true;
     setAutoSummaryProgress({ current: 0, total: queue.length });
-    setIsLoadingVideos(true);
-    setIsSummarizing(true);
 
     try {
       for (let index = 0; index < queue.length; index += 1) {
@@ -2536,13 +2635,13 @@ export default function ChatPage() {
           return;
         }
         const video = queue[index];
-        setAutoSummaryProgress({ current: index + 1, total: queue.length });
+        setAutoSummaryProgress({ current: index, total: queue.length });
+        const job = enqueueVideoSummary(video, { destination, background: true });
+        if (!job) {
+          continue;
+        }
         try {
-          const result = await summarizeVideoOnce({
-            video,
-            destination,
-            debug: false,
-          });
+          const result = await job;
           if (videoSummaryQueueTokenRef.current !== queueToken) {
             return;
           }
@@ -2554,92 +2653,101 @@ export default function ChatPage() {
             message: error instanceof Error ? error.message : String(error),
           });
         }
+        setAutoSummaryProgress({ current: index + 1, total: queue.length });
       }
     } finally {
       if (videoSummaryQueueTokenRef.current === queueToken) {
         autoSummaryActiveRef.current = false;
         setAutoSummaryProgress(null);
-        setIsLoadingVideos(false);
-        setIsSummarizing(false);
       }
     }
   }
 
-  async function openVideoSummary(video: VideoRecommendation) {
-    setSummaryDiagnostics(null);
-    setSelectedVideo(video);
-    if (video.videoId?.trim()) {
+  function openVideoSummary(video: VideoRecommendation) {
+    const resolved =
+      recommendedVideos.find((item) => videoMatches(item, video)) ?? video;
+    setSelectedVideo(resolved);
+    if (resolved.videoId?.trim()) {
       void recordVideoWatch({
-        videoId: video.videoId,
-        videoUrl: video.url,
-        title: video.title,
+        videoId: resolved.videoId,
+        videoUrl: resolved.url,
+        title: resolved.title,
         currentTripId: useTripStore.getState().tripId,
       }).catch(() => undefined);
     }
     logFrontendDebugEvent("chat-video", "open-summary-click", {
-      videoId: video.videoId,
-      title: video.title,
-      skipClientSummary: shouldSkipClientVideoSummarize(video),
+      videoId: resolved.videoId,
+      title: resolved.title,
+      skipClientSummary: shouldSkipClientVideoSummarize(resolved),
     });
 
-    if (shouldSkipClientVideoSummarize(video)) {
+    if (shouldSkipClientVideoSummarize(resolved)) {
       return;
     }
 
-    setIsLoadingVideos(true);
-    setIsSummarizing(true);
-    try {
-      const result = await summarizeVideoOnce({
-        video,
-        destination: planningSnapshot.destination,
-      });
-      applyVideoSummaryResult(video, result);
-      setSummaryDiagnostics(buildSummaryDiagnostics(result));
-    } catch (error) {
-      pushToast({
-        variant: "error",
-        title: t.video.requestFailed,
-        description: error instanceof Error ? error.message : t.video.requestFailedGeneric,
-      });
-    } finally {
-      if (!autoSummaryActiveRef.current) {
-        setIsLoadingVideos(false);
-        setIsSummarizing(false);
-      }
+    const videoKey = getVideoIdentity(resolved);
+    if (videoKey) {
+      clearSummaryDiagnosticsForVideo(videoKey);
     }
+    setSummaryDiagnostics(null);
+    const job = enqueueVideoSummary(resolved, {
+      destination: planningSnapshot.destination,
+      background: false,
+    });
+    if (!job) {
+      return;
+    }
+    job
+      .then((result) => {
+        applyVideoSummaryResult(video, result);
+        setSummaryDiagnostics(buildSummaryDiagnostics(result));
+      })
+      .catch((error) => {
+        pushToast({
+          variant: "error",
+          title: t.video.requestFailed,
+          description: error instanceof Error ? error.message : t.video.requestFailedGeneric,
+        });
+      });
   }
 
-  async function refreshVideoSummary(video: VideoRecommendation) {
+  function refreshVideoSummary(video: VideoRecommendation) {
     if (!video.videoId?.trim()) {
       return;
     }
-    setSummaryDiagnostics(null);
-    setIsLoadingVideos(true);
-    setIsSummarizing(true);
+    clearSummaryDiagnosticsForVideo(video.videoId || video.id);
+    if (videoMatches(selectedVideo, video)) {
+      setSummaryDiagnostics(null);
+    }
     logFrontendDebugEvent("chat-video", "refresh-summary-click", {
       videoId: video.videoId,
       title: video.title,
     });
-    try {
-      const result = await summarizeVideoOnce({
-        video,
-        destination: planningSnapshot.destination,
-        refresh: true,
-      });
-      applyVideoSummaryResult(video, result);
-      setSummaryDiagnostics(buildSummaryDiagnostics(result));
-    } catch (error) {
-      pushToast({
-        variant: "error",
-        title: t.video.requestFailed,
-        description: error instanceof Error ? error.message : t.video.requestFailedGeneric,
-      });
-    } finally {
-      if (!autoSummaryActiveRef.current) {
-        setIsLoadingVideos(false);
-        setIsSummarizing(false);
-      }
+    const job = enqueueVideoSummary(video, {
+      destination: planningSnapshot.destination,
+      background: false,
+      refresh: true,
+    });
+    if (!job) {
+      return;
     }
+    job
+      .then((result) => {
+        applyVideoSummaryResult(video, result);
+        setSelectedVideo((current) => {
+          if (videoMatches(current, video)) {
+            setSummaryDiagnostics(buildSummaryDiagnostics(result));
+          }
+          return current;
+        });
+      })
+      .catch((error) => {
+        pushToast({
+          variant: "error",
+          title: t.video.requestFailed,
+          description: error instanceof Error ? error.message : t.video.requestFailedGeneric,
+        });
+      });
   }
 
   function handleOpenSourceDrawer(source: SourceReference) {
@@ -2987,7 +3095,7 @@ export default function ChatPage() {
                     <>
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                         {recommendedVideos.map((video, index) =>
-                          replacingVideoIndex === index ? (
+          replacingVideoIndex === index ? (
                             <Card
                               key={`replacing-${index}`}
                               className="overflow-hidden rounded-2xl border-0 bg-surface py-0 shadow-soft ring-0"
@@ -3006,6 +3114,9 @@ export default function ChatPage() {
                               key={video.id}
                               video={video}
                               index={index}
+                              processingState={
+                                summaryStatusByVideoKey[(video.videoId || video.id || "").trim()] ?? null
+                              }
                               onClick={() => void openVideoSummary(video)}
                               onDismiss={() => void handleDismissVideo(video, index)}
                             />
@@ -3124,6 +3235,28 @@ export default function ChatPage() {
           className="absolute left-0 top-0 z-20 h-full w-2 -translate-x-1 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-slate-400/50"
         />
         <h3 className="mb-2 text-sm font-semibold text-slate-900">即時行程</h3>
+
+        {hasContextPanel ? (
+          <div className="mb-3 grid gap-2">
+            {tagConfigs.map((tag, index) => {
+              const Icon = tag.icon;
+              return (
+                <div
+                  key={tag.label}
+                  className="flex items-start gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2"
+                >
+                  <Icon className="mt-0.5 size-4 shrink-0 text-slate-500" aria-hidden />
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                      {tag.label}
+                    </p>
+                    <p className="truncate text-sm font-medium text-slate-900">{extractedValues[index]}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
 
         {hasContextPanel ? (
           <div className="flex flex-col gap-2">

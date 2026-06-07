@@ -8,8 +8,7 @@ Use the single root `docker-compose.yml` with these services only:
 
 - `aiyo-new-app-dev`
 - `aiyo-new-app-prod-live`
-- `aiyo-new-postgres-dev`
-- `aiyo-new-postgres-prod`
+- `aiyo-new-postgres`
 - `aiyo-new-redis`
 - `open-webui`
 
@@ -32,7 +31,7 @@ Do not continue onboarding around the older `aiyo/.env` plus `mem0` profile flow
 
    ```bash
    docker compose --env-file ./aiyo/.env.dev up -d --build --force-recreate \
-     aiyo-new-postgres-dev aiyo-new-redis open-webui aiyo-new-app-dev
+     aiyo-new-postgres aiyo-new-redis open-webui aiyo-new-app-dev
    ```
 
 4. Open `http://127.0.0.1:8080`, sign in to Open WebUI, and generate an API key.

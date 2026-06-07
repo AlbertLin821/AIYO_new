@@ -543,7 +543,7 @@ export async function searchYouTubeVideos(input: SearchInput): Promise<{
   });
 
   const passesScope = (video: VideoRecommendation) =>
-    isInTripDestinationScope(metaFor(video), destinationScope, rawUserQuery);
+    isInTripDestinationScope(metaFor(video), destinationScope);
 
   const buildPool = (mapped: VideoRecommendation[]): VideoRecommendation[] => {
     const strictFiltered = mapped.filter((video) =>

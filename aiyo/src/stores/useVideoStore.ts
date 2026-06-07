@@ -37,6 +37,8 @@ export type SummaryDiagnostics = {
   failedChunkCount?: number;
 };
 
+export type VideoSummaryStatus = "queued" | "running";
+
 export type VideoRecommendationRequest = {
   destination?: string;
   keyword?: string;
@@ -57,9 +59,11 @@ export interface VideoState {
     | "single-video-url"
     | null;
   summaryDiagnostics: SummaryDiagnostics | null;
+  summaryDiagnosticsByVideoKey: Record<string, SummaryDiagnostics | undefined>;
   lastRecommendationRequest: VideoRecommendationRequest | null;
   isSearching: boolean;
   isSummarizing: boolean;
+  summaryStatusByVideoKey: Record<string, VideoSummaryStatus | undefined>;
   errorMessage: string | null;
   /** 使用者已按「更多影片」後，列表可超過 INITIAL_VIDEO_RECOMMENDATIONS_LIMIT */
   hasLoadedMoreVideos: boolean;
@@ -88,9 +92,18 @@ export interface VideoState {
       | null,
   ) => void;
   setSummaryDiagnostics: (value: SummaryDiagnostics | null) => void;
+  getSummaryDiagnosticsForVideo: (videoKey?: string | null) => SummaryDiagnostics | null;
+  setSummaryDiagnosticsForVideo: (
+    videoKey: string,
+    value: SummaryDiagnostics | null,
+  ) => void;
+  clearSummaryDiagnosticsForVideo: (videoKey?: string | null) => void;
   setLastRecommendationRequest: (request: VideoRecommendationRequest | null) => void;
   setIsSearching: (searching: boolean) => void;
   setIsSummarizing: (summarizing: boolean) => void;
+  getVideoSummaryStatus: (videoKey?: string | null) => VideoSummaryStatus | null;
+  setVideoSummaryStatus: (videoKey: string, status: VideoSummaryStatus) => void;
+  clearVideoSummaryStatus: (videoKey?: string | null) => void;
   setErrorMessage: (message: string | null) => void;
   bumpSearchBarReset: () => void;
 }
@@ -101,9 +114,11 @@ export const useVideoStore = create<VideoState>((set, get) => ({
   searchQuery: "",
   recommendationSource: null,
   summaryDiagnostics: null,
+  summaryDiagnosticsByVideoKey: {},
   lastRecommendationRequest: null,
   isSearching: false,
   isSummarizing: false,
+  summaryStatusByVideoKey: {},
   errorMessage: null,
   hasLoadedMoreVideos: false,
   searchBarResetNonce: 0,
@@ -176,9 +191,56 @@ export const useVideoStore = create<VideoState>((set, get) => ({
   setSearchQuery: (searchQuery) => set({ searchQuery }),
   setRecommendationSource: (recommendationSource) => set({ recommendationSource }),
   setSummaryDiagnostics: (summaryDiagnostics) => set({ summaryDiagnostics }),
+  getSummaryDiagnosticsForVideo: (videoKey) => {
+    if (!videoKey) {
+      return null;
+    }
+    return get().summaryDiagnosticsByVideoKey[videoKey] ?? null;
+  },
+  setSummaryDiagnosticsForVideo: (videoKey, value) =>
+    set((state) => {
+      const next = { ...state.summaryDiagnosticsByVideoKey };
+      if (value) {
+        next[videoKey] = value;
+      } else {
+        delete next[videoKey];
+      }
+      return { summaryDiagnosticsByVideoKey: next };
+    }),
+  clearSummaryDiagnosticsForVideo: (videoKey) =>
+    set((state) => {
+      if (!videoKey || !(videoKey in state.summaryDiagnosticsByVideoKey)) {
+        return state;
+      }
+      const next = { ...state.summaryDiagnosticsByVideoKey };
+      delete next[videoKey];
+      return { summaryDiagnosticsByVideoKey: next };
+    }),
   setLastRecommendationRequest: (lastRecommendationRequest) => set({ lastRecommendationRequest }),
   setIsSearching: (isSearching) => set({ isSearching }),
   setIsSummarizing: (isSummarizing) => set({ isSummarizing }),
+  getVideoSummaryStatus: (videoKey) => {
+    if (!videoKey) {
+      return null;
+    }
+    return get().summaryStatusByVideoKey[videoKey] ?? null;
+  },
+  setVideoSummaryStatus: (videoKey, status) =>
+    set((state) => ({
+      summaryStatusByVideoKey: {
+        ...state.summaryStatusByVideoKey,
+        [videoKey]: status,
+      },
+    })),
+  clearVideoSummaryStatus: (videoKey) =>
+    set((state) => {
+      if (!videoKey || !(videoKey in state.summaryStatusByVideoKey)) {
+        return state;
+      }
+      const next = { ...state.summaryStatusByVideoKey };
+      delete next[videoKey];
+      return { summaryStatusByVideoKey: next };
+    }),
   setErrorMessage: (errorMessage) => set({ errorMessage }),
   bumpSearchBarReset: () =>
     set((state) => ({

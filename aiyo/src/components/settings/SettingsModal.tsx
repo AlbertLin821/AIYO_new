@@ -2,23 +2,40 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  Brain,
   Check,
-  Globe,
-  Heart,
+  Compass,
   Pencil,
   Plus,
   RefreshCcw,
   Save,
+  Shield,
   Trash2,
   X,
 } from "lucide-react";
+import InterestPickerDialog from "@/components/settings/InterestPickerDialog";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  getInterestIcon,
+  getInterestLabel,
+  getPaceOption,
+  normalizePreferredTransport,
+  paceOptions,
+  transportOptions,
+} from "@/data/travelPreferenceOptions";
 import { zhTW as t } from "@/locales/zh-TW";
 import {
   clearPersonalizationData,
@@ -34,38 +51,37 @@ import { useToastStore } from "@/stores/useToastStore";
 import { useUIStore } from "@/stores/useUIStore";
 import type { MemoryRecord, User } from "@/types";
 
-const paceOptions: { value: User["travelPace"]; label: string; desc: string }[] = [
-  { value: "relaxed", label: t.profile.paceRelaxed, desc: t.profile.paceRelaxedDesc },
-  { value: "moderate", label: t.profile.paceModerate, desc: t.profile.paceModerateDesc },
-  { value: "intensive", label: t.profile.paceIntensive, desc: t.profile.paceIntensiveDesc },
-];
+type SettingsPage = "preferences" | "memory" | "privacy";
 
-const preferenceOptions = [
-  { value: "food", label: t.profile.prefFood },
-  { value: "coffee", label: t.profile.prefCoffee },
-  { value: "night view", label: t.profile.prefNight },
-  { value: "shopping", label: t.profile.prefShopping },
-  { value: "museum", label: t.profile.prefMuseum },
-  { value: "architecture", label: t.profile.prefArchitecture },
-  { value: "parks", label: t.profile.prefParks },
-  { value: "local neighborhoods", label: t.profile.prefNeighborhoods },
-];
-
-function normalizePreferredTransport(raw: string): string {
-  const u = raw.trim();
-  if (["Driving", "Transit", "Walking", "Bicycling"].includes(u)) return u;
-  if (/walk/i.test(u)) return "Walking";
-  if (/bike|bicycle/i.test(u)) return "Bicycling";
-  if (/taxi|car|drive/i.test(u)) return "Driving";
-  return "Transit";
+function SelectedInterestChip({
+  value,
+  interestIcons,
+  onRemove,
+  readOnly,
+}: {
+  value: string;
+  interestIcons: Record<string, string>;
+  onRemove?: () => void;
+  readOnly: boolean;
+}) {
+  const Icon = getInterestIcon(value, interestIcons);
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-secondary/30 bg-secondary/10 px-3 py-1.5 text-sm font-medium text-secondary">
+      <Icon className="size-3.5 shrink-0" />
+      {getInterestLabel(value)}
+      {!readOnly && onRemove ? (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="ml-0.5 flex size-4 cursor-pointer items-center justify-center rounded-full text-secondary/70 transition-colors hover:bg-secondary/20 hover:text-secondary"
+          aria-label={`移除 ${getInterestLabel(value)}`}
+        >
+          <X className="size-3" />
+        </button>
+      ) : null}
+    </span>
+  );
 }
-
-const transportOptions = [
-  { value: "Driving", label: t.profile.transportDriving },
-  { value: "Transit", label: t.profile.transportTransit },
-  { value: "Walking", label: t.profile.transportWalking },
-  { value: "Bicycling", label: t.profile.transportBicycling },
-];
 
 export default function SettingsModal() {
   const open = useUIStore((s) => s.settingsModalOpen);
@@ -73,12 +89,14 @@ export default function SettingsModal() {
   const store = useProfileStore();
   const pushToast = useToastStore((s) => s.pushToast);
 
+  const [activePage, setActivePage] = useState<SettingsPage>("preferences");
+  const [isEditing, setIsEditing] = useState(false);
   const [pace, setPace] = useState<User["travelPace"]>(store.travelPace);
   const [preferences, setPreferences] = useState<string[]>(store.travelPreferences);
   const [interests, setInterests] = useState<string[]>(store.interests);
+  const [interestIcons, setInterestIcons] = useState<Record<string, string>>(store.interestIcons ?? {});
   const [transport, setTransport] = useState(() => normalizePreferredTransport(store.preferredTransport));
-  const [customInterest, setCustomInterest] = useState("");
-  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [interestPickerOpen, setInterestPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -110,42 +128,72 @@ export default function SettingsModal() {
     }
   }, [pushToast]);
 
-  useEffect(() => {
-    if (!open) return;
+  function resetLocalState() {
     setPace(store.travelPace);
     setPreferences(store.travelPreferences);
     setInterests(store.interests);
+    setInterestIcons(store.interestIcons ?? {});
     setTransport(normalizePreferredTransport(store.preferredTransport));
-    setCustomInterest("");
-    setShowCustomInput(false);
+    setInterestPickerOpen(false);
     setSaved(false);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    setActivePage("preferences");
+    setIsEditing(false);
+    resetLocalState();
     void loadMemories();
-  }, [open, store.travelPace, store.travelPreferences, store.interests, store.preferredTransport, loadMemories]);
+  }, [open, store.travelPace, store.travelPreferences, store.interests, store.interestIcons, store.preferredTransport, loadMemories]);
+
+  function handlePageChange(value: string) {
+    if (isEditing) {
+      resetLocalState();
+      setIsEditing(false);
+    }
+    setActivePage(value as SettingsPage);
+  }
 
   function togglePreference(pref: string) {
     setPreferences((c) => (c.includes(pref) ? c.filter((i) => i !== pref) : [...c, pref]));
     setInterests((c) => (c.includes(pref) ? c.filter((i) => i !== pref) : [...c, pref]));
   }
 
-  function addCustomInterest() {
-    const trimmed = customInterest.trim();
+  function removeInterest(pref: string) {
+    setPreferences((c) => c.filter((i) => i !== pref));
+    setInterests((c) => c.filter((i) => i !== pref));
+  }
+
+  function addCustomInterest(value: string, iconName: string) {
+    const trimmed = value.trim();
     if (!trimmed) return;
     if (!preferences.includes(trimmed)) {
       setPreferences((c) => [...c, trimmed]);
       setInterests((c) => [...c, trimmed]);
+      setInterestIcons((c) => ({ ...c, [trimmed]: iconName }));
     }
-    setCustomInterest("");
-    setShowCustomInput(false);
+  }
+
+  function handleCancelEdit() {
+    resetLocalState();
+    setIsEditing(false);
   }
 
   async function handleSave() {
     setSaving(true);
-    const updates = { travelPace: pace, travelPreferences: preferences, interests, preferredTransport: transport };
+    const updates = {
+      travelPace: pace,
+      travelPreferences: preferences,
+      interests,
+      interestIcons,
+      preferredTransport: transport,
+    };
     store.updateProfile(updates);
     try {
       const persisted = await syncService.saveProfile(updates);
       store.updateProfile(persisted);
       setSaved(true);
+      setIsEditing(false);
       setTimeout(() => setSaved(false), 2000);
       pushToast({ variant: "success", title: t.profile.syncedTitle, description: t.profile.syncedDesc });
     } catch (error) {
@@ -207,10 +255,12 @@ export default function SettingsModal() {
         travelPace: "",
         travelPreferences: [],
         interests: [],
+        interestIcons: {},
       });
       setPace("");
       setPreferences([]);
       setInterests([]);
+      setInterestIcons({});
       setTransport("");
       pushToast({ variant: "success", title: "已重置旅遊偏好", description: "AI 後續不會再套用舊偏好。" });
     } catch (error) {
@@ -251,10 +301,12 @@ export default function SettingsModal() {
         travelPace: "",
         travelPreferences: [],
         interests: [],
+        interestIcons: {},
       });
       setPace("");
       setPreferences([]);
       setInterests([]);
+      setInterestIcons({});
       setTransport("");
       setMemories([]);
       pushToast({ variant: "success", title: "已清除個人化資料", description: "行程會保留，但個人化依據已清除。" });
@@ -265,183 +317,242 @@ export default function SettingsModal() {
     }
   }
 
+  const selectedPace = getPaceOption(pace);
+  const selectedTransport = transportOptions.find((opt) => opt.value === transport) ?? null;
+
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) {
-          close(false);
-        }
-      }}
-    >
-      <DialogContent
-        showCloseButton={false}
-        className="flex max-h-[85vh] w-full max-w-lg flex-col gap-0 overflow-hidden rounded-2xl border-border-light bg-surface p-0 shadow-soft-lg sm:max-w-lg"
+    <>
+      <Dialog
+        open={open}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            close(false);
+          }
+        }}
       >
-        <DialogHeader className="flex-row items-center justify-between border-b border-border-light px-6 py-4">
-          <DialogTitle className="text-base font-bold">設定</DialogTitle>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => close(false)}
-            className="rounded-lg"
+        <DialogContent
+          showCloseButton={false}
+          className="flex h-[min(85vh,680px)] w-full max-w-lg flex-col gap-0 overflow-hidden rounded-2xl border-border-light bg-surface p-0 shadow-soft-lg sm:max-w-lg"
+        >
+          <DialogHeader className="shrink-0 flex-row items-center justify-between border-b border-border-light px-6 py-4">
+            <DialogTitle className="text-base font-bold">{t.profile.settingsTitle}</DialogTitle>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => close(false)}
+                className="rounded-lg"
+              >
+                <X className="size-5" aria-hidden />
+              </Button>
+            </div>
+          </DialogHeader>
+
+          <Tabs
+            value={activePage}
+            onValueChange={handlePageChange}
+            className="flex min-h-0 flex-1 flex-col gap-0"
           >
-            <X className="size-5" aria-hidden />
-          </Button>
-        </DialogHeader>
-
-        <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
-              <section>
-                <h3 className="mb-3 font-semibold text-foreground">{t.profile.travelPace}</h3>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  {paceOptions.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setPace((c) => (c === opt.value ? "" : opt.value))}
-                      className={`cursor-pointer rounded-xl border-2 p-4 text-center transition-all ${
-                        pace === opt.value
-                          ? "border-primary bg-primary/5"
-                          : "border-border-light hover:border-primary/30"
-                      }`}
-                    >
-                      <p className="text-sm font-medium text-foreground">{opt.label}</p>
-                      <p className="mt-1 text-[11px] text-muted">{opt.desc}</p>
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <section>
-                <h3 className="mb-1 flex items-center gap-2 font-semibold text-foreground">
-                  <Heart className="size-4 text-secondary" />
-                  {t.profile.travelInterests}
-                </h3>
-                <p className="mb-3 text-xs text-muted">{t.profile.tagsHint}</p>
-                <div className="flex flex-wrap gap-2">
-                  {preferenceOptions.map((pref) => (
-                    <button
-                      key={pref.value}
-                      type="button"
-                      onClick={() => togglePreference(pref.value)}
-                      className={`cursor-pointer rounded-full border px-3.5 py-1.5 text-sm font-medium transition-all ${
-                        preferences.includes(pref.value)
-                          ? "border-secondary/30 bg-secondary/15 text-secondary"
-                          : "border-transparent bg-border-light text-muted hover:bg-secondary/10 hover:text-secondary"
-                      }`}
-                    >
-                      {preferences.includes(pref.value) ? t.profile.selectedPrefix : ""}
-                      {pref.label}
-                    </button>
-                  ))}
-                  {preferences
-                    .filter((p) => !preferenceOptions.some((o) => o.value === p))
-                    .map((custom) => (
-                      <button
-                        key={custom}
-                        type="button"
-                        onClick={() => togglePreference(custom)}
-                        className="cursor-pointer rounded-full border border-secondary/30 bg-secondary/15 px-3.5 py-1.5 text-sm font-medium text-secondary transition-all"
-                      >
-                        {t.profile.selectedPrefix}{custom}
-                      </button>
-                    ))}
-                  {showCustomInput ? (
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="text"
-                        value={customInterest}
-                        onChange={(e) => setCustomInterest(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") { e.preventDefault(); addCustomInterest(); }
-                          if (e.key === "Escape") { setShowCustomInput(false); setCustomInterest(""); }
-                        }}
-                        placeholder="輸入自訂興趣"
-                        autoFocus
-                        className="w-28 rounded-full border border-border bg-cream/50 px-3 py-1.5 text-sm text-foreground outline-none transition-all focus:border-secondary/50 focus:ring-2 focus:ring-secondary/30"
-                      />
-                      <button
-                        type="button"
-                        onClick={addCustomInterest}
-                        disabled={!customInterest.trim()}
-                        className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full bg-secondary text-white transition-colors hover:bg-secondary/80 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        <Check className="size-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setShowCustomInput(false); setCustomInterest(""); }}
-                        className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full bg-border-light text-muted transition-colors hover:bg-red-100 hover:text-red-500"
-                      >
-                        <X className="size-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setShowCustomInput(true)}
-                      className="flex cursor-pointer items-center gap-1 rounded-full border border-dashed border-border px-3.5 py-1.5 text-sm font-medium text-muted transition-all hover:border-secondary/40 hover:bg-secondary/5 hover:text-secondary"
-                    >
-                      <Plus className="size-3.5" />
-                      自訂
-                    </button>
-                  )}
-                </div>
-              </section>
-
-              <section>
-                <h3 className="mb-3 flex items-center gap-2 font-semibold text-foreground">
-                  <Globe className="size-4 text-primary" />
-                  {t.profile.preferredTransport}
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {transportOptions.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setTransport((c: string) => (c === opt.value ? "" : opt.value))}
-                      className={`cursor-pointer rounded-full border px-3.5 py-1.5 text-sm font-medium transition-all ${
-                        transport === opt.value
-                          ? "border-primary/30 bg-primary/15 text-primary"
-                          : "border-transparent bg-border-light text-muted hover:bg-primary/10 hover:text-primary"
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => void handleSave()}
-                  disabled={saving}
-                  className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
-                    saved
-                      ? "bg-tertiary text-white"
-                      : "bg-primary text-white hover:bg-primary-dark"
-                  }`}
+            <div className="shrink-0 px-6 py-3">
+              <TabsList className="flex h-auto min-h-11 w-full items-center gap-1 rounded-full border border-border-light bg-cream/80 p-1 shadow-none">
+                <TabsTrigger
+                  value="preferences"
+                  aria-label={t.profile.settingsTabPreferences}
+                  className="inline-flex h-9 min-w-0 flex-1 items-center justify-center gap-1 rounded-full border border-transparent bg-transparent px-2 text-muted-foreground shadow-none ring-0 outline-none after:hidden transition-colors hover:bg-transparent hover:text-foreground focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none data-active:border-primary/35 data-active:bg-primary/10 data-active:text-primary data-active:shadow-none sm:gap-1.5 sm:px-2.5"
                 >
-                  {saving ? (
-                    <><Save className="size-4 animate-pulse" />{t.profile.saving}</>
-                  ) : saved ? (
-                    <><Check className="size-4" />{t.profile.saved}</>
-                  ) : (
-                    <><Save className="size-4" />{t.profile.save}</>
-                  )}
-                </button>
-              </div>
+                  <Compass className="size-3.5 shrink-0 sm:size-4" />
+                  <span className="truncate text-[10px] font-medium sm:text-xs">{t.profile.settingsTabPreferences}</span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="memory"
+                  data-testid="settings-memory-tab"
+                  aria-label={t.profile.settingsTabMemory}
+                  className="inline-flex h-9 min-w-0 flex-1 items-center justify-center gap-1 rounded-full border border-transparent bg-transparent px-2 text-muted-foreground shadow-none ring-0 outline-none after:hidden transition-colors hover:bg-transparent hover:text-foreground focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none data-active:border-primary/35 data-active:bg-primary/10 data-active:text-primary data-active:shadow-none sm:gap-1.5 sm:px-2.5"
+                >
+                  <Brain className="size-3.5 shrink-0 sm:size-4" />
+                  <span className="truncate text-[10px] font-medium sm:text-xs">{t.profile.settingsTabMemory}</span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="privacy"
+                  aria-label={t.profile.settingsTabPrivacy}
+                  className="inline-flex h-9 min-w-0 flex-1 items-center justify-center gap-1 rounded-full border border-transparent bg-transparent px-2 text-muted-foreground shadow-none ring-0 outline-none after:hidden transition-colors hover:bg-transparent hover:text-foreground focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none data-active:border-primary/35 data-active:bg-primary/10 data-active:text-primary data-active:shadow-none sm:gap-1.5 sm:px-2.5"
+                >
+                  <Shield className="size-3.5 shrink-0 sm:size-4" />
+                  <span className="truncate text-[10px] font-medium sm:text-xs">{t.profile.settingsTabPrivacy}</span>
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
-              <section>
-                <div className="mb-3 flex items-start justify-between gap-3">
+            <div className="relative min-h-0 flex-1">
+            <TabsContent value="preferences" className="absolute inset-0 overflow-hidden">
+              <div className="h-full overflow-y-auto px-6 py-5 pb-20">
+              <div className="space-y-4">
+            <Card className="border-border-light bg-cream/20 shadow-none">
+              <CardHeader className="pb-2">
+                <CardTitle>{t.profile.travelPace}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {isEditing ? (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    {paceOptions.map((opt) => {
+                      const Icon = opt.icon;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setPace((c) => (c === opt.value ? "" : opt.value))}
+                          className={`cursor-pointer rounded-xl border-2 p-4 text-center transition-all ${
+                            pace === opt.value
+                              ? "border-primary bg-primary/5"
+                              : "border-border-light hover:border-primary/30"
+                          }`}
+                        >
+                          <Icon className="mx-auto mb-2 size-5 text-primary" />
+                          <p className="text-sm font-medium text-foreground">{opt.label}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : selectedPace ? (
+                  <div className="inline-flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+                    <selectedPace.icon className="size-5 text-primary" />
+                    <p className="text-sm font-medium text-foreground">{selectedPace.label}</p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted">{t.profile.notSet}</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-border-light bg-cream/20 shadow-none">
+              <CardHeader className="pb-2">
+                <CardTitle>{t.profile.travelInterests}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {preferences.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {preferences.map((pref) => (
+                      <SelectedInterestChip
+                        key={pref}
+                        value={pref}
+                        interestIcons={interestIcons}
+                        readOnly={!isEditing}
+                        onRemove={isEditing ? () => removeInterest(pref) : undefined}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted">{t.profile.noInterests}</p>
+                )}
+                {isEditing ? (
+                  <button
+                    type="button"
+                    onClick={() => setInterestPickerOpen(true)}
+                    className="mt-3 inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-dashed border-border px-3.5 py-1.5 text-sm font-medium text-muted transition-all hover:border-secondary/40 hover:bg-secondary/5 hover:text-secondary"
+                  >
+                    <Plus className="size-3.5" />
+                    {t.profile.addInterest}
+                  </button>
+                ) : null}
+              </CardContent>
+            </Card>
+
+            <Card className="border-border-light bg-cream/20 shadow-none">
+              <CardHeader className="pb-2">
+                <CardTitle>{t.profile.preferredTransport}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {isEditing ? (
+                  <div className="flex flex-wrap gap-2">
+                    {transportOptions.map((opt) => {
+                      const Icon = opt.icon;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setTransport((c: string) => (c === opt.value ? "" : opt.value))}
+                          className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-all ${
+                            transport === opt.value
+                              ? "border-primary/30 bg-primary/15 text-primary"
+                              : "border-transparent bg-border-light text-muted hover:bg-primary/10 hover:text-primary"
+                          }`}
+                        >
+                          <Icon className="size-3.5" />
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : selectedTransport ? (
+                  <div className="inline-flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-2.5">
+                    <selectedTransport.icon className="size-4 text-primary" />
+                    <span className="text-sm font-medium text-foreground">{selectedTransport.label}</span>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted">{t.profile.notSet}</p>
+                )}
+              </CardContent>
+            </Card>
+              </div>
+              </div>
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-end p-4">
+                <div className="pointer-events-auto flex items-center gap-2">
+                  {isEditing ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={handleCancelEdit}
+                        disabled={saving}
+                        aria-label={t.profile.cancelEdit}
+                        className="size-10 rounded-full bg-surface shadow-md"
+                      >
+                        <X className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon"
+                        onClick={() => void handleSave()}
+                        disabled={saving}
+                        aria-label={saved ? t.profile.saved : t.profile.save}
+                        className="size-10 rounded-full bg-primary text-white shadow-md hover:bg-primary-dark"
+                      >
+                        {saving ? (
+                          <Save className="size-4 animate-pulse" />
+                        ) : saved ? (
+                          <Check className="size-4" />
+                        ) : (
+                          <Save className="size-4" />
+                        )}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="icon"
+                      onClick={() => setIsEditing(true)}
+                      aria-label={t.profile.edit}
+                      className="size-10 rounded-full bg-primary text-white shadow-md hover:bg-primary-dark"
+                    >
+                      <Pencil className="size-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="memory" className="absolute inset-0 overflow-y-auto px-6 py-5">
+            <Card className="border-border-light bg-cream/20 shadow-none">
+              <CardHeader className="pb-0">
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h3 className="font-semibold text-foreground">{t.profile.memoryTitle}</h3>
-                    <p className="mt-0.5 text-xs text-muted">{t.profile.memorySubtitle}</p>
+                    <CardTitle>{t.profile.memoryTitle}</CardTitle>
                   </div>
                   <button
                     type="button"
+                    data-testid="memory-refresh-button"
                     onClick={() => void loadMemories()}
                     disabled={memoriesLoading || Boolean(savingMemoryId || deletingMemoryId)}
                     className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-cream/50 disabled:cursor-not-allowed disabled:opacity-50"
@@ -450,7 +561,8 @@ export default function SettingsModal() {
                     {t.profile.memoryRefresh}
                   </button>
                 </div>
-
+              </CardHeader>
+              <CardContent>
                 {memoriesLoading ? (
                   <p className="text-sm text-muted">{t.profile.memoryLoading}</p>
                 ) : memories.length === 0 ? (
@@ -460,17 +572,18 @@ export default function SettingsModal() {
                 ) : (
                   <div className="flex flex-col gap-3">
                     {memories.map((memory) => {
-                      const isEditing = editingMemoryId === memory.id;
+                      const isEditingMem = editingMemoryId === memory.id;
                       const isSavingMem = savingMemoryId === memory.id;
                       const isDeletingMem = deletingMemoryId === memory.id;
                       const updatedAt = memory.updated_at || memory.created_at;
                       const isTripSummary = memory.kind === "trip_summary" || memory.metadata?.source === "trip-summary";
 
                       return (
-                        <div key={memory.id} className="rounded-2xl border border-border-light bg-cream/35 p-4">
-                          {isEditing ? (
+                        <div key={memory.id} data-testid="memory-item" className="rounded-2xl border border-border-light bg-cream/35 p-4">
+                          {isEditingMem ? (
                             <div className="space-y-3">
                               <textarea
+                                data-testid="memory-edit-input"
                                 value={editingMemoryText}
                                 onChange={(e) => setEditingMemoryText(e.target.value)}
                                 className="min-h-[80px] w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -485,6 +598,7 @@ export default function SettingsModal() {
                                 </button>
                                 <button
                                   type="button"
+                                  data-testid="memory-save-button"
                                   onClick={() => void handleSaveMemory(memory.id)}
                                   disabled={isSavingMem || !editingMemoryText.trim()}
                                   className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
@@ -512,6 +626,7 @@ export default function SettingsModal() {
                                   <div className="flex items-center gap-2">
                                     <button
                                       type="button"
+                                      data-testid="memory-edit-button"
                                       onClick={() => { setEditingMemoryId(memory.id); setEditingMemoryText(memory.memory); }}
                                       className="inline-flex items-center gap-1 rounded-xl border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface"
                                     >
@@ -520,6 +635,7 @@ export default function SettingsModal() {
                                     </button>
                                     <button
                                       type="button"
+                                      data-testid="memory-delete-button"
                                       onClick={() => void handleDeleteMemory(memory.id)}
                                       disabled={isDeletingMem}
                                       className="inline-flex items-center gap-1 rounded-xl border border-danger/20 px-2.5 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-50"
@@ -537,42 +653,56 @@ export default function SettingsModal() {
                     })}
                   </div>
                 )}
-              </section>
+              </CardContent>
+            </Card>
+            </TabsContent>
 
-              <section className="rounded-2xl border border-danger/20 bg-danger/5 p-4">
-                <h3 className="font-semibold text-danger">隱私與資料管理</h3>
-                <p className="mt-1 text-xs text-muted">
-                  這些操作會同步呼叫後端刪除資料；AI 後續 context 不會再讀取已清除的偏好或記憶。
-                </p>
-                <div className="mt-3 grid gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void handleResetPreferences()}
-                    disabled={bulkAction !== null}
-                    className="rounded-xl border border-border bg-surface px-3 py-2 text-left text-sm font-medium text-foreground transition-colors hover:bg-cream/60 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {bulkAction === "preferences" ? "重置中..." : "重置旅遊偏好"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleDeleteAiMemory()}
-                    disabled={bulkAction !== null}
-                    className="rounded-xl border border-danger/30 bg-surface px-3 py-2 text-left text-sm font-medium text-danger transition-colors hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {bulkAction === "memory" ? "刪除中..." : "刪除 AI 記憶"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleClearPersonalizationData()}
-                    disabled={bulkAction !== null}
-                    className="rounded-xl bg-danger px-3 py-2 text-left text-sm font-semibold text-white transition-colors hover:bg-danger/90 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {bulkAction === "all" ? "清除中..." : "清除所有個人化資料"}
-                  </button>
-                </div>
-              </section>
-        </div>
-      </DialogContent>
-    </Dialog>
+            <TabsContent value="privacy" className="absolute inset-0 overflow-y-auto px-6 py-5">
+            <Card className="border-danger/20 bg-danger/5 shadow-none">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-danger">隱私與資料管理</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleResetPreferences()}
+                  disabled={bulkAction !== null}
+                  className="rounded-xl border border-border bg-surface px-3 py-2 text-left text-sm font-medium text-foreground transition-colors hover:bg-cream/60 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {bulkAction === "preferences" ? "重置中..." : "重置旅遊偏好"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteAiMemory()}
+                  disabled={bulkAction !== null}
+                  className="rounded-xl border border-danger/30 bg-surface px-3 py-2 text-left text-sm font-medium text-danger transition-colors hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {bulkAction === "memory" ? "刪除中..." : "刪除 AI 記憶"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleClearPersonalizationData()}
+                  disabled={bulkAction !== null}
+                  className="rounded-xl bg-danger px-3 py-2 text-left text-sm font-semibold text-white transition-colors hover:bg-danger/90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {bulkAction === "all" ? "清除中..." : "清除所有個人化資料"}
+                </button>
+              </CardContent>
+            </Card>
+            </TabsContent>
+            </div>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
+
+      <InterestPickerDialog
+        open={interestPickerOpen}
+        onOpenChange={setInterestPickerOpen}
+        selected={preferences}
+        interestIcons={interestIcons}
+        onToggle={togglePreference}
+        onAddCustom={addCustomInterest}
+      />
+    </>
   );
 }

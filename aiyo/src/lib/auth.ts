@@ -15,6 +15,7 @@ declare module "next-auth" {
 declare module "next-auth/jwt" {
   interface JWT {
     userId?: string;
+    picture?: string | null;
   }
 }
 
@@ -82,6 +83,7 @@ providers.push(
         id: user.id,
         email: user.email,
         name: user.name,
+        image: user.image,
       };
     },
   }),
@@ -150,12 +152,22 @@ export const authOptions: NextAuthOptions = {
     },
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.userId = user.id;
         // Preserve default token fields for session.user (name/email/image).
         token.name = user.name ?? token.name;
         token.email = user.email ?? token.email;
+        token.picture = user.image ?? token.picture ?? null;
+      }
+
+      if (trigger === "update" && session) {
+        if (typeof session.image === "string") {
+          token.picture = session.image;
+        }
+        if (typeof session.name === "string") {
+          token.name = session.name;
+        }
       }
 
       // NextAuth already stores a stable subject in `sub`. Use it as a fallback so
@@ -177,7 +189,7 @@ export const authOptions: NextAuthOptions = {
 
       session.user.name = session.user.name ?? token.name ?? null;
       session.user.email = session.user.email ?? token.email ?? null;
-      session.user.image = session.user.image ?? token.picture ?? null;
+      session.user.image = token.picture ?? session.user.image ?? null;
       session.user.id = user?.id || token.userId || token.sub || "";
 
       return session;

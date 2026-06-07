@@ -1,6 +1,6 @@
 # AIYO_new
 
-`AIYO_new` is the active repository for the AIYO travel-planning system. The application lives in `aiyo/`; the repository root now provides a six-service Docker stack for local development and demo verification.
+`AIYO_new` is the active repository for the AIYO travel-planning system. The application lives in `aiyo/`; the repository root now provides a five-service Docker stack for local development and demo verification.
 
 ## Active stack
 
@@ -8,8 +8,7 @@ The active Compose file keeps only these services:
 
 - `aiyo-new-app-dev`
 - `aiyo-new-app-prod-live`
-- `aiyo-new-postgres-dev`
-- `aiyo-new-postgres-prod`
+- `aiyo-new-postgres`
 - `aiyo-new-redis`
 - `open-webui`
 
@@ -22,8 +21,7 @@ Legacy `mem0`, `searxng`, and `pgadmin` are no longer part of the active stack. 
 | Dev app | `http://127.0.0.1:3000` |
 | Prod-live app | `http://127.0.0.1:3001` |
 | Open WebUI | `http://127.0.0.1:8080` |
-| Postgres dev | `127.0.0.1:5432` |
-| Postgres prod-live | `127.0.0.1:5433` |
+| Shared Postgres | `127.0.0.1:5432` |
 | Redis | `127.0.0.1:6379` |
 
 ## Environment files
@@ -76,7 +74,7 @@ Or directly:
 
 ```bash
 docker compose --env-file ./aiyo/.env.dev up -d --build --force-recreate \
-  aiyo-new-postgres-dev aiyo-new-redis open-webui aiyo-new-app-dev
+  aiyo-new-postgres aiyo-new-redis open-webui aiyo-new-app-dev
 ```
 
 ## Start prod-live
@@ -89,8 +87,24 @@ Or directly:
 
 ```bash
 docker compose --env-file ./aiyo/.env.prod-live up -d --build --force-recreate \
-  aiyo-new-postgres-prod aiyo-new-redis open-webui aiyo-new-app-prod-live
+  aiyo-new-postgres aiyo-new-redis open-webui aiyo-new-app-prod-live
 ```
+
+## Recreate all services
+
+```powershell
+.\all-up.ps1
+```
+
+This recreates shared services with `aiyo/.env.dev`, then recreates `aiyo-new-app-prod-live` with `aiyo/.env.prod-live`.
+
+## Recreate both frontends
+
+```powershell
+.\frontend-up.ps1
+```
+
+This only recreates `aiyo-new-app-dev` and `aiyo-new-app-prod-live`.
 
 ## Open WebUI setup
 

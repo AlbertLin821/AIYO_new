@@ -138,6 +138,57 @@ function makeChiayiPreferenceAiContext(): AIContextBuildResult {
   };
 }
 
+function makeKumamotoPreferenceAiContext(): AIContextBuildResult {
+  return {
+    text: "",
+    promptContextText: "",
+    sources: ["user_preferences"],
+    structured: {
+      preferences: {
+        budgetLevel: "medium",
+        travelStyle: ["美食", "購物", "自然景觀"],
+        pace: "moderate",
+        transportPreference: "self_drive",
+        destination: "熊本",
+      },
+      recentTripCount: 1,
+      recentVideoCount: 0,
+      appliedVideoSummaryCount: 0,
+    },
+    structuredContext: {
+      userId: "user_1",
+      preferences: {
+        destinationPreferences: ["熊本"],
+        budgetLevel: "medium",
+        travelStyles: ["美食", "購物", "自然景觀"],
+        pace: "moderate",
+        transportPreference: "self_drive",
+        accommodationPreference: null,
+        avoidances: [],
+        confidence: 0.8,
+        source: "mem0",
+        updatedAt: null,
+      },
+      recentTrips: [],
+      currentTrip: null,
+      tripChatHistory: [],
+      globalChatMemory: [],
+      videoInteractions: [],
+      appliedVideoSummaries: [],
+      memorySnippets: [],
+      contextWarnings: [],
+    },
+    debug: {
+      sources: ["user_preferences"],
+      includedSources: ["user_preferences"],
+      excludedSources: [],
+      counts: { recentTrips: 0 },
+      limits: {},
+      vectorStore: "none",
+    },
+  };
+}
+
 function makeTainanPreferenceAiContext(): AIContextBuildResult {
   return {
     text: "",
@@ -234,13 +285,14 @@ test("東京三天 with stale 台南 context asks for remaining basics before pl
   assert.equal(response.tripProfile?.destination, "東京");
 });
 
-test("structured chat generates itinerary when destination, duration, dates, and traveler count are complete", async () => {
+test("structured chat generates itinerary when destination, duration, dates, traveler count, and dietary preference are complete", async () => {
   const response = await chatWithTravelAssistant({
     message: "請幫我規劃熊本行程",
     structuredTravelPlanning: true,
     tripProfile: {
       ...makeStructuredProfile(),
       travel_dates: { start: "2026-06-10", end: "2026-06-14" },
+      dietary_restrictions: ["無特殊飲食限制"],
     },
   });
 
@@ -725,7 +777,7 @@ test("question card skips destination when conversation already mentions Kumamot
   );
 });
 
-test("question card asks for dates and traveler count before planning when they are missing", () => {
+test("question card asks for dates traveler count and dietary preference before planning when they are missing", () => {
   const card = buildQuestionCard({
     ...makeStructuredProfile(),
     destination: "熊本",
@@ -740,9 +792,10 @@ test("question card asks for dates and traveler count before planning when they 
   assert.ok(card);
   assert.ok(card?.questions.some((question) => question.slot === "travel_dates"));
   assert.ok(card?.questions.some((question) => question.slot === "traveler_count"));
+  assert.ok(card?.questions.some((question) => question.slot === "dietary_restrictions"));
 });
 
-test("question card does not block on preferences after dates and companions are known", () => {
+test("question card keeps asking for dietary preference after dates and companions are known", () => {
   const card = buildQuestionCard({
     ...makeStructuredProfile(),
     destination: "熊本",
@@ -754,7 +807,7 @@ test("question card does not block on preferences after dates and companions are
     preferences: [],
     pace: null,
   });
-  assert.equal(card, null);
+  assert.ok(card?.questions.some((question) => question.slot === "dietary_restrictions"));
 });
 
 test("question card skips traveler_count when party size is already known", () => {
@@ -775,6 +828,7 @@ test("question card skips traveler_count when party size is already known", () =
     card?.questions.some((question) => question.slot === "traveler_count"),
     false,
   );
+  assert.ok(card?.questions.some((question) => question.slot === "dietary_restrictions"));
 });
 
 test("Chiayi 3d2n four travelers then accept preferences skips traveler_count question", async () => {
@@ -847,6 +901,144 @@ test("Chiayi 3d2n four travelers then accept preferences skips traveler_count qu
   assert.equal(second.tripProfile?.traveler_count, 4);
 });
 
+test("Kumamoto five-day five-traveler preference accept keeps traveler count and asks dates plus dietary preference", async () => {
+  const opening = "我想要去熊本五天四夜 總共五個人去";
+  const first = await chatWithTravelAssistant({
+    message: opening,
+    aiContext: makeKumamotoPreferenceAiContext(),
+  });
+
+  assert.equal(first.travelAgentDecision?.mode, "confirm_preferences");
+  assert.equal(first.tripProfile?.destination, "熊本");
+  assert.equal(first.tripProfile?.duration_days, 5);
+  assert.equal(first.tripProfile?.traveler_count, 5);
+
+  const history: ChatMessage[] = [
+    {
+      id: "user_opening_kumamoto",
+      role: "user",
+      content: opening,
+      timestamp: "21:45",
+    },
+    {
+      id: "assistant_confirm_kumamoto",
+      role: "assistant",
+      content: first.reply.content,
+      timestamp: "21:45",
+      tripProfile: first.tripProfile,
+    },
+  ];
+
+  const second = await chatWithTravelAssistant({
+    message: "沿用先前偏好，請直接開始規劃熊本5 天完整行程。",
+    structuredTravelPlanning: true,
+    tripProfile: first.tripProfile,
+    messages: history,
+    aiContext: makeKumamotoPreferenceAiContext(),
+  });
+
+  assert.equal(second.reply.responseType, "question_card");
+  assert.ok(second.reply.questionCard?.questions.some((question) => question.slot === "travel_dates"));
+  assert.ok(second.reply.questionCard?.questions.some((question) => question.slot === "dietary_restrictions"));
+  assert.equal(
+    second.reply.questionCard?.questions.some((question) => question.slot === "traveler_count"),
+    false,
+  );
+  assert.equal(second.tripProfile?.traveler_count, 5);
+});
+
+test("forced revision asks only for dietary restriction instead of reconfirming stored preferences", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "我不滿意，幫我重新安排一次",
+    structuredTravelPlanning: true,
+    forceStructuredRevision: true,
+    tripProfile: {
+      ...makeStructuredProfile(),
+      destination: "熊本",
+      duration_days: 7,
+      duration_nights: 6,
+      traveler_count: 5,
+      companions: "family_group",
+      travel_dates: { start: "2026-10-01", end: "2026-10-07" },
+      dietary_restrictions: [],
+      transportation: "self_drive",
+    },
+    context: {
+      destination: "熊本",
+      days: 7,
+      itinerary: [
+        {
+          dayNumber: 1,
+          items: [{ id: "castle", time: "10:00", title: "熊本城", type: "attraction" as const }],
+        },
+      ],
+      tripStartDate: "2026-10-01",
+      tripEndDate: "2026-10-07",
+      preferences: {
+        interests: ["food"],
+        pace: "moderate",
+        transportPreference: "self_drive",
+      },
+    },
+    aiContext: makeKumamotoPreferenceAiContext(),
+  });
+
+  assert.equal(response.travelAgentDecision?.mode, "collect_requirements");
+  assert.equal(response.reply.responseType, "question_card");
+  assert.deepEqual(
+    response.reply.questionCard?.questions.map((question) => question.slot),
+    ["dietary_restrictions"],
+  );
+  assert.match(response.reply.content, /飲食偏好|飲食限制|過敏/);
+});
+
+test("forced revision accepts english no for dietary restrictions and continues to travel plan", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "沒有飲食限制，請繼續幫我重排熊本 7 天行程",
+    structuredTravelPlanning: true,
+    forceStructuredRevision: true,
+    tripProfile: {
+      ...makeStructuredProfile(),
+      destination: "熊本",
+      duration_days: 7,
+      duration_nights: 6,
+      traveler_count: 5,
+      companions: "family_group",
+      travel_dates: { start: "2026-10-01", end: "2026-10-07" },
+      dietary_restrictions: [],
+      transportation: "self_drive",
+    },
+    questionAnswers: [
+      {
+        slot: "dietary_restrictions",
+        question: "有沒有需要先避開的飲食限制或過敏？",
+        value: "no",
+      },
+    ],
+    context: {
+      destination: "熊本",
+      days: 7,
+      itinerary: [
+        {
+          dayNumber: 1,
+          items: [{ id: "castle", time: "10:00", title: "熊本城", type: "attraction" as const }],
+        },
+      ],
+      tripStartDate: "2026-10-01",
+      tripEndDate: "2026-10-07",
+      preferences: {
+        interests: ["food"],
+        pace: "moderate",
+        transportPreference: "self_drive",
+      },
+    },
+    aiContext: makeKumamotoPreferenceAiContext(),
+  });
+
+  assert.equal(response.tripProfile?.dietary_restrictions[0], "無特殊飲食限制");
+  assert.equal(response.reply.responseType, "travel_plan");
+});
+
 test("applyQuestionAnswers maps traveler_count to companions", () => {
   const profile = applyQuestionAnswers(makeStructuredProfile(), [
     { slot: "traveler_count", value: "3" },
@@ -864,14 +1056,27 @@ test("applyQuestionAnswers maps companions to traveler_count", () => {
   assert.equal(profile.traveler_count, 1);
 });
 
-test("question card becomes null after core planning fields are complete", () => {
+test("question card becomes null after core planning fields including dietary preference are complete", () => {
   const card = buildQuestionCard({
     ...makeStructuredProfile(),
     travel_dates: { start: "2026-06-10", end: "2026-06-14" },
     companions: "couple_or_friend",
     traveler_count: 2,
+    dietary_restrictions: ["無特殊飲食限制"],
   });
   assert.equal(card, null);
+});
+
+test("applyQuestionAnswers stores dietary restriction text and allows explicit none", () => {
+  const restricted = applyQuestionAnswers(makeStructuredProfile(), [
+    { slot: "dietary_restrictions", value: "素食、海鮮過敏" },
+  ]);
+  assert.deepEqual(restricted.dietary_restrictions, ["素食", "海鮮過敏"]);
+
+  const unrestricted = applyQuestionAnswers(makeStructuredProfile(), [
+    { slot: "dietary_restrictions", value: "無" },
+  ]);
+  assert.deepEqual(unrestricted.dietary_restrictions, ["無特殊飲食限制"]);
 });
 
 test("dynamic question card sanitizer keeps AI wording while preserving parseable values", () => {
@@ -1801,4 +2006,52 @@ test("question answer summary does not overwrite Tokyo destination", async () =>
 
   assert.equal(response.tripProfile?.destination, "東京");
   assert.ok(!(response.reply.questionCard?.title || "").includes("？：兩人"));
+});
+
+test("convertTripPlanToTravelPlanWithSources omits canned fallback notes from display fields", () => {
+  const response = convertTripPlanToTravelPlanWithSources(
+    {
+      summary: "熊本七天六夜",
+      days: [
+        {
+          dayNumber: 1,
+          items: [
+            {
+              id: "spot_1",
+              dayNumber: 1,
+              time: "10:30",
+              title: "勝烈亭 新市街本店",
+              type: "attraction",
+              source: "ai",
+              notes: "安排停留 勝烈亭 新市街本店。",
+            },
+            {
+              id: "food_1",
+              dayNumber: 1,
+              time: "12:30",
+              title: "熊本拉麵黑亭 熊本車站本店",
+              type: "restaurant",
+              source: "ai",
+              notes: "安排在 熊本拉麵黑亭 熊本車站本店 用餐。",
+            },
+            {
+              id: "spot_2",
+              dayNumber: 1,
+              time: "14:30",
+              title: "熊本屋台村",
+              type: "activity",
+              source: "ai",
+              notes: "安排停留 熊本屋台村。",
+            },
+          ],
+        },
+      ],
+    },
+    makeStructuredProfile(),
+    {},
+  );
+
+  assert.equal(response.days[0]?.spots[0]?.feature, "");
+  assert.equal(response.days[0]?.food_recommendations[0]?.description, "");
+  assert.equal(response.days[0]?.tips.length, 0);
 });

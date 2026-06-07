@@ -431,11 +431,24 @@ export async function sendChatAndWaitForCompletion(
 export async function expectItineraryActivity(page: Page, title: string, visible = true) {
   await page.goto("/itinerary");
   await openItineraryEditor(page);
+  await expandAllItineraryDays(page);
   const card = page.getByTestId("activity-card").filter({ hasText: title });
   if (visible) {
     await expect(card.first()).toBeVisible({ timeout: 40_000 });
   } else {
     await expect(card).toHaveCount(0, { timeout: 20_000 });
+  }
+}
+
+async function expandAllItineraryDays(page: Page) {
+  const dayCards = page.getByTestId("itinerary-day-card");
+  const dayCount = await dayCards.count();
+  for (let index = 0; index < dayCount; index += 1) {
+    const card = dayCards.nth(index);
+    const toggle = card.getByRole("button", { expanded: false }).first();
+    if (await toggle.isVisible().catch(() => false)) {
+      await toggle.click();
+    }
   }
 }
 
@@ -512,6 +525,7 @@ export async function getCurrentItineraryFromUI(page: Page): Promise<UiItinerary
     dayCards = page.getByTestId("itinerary-day-card");
   }
   await expect(dayCards.first()).toBeVisible({ timeout: 40_000 });
+  await expandAllItineraryDays(page);
   const dayCount = await dayCards.count();
   const days: UiItineraryDaySnapshot[] = [];
 
@@ -612,6 +626,10 @@ export async function expectDay2Order(page: Page, orderedTitles: string[]) {
   await openItineraryEditor(page);
 
   const day2Card = page.getByTestId("itinerary-day-card").nth(1);
+  const collapsedToggle = day2Card.getByRole("button", { expanded: false }).first();
+  if (await collapsedToggle.isVisible().catch(() => false)) {
+    await collapsedToggle.click();
+  }
   let lastUiTitles: string[] = [];
 
   await expect

@@ -126,7 +126,7 @@ function resolveScenario(message: string, seed: Phase7TokyoSeed, body?: ChatRout
   if (/嘉義.*(三天|3天|三天兩夜)/.test(text) && /四個人|4\s*個人|總共\s*4/.test(text)) {
     return {
       content:
-        "嘉義三天兩夜、四個人聽起來很棒！我找到可沿用的偏好：美食、coffee、night view、購物、適中步調、Transit。這次也要沿用嗎？",
+        "嘉義三天兩夜、四個人聽起來很棒！我找到您的偏好：美食、coffee、night view、購物、適中步調、Transit。這次也要使用這些設定嗎？",
       responseType: "text_message",
       travelAgentDecision: {
         mode: "confirm_preferences",

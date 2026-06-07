@@ -50,6 +50,7 @@ export function formatPreferenceSummary(preferences: TravelAgentKnownPreferences
       : "",
     formatPaceLabel(preferences.pace),
     preferences.transportPreference,
+    preferences.foodPreferences?.length ? `飲食偏好：${preferences.foodPreferences.join("、")}` : "",
   ].filter(Boolean);
   return parts.length ? parts.join("、") : "你之前的旅遊偏好";
 }
@@ -117,6 +118,10 @@ export function buildPreferenceDetailRows(
     rows.push({ label: "同行類型", value: preferences.companionType });
   }
 
+  if (preferences.foodPreferences?.length) {
+    rows.push({ label: "飲食偏好", value: preferences.foodPreferences.join("、") });
+  }
+
   if (preferences.mustVisit?.length) {
     rows.push({ label: "必去", value: preferences.mustVisit.join("、") });
   }
@@ -144,6 +149,7 @@ export function hasMeaningfulReusablePreferences(preferences?: {
   transportPreference?: string;
   accommodationPreference?: string;
   companionType?: string;
+  foodPreferences?: string[];
   pace?: string;
   notes?: string;
 }): boolean {
@@ -157,6 +163,7 @@ export function hasMeaningfulReusablePreferences(preferences?: {
       preferences.transportPreference ||
       preferences.accommodationPreference ||
       preferences.companionType ||
+      preferences.foodPreferences?.length ||
       preferences.pace ||
       preferences.notes,
   );
@@ -177,6 +184,7 @@ export function buildPreferenceOverrideMessage(preferences: TravelAgentKnownPref
     preferences.transportPreference,
     preferences.accommodationPreference,
     preferences.companionType,
+    preferences.foodPreferences?.length ? `飲食偏好：${preferences.foodPreferences.join("、")}` : "",
   ].filter(Boolean);
   return parts.length ? `這次想改成：${parts.join("、")}` : "這次想重新填寫偏好";
 }

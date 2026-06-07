@@ -19,9 +19,8 @@ export function shouldSkipClientVideoSummarize(video: VideoRecommendation): bool
   const segments = video.summarySegments?.length ?? 0;
   const locations = video.extractedLocations?.length ?? 0;
   const foods = video.extractedFoods?.length ?? 0;
-  const stamps = video.timestamps?.length ?? 0;
-  /** 不將僅有 description 剪貼的 `summary` 視為已分析：搜尋 API 影片常帶長篇說明但仍須跑摘要管線。 */
-  return segments > 0 || locations > 0 || foods > 0 || stamps > 0;
+  /** 不將僅有 description 剪貼的 `summary` 或 YouTube 章節 `timestamps` 視為已分析。 */
+  return segments > 0 || locations > 0 || foods > 0;
 }
 
 export type VideoSearchDebugInfo = {
@@ -120,17 +119,17 @@ export async function fetchVideoRecommendations(
       ? (payload.meta.debug as VideoSearchDebugInfo)
       : undefined;
 
-  if (process.env.NODE_ENV !== "production" && debug) {
-    console.info("[video-search]", {
-      rawInput: debug.rawInput,
-      searchQueries: debug.searchQueries,
-      executedQueries: debug.executedQueries,
-      regionCode: debug.regionCode,
-      relevanceLanguage: debug.relevanceLanguage,
-      selectedStrategy: debug.selectedStrategy,
-      fallbackReasons: debug.fallbackReasons,
-    });
-  }
+  // if (process.env.NODE_ENV !== "production" && debug) {
+  //   console.info("[video-search]", {
+  //     rawInput: debug.rawInput,
+  //     searchQueries: debug.searchQueries,
+  //     executedQueries: debug.executedQueries,
+  //     regionCode: debug.regionCode,
+  //     relevanceLanguage: debug.relevanceLanguage,
+  //     selectedStrategy: debug.selectedStrategy,
+  //     fallbackReasons: debug.fallbackReasons,
+  //   });
+  // }
 
   const result: VideoRecommendationsClientResult = {
     videos: payload.data,

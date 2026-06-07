@@ -13,7 +13,7 @@ async function main() {
       segs: result.segments.length,
       locs: result.extractedLocations.length,
       foods: result.segments.flatMap((s) => s.foods || []).length,
-      model: result.debug?.model,
+      pipeline: result.debug?.pipelineVersion,
       transcript: result.debug?.transcriptSource,
     }),
   );

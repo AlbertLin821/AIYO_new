@@ -108,11 +108,12 @@ function postProcessSimplePlaces(input: {
   destinationHint?: string;
   transcriptLanguage?: string;
   title: string;
+  description?: string;
 }): SimpleVideoExtractionResult["places"] {
   const profile = selectTravelExtractionProfile({
-    destinationHint: input.destinationHint,
     transcriptLanguage: input.transcriptLanguage,
     title: input.title,
+    description: input.description,
   });
   const seen = new Set<string>();
   const out: SimpleVideoExtractionResult["places"] = [];
@@ -198,6 +199,7 @@ export async function extractSimpleVideoPlacesAndFoods(input: {
     destinationHint: input.destinationHint,
     transcriptLanguage: input.transcriptLanguage,
     title: input.title,
+    description: input.description,
   });
 
   return {

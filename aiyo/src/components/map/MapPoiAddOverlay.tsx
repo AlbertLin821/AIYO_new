@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { createPortal } from "react-dom";
 import { Loader2, Plus, X } from "lucide-react";
 import { addPlaceToItinerary } from "@/lib/addPlaceToItinerary";
@@ -9,7 +9,7 @@ import { pendingPoiKey, usePendingPoiPreview } from "@/hooks/usePendingPoiPrevie
 import { zhTW as t } from "@/locales/zh-TW";
 import { useMapStore } from "@/stores/useMapStore";
 import { useToastStore } from "@/stores/useToastStore";
-import type { GoogleMapInstance } from "@/services/googleMapsLoader";
+import type { GoogleMapInstance, GoogleMapsApi } from "@/services/googleMapsLoader";
 import type { LocationReference } from "@/types";
 
 type MapPoiAddOverlayProps = {
@@ -33,6 +33,36 @@ type OverlayContentProps = {
   dismiss: () => void;
   onMapClickSuppress?: () => void;
 };
+
+function createPoiAddOverlayClass(
+  mapsApi: GoogleMapsApi,
+  container: HTMLDivElement,
+  pendingPoiRef: MutableRefObject<ReturnType<typeof useMapStore.getState>["pendingPoi"]>,
+) {
+  return class PoiAddOverlay extends mapsApi.OverlayView {
+    onAdd() {
+      this.getPanes()?.floatPane.appendChild(container);
+    }
+
+    draw() {
+      const poi = pendingPoiRef.current;
+      if (!poi) {
+        return;
+      }
+      const projection = this.getProjection();
+      const point = projection?.fromLatLngToDivPixel(new mapsApi.LatLng(poi.lat, poi.lng));
+      if (point) {
+        container.style.left = `${point.x}px`;
+        container.style.top = `${point.y}px`;
+        container.style.transform = "translate(-50%, calc(-100% - 6px))";
+      }
+    }
+
+    onRemove() {
+      container.remove();
+    }
+  };
+}
 
 function MapPoiAddOverlayContent({
   menuOpen,
@@ -202,6 +232,7 @@ export default function MapPoiAddOverlay({
   const preferredPoiDay = useMapStore((state) => state.preferredPoiDay);
   const [portalTarget, setPortalTarget] = useState<HTMLDivElement | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const mountedRef = useRef(true);
   const overlayRef = useRef<{
     poiKey: string;
     overlay: { setMap: (map: GoogleMapInstance | null) => void; draw: () => void };
@@ -209,7 +240,6 @@ export default function MapPoiAddOverlay({
     listeners: Array<{ remove?: () => void }>;
   } | null>(null);
   const pendingPoiRef = useRef(pendingPoi);
-  pendingPoiRef.current = pendingPoi;
 
   const poiKey = pendingPoiKey(pendingPoi);
 
@@ -220,10 +250,25 @@ export default function MapPoiAddOverlay({
   });
 
   useEffect(() => {
-    if (!poiKey) {
-      setMenuOpen(false);
+    pendingPoiRef.current = pendingPoi;
+  }, [pendingPoi]);
+
+  useEffect(() => {
+    if (poiKey) {
+      return;
     }
+    queueMicrotask(() => {
+      if (mountedRef.current) {
+        setMenuOpen(false);
+      }
+    });
   }, [poiKey]);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const maps = window.google?.maps;
@@ -233,7 +278,11 @@ export default function MapPoiAddOverlay({
         overlayRef.current.overlay.setMap(null);
         overlayRef.current = null;
       }
-      setPortalTarget(null);
+      queueMicrotask(() => {
+        if (mountedRef.current) {
+          setPortalTarget(null);
+        }
+      });
       return;
     }
 
@@ -253,28 +302,7 @@ export default function MapPoiAddOverlay({
     container.style.zIndex = "1000";
     const mapsApi = maps;
 
-    class PoiAddOverlay extends mapsApi.OverlayView {
-      onAdd() {
-        this.getPanes()?.floatPane.appendChild(container);
-      }
-      draw() {
-        const poi = pendingPoiRef.current;
-        if (!poi) {
-          return;
-        }
-        const projection = this.getProjection();
-        const point = projection?.fromLatLngToDivPixel(new mapsApi.LatLng(poi.lat, poi.lng));
-        if (point) {
-          container.style.left = `${point.x}px`;
-          container.style.top = `${point.y}px`;
-          container.style.transform = "translate(-50%, calc(-100% - 6px))";
-        }
-      }
-      onRemove() {
-        container.remove();
-      }
-    }
-
+    const PoiAddOverlay = createPoiAddOverlayClass(mapsApi, container, pendingPoiRef);
     const overlay = new PoiAddOverlay();
     overlay.setMap(map);
 
@@ -284,7 +312,11 @@ export default function MapPoiAddOverlay({
       .filter((listener): listener is { remove?: () => void } => Boolean(listener));
 
     overlayRef.current = { poiKey, overlay, container, listeners };
-    setPortalTarget(container);
+    queueMicrotask(() => {
+      if (mountedRef.current) {
+        setPortalTarget(container);
+      }
+    });
 
     return () => {
       listeners.forEach((listener) => listener?.remove?.());
@@ -292,7 +324,11 @@ export default function MapPoiAddOverlay({
       if (overlayRef.current?.poiKey === poiKey) {
         overlayRef.current = null;
       }
-      setPortalTarget(null);
+      queueMicrotask(() => {
+        if (mountedRef.current) {
+          setPortalTarget(null);
+        }
+      });
     };
   }, [map, mapReady, poiKey, previewState.showAddUi]);
 
@@ -302,7 +338,7 @@ export default function MapPoiAddOverlay({
 
   return createPortal(
     <MapPoiAddOverlayContent
-      menuOpen={menuOpen}
+      menuOpen={menuOpen && Boolean(poiKey)}
       setMenuOpen={setMenuOpen}
       preview={previewState.preview}
       loading={previewState.loading}

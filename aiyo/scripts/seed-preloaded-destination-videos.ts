@@ -371,7 +371,7 @@ async function runDestination(
   console.log(`[${dest.id}] 已匯出種子 ${bundle.videos.length} 支 -> ${path.relative(ROOT, bundlePath)}`);
 }
 
-async function writeIndex(_destinations: GlobalVideoDestination[]): Promise<void> {
+async function writeIndex(): Promise<void> {
   const entries: Array<{
     id: string;
     destinationHint: string;
@@ -446,7 +446,7 @@ async function main() {
     await runDestination(dest, options, completed, allRuns);
   }
 
-  await writeIndex(destinations);
+  await writeIndex();
 
   let totalExported = 0;
   for (const dest of destinations) {

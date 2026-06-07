@@ -9,8 +9,11 @@ import {
 import { prisma } from "@/lib/prisma";
 import { serverConfig } from "@/server/config";
 import { findKnownLocationReference } from "@/server/geo/locationCatalog";
-import { geocodePlace, mapGeocodedPlaceResolvedFrom } from "@/server/places/geocodePlace";
+import { geocodeVideoPlaceName } from "@/server/places/geocodeVideoPlace";
+import { mapGeocodedPlaceResolvedFrom } from "@/server/places/geocodePlace";
 import {
+  inferTripDestinationLabelFromVideoMetadata,
+  isTextInTripDestinationScope,
   resolveTripDestinationScope,
   type TripDestinationScope,
 } from "@/lib/tripDestinationScope";
@@ -26,7 +29,10 @@ import {
 } from "@/server/video/simpleExtraction";
 import { preprocessTranscript } from "@/server/video/transcriptProcessing";
 import { syncExtractedLocationsWithSegments } from "@/server/video/syncExtractedLocationsWithSegments";
-import { selectTravelExtractionProfile } from "@/server/video/travelExtractionProfiles";
+import {
+  selectTravelExtractionProfile,
+  type TravelExtractionProfile,
+} from "@/server/video/travelExtractionProfiles";
 import type {
   LocationReference,
   Timestamp,
@@ -36,10 +42,104 @@ import type {
   VideoSummarySegment,
 } from "@/types";
 
-const VIDEO_PIPELINE_VERSION =
-  serverConfig.videoExtractionMode === "simple-ollama" ? "video-simple-ollama-v3" : "video-quality-v7";
+export const VIDEO_PIPELINE_VERSION =
+  serverConfig.videoExtractionMode === "simple-ollama" ? "video-simple-ollama-v5" : "video-quality-v9";
 const NO_VERIFIED_PLACES_MESSAGE = "此影片未擷取到足夠明確且可驗證的地點名稱。";
 const NO_SIMPLE_RESULTS_MESSAGE = "此影片未擷取到明確地點或食物名稱。";
+
+function scopesShareCountryCode(
+  left: TripDestinationScope | null | undefined,
+  right: TripDestinationScope | null | undefined,
+): boolean {
+  const leftCodes = left?.countryCodes?.filter(Boolean) ?? [];
+  const rightCodes = right?.countryCodes?.filter(Boolean) ?? [];
+  if (leftCodes.length === 0 || rightCodes.length === 0) {
+    return false;
+  }
+  return leftCodes.some((code) => rightCodes.includes(code));
+}
+
+export function resolveVideoSummaryDestinationContext(input: {
+  destinationHint?: string;
+  transcriptLanguage?: string;
+  title?: string;
+  description?: string;
+}): {
+  profile: TravelExtractionProfile;
+  destinationHint?: string;
+  destinationScope: TripDestinationScope | null;
+} {
+  // User trip destination must not override video metadata when picking extraction profile.
+  const profile = selectTravelExtractionProfile({
+    transcriptLanguage: input.transcriptLanguage,
+    title: input.title,
+    description: input.description,
+  });
+  const metadataLabel = inferTripDestinationLabelFromVideoMetadata({
+    title: input.title,
+    description: input.description,
+  });
+  const videoScopeFromMetadata = metadataLabel ? resolveTripDestinationScope(metadataLabel) : null;
+  const videoScopeFromProfile =
+    profile.country && profile.country !== "Global"
+      ? resolveTripDestinationScope(profile.country)
+      : null;
+  const videoScope =
+    videoScopeFromMetadata?.countryCodes.length
+      ? videoScopeFromMetadata
+      : videoScopeFromProfile;
+  const userDestination = input.destinationHint?.trim() || "";
+  const userScope = userDestination ? resolveTripDestinationScope(userDestination) : null;
+
+  if (videoScope?.countryCodes.length && userScope?.countryCodes.length) {
+    if (!scopesShareCountryCode(userScope, videoScope)) {
+      return {
+        profile,
+        destinationHint: metadataLabel || profile.country || videoScope.canonicalLabel,
+        destinationScope: videoScope,
+      };
+    }
+    return {
+      profile,
+      destinationHint: userDestination || metadataLabel || profile.country || undefined,
+      destinationScope: userScope,
+    };
+  }
+
+  if (videoScope?.countryCodes.length) {
+    return {
+      profile,
+      destinationHint: metadataLabel || profile.country || videoScope.canonicalLabel,
+      destinationScope: videoScope,
+    };
+  }
+
+  if (userScope) {
+    return {
+      profile,
+      destinationHint: userDestination || profile.country || undefined,
+      destinationScope: userScope,
+    };
+  }
+
+  return {
+    profile,
+    destinationHint: metadataLabel || profile.country || undefined,
+    destinationScope: videoScopeFromProfile,
+  };
+}
+
+export function isCatalogLocationAllowedForVideoScope(
+  location: Pick<LocationReference, "name" | "address" | "description">,
+  destinationScope?: TripDestinationScope | null,
+): boolean {
+  if (!destinationScope?.countryCodes.length) {
+    return true;
+  }
+
+  const haystack = [location.name, location.address, location.description].filter(Boolean).join(" ");
+  return isTextInTripDestinationScope(haystack, destinationScope, { strictCountryLevel: true });
+}
 
 function dedupeLocationsByNormalizedName<T extends Pick<LocationReference, "name">>(locations: T[]): T[] {
   const seen = new Set<string>();
@@ -87,11 +187,10 @@ function isVideoSummaryResult(value: unknown): value is VideoSummaryResult {
   );
 }
 
-function buildSummaryCacheKey(input: { videoId: string; destination?: string; language?: string }): string {
+export function buildSummaryCacheKey(input: { videoId: string; language?: string }): string {
   return [
     VIDEO_PIPELINE_VERSION,
     input.videoId.trim(),
-    (input.destination || "").trim() || "any-destination",
     (input.language || "zh-Hant").trim(),
   ].join(":");
 }
@@ -145,6 +244,38 @@ async function invalidateVideoSummaryCache(cacheKey: string): Promise<void> {
   }
 }
 
+function purgeMemoryVideoSummaryCacheForVideoId(youtubeVideoId: string): void {
+  const trimmed = youtubeVideoId.trim();
+  if (!trimmed) {
+    return;
+  }
+  const needle = `:${trimmed}:`;
+  for (const key of videoSummaryCache.keys()) {
+    if (key.includes(needle)) {
+      videoSummaryCache.delete(key);
+    }
+  }
+}
+
+/** Remove every persisted/memory cache row for a YouTube id (all destination variants). */
+async function invalidateAllVideoSummaryCachesForVideoId(youtubeVideoId: string): Promise<void> {
+  const trimmed = youtubeVideoId.trim();
+  if (!trimmed) {
+    return;
+  }
+  purgeMemoryVideoSummaryCacheForVideoId(trimmed);
+  try {
+    await prisma.$executeRaw`
+      DELETE FROM "video_summary_caches"
+      WHERE "videoId" LIKE ${`%:${trimmed}:%`}
+    `;
+  } catch (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[video-summary-cache] Failed to invalidate all cache rows for video.", error);
+    }
+  }
+}
+
 function isAcceptableVideoSummaryCache(result: VideoSummaryResult): boolean {
   if (result.segments.length === 0) {
     return false;
@@ -153,6 +284,55 @@ function isAcceptableVideoSummaryCache(result: VideoSummaryResult): boolean {
     return false;
   }
   return true;
+}
+
+/** Load cached summary by YouTube id (canonical key first, then legacy destination-scoped rows). */
+export async function getCachedVideoSummaryForVideoId(
+  youtubeVideoId: string,
+  language = "zh-Hant",
+): Promise<VideoSummaryResult | null> {
+  const trimmed = youtubeVideoId.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const canonicalKey = buildSummaryCacheKey({ videoId: trimmed, language });
+  const canonicalHit = await getCachedVideoSummary(canonicalKey);
+  if (canonicalHit) {
+    return canonicalHit;
+  }
+
+  try {
+    const rows = await prisma.$queryRaw<VideoSummaryCacheRow[]>`
+      SELECT "result"
+      FROM "video_summary_caches"
+      WHERE "videoId" LIKE ${`%:${trimmed}:%`}
+      ORDER BY "updatedAt" DESC
+      LIMIT 5
+    `;
+    for (const row of rows) {
+      const result = row.result;
+      if (isVideoSummaryResult(result) && isAcceptableVideoSummaryCache(result)) {
+        videoSummaryCache.set(canonicalKey, {
+          expiresAt: Date.now() + VIDEO_SUMMARY_CACHE_MS,
+          result,
+        });
+        return {
+          ...result,
+          debug: {
+            ...result.debug,
+            cacheStatus: "persisted-hit-legacy",
+          } as VideoSummaryResult["debug"],
+        };
+      }
+    }
+  } catch (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[video-summary-cache] Failed legacy cache lookup.", error);
+    }
+  }
+
+  return null;
 }
 
 async function getCachedVideoSummary(cacheKey: string): Promise<VideoSummaryResult | null> {
@@ -348,7 +528,7 @@ async function buildSimpleMapReadyLocations(input: {
     const known = findKnownLocationReference(place.name, description);
 
     if (serverConfig.googleMapsApiKey) {
-      const geocoded = await geocodePlace({
+      const geocoded = await geocodeVideoPlaceName({
         query: place.name,
         destinationHint: input.destinationHint,
         destinationScope: input.destinationScope,
@@ -376,7 +556,7 @@ async function buildSimpleMapReadyLocations(input: {
       }
     }
 
-    if (!known) {
+    if (!known || !isCatalogLocationAllowedForVideoScope(known, input.destinationScope)) {
       continue;
     }
 
@@ -408,11 +588,10 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
   }
 
   const videoId = idFromField || idFromUrl;
-  const inputCacheKey = buildSummaryCacheKey({ videoId, destination: input.destination });
   if (input.refresh) {
-    await invalidateVideoSummaryCache(inputCacheKey);
+    await invalidateAllVideoSummaryCachesForVideoId(videoId);
   }
-  const inputVideoIdCache = input.refresh ? null : await getCachedVideoSummary(inputCacheKey);
+  const inputVideoIdCache = input.refresh ? null : await getCachedVideoSummaryForVideoId(videoId);
   if (inputVideoIdCache) {
     return inputVideoIdCache;
   }
@@ -423,27 +602,19 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     title: input.title,
   });
   const resolvedVideoId = metadata.videoId || videoId;
-  const resolvedCacheKeyEarly = buildSummaryCacheKey({
-    videoId: resolvedVideoId,
-    destination: input.destination,
-  });
-  if (input.refresh && resolvedCacheKeyEarly !== inputCacheKey) {
-    await invalidateVideoSummaryCache(resolvedCacheKeyEarly);
+  if (input.refresh && resolvedVideoId !== videoId) {
+    await invalidateAllVideoSummaryCachesForVideoId(resolvedVideoId);
   }
 
   if (resolvedVideoId !== videoId) {
     const resolvedVideoIdCache = input.refresh
       ? null
-      : await getCachedVideoSummary(
-          buildSummaryCacheKey({ videoId: resolvedVideoId, destination: input.destination }),
-        );
+      : await getCachedVideoSummaryForVideoId(resolvedVideoId);
     if (resolvedVideoIdCache) {
       return resolvedVideoIdCache;
     }
   }
-  const resolvedCacheKey = resolvedCacheKeyEarly;
-  const destinationScope = resolveTripDestinationScope(input.destination);
-
+  const resolvedCacheKey = buildSummaryCacheKey({ videoId: resolvedVideoId });
   const transcriptResult = await fetchYouTubeTranscript(resolvedVideoId);
   const descriptionFallbackEntries = buildDescriptionFallbackTranscriptEntries({
     title: metadata.title,
@@ -507,12 +678,15 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
 
   const transcriptSource: VideoSummaryDebugMeta["transcriptSource"] =
     transcriptResult.entries.length > 0 ? "youtube" : "fallback-description";
-  const profile = selectTravelExtractionProfile({
+  const destinationContext = resolveVideoSummaryDestinationContext({
     destinationHint: input.destination,
     transcriptLanguage: transcriptResult.captionLanguage,
     title: metadata.title,
     description: metadata.description,
   });
+  const profile = destinationContext.profile;
+  const destinationHint = destinationContext.destinationHint;
+  const destinationScope = destinationContext.destinationScope;
   const preprocessedLines = preprocessTranscript(transcriptEntries, profile, {
     captionLanguage: transcriptResult.captionLanguage,
   });
@@ -521,7 +695,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
       title: metadata.title,
       description: metadata.description,
       transcriptLines: preprocessedLines,
-      destinationHint: input.destination,
+      destinationHint,
       transcriptLanguage: transcriptResult.captionLanguage,
     });
     const extractedFoodNames = simpleResult.foods.map((food) => food.name);
@@ -532,13 +706,13 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     });
     const mapReadyLocations = await buildSimpleMapReadyLocations({
       places: simpleResult.places,
-      destinationHint: input.destination,
+      destinationHint,
       destinationScope,
     });
     const syncedLocations = await syncExtractedLocationsWithSegments({
       segments: resolvedSegments,
       mapReadyLocations,
-      destinationHint: input.destination,
+      destinationHint,
       destinationScope,
     });
     const extractedLocationNames = syncedLocations.map((place) => place.name);
@@ -623,7 +797,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     transcriptLines: preprocessedLines,
     title: metadata.title,
     description: metadata.description,
-    destinationHint: input.destination,
+    destinationHint,
     destinationScope,
     enableGeocode: Boolean(serverConfig.googleMapsApiKey),
     enableSearch:
@@ -754,7 +928,6 @@ export async function persistVideoSummaryFromInput(
   const videoId = extractYouTubeVideoId(input.videoId) || input.videoId.trim();
   const resolvedCacheKey = buildSummaryCacheKey({
     videoId,
-    destination: input.destination,
     language: "zh-Hant",
   });
   await cacheVideoSummary(resolvedCacheKey, result);

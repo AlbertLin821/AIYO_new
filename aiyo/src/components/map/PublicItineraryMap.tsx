@@ -162,7 +162,6 @@ export default function PublicItineraryMap({ pins, selectedPinId, className }: P
     }
 
     let cancelled = false;
-    setSdkError(false);
 
     void loadGoogleMapsApi(effectiveGoogleMapsApiKey)
       .then(async (maps) => {

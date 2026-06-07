@@ -1,14 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSession } from "next-auth/react";
 import { AnimatePresence, m } from "@/lib/motion";
 import {
   closestCenter,
   DndContext,
+  DragOverlay,
   type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
   KeyboardSensor,
   PointerSensor,
+  useDroppable,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -22,17 +26,32 @@ import { transportDisplayLabel, type TransportDisplayOption } from "@/lib/transp
 import { getRegionalTransitOptions } from "@/lib/tripTransportRegion";
 import { cn } from "@/lib/utils";
 import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
-import { addPlaceToItinerary } from "@/lib/addPlaceToItinerary";
+import { ensureItineraryDayCount } from "@/lib/ensureItineraryDays";
+import { nextActivityTime } from "@/lib/addPlaceToItinerary";
 import { createTripItemId } from "@/lib/tripItemIds";
 import { findLinkedPinForItem } from "@/lib/mapPinItineraryLink";
+import PlaceConfirmDialog from "@/components/itinerary/PlaceConfirmDialog";
+import {
+  findItineraryItemDayNumber,
+  itineraryDayContainerId,
+  parseItineraryDayContainerId,
+  resolveItineraryDragTarget,
+} from "@/components/itinerary/itineraryDragUtils";
 import ConfirmDialog from "@/components/system/ConfirmDialog";
 import MapPoiAddCard from "@/components/map/MapPoiAddCard";
 import { listTripsForLibrary, setActiveTrip } from "@/services/itineraryClient";
+import {
+  buildItineraryFieldsFromResolvedLocation,
+  finalizeManualPlaceLocation,
+  resolveManualPlaceLocation,
+} from "@/services/resolveManualPlaceLocation";
+import { manualPlaceFailureToast } from "@/lib/places/manualPlaceFailureToast";
 import { syncService } from "@/services/syncService";
 import { useMapStore } from "@/stores/useMapStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
-import type { ApiResponse, GeocodeResponse, LocationReference, MapPin as TripMapPin, TripPlanItem } from "@/types";
+import type { LocationReference, MapPin as TripMapPin, TripPlanDay, TripPlanItem } from "@/types";
+import type { PlaceSuggestion } from "@/types/geocode";
 
 const typeColors: Record<TripPlanItem["type"], string> = {
   attraction: "bg-primary/10 text-primary",
@@ -82,10 +101,56 @@ function buildPinFromItineraryItem(item: TripPlanItem, dayNumber: number): TripM
 
 type TransportSelectOption = TransportDisplayOption;
 
+function MapDayDropZone({
+  dayNumber,
+  children,
+}: {
+  dayNumber: number;
+  children: ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: itineraryDayContainerId(dayNumber) });
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "transition-colors",
+        isOver && "bg-primary/[0.06] ring-1 ring-inset ring-primary/30",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+function MapStopDragPreview({ item }: { item: TripPlanItem }) {
+  return (
+    <div className="w-[min(340px,calc(100vw-2rem))] cursor-grabbing rounded-xl border border-primary/35 bg-surface px-3 py-2.5 shadow-xl ring-2 ring-primary/25">
+      <div className="mb-0.5 flex flex-wrap items-center gap-2">
+        <span className="font-mono text-xs text-primary">{item.time?.slice(0, 5) || "09:00"}</span>
+        <span className={cn("rounded-full px-1.5 py-0.5 text-[10px]", typeColors[item.type])}>
+          {typeLabel(item.type)}
+        </span>
+      </div>
+      <p className="truncate text-sm font-semibold text-foreground">{item.title}</p>
+      {item.location?.name ? (
+        <p className="mt-0.5 truncate text-[11px] text-muted">{item.location.name}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function findItineraryItemById(itineraryDays: TripPlanDay[], itemId: string): TripPlanItem | null {
+  for (const day of itineraryDays) {
+    const item = day.items.find((entry) => entry.id === itemId);
+    if (item) {
+      return item;
+    }
+  }
+  return null;
+}
+
 type SortableStopProps = {
   item: TripPlanItem;
-  index: number;
-  itemsLength: number;
   isSelected: boolean;
   canSelectOnMap: boolean;
   incomingRoute: ReturnType<typeof buildItineraryRouteSegments>[number] | undefined;
@@ -105,8 +170,6 @@ type SortableStopProps = {
 
 function SortableMapStop({
   item,
-  index,
-  itemsLength,
   isSelected,
   canSelectOnMap,
   incomingRoute,
@@ -127,7 +190,6 @@ function SortableMapStop({
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    zIndex: isDragging ? 20 : 1,
     position: "relative" as const,
   };
 
@@ -137,7 +199,7 @@ function SortableMapStop({
       style={style}
       className={cn(
         "touch-none cursor-grab active:cursor-grabbing",
-        isDragging && "opacity-90 shadow-md",
+        isDragging && "opacity-0",
       )}
       {...attributes}
       {...listeners}
@@ -145,7 +207,7 @@ function SortableMapStop({
     >
       {incomingRoute && (
         <div
-          className="ml-5 rounded-xl border border-border-light bg-surface-elevated/60 px-3 py-2"
+          className="rounded-xl border border-border-light bg-surface-elevated/60 px-3 py-2"
           onPointerDown={(event) => event.stopPropagation()}
         >
           <div className="flex items-center">
@@ -189,10 +251,6 @@ function SortableMapStop({
             canSelectOnMap && isSelected ? "bg-primary/10 ring-1 ring-primary/20" : canSelectOnMap && "hover:bg-cream/60",
           )}
         >
-          <div className="flex flex-col items-center gap-1 pt-1">
-            <div className={cn("size-2 rounded-full", index === 0 ? "bg-primary" : "bg-border")} />
-            {index < itemsLength - 1 && <div className="h-8 w-px bg-border-light" />}
-          </div>
           <div className="min-w-0 flex-1">
             <div className="mb-0.5 flex flex-wrap items-center gap-2">
               <label className="sr-only" htmlFor={`time_${item.id}`}>
@@ -323,9 +381,11 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
   const tripDestination = useTripStore((state) => state.destination);
   const currentTripId = useTripStore((state) => state.tripId);
   const updateItineraryItem = useTripStore((state) => state.updateItineraryItem);
+  const addItineraryItem = useTripStore((state) => state.addItineraryItem);
   const updateItineraryItemTransport = useTripStore((state) => state.updateItineraryItemTransport);
   const removeItineraryItem = useTripStore((state) => state.removeItineraryItem);
   const reorderItineraryItem = useTripStore((state) => state.reorderItineraryItem);
+  const moveItineraryItemBetweenDays = useTripStore((state) => state.moveItineraryItemBetweenDays);
   const {
     panelOpen,
     setPanelOpen,
@@ -344,19 +404,45 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
-  const [expandedDay, setExpandedDay] = useState<number>(1);
+  const [expandedDays, setExpandedDays] = useState<Record<number, boolean>>({});
 
   const prevPendingPoiRef = useRef(pendingPoi);
+  const lastExpandedTripIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const tripChanged = lastExpandedTripIdRef.current !== currentTripId;
+    lastExpandedTripIdRef.current = currentTripId;
+    setExpandedDays((prev) => {
+      const next: Record<number, boolean> = {};
+      for (const day of itinerary) {
+        next[day.dayNumber] = tripChanged ? true : (prev[day.dayNumber] ?? true);
+      }
+      return next;
+    });
+  }, [currentTripId, itinerary]);
+
+  useEffect(() => {
+    const expandedDayNumbers = itinerary
+      .filter((day) => expandedDays[day.dayNumber])
+      .map((day) => day.dayNumber);
+    if (expandedDayNumbers.length === 0) {
+      clearVisibleRouteDayNumbers();
+      return;
+    }
+    setVisibleRouteDayNumbers(expandedDayNumbers);
+  }, [clearVisibleRouteDayNumbers, expandedDays, itinerary, setVisibleRouteDayNumbers]);
 
   useEffect(() => {
     if (enablePoiAdd) {
-      setPreferredPoiDay(expandedDay);
+      const preferredDay =
+        itinerary.find((day) => expandedDays[day.dayNumber])?.dayNumber ?? itinerary[0]?.dayNumber ?? 1;
+      setPreferredPoiDay(preferredDay);
     }
-  }, [enablePoiAdd, expandedDay, setPreferredPoiDay]);
+  }, [enablePoiAdd, expandedDays, itinerary, setPreferredPoiDay]);
 
   useEffect(() => {
     if (prevPendingPoiRef.current && !pendingPoi) {
-      setExpandedDay(preferredPoiDay);
+      setExpandedDays((prev) => ({ ...prev, [preferredPoiDay]: true }));
     }
     prevPendingPoiRef.current = pendingPoi;
   }, [pendingPoi, preferredPoiDay]);
@@ -380,6 +466,15 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
     loading: boolean;
     error: string | null;
   } | null>(null);
+  const [placePick, setPlacePick] = useState<{
+    dayNumber: number;
+    itemId: string;
+    preferredName: string;
+    query: string;
+    suggestions: PlaceSuggestion[];
+  } | null>(null);
+  const [placePickPending, setPlacePickPending] = useState(false);
+  const [activeDragItem, setActiveDragItem] = useState<TripPlanItem | null>(null);
 
   const isPanelVisible = embedded || panelOpen;
 
@@ -402,7 +497,7 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
         const snapshot = await setActiveTrip(tripId);
         syncService.applyTripSwitch(snapshot);
         syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
-        setExpandedDay(1);
+        setExpandedDays({ 1: true });
       } catch (error) {
         pushToast({
           variant: "error",
@@ -432,54 +527,76 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
       return;
     }
 
+    const dayNumber = placeSearch.dayNumber;
     setPlaceSearch((current) => (current ? { ...current, loading: true, error: null } : current));
     try {
-      const response = await fetch("/api/map/geocode", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          queries: [query],
-          region: tripDestination,
-        }),
-      });
-      const payload = (await response.json()) as ApiResponse<GeocodeResponse>;
-      if (!payload.success) {
-        throw new Error(payload.error.message);
-      }
-      const result = payload.data.results[0];
-      if (!result) {
-        throw new Error("找不到符合的地點。");
+      const resolved = await resolveManualPlaceLocation(query, tripDestination);
+
+      if (resolved.status === "failed") {
+        const failureToast = manualPlaceFailureToast(resolved.reason, false);
+        pushToast({
+          variant: "warning",
+          title: failureToast.title,
+          description: resolved.message || failureToast.description,
+        });
+        setPlaceSearch((current) => (current ? { ...current, loading: false } : current));
+        return;
       }
 
-      const id = createTripItemId("manual");
-      const location: LocationReference = {
-        name: result.query || query,
-        lat: result.lat,
-        lng: result.lng,
-        description: result.formattedAddress,
-        address: result.formattedAddress,
-        placeId: result.placeId,
-        photoUrl: result.photoUrl,
-        thumbnail: result.thumbnail || result.photoUrl,
-        openingHours: result.openingHours,
-        phoneNumber: result.phoneNumber,
-        website: result.website,
-        googleMapsUrl: result.googleMapsUrl,
-        rating: result.rating,
-        userRatingsTotal: result.userRatingsTotal,
-        resolvedFrom: "google-geocode",
-        rawQuery: query,
-        verified: true,
-      };
-      addPlaceToItinerary({
-        dayNumber: placeSearch.dayNumber,
-        itemId: id,
-        location,
-        title: result.query || query,
-        notes: result.formattedAddress,
-      });
-      setExpandedDay(placeSearch.dayNumber);
-      setPlaceSearch(null);
+      ensureItineraryDayCount(dayNumber);
+      const day = useTripStore.getState().itinerary.find((entry) => entry.dayNumber === dayNumber);
+      const itemId = createTripItemId("manual");
+      const activityTime = nextActivityTime(day?.items ?? []);
+
+      if (resolved.status === "auto") {
+        const fields = buildItineraryFieldsFromResolvedLocation(resolved.location, query);
+        addItineraryItem(dayNumber, {
+          id: itemId,
+          dayNumber,
+          time: activityTime,
+          title: fields.title,
+          type: "activity",
+          notes: undefined,
+          location: fields.location,
+          source: "manual",
+        });
+        setExpandedDays((prev) => ({ ...prev, [dayNumber]: true }));
+        setPlaceSearch(null);
+        setSelectedPinId(`day_${dayNumber}_${itemId}`);
+        pushToast({
+          variant: "success",
+          title: t.itineraryPage.addActivityGeocodedTitle,
+          description: t.itineraryPage.addActivityGeocodedDesc,
+        });
+      } else {
+        addItineraryItem(dayNumber, {
+          id: itemId,
+          dayNumber,
+          time: activityTime,
+          title: query,
+          type: "activity",
+          notes: undefined,
+          location: {
+            name: query,
+            lat: 0,
+            lng: 0,
+            description: query,
+            address: query,
+          },
+          source: "manual",
+        });
+        setExpandedDays((prev) => ({ ...prev, [dayNumber]: true }));
+        setPlaceSearch(null);
+        setPlacePick({
+          dayNumber,
+          itemId,
+          preferredName: query,
+          query: resolved.query,
+          suggestions: resolved.suggestions,
+        });
+      }
+
+      await syncService.flushTripSyncNow({ force: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : "新增活動失敗。";
       setPlaceSearch((current) => (current ? { ...current, loading: false, error: message } : current));
@@ -489,7 +606,52 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
         description: message,
       });
     }
-  }, [itinerary, placeSearch, pushToast, tripDestination]);
+  }, [addItineraryItem, ensureItineraryDayCount, placeSearch, pushToast, setSelectedPinId, tripDestination]);
+
+  const handlePlacePickSelect = useCallback(
+    async (suggestion: PlaceSuggestion) => {
+      if (!placePick) {
+        return;
+      }
+      setPlacePickPending(true);
+      try {
+        const region = useTripStore.getState().destination;
+        const location = await finalizeManualPlaceLocation(
+          suggestion,
+          suggestion.placeName,
+          region,
+        );
+        const fields = buildItineraryFieldsFromResolvedLocation(location, placePick.preferredName);
+        updateItineraryItem(placePick.dayNumber, placePick.itemId, {
+          title: fields.title,
+          location: fields.location,
+        });
+        setSelectedPinId(`day_${placePick.dayNumber}_${placePick.itemId}`);
+        pushToast({
+          variant: "success",
+          title: t.itineraryPage.placeConfirmAppliedTitle,
+          description: t.itineraryPage.placeConfirmAppliedDesc,
+        });
+        setPlacePick(null);
+        await syncService.flushTripSyncNow({ force: true });
+      } finally {
+        setPlacePickPending(false);
+      }
+    },
+    [placePick, pushToast, setSelectedPinId, updateItineraryItem],
+  );
+
+  const handlePlacePickSkip = useCallback(() => {
+    if (placePickPending) {
+      return;
+    }
+    setPlacePick(null);
+    pushToast({
+      variant: "info",
+      title: t.itineraryPage.placeConfirmSkippedTitle,
+      description: t.itineraryPage.placeConfirmSkippedDesc,
+    });
+  }, [placePickPending, pushToast]);
 
   const commitTitleEdit = useCallback(() => {
     if (!editingItem) {
@@ -500,44 +662,88 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
     setEditingItem(null);
   }, [editingItem, updateItineraryItem]);
 
-  const handleDayDragEnd = useCallback(
-    (dayNumber: number) => (event: DragEndEvent) => {
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      const item = findItineraryItemById(itinerary, String(event.active.id));
+      setActiveDragItem(item);
+    },
+    [itinerary],
+  );
+
+  const handleDragOver = useCallback(
+    (event: DragOverEvent) => {
+      if (!event.over) {
+        return;
+      }
+      const target = resolveItineraryDragTarget(itinerary, String(event.over.id));
+      if (!target) {
+        return;
+      }
+      setExpandedDays((prev) => ({ ...prev, [target.dayNumber]: true }));
+    },
+    [itinerary],
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      setActiveDragItem(null);
       const { active, over } = event;
-      if (!over || active.id === over.id) {
+      if (!over) {
         return;
       }
-      const day = useTripStore.getState().itinerary.find((entry) => entry.dayNumber === dayNumber);
-      if (!day) {
+
+      const activeId = String(active.id);
+      const overId = String(over.id);
+      if (activeId === overId) {
         return;
       }
-      const oldIndex = day.items.findIndex((item) => item.id === active.id);
-      const newIndex = day.items.findIndex((item) => item.id === over.id);
-      if (oldIndex < 0 || newIndex < 0) {
+
+      const fromDayNumber = findItineraryItemDayNumber(itinerary, activeId);
+      const target = resolveItineraryDragTarget(itinerary, overId);
+      if (fromDayNumber == null || !target) {
         return;
       }
-      reorderItineraryItem(dayNumber, oldIndex, newIndex);
+
+      const fromDay = itinerary.find((entry) => entry.dayNumber === fromDayNumber);
+      if (!fromDay) {
+        return;
+      }
+
+      const oldIndex = fromDay.items.findIndex((item) => item.id === activeId);
+      if (oldIndex === -1) {
+        return;
+      }
+
+      if (fromDayNumber === target.dayNumber) {
+        let newIndex = target.index;
+        if (parseItineraryDayContainerId(overId) != null) {
+          newIndex = Math.max(0, fromDay.items.length - 1);
+        }
+        if (oldIndex !== newIndex) {
+          reorderItineraryItem(fromDayNumber, oldIndex, newIndex);
+          pushToast({
+            variant: "success",
+            title: "已更新排序",
+            description: "已依新順序調整行程時間。",
+          });
+        }
+        return;
+      }
+
+      moveItineraryItemBetweenDays(fromDayNumber, target.dayNumber, activeId, target.index);
+      setExpandedDays((prev) => ({ ...prev, [target.dayNumber]: true }));
       pushToast({
         variant: "success",
-        title: "已更新排序",
-        description: "已依新順序調整行程時間。",
+        title: "已移動活動",
+        description: `已將活動移至第 ${target.dayNumber} 天。`,
       });
     },
-    [pushToast, reorderItineraryItem],
+    [itinerary, moveItineraryItemBetweenDays, pushToast, reorderItineraryItem],
   );
 
-  const handleDayHeaderClick = useCallback(
-    (dayNumber: number) => {
-      if (expandedDay === dayNumber) {
-        setExpandedDay(-1);
-        clearVisibleRouteDayNumbers();
-        return;
-      }
-
-      setExpandedDay(dayNumber);
-      setVisibleRouteDayNumbers([dayNumber]);
-    },
-    [clearVisibleRouteDayNumbers, expandedDay, setVisibleRouteDayNumbers],
-  );
+  const handleDayHeaderClick = useCallback((dayNumber: number) => {
+    setExpandedDays((prev) => ({ ...prev, [dayNumber]: !prev[dayNumber] }));
+  }, []);
 
   return (
     <>
@@ -778,59 +984,62 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
           </AnimatePresence>
 
           <div className={cn("flex-1 overflow-y-auto", embedded && "min-h-0")}>
-            {itinerary.map((day) => (
-              <div key={day.dayNumber} className="border-b border-border last:border-b-0">
-                <button
-                  type="button"
-                  onClick={() => handleDayHeaderClick(day.dayNumber)}
-                  className="flex w-full cursor-pointer items-center justify-between px-5 py-3 transition-colors hover:bg-cream/50"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
-                      {t.itineraryPanel.dayShort}
-                      {day.dayNumber}
-                    </div>
-                    <div className="text-left">
-                      <p className="text-sm font-medium text-foreground">
-                        {t.itineraryPanel.dayPrefix}
-                        {day.dayNumber}
-                        {t.itineraryPanel.daySuffix}
-                      </p>
-                      {day.theme && <p className="text-[11px] text-muted">{day.theme}</p>}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="shrink-0 whitespace-nowrap rounded-full bg-border-light px-1.5 py-0.5 text-[10px] text-muted">
-                      {day.items.length} 個地點
-                    </span>
-                    {expandedDay === day.dayNumber ? (
-                      <ChevronUp className="size-4 text-muted" />
-                    ) : (
-                      <ChevronDown className="size-4 text-muted" />
-                    )}
-                  </div>
-                </button>
-
-                <AnimatePresence>
-                  {expandedDay === day.dayNumber && (
-                    <m.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="overflow-hidden"
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragEnd={handleDragEnd}
+            >
+              {itinerary.map((day) => (
+                <MapDayDropZone key={day.dayNumber} dayNumber={day.dayNumber}>
+                  <div className="border-b border-border last:border-b-0">
+                    <button
+                      type="button"
+                      onClick={() => handleDayHeaderClick(day.dayNumber)}
+                      className="flex w-full cursor-pointer items-center justify-between px-5 py-3 transition-colors hover:bg-cream/50"
                     >
-                      <div className="flex flex-col gap-1 px-5 pb-3">
-                        <DndContext
-                          sensors={sensors}
-                          collisionDetection={closestCenter}
-                          onDragEnd={handleDayDragEnd(day.dayNumber)}
+                      <div className="flex items-center gap-3">
+                        <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
+                          {t.itineraryPanel.dayShort}
+                          {day.dayNumber}
+                        </div>
+                        <div className="text-left">
+                          <p className="text-sm font-medium text-foreground">
+                            {t.itineraryPanel.dayPrefix}
+                            {day.dayNumber}
+                            {t.itineraryPanel.daySuffix}
+                          </p>
+                          {day.theme && <p className="text-[11px] text-muted">{day.theme}</p>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="shrink-0 whitespace-nowrap rounded-full bg-border-light px-1.5 py-0.5 text-[10px] text-muted">
+                          {day.items.length} 個地點
+                        </span>
+                        {expandedDays[day.dayNumber] ? (
+                          <ChevronUp className="size-4 text-muted" />
+                        ) : (
+                          <ChevronDown className="size-4 text-muted" />
+                        )}
+                      </div>
+                    </button>
+
+                    <AnimatePresence>
+                      {expandedDays[day.dayNumber] && (
+                        <m.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className={cn("overflow-hidden", activeDragItem && "overflow-visible")}
                         >
-                          <SortableContext
-                            items={day.items.map((i) => i.id)}
-                            strategy={verticalListSortingStrategy}
-                          >
-                            {day.items.map((item, index) => {
+                          <div className="flex flex-col gap-1 px-5 pb-3">
+                            <SortableContext
+                              items={day.items.map((i) => i.id)}
+                              strategy={verticalListSortingStrategy}
+                            >
+                              {day.items.map((item) => {
                               const linkedPin = findLinkedPinForItem(item, pins);
                               const isSelected = linkedPin?.id === selectedPinId;
                               const canSelectOnMap = Boolean(linkedPin || hasUsableMapCoordinate(item.location));
@@ -852,8 +1061,6 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
                                 <SortableMapStop
                                   key={item.id}
                                   item={item}
-                                  index={index}
-                                  itemsLength={day.items.length}
                                   isSelected={isSelected}
                                   canSelectOnMap={canSelectOnMap}
                                   incomingRoute={incomingRoute}
@@ -915,29 +1122,43 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
                                 />
                               );
                             })}
-                          </SortableContext>
-                        </DndContext>
+                            </SortableContext>
 
-                        <button
-                          type="button"
-                          onClick={() => addQuickStop(day.dayNumber)}
-                          data-testid="itinerary-panel-add-activity"
-                          className="mt-1 flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs text-muted transition-all hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
-                        >
-                          <Plus className="size-3" />
-                          {t.itineraryPanel.addLocalActivity}
-                        </button>
-                      </div>
-                    </m.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            ))}
+                            <button
+                              type="button"
+                              onClick={() => addQuickStop(day.dayNumber)}
+                              data-testid="itinerary-panel-add-activity"
+                              className="mt-1 flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs text-muted transition-all hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+                            >
+                              <Plus className="size-3" />
+                              {t.itineraryPanel.addLocalActivity}
+                            </button>
+                          </div>
+                        </m.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </MapDayDropZone>
+              ))}
+
+              <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)" }}>
+                {activeDragItem ? <MapStopDragPreview item={activeDragItem} /> : null}
+              </DragOverlay>
+            </DndContext>
           </div>
 
         </m.div>
       )}
     </AnimatePresence>
+
+      <PlaceConfirmDialog
+        open={Boolean(placePick)}
+        query={placePick?.query ?? ""}
+        suggestions={placePick?.suggestions ?? []}
+        pending={placePickPending}
+        onSelect={(suggestion) => void handlePlacePickSelect(suggestion)}
+        onSkip={handlePlacePickSkip}
+      />
 
       <ConfirmDialog
         open={Boolean(deleteItemTarget)}

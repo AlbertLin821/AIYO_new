@@ -19,12 +19,17 @@ export function isPlacePhotoProxyUrl(url?: string | null): boolean {
   return Boolean(url?.trim().startsWith(PLACE_PHOTO_PROXY_PATH));
 }
 
-export function hasUsablePlacePhotoUrl(url?: string | null): boolean {
-  const resolved = resolvePlacePhotoUrl(url);
+export function hasUsablePlacePhotoUrl(url?: string | null, placeId?: string | null): boolean {
+  const resolved = resolvePlacePhotoUrl(url, placeId);
   if (!resolved) {
     return false;
   }
-  return !isPlacePhotoProxyUrl(resolved);
+  if (!isPlacePhotoProxyUrl(resolved)) {
+    return true;
+  }
+  const query = resolved.split("?", 2)[1] ?? "";
+  const params = new URLSearchParams(query);
+  return Boolean(params.get("placeId")?.trim());
 }
 
 function withPlaceId(url: string, placeId?: string | null): string {

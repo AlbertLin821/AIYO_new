@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -7,7 +7,7 @@ async function main() {
   // in the currently configured DATABASE_URL.
   console.log("[db:clear-users] DATABASE_URL =", process.env.DATABASE_URL ? "(set)" : "(missing)");
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const sessions = await tx.session.deleteMany();
     const accounts = await tx.account.deleteMany();
     const verificationTokens = await tx.verificationToken.deleteMany();

@@ -68,6 +68,7 @@ export async function applyAssistantActions(
 ): Promise<{ appliedCount: number; skippedCount: number }> {
   let appliedCount = 0;
   let skippedCount = 0;
+  let tripMutated = false;
   const geocodeTargets: PendingGeocodeTarget[] = [];
   const geocodeSeen = new Set<string>();
   const tripState = useTripStore.getState();
@@ -100,6 +101,7 @@ export async function applyAssistantActions(
       if (typeof action.payload.days === "number") {
         tripStore.resizeItineraryToDayCount(action.payload.days);
       }
+      tripMutated = true;
       appliedCount += 1;
       continue;
     }
@@ -123,6 +125,7 @@ export async function applyAssistantActions(
     if (action.type === "itinerary.add_item") {
       const newItem = itemFromInput(action.payload.item, dayNumber);
       useTripStore.getState().addItineraryItem(dayNumber, newItem);
+      tripMutated = true;
       maybeEnqueueItemGeocodeTarget(geocodeTargets, geocodeSeen, {
         ...geocodeContext,
         dayId: action.payload.dayId,
@@ -139,6 +142,7 @@ export async function applyAssistantActions(
       useMapStore.getState().setPins(
         useMapStore.getState().pins.filter((pin) => pin.linkedTripItemId !== action.payload.itemId),
       );
+      tripMutated = true;
       appliedCount += 1;
       continue;
     }
@@ -150,6 +154,7 @@ export async function applyAssistantActions(
           candidate.dayNumber === dayNumber ? { ...candidate, items: reordered } : candidate,
         ),
       );
+      tripMutated = true;
       appliedCount += 1;
       continue;
     }
@@ -165,6 +170,7 @@ export async function applyAssistantActions(
             : candidate,
         ),
       );
+      tripMutated = true;
       appliedCount += 1;
       continue;
     }
@@ -184,6 +190,7 @@ export async function applyAssistantActions(
         }
       }
       useTripStore.getState().updateItineraryItem(dayNumber, action.payload.itemId, patch);
+      tripMutated = true;
       maybeEnqueueItemGeocodeTarget(geocodeTargets, geocodeSeen, {
         ...geocodeContext,
         dayId: action.payload.dayId,
@@ -196,17 +203,17 @@ export async function applyAssistantActions(
   }
 
   geocodeTargets.push(...collectMapFocusGeocodeTargets(actions, geocodeContext));
+  const geocodeEnabled = options.geocode ?? typeof window !== "undefined";
 
-  if (appliedCount > 0) {
+  if (geocodeEnabled) {
+    await processPendingGeocodeTargets(geocodeTargets, { persist: false });
+  }
+
+  if (tripMutated) {
     reconcileMapWithTrip();
     if (options.persist !== false) {
       await syncService.flushTripSyncNow({ force: true });
     }
-  }
-
-  const geocodeEnabled = options.geocode ?? typeof window !== "undefined";
-  if (geocodeEnabled) {
-    await processPendingGeocodeTargets(geocodeTargets, { persist: options.persist !== false });
   }
 
   return { appliedCount, skippedCount };

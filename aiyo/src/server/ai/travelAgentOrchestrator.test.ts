@@ -56,32 +56,35 @@ test("你好 stays casual without search or itinerary generation", () => {
   assert.equal(decision.shouldGenerateItinerary, false);
 });
 
-test("Tokyo three-day request asks for preference detail before generating", () => {
+test("Tokyo three-day request asks for dates traveler count and dietary preference before generating", () => {
   const decision = decideTravelAgentMode({ message: "我想去東京玩三天" });
 
   assert.equal(decision.mode, "collect_requirements");
   assert.equal(decision.shouldSearch, false);
   assert.equal(decision.shouldGenerateItinerary, false);
-  assert.deepEqual(decision.missingRequirements, []);
-  assert.match(decision.userFacingGuidance || "", /預算/);
+  assert.ok(decision.missingRequirements.includes("出發日期"));
+  assert.ok(decision.missingRequirements.includes("旅客人數"));
+  assert.ok(decision.missingRequirements.includes("飲食偏好"));
 });
 
-test("Osaka planning request with basics still asks preferences first", () => {
+test("Osaka planning request with basics asks only for required missing fields", () => {
   const decision = decideTravelAgentMode({
     message: "我想要去大阪五天四夜總共4個人去玩幫我規劃一下行程",
   });
 
   assert.equal(decision.mode, "collect_requirements");
   assert.equal(decision.shouldGenerateItinerary, false);
-  assert.match(decision.userFacingGuidance || "", /交通偏好/);
+  assert.deepEqual(decision.missingRequirements, ["出發日期", "飲食偏好"]);
+  assert.match(decision.userFacingGuidance || "", /出發日期/);
 });
 
-test("explicit complete planning request can generate once basics are known", () => {
+test("explicit complete planning request still asks for missing required basics", () => {
   const decision = decideTravelAgentMode({ message: "幫我完整規劃東京三天行程" });
 
-  assert.equal(decision.mode, "generate_itinerary");
+  assert.equal(decision.mode, "collect_requirements");
   assert.equal(decision.shouldSearch, false);
-  assert.equal(decision.shouldGenerateItinerary, true);
+  assert.equal(decision.shouldGenerateItinerary, false);
+  assert.ok(decision.missingRequirements.includes("出發日期"));
 });
 
 test("known mid-budget food preferences trigger preference confirmation", () => {
@@ -184,6 +187,91 @@ test("positive acknowledgement can continue into itinerary generation", () => {
 
   assert.equal(decision.mode, "generate_itinerary");
   assert.equal(decision.shouldGenerateItinerary, true);
+});
+
+test("complete planning request with dates travelers and dietary preferences can generate directly", () => {
+  const decision = decideTravelAgentMode({
+    message: "請直接規劃熊本五天四夜行程",
+    tripProfile: {
+      destination: "熊本",
+      duration_days: 5,
+      duration_nights: 4,
+      departure_location: null,
+      travel_dates: { start: "2026-10-01", end: "2026-10-05" },
+      companions: "family_group",
+      traveler_count: 5,
+      budget: null,
+      special_population: {
+        has_elderly: false,
+        has_children: false,
+        mobility_issue: false,
+      },
+      preferences: [],
+      transportation: null,
+      accommodation: null,
+      visited_before: [],
+      avoid_places: [],
+      dietary_restrictions: ["無特殊飲食限制"],
+      disliked_activities: [],
+      pace: null,
+      plan_integration: "direct_merge",
+    },
+  });
+
+  assert.equal(decision.mode, "generate_itinerary");
+  assert.equal(decision.shouldGenerateItinerary, true);
+});
+
+test("forced revision with existing itinerary skips preference confirmation and asks only missing revision fields", () => {
+  const decision = decideTravelAgentMode({
+    message: "我不滿意，幫我重新安排一次",
+    forceStructuredRevision: true,
+    context: {
+      destination: "熊本",
+      days: 7,
+      itinerary: [
+        {
+          dayNumber: 1,
+          items: [{ id: "kumamoto-castle", time: "10:00", title: "熊本城", type: "attraction" as const }],
+        },
+      ],
+    },
+    tripProfile: {
+      destination: "熊本",
+      duration_days: 7,
+      duration_nights: 6,
+      departure_location: null,
+      travel_dates: { start: "2026-10-01", end: "2026-10-07" },
+      companions: "family_group",
+      traveler_count: 5,
+      budget: null,
+      special_population: {
+        has_elderly: false,
+        has_children: false,
+        mobility_issue: false,
+      },
+      preferences: ["food"],
+      transportation: "self_drive",
+      accommodation: null,
+      visited_before: [],
+      avoid_places: [],
+      dietary_restrictions: [],
+      disliked_activities: [],
+      pace: "moderate",
+      plan_integration: "direct_merge",
+    },
+    aiContext: makeAiContext({
+      transportPreference: "Driving",
+      travelStyle: ["shopping"],
+      budgetLevel: "medium",
+    }),
+  });
+
+  assert.equal(decision.mode, "collect_requirements");
+  assert.equal(decision.missingRequirements.includes("飲食偏好"), true);
+  assert.equal(decision.missingRequirements.includes("旅客人數"), false);
+  assert.equal(decision.mode === "confirm_preferences", false);
+  assert.match(decision.userFacingGuidance || "", /重新安排/);
 });
 
 test("adding one more day modifies the current itinerary instead of confirming preferences", () => {

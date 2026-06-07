@@ -106,6 +106,42 @@ export function locationFromPlaceDetailsRow(
   };
 }
 
+export async function fetchPlaceDetailsPatch(
+  input: { placeId: string; lat: number; lng: number },
+  region?: string,
+): Promise<Partial<LocationReference>> {
+  const response = await fetch("/api/map/place-details", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      region: region?.trim() || undefined,
+      places: [
+        {
+          id: input.placeId,
+          placeId: input.placeId,
+          lat: input.lat,
+          lng: input.lng,
+        },
+      ],
+    }),
+  });
+  const payload = (await response.json()) as ApiResponse<{ results: PlaceDetailsRow[] }>;
+  if (!payload.success) {
+    throw new Error(payload.error.message);
+  }
+  const row = payload.data.results[0];
+  const details = row?.details ?? {};
+  if (!Object.values(details).some((value) => value !== undefined && value !== "")) {
+    return {};
+  }
+  return {
+    ...details,
+    placeId: input.placeId,
+    verified: details.verified ?? true,
+    resolvedFrom: "google-place-details",
+  };
+}
+
 export function isCoordinateOnlyName(name: string, lat: number, lng: number): boolean {
   return name === displayNameFromCoordinates(lat, lng);
 }

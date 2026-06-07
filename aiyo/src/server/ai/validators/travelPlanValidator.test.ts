@@ -50,6 +50,29 @@ test("validateTripPlanQuality reports chronological and title quality issues", (
   assert.ok(issues.some((issue) => issue.message.includes("coordinates")));
 });
 
+test("validateTripPlanQuality reports duplicate concrete places across days", () => {
+  const plan: TripPlanResult = {
+    summary: "熊本兩日行程",
+    days: [
+      {
+        dayNumber: 1,
+        items: [{ id: "1", time: "10:00", title: "熊本城", type: "attraction", transport: "步行 10 分鐘" }],
+      },
+      {
+        dayNumber: 2,
+        items: [{ id: "2", time: "10:30", title: "熊本城", type: "attraction", transport: "電車 20 分鐘" }],
+      },
+    ],
+  };
+
+  const issues = validateTripPlanQuality(plan, {
+    ...makeRequest(),
+    days: 2,
+  });
+
+  assert.ok(issues.some((issue) => issue.message.includes("should not repeat across days")));
+});
+
 test("validateTravelPlanResponseQuality reports citation ids that are not registered", () => {
   const issues = validateTravelPlanResponseQuality({
     response_type: "travel_plan",

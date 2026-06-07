@@ -45,6 +45,7 @@ import {
   getDayItemCountBounds,
   suggestedMealTime,
 } from "@/server/ai/planning/itineraryPlanningStandard";
+import { resolveTripItemDisplayNote } from "@/lib/tripItemNotes";
 import { validateItineraryQuality } from "@/server/ai/planning/itineraryQualityValidator";
 import { buildTripPlanResearchPlan } from "@/server/ai/planning/tripPlanResearchPolicy";
 import {
@@ -356,6 +357,9 @@ function normalizeAssistantAction(value: unknown): AssistantAction | null {
   }
   return value as AssistantAction;
 }
+
+void normalizeProposedChange;
+void normalizeAssistantAction;
 
 function parseStructuredChatOutput(raw: string): ChatPlanningOutput {
   try {
@@ -812,6 +816,23 @@ function uniqueStrings(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
+const DIETARY_NO_RESTRICTION_LABEL = "無特殊飲食限制";
+
+function hasAnsweredDietaryRestrictions(values?: string[] | null): boolean {
+  return Boolean(values?.some((value) => value.trim()));
+}
+
+function parseDietaryRestrictionsInput(value: string): string[] {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return [];
+  }
+  if (/^(?:無|沒有|都可以|不限|無特殊|沒有飲食限制|無特殊飲食限制|no|none|no restrictions?|no allergies?)$/iu.test(trimmed)) {
+    return [DIETARY_NO_RESTRICTION_LABEL];
+  }
+  return uniqueStrings(trimmed.split(/[、，,；;\n]/u));
+}
+
 function classifyCompanionsFromTravelerCount(travelerCount: number): {
   companions: TripProfile["companions"];
   travelerCount: number;
@@ -1126,6 +1147,25 @@ function updateTripProfileFromText(profile: TripProfile, message: string): TripP
     next.pace = "intensive";
   }
 
+  if (/^(?:無|沒有|都可以|不限).{0,8}(?:飲食限制|忌口|過敏)/u.test(message) || /沒有忌口/u.test(message)) {
+    next.dietary_restrictions = [DIETARY_NO_RESTRICTION_LABEL];
+  } else {
+    const dietaryHints = uniqueStrings([
+      /素食|吃素|全素/u.test(message) ? "素食" : "",
+      /蛋奶素/u.test(message) ? "蛋奶素" : "",
+      /不吃牛/u.test(message) ? "不吃牛" : "",
+      /不吃豬/u.test(message) ? "不吃豬" : "",
+      /不吃海鮮/u.test(message) ? "不吃海鮮" : "",
+      /海鮮過敏/u.test(message) ? "海鮮過敏" : "",
+      /花生過敏/u.test(message) ? "花生過敏" : "",
+      /乳糖不耐/u.test(message) ? "乳糖不耐" : "",
+      /麩質過敏/u.test(message) ? "麩質過敏" : "",
+    ]);
+    if (dietaryHints.length) {
+      next.dietary_restrictions = uniqueStrings([...next.dietary_restrictions, ...dietaryHints]);
+    }
+  }
+
   const preferences = [
     /美食|小吃|餐廳/u.test(message) ? "food" : "",
     /自然|風景|阿蘇|山|海|溫泉/u.test(message) ? "nature" : "",
@@ -1193,6 +1233,9 @@ export function applyQuestionAnswers(profile: TripProfile, answers?: ChatQuestio
       }
       case "budget":
         next.budget = first || null;
+        break;
+      case "dietary_restrictions":
+        next.dietary_restrictions = parseDietaryRestrictionsInput(first);
         break;
       case "transportation":
         next.transportation = first || null;
@@ -1323,6 +1366,10 @@ function buildTransportOptions(destination: string): Array<{
   ];
 }
 
+void estimateBudgetOptions;
+void buildPreferenceOptions;
+void buildTransportOptions;
+
 function isPlausibleDestinationLabel(label: string): boolean {
   const trimmed = label.trim();
   if (!trimmed || trimmed.length < 2) {
@@ -1451,6 +1498,16 @@ export function buildQuestionCard(profile: TripProfile, context?: ChatContext): 
         { label: "5 人以上", value: "5" },
       ],
       helperText: "我會依人數調整交通、用餐和節奏建議。",
+    });
+  }
+
+  if (!hasAnsweredDietaryRestrictions(merged.dietary_restrictions)) {
+    questions.push({
+      slot: "dietary_restrictions",
+      question: "有沒有需要先避開的飲食限制或過敏？",
+      type: "text",
+      placeholder: "例如：素食、不吃牛、海鮮過敏；若沒有請填無",
+      helperText: "這會直接影響餐廳與用餐安排。",
     });
   }
 
@@ -2163,15 +2220,6 @@ function buildRemoveItineraryItemPatchResponse(input: {
     };
   }
 
-  const change = {
-    type: "remove_itinerary_item" as const,
-    day: target.dayNumber,
-    itemId: target.item.id,
-    targetTitle: target.item.title,
-    reason: `依照使用者要求，自第 ${parsed.day} 天移除此行程項目`,
-    source: "ai-chat" as const,
-  };
-
   return {
     reply: {
       id: `assistant_${Date.now()}`,
@@ -2329,6 +2377,8 @@ function summarizeProposedChangesForReply(changes: AiProposedChange[]): string {
   }
   return "已更新行程。";
 }
+
+void summarizeProposedChangesForReply;
 
 function buildItineraryPatchResponsePayload(input: {
   content: string;
@@ -2674,23 +2724,6 @@ function buildDeterministicItineraryPatchResponse(input: {
       title: originalTitle,
     });
     if (!target) {
-      // #region agent log
-      if (process.env.AIYO_DEBUG_AGENT_LOG === "1") {
-        fetch("http://127.0.0.1:7685/ingest/65560261-863b-4a32-a6ca-5302ff0f0ae4", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "3cb8fb" },
-          body: JSON.stringify({
-            sessionId: "3cb8fb",
-            runId: "pre-fix",
-            hypothesisId: "H1",
-            location: "travelPlannerService.ts:buildDeterministicItineraryPatchResponse",
-            message: "replace match missed itinerary item",
-            data: { originalTitle, nextTitle, day, messagePreview: message.slice(0, 120) },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-      }
-      // #endregion
       return buildItineraryPatchResponsePayload({
         content: day
           ? `我目前無法唯一確認第 ${day} 天要替換的「${originalTitle}」。請再告訴我更完整的景點名稱。`
@@ -3082,6 +3115,7 @@ function toUserFacingPlanWarnings(warnings?: string[]): string[] {
 
 function profileToTripPlanRequest(profile: TripProfile, context?: ChatContext): TripPlanRequest {
   const pace = profile.pace === "relaxed" || profile.pace === "intensive" ? profile.pace : "moderate";
+  const dietaryRestrictions = profile.dietary_restrictions.filter(Boolean);
   return {
     destination: profile.destination || "未指定目的地",
     days: Math.max(1, profile.duration_days || 3),
@@ -3101,7 +3135,7 @@ function profileToTripPlanRequest(profile: TripProfile, context?: ChatContext): 
         profile.special_population.has_elderly ? "有長輩同行" : "",
         profile.special_population.has_children ? "有小孩同行" : "",
         profile.special_population.mobility_issue ? "有行動不便需求" : "",
-        profile.dietary_restrictions.length ? `飲食限制：${profile.dietary_restrictions.join("、")}` : "",
+        dietaryRestrictions.length ? `飲食限制：${dietaryRestrictions.join("、")}` : "",
       ].filter(Boolean).join("；"),
       avoid: profile.avoid_places,
       mustVisit: profile.visited_before.length ? undefined : [],
@@ -3161,13 +3195,17 @@ export function convertTripPlanToTravelPlanWithSources(
           .map((text) => ({ text })),
         spots: spotItems.map((item) => ({
           name: item.title,
-          feature: item.notes || "依照目前旅遊需求安排的停靠點",
+          feature: resolveTripItemDisplayNote(item.notes, item.title) || "",
         })),
         food_recommendations: foodItems.map((item) => ({
           name: item.title,
-          description: item.notes || "依照目前旅遊需求安排的用餐建議",
+          description: resolveTripItemDisplayNote(item.notes, item.title) || "",
         })),
-        tips: uniqueStrings(day.items.map((item) => item.notes || "").filter(Boolean))
+        tips: uniqueStrings(
+          day.items
+            .map((item) => resolveTripItemDisplayNote(item.notes, item.title))
+            .filter((text): text is string => Boolean(text)),
+        )
           .slice(0, 3)
           .map((text) => ({ text })),
       };
@@ -3483,7 +3521,7 @@ async function buildExistingItineraryPatchResponse(input: {
 
   let llmReplyText = "";
   let resolvedActions: AssistantAction[] = [];
-  let resolutionIssues: string[] = [];
+  const resolutionIssues: string[] = [];
   const shouldUseLlmPatchIntent = process.env.AIYO_SKIP_LLM_PATCH !== "1";
 
   if (shouldUseLlmPatchIntent) {
@@ -3773,13 +3811,11 @@ export function buildFallbackTripPlan(request: TripPlanRequest, placeHits: Place
       title,
       type: "restaurant",
       transport: transportLabel,
-      notes: chinese
-        ? synthetic
+      notes: synthetic
+        ? chinese
           ? `於 ${areaHint} 一帶安排${slot === "lunch" ? "午餐" : "晚餐"}。`
-          : `安排在 ${title} 用餐。`
-        : synthetic
-          ? `${slot === "lunch" ? "Lunch" : "Dinner"} near ${areaHint}.`
-          : `Dine at ${title}.`,
+          : `${slot === "lunch" ? "Lunch" : "Dinner"} near ${areaHint}.`
+        : undefined,
       source: "ai",
       location: toLocation(restaurant, `${destLabel} ${slot}`),
     };
@@ -3805,7 +3841,7 @@ export function buildFallbackTripPlan(request: TripPlanRequest, placeHits: Place
         title: place.name,
         type,
         transport: itemCursor === 1 ? transportLabel : transportLabel,
-        notes: chinese ? `安排停留 ${place.name}。` : `Visit ${place.name}.`,
+        notes: undefined,
         source: "ai",
         location: toLocation(place, `${destLabel} 建議停留點`),
       });
@@ -3974,7 +4010,7 @@ export async function generateTripPlan(
     {
       role: "system" as const,
       content:
-        "You generate structured travel itineraries. Output valid JSON only with realistic daily flows. Each item title must be one searchable place or venue name only.",
+        "You generate structured travel itineraries. Output valid JSON only with realistic daily flows. Each item title must be one searchable place or venue name only. Do not repeat the same concrete place across days unless the user explicitly requested a revisit.",
     },
     {
       role: "user" as const,
@@ -4191,6 +4227,7 @@ function contextWithoutItineraryForGeneralReply(
   context: ChatContext | undefined,
   _decision: TravelAgentDecision,
 ): ChatContext | undefined {
+  void _decision;
   return context;
 }
 
@@ -4234,31 +4271,8 @@ export async function chatWithTravelAssistant(input: {
     tripProfile: resolvedTripProfile,
     aiContext: input.aiContext,
     memoryContext: input.memoryContext,
+    forceStructuredRevision: input.forceStructuredRevision,
   });
-  // #region agent log
-  if (process.env.AIYO_DEBUG_AGENT_LOG === "1") {
-    fetch("http://127.0.0.1:7685/ingest/65560261-863b-4a32-a6ca-5302ff0f0ae4", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "3cb8fb" },
-      body: JSON.stringify({
-        sessionId: "3cb8fb",
-        runId: "pre-fix",
-        hypothesisId: "H1-H3",
-        location: "travelPlannerService.ts:chatWithTravelAssistant",
-        message: "travel agent decision",
-        data: {
-          messagePreview: input.message.slice(0, 120),
-          mode: travelAgentDecision.mode,
-          debugReason: travelAgentDecision.debugReason,
-          hasItinerary: Boolean(context?.itinerary?.length),
-          isPreferenceOverride: isPreferenceOverrideMessage(input.message),
-          patchRequest: isExistingItineraryPatchRequest({ message: input.message, context }),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  }
-  // #endregion
   const generalReplyContext = contextWithoutItineraryForGeneralReply(context, travelAgentDecision);
   const itineraryInquiryResponse = buildExistingItineraryInquiryResponse({
     message: input.message,

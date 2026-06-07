@@ -18,6 +18,7 @@ export const useUserStore = create<UserState>((set) => ({
   preferredTransport: "",
   travelPace: "",
   interests: [],
+  interestIcons: {},
   isFirstVisit: true,
   updateProfile: (updates) =>
     withSyncMutationSource("local-user-edit", () => {

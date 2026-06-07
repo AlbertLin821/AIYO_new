@@ -14,7 +14,7 @@ async function main() {
       locs: result.extractedLocations?.length ?? 0,
       foods: result.extractedFoods?.length ?? 0,
       transcript: result.transcriptSource,
-      failedChunks: result.debug?.failedChunks,
+      failedChunks: result.debug?.failedChunkCount ?? 0,
     }),
   );
 }

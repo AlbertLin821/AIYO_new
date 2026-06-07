@@ -170,6 +170,7 @@ export default function Sidebar() {
           <div className={cn("mt-3 flex gap-2", collapsed ? "flex-col" : "")}>
             {status === "authenticated" ? (
               <button
+                data-testid="settings-open-button"
                 onClick={() => setSettingsModalOpen(true)}
                 className={cn(
                   "flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-colors",

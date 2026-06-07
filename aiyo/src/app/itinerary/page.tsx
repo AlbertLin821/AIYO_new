@@ -4,7 +4,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import type { DragEndEvent } from "@dnd-kit/core";
 import { isFolderNameDuplicate } from "@/lib/itinerary-folder-names";
 import { groupItinerariesForLanding } from "@/lib/itinerary-grouping";
 import {
@@ -19,7 +18,7 @@ import {
 } from "@/lib/tripMetaEdit";
 import { zhTW as t } from "@/locales/zh-TW";
 import { AnimatePresence, m } from "@/lib/motion";
-import { ArrowLeft, ArrowUpDown, CalendarDays, LinkIcon, Plus, Search } from "lucide-react";
+import { ArrowLeft, CalendarDays, LinkIcon, Plus, Search } from "lucide-react";
 import DeleteTripDialog from "@/components/itinerary/DeleteTripDialog";
 import ItineraryEditorSection from "@/components/itinerary/ItineraryEditorSection";
 import ItineraryLibraryPanel, { type TripLibrarySort } from "@/components/itinerary/ItineraryLibraryPanel";
@@ -31,6 +30,7 @@ import RenameTripDialog from "@/components/itinerary/RenameTripDialog";
 import ItineraryLandingFolderView from "@/components/itinerary/ItineraryLandingFolderView";
 import type { AddActivityDraft } from "@/components/itinerary/AddActivityForm";
 import ConfirmDialog from "@/components/system/ConfirmDialog";
+import PlaceConfirmDialog from "@/components/itinerary/PlaceConfirmDialog";
 import PromptDialog from "@/components/system/PromptDialog";
 import {
   addTripCollaborator,
@@ -58,11 +58,23 @@ import {
   unpublishTrip,
 } from "@/services/publicItineraryClient";
 import { syncService } from "@/services/syncService";
+import { geocodeItineraryItemsMissingLocation } from "@/services/geocodeItineraryItems";
+import {
+  buildItineraryFieldsFromResolvedLocation,
+  buildManualPlacePlaceholderLocation,
+  finalizeManualPlaceLocation,
+  resolveManualPlaceGeocodeQuery,
+  resolveManualPlaceLocation,
+} from "@/services/resolveManualPlaceLocation";
+import { useMapStore } from "@/stores/useMapStore";
+import { manualPlaceFailureToast } from "@/lib/places/manualPlaceFailureToast";
+import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
 import { useCollabStore } from "@/stores/useCollabStore";
 import { withSyncMutationSource } from "@/stores/syncMutationSource";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
 import type { BootstrapPayload, TripPlanItem, TripPublicationStatus } from "@/types";
+import type { PlaceSuggestion } from "@/types/geocode";
 
 const MAX_COVER_DATA_URL_CHARS = 850_000;
 
@@ -126,12 +138,22 @@ export default function ItineraryPage() {
     updateItineraryItem,
     removeItineraryItem,
     reorderItineraryItem,
+    moveItineraryItemBetweenDays,
   } = useTripStore();
   const { inviteCode, shareLink, roomId, presence } = useCollabStore();
   const pushToast = useToastStore((state) => state.pushToast);
 
   const [addingToDay, setAddingToDay] = useState<number | null>(null);
   const [addDraft, setAddDraft] = useState<AddActivityDraft>(EMPTY_ADD_DRAFT);
+  const [placePick, setPlacePick] = useState<{
+    dayNumber: number;
+    itemId: string;
+    preferredName: string;
+    query: string;
+    suggestions: PlaceSuggestion[];
+  } | null>(null);
+  const [placePickPending, setPlacePickPending] = useState(false);
+  const [addActivitySaving, setAddActivitySaving] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
   const [publicationStatus, setPublicationStatus] = useState<TripPublicationStatus>({
@@ -444,38 +466,197 @@ export default function ItineraryPage() {
     }
   }, [joinCode, loadTripLibrary, pushToast, refreshCollaboratorsForTrip, requireAuthenticated]);
 
+  const applyManualLocationResolution = useCallback(
+    async (dayNumber: number, itemId: string, locationQuery: string) => {
+      const trimmed = locationQuery.trim();
+      if (!trimmed) {
+        return;
+      }
+
+      const region = useTripStore.getState().destination;
+      const resolved = await resolveManualPlaceLocation(trimmed, region);
+      if (resolved.status === "auto") {
+        const fields = buildItineraryFieldsFromResolvedLocation(resolved.location, trimmed);
+        updateItineraryItem(dayNumber, itemId, {
+          title: fields.title,
+          location: fields.location,
+        });
+        pushToast({
+          variant: "success",
+          title: t.itineraryPage.addActivityGeocodedTitle,
+          description: t.itineraryPage.addActivityGeocodedDesc,
+        });
+        return;
+      }
+
+      if (resolved.status === "choose") {
+        setPlacePick({
+          dayNumber,
+          itemId,
+          preferredName: trimmed,
+          query: resolved.query,
+          suggestions: resolved.suggestions,
+        });
+        return;
+      }
+
+      const failureToast = manualPlaceFailureToast(resolved.reason, true);
+      pushToast({
+        variant: "warning",
+        title: failureToast.title,
+        description: resolved.message || failureToast.description,
+      });
+    },
+    [pushToast, updateItineraryItem],
+  );
+
+  const handlePlacePickSelect = useCallback(
+    async (suggestion: PlaceSuggestion) => {
+      if (!placePick) {
+        return;
+      }
+      setPlacePickPending(true);
+      try {
+        const region = useTripStore.getState().destination;
+        const location = await finalizeManualPlaceLocation(
+          suggestion,
+          suggestion.placeName,
+          region,
+        );
+        const existingItem = useTripStore
+          .getState()
+          .itinerary.find((day) => day.dayNumber === placePick.dayNumber)
+          ?.items.find((entry) => entry.id === placePick.itemId);
+        const fields = buildItineraryFieldsFromResolvedLocation(location, placePick.preferredName);
+        updateItineraryItem(placePick.dayNumber, placePick.itemId, {
+          title: existingItem?.title.trim() || fields.title,
+          location: fields.location,
+        });
+        useMapStore.getState().setSelectedPinId(`day_${placePick.dayNumber}_${placePick.itemId}`);
+        pushToast({
+          variant: "success",
+          title: t.itineraryPage.placeConfirmAppliedTitle,
+          description: t.itineraryPage.placeConfirmAppliedDesc,
+        });
+        setPlacePick(null);
+        await syncService.flushTripSyncNow({ force: true });
+      } finally {
+        setPlacePickPending(false);
+      }
+    },
+    [placePick, pushToast, updateItineraryItem],
+  );
+
+  const handlePlacePickSkip = useCallback(() => {
+    if (placePickPending) {
+      return;
+    }
+    setPlacePick(null);
+    pushToast({
+      variant: "info",
+      title: t.itineraryPage.placeConfirmSkippedTitle,
+      description: t.itineraryPage.placeConfirmSkippedDesc,
+    });
+  }, [placePickPending, pushToast]);
+
   const handleAddItem = useCallback(
     (dayNumber: number) => {
       if (!requireAuthenticated("/itinerary")) {
         return;
       }
-      if (!addDraft.title.trim()) {
+      if (!addDraft.title.trim() || addActivitySaving) {
         return;
       }
-      itemIdCounter.current += 1;
-      addItineraryItem(dayNumber, {
-        id: `item_new_${dayNumber}_${itemIdCounter.current}`,
-        dayNumber,
-        time: addDraft.time,
-        title: addDraft.title.trim(),
-        type: addDraft.type,
-        notes: addDraft.notes.trim() || undefined,
-        location: addDraft.location.trim()
-          ? {
-              name: addDraft.location.trim(),
-              lat: 0,
-              lng: 0,
-              description: addDraft.notes.trim() || addDraft.location.trim(),
-              address: addDraft.location.trim(),
-            }
-          : undefined,
-        source: "manual",
-      });
-      void syncService.flushTripSyncNow({ force: true });
-      setAddDraft(EMPTY_ADD_DRAFT);
-      setAddingToDay(null);
+
+      void (async () => {
+        setAddActivitySaving(true);
+        try {
+          itemIdCounter.current += 1;
+          const itemId = `item_new_${dayNumber}_${itemIdCounter.current}`;
+          const title = addDraft.title.trim();
+          const locationText = addDraft.location.trim();
+          const geocodeQuery = resolveManualPlaceGeocodeQuery(title, locationText);
+          const baseItem = {
+            id: itemId,
+            dayNumber,
+            time: addDraft.time,
+            type: addDraft.type,
+            notes: addDraft.notes.trim() || undefined,
+            source: "manual" as const,
+          };
+
+          const finishAddForm = () => {
+            setAddDraft(EMPTY_ADD_DRAFT);
+            setAddingToDay(null);
+          };
+
+          if (!geocodeQuery) {
+            addItineraryItem(dayNumber, { ...baseItem, title });
+            finishAddForm();
+            await syncService.flushTripSyncNow({ force: true });
+            return;
+          }
+
+          const region = useTripStore.getState().destination;
+          const resolved = await resolveManualPlaceLocation(geocodeQuery, region);
+
+          if (resolved.status === "failed") {
+            const failureToast = manualPlaceFailureToast(resolved.reason, true);
+            pushToast({
+              variant: "warning",
+              title: failureToast.title,
+              description: resolved.message || failureToast.description,
+            });
+            addItineraryItem(dayNumber, { ...baseItem, title });
+            finishAddForm();
+            await syncService.flushTripSyncNow({ force: true });
+            return;
+          }
+
+          if (resolved.status === "auto") {
+            const fields = buildItineraryFieldsFromResolvedLocation(resolved.location, geocodeQuery);
+            addItineraryItem(dayNumber, {
+              ...baseItem,
+              title,
+              location: fields.location,
+            });
+            useMapStore.getState().setSelectedPinId(`day_${dayNumber}_${itemId}`);
+            pushToast({
+              variant: "success",
+              title: t.itineraryPage.addActivityGeocodedTitle,
+              description: t.itineraryPage.addActivityGeocodedDesc,
+            });
+            finishAddForm();
+            await syncService.flushTripSyncNow({ force: true });
+            return;
+          }
+
+          addItineraryItem(dayNumber, {
+            ...baseItem,
+            title,
+            location: buildManualPlacePlaceholderLocation(locationText || geocodeQuery),
+          });
+          setPlacePick({
+            dayNumber,
+            itemId,
+            preferredName: locationText || title,
+            query: resolved.query,
+            suggestions: resolved.suggestions,
+          });
+          finishAddForm();
+          await syncService.flushTripSyncNow({ force: true });
+        } catch (error) {
+          pushToast({
+            variant: "error",
+            title: t.itineraryPage.addBlockTitle,
+            description: error instanceof Error ? error.message : "新增活動失敗。",
+          });
+        } finally {
+          setAddActivitySaving(false);
+        }
+      })();
     },
-    [addDraft, addItineraryItem, requireAuthenticated],
+    [addActivitySaving, addDraft, addItineraryItem, pushToast, requireAuthenticated],
   );
 
   const handleStartAddActivity = useCallback(
@@ -499,19 +680,24 @@ export default function ItineraryPage() {
     [insertDayAfter, requireAuthenticated],
   );
 
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent, dayNumber: number, items: TripPlanItem[]) => {
+  const handleReorderWithinDay = useCallback(
+    (dayNumber: number, oldIndex: number, newIndex: number) => {
       if (!requireAuthenticated("/itinerary")) {
         return;
       }
-      const { active, over } = event;
-      if (over && active.id !== over.id) {
-        const oldIndex = items.findIndex((item) => item.id === active.id);
-        const newIndex = items.findIndex((item) => item.id === over.id);
-        reorderItineraryItem(dayNumber, oldIndex, newIndex);
-      }
+      reorderItineraryItem(dayNumber, oldIndex, newIndex);
     },
     [reorderItineraryItem, requireAuthenticated],
+  );
+
+  const handleMoveItemBetweenDays = useCallback(
+    (fromDayNumber: number, toDayNumber: number, itemId: string, toIndex: number) => {
+      if (!requireAuthenticated("/itinerary")) {
+        return;
+      }
+      moveItineraryItemBetweenDays(fromDayNumber, toDayNumber, itemId, toIndex);
+    },
+    [moveItineraryItemBetweenDays, requireAuthenticated],
   );
 
   const handleRemoveDay = useCallback(
@@ -570,8 +756,44 @@ export default function ItineraryPage() {
         return;
       }
       updateItineraryItem(dayNumber, itemId, patch);
+
+      const nextLocation = patch.location;
+      const needsGeocode =
+        nextLocation !== undefined &&
+        (nextLocation === null || !hasUsableMapCoordinate(nextLocation));
+      if (!needsGeocode) {
+        return;
+      }
+
+      void (async () => {
+        const item = useTripStore
+          .getState()
+          .itinerary.find((day) => day.dayNumber === dayNumber)
+          ?.items.find((entry) => entry.id === itemId);
+        if (!item || hasUsableMapCoordinate(item.location)) {
+          return;
+        }
+
+        const locationQuery =
+          item.location?.name?.trim() ||
+          item.location?.address?.trim() ||
+          item.notes?.match(/地點：(.+)/)?.[1]?.trim() ||
+          "";
+        if (locationQuery) {
+          await applyManualLocationResolution(dayNumber, itemId, locationQuery);
+        } else {
+          const updates = await geocodeItineraryItemsMissingLocation(
+            [{ dayNumber, item }],
+            useTripStore.getState().destination,
+          );
+          for (const update of updates) {
+            updateItineraryItem(update.dayNumber, update.itemId, { location: update.location });
+          }
+        }
+        await syncService.flushTripSyncNow({ force: true });
+      })();
     },
-    [requireAuthenticated, updateItineraryItem],
+    [applyManualLocationResolution, requireAuthenticated, updateItineraryItem],
   );
 
   const closeRenameFolderDialog = useCallback(() => {
@@ -1240,30 +1462,17 @@ export default function ItineraryPage() {
               <p className="text-xs text-muted">
                 共 {visibleItineraries.length} 個行程
               </p>
-              <div className="flex items-center gap-1.5">
-                <ArrowUpDown className="size-3.5 text-muted" aria-hidden />
-                {(
-                  [
-                    { value: "createdAt_desc", label: t.itineraryPage.librarySortByCreated },
-                    { value: "updatedAt_desc", label: t.itineraryPage.librarySortByTime },
-                    { value: "title_asc", label: t.itineraryPage.librarySortByTitle },
-                    { value: "days_asc", label: t.itineraryPage.librarySortByTripDays },
-                  ] as const
-                ).map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setTripLibrarySort(opt.value)}
-                    className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                      tripLibrarySort === opt.value
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted hover:bg-cream/60 hover:text-foreground"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
+              <select
+                value={tripLibrarySort}
+                onChange={(event) => setTripLibrarySort(event.target.value as TripLibrarySort)}
+                aria-label={t.itineraryPage.librarySortSelectAria}
+                className="min-h-[36px] rounded-xl border border-border-light bg-surface px-3 py-1.5 text-xs font-medium text-foreground"
+              >
+                <option value="createdAt_desc">{t.itineraryPage.librarySortByCreated}</option>
+                <option value="updatedAt_desc">{t.itineraryPage.librarySortByTime}</option>
+                <option value="title_asc">{t.itineraryPage.librarySortByTitle}</option>
+                <option value="days_asc">{t.itineraryPage.librarySortByTripDays}</option>
+              </select>
             </div>
 
             {libraryLoading && visibleItineraries.length === 0 ? (
@@ -1501,6 +1710,7 @@ export default function ItineraryPage() {
                     recoveringTrip={recoveringTrip}
                     addingToDay={addingToDay}
                     addDraft={addDraft}
+                    addActivitySaving={addActivitySaving}
                     othersEditorPresence={othersEditorPresence}
                     onMouseMove={sendSharedTripCursor}
                     onMouseLeave={clearSharedTripCursor}
@@ -1513,7 +1723,8 @@ export default function ItineraryPage() {
                     onRemoveDay={handleRemoveDay}
                     onRemoveItem={handleRemoveItem}
                     onUpdateItem={handleUpdateItem}
-                    onReorderItem={handleDragEnd}
+                    onReorderWithinDay={handleReorderWithinDay}
+                    onMoveItemBetweenDays={handleMoveItemBetweenDays}
                   />
                 </div>
               </div>
@@ -1630,6 +1841,15 @@ export default function ItineraryPage() {
         variant="danger"
         onCancel={closeDeleteFolderDialog}
         onConfirm={() => void handleConfirmDeleteFolder()}
+      />
+
+      <PlaceConfirmDialog
+        open={Boolean(placePick)}
+        query={placePick?.query ?? ""}
+        suggestions={placePick?.suggestions ?? []}
+        pending={placePickPending}
+        onSelect={(suggestion) => void handlePlacePickSelect(suggestion)}
+        onSkip={handlePlacePickSkip}
       />
 
       <DeleteTripDialog

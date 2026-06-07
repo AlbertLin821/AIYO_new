@@ -64,6 +64,20 @@
       "isCountryLevel": true
     },
     {
+      "canonical": "紐西蘭",
+      "aliases": [
+        "New Zealand",
+        "new zealand",
+        "aotearoa",
+        "紐西蘭",
+        "新西蘭",
+        "皇后鎮",
+        "Queenstown"
+      ],
+      "countryCode": "NZ",
+      "isCountryLevel": true
+    },
+    {
       "canonical": "仙台",
       "aliases": [
         "Sendai",

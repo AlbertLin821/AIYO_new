@@ -124,10 +124,31 @@ export async function runStructuredTripWorkflow(
 
   const buildQuestionCardLead = () => {
     const destination = profile.destination?.trim() || "這趟旅程";
+    const missingLabels = (card?.questions || [])
+      .map((question) => {
+        if (question.slot === "travel_dates") {
+          return "出發日期";
+        }
+        if (question.slot === "traveler_count") {
+          return "人數";
+        }
+        if (question.slot === "dietary_restrictions") {
+          return "飲食偏好";
+        }
+        return question.question.trim();
+      })
+      .filter(Boolean);
+    const knownPreferences = [
+      profile.preferences.length ? profile.preferences.join("、") : "",
+      profile.transportation || "",
+      profile.pace || "",
+    ].filter(Boolean);
     if (!profile.duration_days) {
       return `了解，你想去 ${destination}。我先確認幾個核心條件，等你補完後就會自動開始規劃。`;
     }
-    return `收到，我已整理好目前條件。再補充下面幾個重點，我就會接著安排行程。`;
+    const knownPreferenceText = knownPreferences.length ? `我會先沿用目前的${knownPreferences.join("、")}偏好。` : "";
+    const missingText = missingLabels.length ? `現在還差${missingLabels.join("、")}，補完後我就直接幫你排完整行程。` : "再補充下面幾個重點，我就會接著安排行程。";
+    return `收到，${knownPreferenceText}${missingText}`;
   };
 
   if (card) {

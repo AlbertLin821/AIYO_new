@@ -4,7 +4,7 @@
 
 - `AIYO_new/aiyo/` — active Next.js 16 app
 - `AIYO_new/docs/` — architecture, migration, rollback, research
-- `AIYO_new/docker-compose.yml` — six-service local stack
+- `AIYO_new/docker-compose.yml` — five-service local stack
 - `AIYO_new/scripts/` — backup, archive, verification, deploy helpers
 
 ## Runtime topology
@@ -13,8 +13,8 @@
 flowchart LR
     Browser -->|127.0.0.1:3000| Dev["aiyo-new-app-dev"]
     Browser -->|127.0.0.1:3001| Live["aiyo-new-app-prod-live"]
-    Dev -->|SQL| PgDev["aiyo-new-postgres-dev"]
-    Live -->|SQL| PgLive["aiyo-new-postgres-prod"]
+    Dev -->|SQL| Pg["aiyo-new-postgres"]
+    Live -->|SQL| Pg
     Dev -->|Redis| Redis["aiyo-new-redis"]
     Live -->|Redis| Redis
     Dev -->|HTTP| Owu["open-webui:8080"]

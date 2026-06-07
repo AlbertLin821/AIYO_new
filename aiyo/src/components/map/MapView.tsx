@@ -177,12 +177,13 @@ function buildMarkerPinIcon(maps: GoogleMapsApi, color: string, selected: boolea
 }
 
 function needsPlaceDetails(pin: MapPinType, linkedItem?: { location?: LocationReference }): boolean {
+  const placeId = pin.placeId || linkedItem?.location?.placeId;
   const hasImage = [
     pin.thumbnail,
     pin.photoUrl,
     linkedItem?.location?.thumbnail,
     linkedItem?.location?.photoUrl,
-  ].some((candidate) => hasUsablePlacePhotoUrl(candidate));
+  ].some((candidate) => hasUsablePlacePhotoUrl(candidate, placeId));
   const hasOpeningHours = Boolean(pin.openingHours || linkedItem?.location?.openingHours);
   const hasPhone = Boolean(pin.phoneNumber || linkedItem?.location?.phoneNumber);
   return !hasImage || !hasOpeningHours || !hasPhone;
@@ -582,7 +583,6 @@ export default function MapView({
     selectedPinId,
     setSelectedPinId,
     setPendingPoi,
-    setPanelOpen,
     clearPins,
     panelOpen,
     focusLocation,
@@ -1073,7 +1073,7 @@ export default function MapView({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [forceMockFallback, pushToast, runtimeConfigChecked, runtimeMapsConfig.enableMockMaps, runtimeMapsConfig.googleMapsApiKey, runtimeMapsConfig.googleMapsMapId, useAdvancedMarkers, useGoogleSdk]);
+  }, [effectiveAllowPoiAdd, forceMockFallback, pushToast, runtimeConfigChecked, runtimeMapsConfig.enableMockMaps, runtimeMapsConfig.googleMapsApiKey, runtimeMapsConfig.googleMapsMapId, useAdvancedMarkers, useGoogleSdk]);
 
   useEffect(() => {
     if (!useGoogleSdk) {
@@ -1883,14 +1883,14 @@ export default function MapView({
       cancelled = true;
       clearTimeout(directionsTimer);
     };
-  }, [effectiveShowItineraryRoutes, readOnly, sdkState, tripDestination, visiblePins, visibleRouteSegments]);
+  }, [effectiveShowItineraryRoutes, readOnly, sdkState, tripDestination, useAdvancedMarkers, visiblePins, visibleRouteSegments]);
 
   useEffect(() => {
     if (sdkState !== "ready" || !effectiveShowItineraryRoutes) {
       return;
     }
     routePolylinesRef.current.forEach(({ polyline, segmentId, usedDirections }) => {
-      const isHighlighted = highlightedRouteIds.has(segmentId);
+      const isHighlighted = visibleHighlightedRouteIds.has(segmentId);
       polyline.setOptions?.({
         strokeOpacity: isHighlighted ? 1 : usedDirections ? 0.82 : 0.58,
         strokeWeight: isHighlighted ? 7 : usedDirections ? 5 : 4,

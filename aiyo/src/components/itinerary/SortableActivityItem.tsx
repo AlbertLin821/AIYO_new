@@ -7,7 +7,6 @@ import {
   Car,
   CarTaxiFront,
   Footprints,
-  GripVertical,
   MapPin,
   PencilLine,
   Save,
@@ -75,7 +74,10 @@ function SortableActivityItem({
 }: Props) {
   const tripDestination = useTripStore((s) => s.destination);
   const transportChoices = useMemo(() => transportEditOptions(tripDestination), [tripDestination]);
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+    disabled: !canEdit,
+  });
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<EditDraft>(() => toDraft(item));
   const formId = useId();
@@ -85,7 +87,6 @@ function SortableActivityItem({
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    zIndex: isDragging ? 50 : 1,
     position: "relative" as const,
   };
 
@@ -154,31 +155,17 @@ function SortableActivityItem({
       style={style}
       className={cn(
         "group rounded-xl border border-border-light bg-surface transition-colors",
-        "border-l-4 touch-none cursor-grab active:cursor-grabbing",
+        "border-l-4",
         colorClass,
         isDark && "border-zinc-800 bg-zinc-900/90 text-zinc-100",
-        isDragging &&
-          (isDark
-            ? "border-primary/30 bg-zinc-800 opacity-90"
-            : "border-primary/20 bg-cream/70 shadow-soft-lg opacity-90"),
+        isDragging && "opacity-0",
+        canEdit && "touch-none cursor-grab active:cursor-grabbing",
       )}
+      {...(canEdit ? attributes : {})}
+      {...(canEdit ? listeners : {})}
+      aria-label={canEdit ? `拖曳排序：${item.title}` : undefined}
     >
       <div className="flex items-start gap-3 px-4 py-3">
-        {canEdit ? (
-          <button
-            type="button"
-            className={cn(
-              "mt-1 rounded-lg p-1.5 text-muted transition-colors hover:bg-primary/10 hover:text-primary",
-              isDark && "text-zinc-500 hover:bg-zinc-800 hover:text-orange-300",
-            )}
-            aria-label={`拖曳排序：${item.title}`}
-            title="拖曳排序"
-            {...attributes}
-            {...listeners}
-          >
-            <GripVertical className="size-4" aria-hidden />
-          </button>
-        ) : null}
         <div className="flex min-w-[56px] flex-col items-center gap-1">
           <span
             className={cn(
@@ -197,6 +184,7 @@ function SortableActivityItem({
           disabled={!canEdit}
           className="min-w-0 flex-1 text-left disabled:cursor-default"
           aria-label={`編輯活動 ${item.title}`}
+          onPointerDown={(event) => event.stopPropagation()}
         >
           <div className="flex flex-wrap items-center gap-2">
             <h3 className={cn("min-w-0 text-sm font-semibold", isDark ? "text-zinc-100" : "text-foreground")}>

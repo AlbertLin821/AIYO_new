@@ -1,6 +1,6 @@
 # Docker Rollback
 
-Use this guide to return from the six-service stack to the pre-migration state without deleting data prematurely.
+Use this guide to return from the five-service stack to the pre-migration state without deleting data prematurely.
 
 ## Backup artifacts to keep
 
@@ -51,12 +51,11 @@ cat backup/<timestamp>/aiyo-new-postgres.sql | docker exec -i aiyo-new-postgres 
 
 If the dump was taken from a different container name, use that matching file and user.
 
-## Remove new split-stack volumes only on full rollback
+## Remove new shared-stack volumes only on full rollback
 
 ```bash
 docker volume rm \
-  aiyo_new_postgres_dev_data \
-  aiyo_new_postgres_prod_data \
+  aiyo_new_postgres_data \
   aiyo_new_redis_data \
   open_webui_data \
   aiyo_new_node_modules_dev \
