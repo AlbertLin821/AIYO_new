@@ -290,6 +290,7 @@ class SyncService {
       preferredTransport: userStore.preferredTransport,
       travelPace: userStore.travelPace,
       interests: userStore.interests,
+      interestIcons: userStore.interestIcons,
     };
 
     if (JSON.stringify(currentProfile) !== JSON.stringify(snapshot.profile)) {

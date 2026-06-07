@@ -168,7 +168,7 @@ function apiKeyFromMapsScriptSrc(src: string): string | null {
   }
 }
 
-/** Drop cached SDK so a new API key can load (e.g. after .env.local change). */
+/** Drop cached SDK so a new API key can load (e.g. after env file change). */
 export function unloadGoogleMapsApi(): void {
   googleMapsPromise = null;
   loadedMapsApiKey = null;

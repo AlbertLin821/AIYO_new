@@ -912,6 +912,8 @@ export interface User {
   /** 空白表示尚未在個人檔選擇節奏 */
   travelPace: TravelPace | "";
   interests: string[];
+  /** 自訂興趣類別對應的 Lucide 圖示名稱 */
+  interestIcons?: Record<string, string>;
 }
 
 export type ExtractedLocation = LocationReference;

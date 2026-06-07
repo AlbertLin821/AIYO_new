@@ -60,9 +60,9 @@ import {
 } from "@/app/chat/itineraryPatchUtils";
 import { applyAssistantActions } from "@/lib/assistantActions/applyAssistantActions";
 import {
-  travelPlanResponseToTripPlanResult,
   tripPlanHasItems,
 } from "@/lib/travelPlanConversion";
+import { pickPreferredGeneratedTripPlan } from "@/lib/generatedTripPlan";
 import { CHAT_HISTORY_WINDOW } from "@/lib/chatConstants";
 import { isStructuredTripPlanningRequest } from "@/lib/chat/isStructuredTripPlanningRequest";
 import {
@@ -70,6 +70,8 @@ import {
   isFullItineraryRevisionCommand,
   isItineraryMutationCommand,
   isPlanningConfirmationCommand,
+  shouldAttachDecisionPreferenceConfirmation,
+  shouldRenderInlinePreferenceReusePanel,
   shouldShowPlanningWorkflowRail,
 } from "@/lib/chat/workflowRailVisibility";
 import { findLatestApplicableItinerarySource } from "@/lib/chat/latestItinerarySource";
@@ -1052,6 +1054,43 @@ export default function ChatPage() {
     return created.tripId;
   }
 
+  async function ensureExistingItineraryContextLoaded(message: string) {
+    const needsExistingItinerary =
+      isItineraryMutationCommand(message) || isFullItineraryRevisionCommand(message);
+    if (!needsExistingItinerary || useTripStore.getState().itinerary.length > 0) {
+      return;
+    }
+
+    if (!syncService.isHydrated()) {
+      const bootstrap = await syncService.loadBootstrap();
+      syncService.applyBootstrap(bootstrap, {
+        source: "chat-preflight-bootstrap",
+        forceTrip: true,
+      });
+      syncService.startRealtime(bootstrap.collaboration?.roomId || null);
+    }
+
+    if (useTripStore.getState().itinerary.length > 0) {
+      return;
+    }
+
+    const currentConversationId = useChatStore.getState().activeConversationId;
+    const currentConversation = useChatStore
+      .getState()
+      .conversations.find((conversation) => conversation.id === currentConversationId);
+    const fallbackTripId =
+      useTripStore.getState().tripId?.trim() ||
+      currentConversation?.tripId?.trim() ||
+      activeConversationTripId;
+    if (!fallbackTripId) {
+      return;
+    }
+
+    const snapshot = await setActiveTrip(fallbackTripId);
+    syncService.applyTripSwitch({ ...snapshot, selectConversation: false });
+    syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
+  }
+
   async function selectConversationForChat(conversationId: string) {
     const conversation = conversations.find((item) => item.id === conversationId);
     selectConversation(conversationId);
@@ -1546,6 +1585,8 @@ export default function ChatPage() {
 
     stopAutoVideoSummaryQueue();
 
+    await ensureExistingItineraryContextLoaded(message);
+
     if (!options?.questionAnswers?.length) {
       applyPlanningUpdateToStores(extractPlanningUpdateFromText(message));
     }
@@ -1781,11 +1822,17 @@ export default function ChatPage() {
       if (requestEpoch !== chatRequestEpochRef.current) {
         return;
       }
+      const decisionPreferenceConfirmation = response.travelAgentDecision?.preferenceConfirmation;
       const replyWithPreferenceConfirmation: ChatMessage =
-        response.travelAgentDecision?.preferenceConfirmation && !response.reply.preferenceConfirmation
+        shouldAttachDecisionPreferenceConfirmation({
+          travelAgentMode: response.travelAgentDecision?.mode ?? null,
+          responseType: response.reply.responseType,
+          replyPreferenceConfirmation: response.reply.preferenceConfirmation,
+          decisionPreferenceConfirmation,
+        })
           ? {
               ...response.reply,
-              preferenceConfirmation: response.travelAgentDecision.preferenceConfirmation,
+              preferenceConfirmation: decisionPreferenceConfirmation,
             }
           : response.reply;
       appendMessage(replyWithPreferenceConfirmation);
@@ -2267,20 +2314,7 @@ export default function ChatPage() {
   }
 
   function resolveGeneratedTripPlan(response: ChatResponsePayload): TripPlanResult | null {
-    if (response.itinerarySuggestion) {
-      return response.itinerarySuggestion;
-    }
-    if (!response.reply.travelPlan) {
-      return null;
-    }
-    const currentTrip = useTripStore.getState();
-    const targetDayCount =
-      response.tripProfile?.duration_days ??
-      planningSnapshot.days ??
-      currentTrip.itinerary?.length;
-    return travelPlanResponseToTripPlanResult(response.reply.travelPlan, {
-      targetDayCount: targetDayCount && targetDayCount > 0 ? targetDayCount : undefined,
-    });
+    return pickPreferredGeneratedTripPlan(response);
   }
 
   async function applyItineraryUpdateFromResponse(
@@ -2370,15 +2404,41 @@ export default function ChatPage() {
       detail: "AI 正在把新的每日行程寫入右側行程欄。",
     });
     const currentTrip = useTripStore.getState();
+    const geocodedPlan: TripPlanResult = {
+      ...plan,
+      days: plan.days.map((day) => ({
+        ...day,
+        items: day.items.map((item) => ({ ...item })),
+      })),
+    };
+    const missingLocationItems = geocodedPlan.days.flatMap((day) =>
+      day.items
+        .filter((item) => !item.location || !item.location.verified || !item.location.placeId)
+        .map((item) => ({ dayNumber: day.dayNumber, item })),
+    );
+    if (missingLocationItems.length > 0) {
+      const geocodeUpdates = await geocodeItineraryItemsMissingLocation(
+        missingLocationItems,
+        currentTrip.destination || response.tripProfile?.destination || planningSnapshot.destination,
+      );
+      for (const update of geocodeUpdates) {
+        const day = geocodedPlan.days.find((entry) => entry.dayNumber === update.dayNumber);
+        const item = day?.items.find((entry) => entry.id === update.itemId);
+        if (item) {
+          item.location = update.location;
+        }
+      }
+    }
     currentTrip.replaceTripPlan(plan, {
       destination: currentTrip.destination || response.tripProfile?.destination || planningSnapshot.destination,
-      days: plan.days.length,
+      days: geocodedPlan.days.length,
       budget:
         currentTrip.budget ||
         planningSnapshot.budget ||
         readBudgetAmountFromText(response.tripProfile?.budget),
       title: currentTrip.title || response.tripProfile?.destination || currentTrip.destination,
     });
+    currentTrip.setItinerary(geocodedPlan.days);
     const reconciled = reconcileTripMapState(useTripStore.getState().itinerary, useMapStore.getState().pins);
     useTripStore.getState().setItinerary(reconciled.itinerary);
     useMapStore.getState().setPins(reconciled.pins);
@@ -2387,7 +2447,7 @@ export default function ChatPage() {
     setItinerarySyncState({
       status: "synced",
       title: "已同步到目前行程",
-      detail: `已更新 ${plan.days.length} 天行程內容。`,
+      detail: `已更新 ${geocodedPlan.days.length} 天行程內容。`,
     });
     if (!options.silent) {
       pushToast({
@@ -2760,14 +2820,24 @@ export default function ChatPage() {
                       />
                     </div>
                   ) : null}
-                  {message.role === "assistant" &&
-                  index === messages.length - 1 &&
-                  (message.preferenceConfirmation || workflowRail.preferenceConfirmation) &&
-                  !message.questionCard ? (
+                  {shouldRenderInlinePreferenceReusePanel({
+                    role: message.role,
+                    isLastMessage: index === messages.length - 1,
+                    responseType: message.responseType,
+                    hasQuestionCard: Boolean(message.questionCard),
+                    messagePreferenceConfirmation: message.preferenceConfirmation,
+                    workflowRailPreferenceConfirmation: workflowRail.preferenceConfirmation,
+                    workflowRailMode: workflowRail.travelAgentMode,
+                  }) ? (
                     <div className="mt-3 w-full min-w-[min(100%,20rem)] max-w-md">
                       <PreferenceReusePanel
                         variant="inline"
-                        confirmation={(message.preferenceConfirmation || workflowRail.preferenceConfirmation)!}
+                        confirmation={
+                          (workflowRail.travelAgentMode === "confirm_preferences" &&
+                          workflowRail.preferenceConfirmation
+                            ? workflowRail.preferenceConfirmation
+                            : message.preferenceConfirmation)!
+                        }
                         disabled={isSending}
                         currentDestination={tripProfile?.destination || planningSnapshot.destination}
                         currentDays={tripProfile?.duration_days || planningSnapshot.days}

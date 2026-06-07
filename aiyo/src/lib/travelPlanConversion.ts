@@ -114,6 +114,7 @@ function buildSpotItem(
   spot: { name: string; feature?: string },
 ): TripPlanItem {
   const title = spot.name.trim() || `行程點 ${itemIndex + 1}`;
+  const notes = spot.feature?.trim() || undefined;
   const hour = DEFAULT_SPOT_HOURS[itemIndex % DEFAULT_SPOT_HOURS.length] ?? 9 + itemIndex * 2;
   return {
     id: buildItemId(dayNumber, itemIndex, title),
@@ -121,7 +122,14 @@ function buildSpotItem(
     time: normalizeTimeValue(undefined, hour),
     title,
     type: "attraction",
-    notes: spot.feature?.trim() || undefined,
+    notes,
+    location: {
+      name: title,
+      lat: 0,
+      lng: 0,
+      description: notes || title,
+      address: title,
+    },
     source: "ai",
   };
 }
@@ -133,6 +141,7 @@ function buildFoodItem(
   spotCount: number,
 ): TripPlanItem {
   const title = food.name.trim() || (itemIndex === 0 ? "午餐" : "晚餐");
+  const notes = food.description?.trim() || undefined;
   const mealIndex = itemIndex;
   const hour = DEFAULT_MEAL_HOURS[mealIndex % DEFAULT_MEAL_HOURS.length] ?? 12 + mealIndex * 2;
   return {
@@ -141,7 +150,14 @@ function buildFoodItem(
     time: normalizeTimeValue(undefined, hour),
     title,
     type: "restaurant",
-    notes: food.description?.trim() || undefined,
+    notes,
+    location: {
+      name: title,
+      lat: 0,
+      lng: 0,
+      description: notes || title,
+      address: title,
+    },
     source: "ai",
   };
 }

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { SyncMutationSource } from "@/stores/syncMutationSource";
 import { withSyncMutationSource } from "@/stores/syncMutationSource";
-import { retimeDayItems, toMinutes } from "@/lib/itineraryRetime";
+import { cascadeDayItemsAfterTravelEdit, retimeDayItems, toMinutes } from "@/lib/itineraryRetime";
 import type { PersistedTripPayload, TripPlanDay, TripPlanItem, TripPlanResult } from "@/types";
 
 export const EMPTY_TRIP_STATE = {
@@ -168,9 +168,7 @@ export const useTripStore = create<TripState>((set) => ({
           day.dayNumber === dayNumber
             ? {
                 ...day,
-                items: day.items.map((item) =>
-                  item.id === itemId ? { ...item, ...patch, id: item.id } : item,
-                ),
+                items: cascadeDayItemsAfterTravelEdit(day.items, itemId, patch),
               }
             : day,
         ),
@@ -185,23 +183,9 @@ export const useTripStore = create<TripState>((set) => ({
           day.dayNumber === dayNumber
             ? {
                 ...day,
-                items: retimeDayItems(
-                  day.items.map((item) =>
-                    item.id === itemId
-                      ? {
-                          ...item,
-                          transport: nextTransport,
-                          transportDurationMinutes: undefined,
-                          transportDistanceMeters: undefined,
-                          transportDataSource: undefined,
-                        }
-                      : item,
-                  ),
-                  {
-                    dayStartMinutes: toMinutes(day.items[0]?.time),
-                    previousItems: day.items,
-                  },
-                ),
+                items: cascadeDayItemsAfterTravelEdit(day.items, itemId, {
+                  transport: nextTransport,
+                }),
               }
             : day,
         ),

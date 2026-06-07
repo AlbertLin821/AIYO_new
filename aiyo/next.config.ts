@@ -5,7 +5,7 @@ import { resolveGoogleMapsClientApiKey, resolveGoogleMapsMapId } from "./src/lib
 import { loadProjectEnvLocalIntoProcess } from "./src/lib/projectEnv";
 
 const repoRoot = path.join(__dirname);
-loadProjectEnvLocalIntoProcess(repoRoot, { override: true });
+loadProjectEnvLocalIntoProcess(repoRoot, { override: false });
 
 const mapsKey = resolveGoogleMapsClientApiKey();
 const mapId = resolveGoogleMapsMapId();
@@ -29,6 +29,7 @@ if (enableMockMaps) {
 const nextConfig: NextConfig = {
   // Enable after removing route-level `export const dynamic = "force-dynamic"` conflicts.
   // cacheComponents: true,
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
   reactCompiler: {
     compilationMode: "annotation",
   },

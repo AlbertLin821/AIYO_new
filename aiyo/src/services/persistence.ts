@@ -54,6 +54,7 @@ interface PersistedState {
     | "preferredTransport"
     | "travelPace"
     | "interests"
+    | "interestIcons"
     | "isFirstVisit"
   >;
   video?: Pick<
@@ -200,6 +201,7 @@ function resetInMemoryStores(): void {
     preferredTransport: "",
     travelPace: "",
     interests: [],
+    interestIcons: {},
     isFirstVisit: true,
   });
   useUIStore.setState({
@@ -258,6 +260,7 @@ function buildStateSnapshot(): PersistedState {
       preferredTransport: profile.preferredTransport,
       travelPace: profile.travelPace,
       interests: profile.interests,
+      interestIcons: profile.interestIcons,
       isFirstVisit: profile.isFirstVisit,
     },
     video: {

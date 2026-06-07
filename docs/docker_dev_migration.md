@@ -1,32 +1,54 @@
 # Docker Dev Migration
 
-`AIYO_new` should be the canonical dev setup for this repository.
-Do not rely on `../AIYO/docker-compose.yml` for shared onboarding.
+`AIYO_new` is now the canonical local Docker setup.
 
-## New collaborators
+## Target state
 
-From the `AIYO_new` root:
+Use the single root `docker-compose.yml` with these services only:
 
-```bash
-docker compose up -d postgres
-cd aiyo
-npm run prisma:generate
-npx prisma migrate deploy
-npm run db:seed
-```
+- `aiyo-new-app-dev`
+- `aiyo-new-app-prod-live`
+- `aiyo-new-postgres-dev`
+- `aiyo-new-postgres-prod`
+- `aiyo-new-redis`
+- `open-webui`
 
-The compose file creates `aiyo_new_db` automatically.
+Host Ollama remains outside Docker at `http://127.0.0.1:11434`.
 
-## Existing local machines
+## New env files
 
-If your local app is still working against the legacy `AIYO` stack, migrate in this order:
+Switch local setup to:
 
-1. Stop the legacy app containers if they are running.
-2. Start PostgreSQL from `AIYO_new/docker-compose.yml`.
-3. Keep using the same `DATABASE_URL` shown in `aiyo/.env.example`.
-4. Run Prisma migrate and seed from `AIYO_new/aiyo`.
-5. Verify login, bootstrap, and trip flows before deleting old containers or volumes.
+- `aiyo/.env.dev`
+- `aiyo/.env.prod-live`
 
-## Why this matters
+Do not continue onboarding around the older `aiyo/.env` plus `mem0` profile flow.
 
-The new compose project uses its own named volumes, so the repo is self-contained for teammates and no longer depends on a sibling project directory.
+## Migration steps for existing machines
+
+1. Backup the current stack with `scripts/backup-docker-migration.sh`.
+2. Stop older containers that still use the retired stack.
+3. Start the new dev stack:
+
+   ```bash
+   docker compose --env-file ./aiyo/.env.dev up -d --build --force-recreate \
+     aiyo-new-postgres-dev aiyo-new-redis open-webui aiyo-new-app-dev
+   ```
+
+4. Open `http://127.0.0.1:8080`, sign in to Open WebUI, and generate an API key.
+5. Fill `OPENWEBUI_API_KEY` in `aiyo/.env.dev` and recreate `open-webui` + app containers.
+6. Verify:
+   - `curl http://127.0.0.1:11434/api/tags`
+   - `curl http://127.0.0.1:8080/health`
+   - `curl http://127.0.0.1:3000/api/health`
+7. Run application checks from `aiyo/`:
+   - `npm test`
+   - `npm run build`
+   - `npm run test:e2e:phase7`
+   - `npm run test:e2e:phase8`
+
+## Notes
+
+- `mem0`, `searxng`, and `pgadmin` are no longer active dependencies of the stack.
+- Planner logic still keeps safe fallbacks when AI or external services fail.
+- Rollback instructions live in [docker-rollback.md](./docker-rollback.md).

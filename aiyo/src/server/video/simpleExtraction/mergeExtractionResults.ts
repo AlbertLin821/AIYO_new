@@ -5,6 +5,10 @@ import type {
 } from "@/server/video/simpleExtraction/types";
 
 const PLACE_PREFIXES = [
+  "是",
+  "就是",
+  "位於",
+  "在",
   "從",
   "到",
   "前往",

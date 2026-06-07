@@ -1,70 +1,39 @@
-param(
-    [switch] $WithMem0
-)
-
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-$envFile = Join-Path $PSScriptRoot "aiyo\.env"
-$envExample = Join-Path $PSScriptRoot "aiyo\.env.example"
+$envFile = Join-Path $PSScriptRoot "aiyo\.env.prod-live"
+$envExample = Join-Path $PSScriptRoot "aiyo\.env.prod-live.example"
 if (-not (Test-Path -LiteralPath $envFile)) {
     if (-not (Test-Path -LiteralPath $envExample)) {
-        Write-Error "Missing aiyo/.env and aiyo/.env.example. Create aiyo/.env before starting Compose."
+        Write-Error "Missing aiyo/.env.prod-live and aiyo/.env.prod-live.example. Create aiyo/.env.prod-live before starting Compose."
         exit 1
     }
     Copy-Item -LiteralPath $envExample -Destination $envFile
-    Write-Host "Created aiyo/.env from .env.example. Set NEXTAUTH_SECRET and OAuth secrets before production use." -ForegroundColor Yellow
-}
-
-$devRunning = docker ps --filter "name=aiyo-new-app-dev" --filter "status=running" --format "{{.Names}}" 2>$null
-if ($devRunning -match "aiyo-new-app-dev") {
-    Write-Host "app-dev (aiyo-new-app-dev) is still running and also uses port 3000." -ForegroundColor Yellow
-    Write-Host "Stop it first, for example:" -ForegroundColor Yellow
-    Write-Host "  docker compose --env-file ./aiyo/.env --profile dev down" -ForegroundColor Yellow
-    exit 1
+    Write-Host "Created aiyo/.env.prod-live from .env.prod-live.example. Set NEXTAUTH_SECRET and OPENWEBUI_API_KEY before live AI verification." -ForegroundColor Yellow
 }
 
 . "$PSScriptRoot\scripts\import-compose-dotenv.ps1"
-$null = Import-AiyoComposeDotEnv -Root $PSScriptRoot
+$null = Import-AiyoComposeDotEnv -Root $PSScriptRoot -Mode "prod-live"
 
-$composeEnvArgs = @("--env-file", "./aiyo/.env")
-$envLocal = Join-Path $PSScriptRoot "aiyo\.env.local"
-if (Test-Path -LiteralPath $envLocal) {
-    $composeEnvArgs += @("--env-file", "./aiyo/.env.local")
-}
-
-$composeArgs = @("compose") + $composeEnvArgs + @("--profile", "prod-live")
-if ($WithMem0) {
-    & "$PSScriptRoot\scripts\clone-mem0.ps1"
-    if ($LASTEXITCODE -ne 0) {
-        exit $LASTEXITCODE
-    }
-    $composeArgs += "--profile", "mem0"
-}
-
-Write-Host "Starting postgres, redis, and app-prod-live (build + next start on each container start)."
-Write-Host "Env: aiyo/.env + .env.local if present (same as dev-up.ps1)."
-Write-Host "Pull latest code on the host yourself before re-running if needed."
-
-$upArgs = $composeArgs + @(
-    "up", "-d", "--build", "--force-recreate",
-    "postgres", "redis", "app-prod-live"
+$composeEnvArgs = @("--env-file", "./aiyo/.env.prod-live")
+$services = @(
+    "aiyo-new-postgres-prod",
+    "aiyo-new-redis",
+    "open-webui",
+    "aiyo-new-app-prod-live"
 )
-if ($WithMem0) {
-    $upArgs += "mem0-memory-postgres", "mem0-memory"
-}
 
-& docker @upArgs
+Write-Host "Starting prod-live stack via Compose (env: aiyo/.env.prod-live)."
+docker compose @composeEnvArgs up -d --build --force-recreate @services
+
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
 Write-Host ""
-& docker @($composeArgs + @("ps"))
+docker compose @composeEnvArgs ps
 
 Write-Host ""
-Write-Host "App: http://localhost:3000  (health: curl http://localhost:3000/api/health)"
-Write-Host "First start runs npm run build inside the container; allow several minutes."
-Write-Host "After code changes, re-run .\prod-live-up.ps1 or:"
-Write-Host "  docker compose --env-file ./aiyo/.env [--env-file ./aiyo/.env.local] --profile prod-live up -d --build --force-recreate app-prod-live"
-Write-Host "Switching from dev mode? Consider removing ./aiyo/.next if you see stale assets."
+Write-Host "Prod-live app: http://127.0.0.1:3001"
+Write-Host "OpenWebUI    : http://127.0.0.1:8080"
+Write-Host "Health       : curl http://127.0.0.1:3001/api/health"

@@ -1,15 +1,115 @@
-# 開發環境建議從本檔所在目錄執行：.\dev-up.ps1（或 docker compose --profile dev up -d postgres redis app-dev），
-# 勿只 docker start aiyo-new-app-dev，以免容器脫離 Compose 所建立的網路而無法解析主機名 postgres。
-# NEXT_PUBLIC_* 會在 Docker 映像「建置」（npm run build）時打入前端程式；若在 builder 時為空，
-# 之後只靠 env_file 重啟容器也無效。請在 build 時讓 Compose 代入變數，例如：
-#   docker compose --env-file ./aiyo/.env build [--profile dev app-dev | app]
-# 或將同樣鍵放在與本檔同一層資料夾的 shell env / 啟動腳本中（Docker Compose 用於 ${} 替換）。
-# 詳見：https://docs.docker.com/compose/how-tos/environment-variables/set-environment-variables/
-# 啟動時請帶 --env-file ./aiyo/.env.local，否則下方 ${GOOGLE_MAPS_*} 可能為空。
-# 勿只用 docker start app-dev（會脫離 backend 網路且保留映像內舊金鑰）。改 keys 後請 --force-recreate app-dev。
+# AIYO_new Docker stack
+# - Dev app:        http://127.0.0.1:3000
+# - Prod-live app:  http://127.0.0.1:3001
+# - Open WebUI:     http://127.0.0.1:8080
+# - Postgres dev:   127.0.0.1:5432
+# - Postgres live:  127.0.0.1:5433
+# - Redis:          127.0.0.1:6379
 
 services:
-  app-dev:
+  aiyo-new-postgres-dev:
+    image: pgvector/pgvector:pg16
+    container_name: aiyo-new-postgres-dev
+    environment:
+      POSTGRES_USER: aiyo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_DEV:-aiyo_password_change_me}
+      POSTGRES_DB: ${POSTGRES_DB_DEV:-aiyo_new_dev_db}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - aiyo_new_postgres_dev_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER_DEV:-aiyo} -d ${POSTGRES_DB_DEV:-aiyo_new_dev_db}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+
+  aiyo-new-postgres-prod:
+    image: pgvector/pgvector:pg16
+    container_name: aiyo-new-postgres-prod
+    environment:
+      POSTGRES_USER: aiyo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_PROD:-aiyo_password_change_me}
+      POSTGRES_DB: ${POSTGRES_DB_PROD:-aiyo_new_prod_db}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - aiyo_new_postgres_prod_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER_PROD:-aiyo} -d ${POSTGRES_DB_PROD:-aiyo_new_prod_db}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+
+  aiyo-new-redis:
+    image: redis:7-alpine
+    container_name: aiyo-new-redis
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - aiyo_new_redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - backend
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:v0.9.6
+    container_name: open-webui
+    environment:
+      ENV: ${OPENWEBUI_ENV:-prod}
+      PORT: "8080"
+      WEBUI_URL: ${OPENWEBUI_PUBLIC_URL:-http://127.0.0.1:8080}
+      WEBUI_AUTH: "true"
+      ENABLE_SIGNUP: "false"
+      ENABLE_API_KEYS: "true"
+      ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS: "true"
+      API_KEYS_ALLOWED_ENDPOINTS: ${OPENWEBUI_ALLOWED_ENDPOINTS:-/api/models,/api/chat/completions,/ollama/api/chat,/ollama/api/tags}
+      ENABLE_PERSISTENT_CONFIG: "false"
+      WEBUI_SECRET_KEY: ${OPENWEBUI_SECRET_KEY:-replace-with-a-long-random-secret}
+      WEBUI_ADMIN_EMAIL: ${OPENWEBUI_ADMIN_EMAIL:-admin@aiyo.local}
+      WEBUI_ADMIN_PASSWORD: ${OPENWEBUI_ADMIN_PASSWORD:-ChangeThisOpenWebUiAdminPassword123!}
+      WEBUI_ADMIN_NAME: ${OPENWEBUI_ADMIN_NAME:-AIYO Admin}
+      OLLAMA_BASE_URL: "http://host.docker.internal:11434"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - open_webui_data:/app/backend/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 40s
+    networks:
+      - backend
+
+  aiyo-new-app-dev:
     build:
       context: ./aiyo
       dockerfile: Dockerfile
@@ -19,102 +119,17 @@ services:
         NEXT_PUBLIC_ENABLE_MOCK_MAPS: ${NEXT_PUBLIC_ENABLE_MOCK_MAPS:-}
     container_name: aiyo-new-app-dev
     env_file:
-      - ./aiyo/.env.local
+      - ./aiyo/.env.dev
     environment:
-      DATABASE_URL: postgresql://aiyo:aiyo_password@postgres:5432/aiyo_new_db?schema=public
-      NEXTAUTH_URL: http://localhost:3000
-      OLLAMA_BASE_URL: http://host.docker.internal:11434
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:9b}
-      OLLAMA_TRAVEL_CHAT_MODEL: ${OLLAMA_TRAVEL_CHAT_MODEL:-qwen3.5:9b}
-      OLLAMA_TRIP_PLAN_MODEL: ${OLLAMA_TRIP_PLAN_MODEL:-granite4.1:3b}
-      OLLAMA_VIDEO_SUMMARY_MODEL: ${OLLAMA_VIDEO_SUMMARY_MODEL:-granite4.1:8b}
-      OLLAMA_VIDEO_SUMMARY_FAST_MODEL: ${OLLAMA_VIDEO_SUMMARY_FAST_MODEL:-mistral-small:24b}
-      OLLAMA_VIDEO_SUMMARY_FINAL_MODEL: ${OLLAMA_VIDEO_SUMMARY_FINAL_MODEL:-granite4.1:8b}
-      OLLAMA_LOCATION_MODEL: ${OLLAMA_LOCATION_MODEL:-granite4.1:8b}
-      MEM0_BASE_URL: http://mem0-memory:8000
-      MEM0_ENABLED: ${MEM0_ENABLED:-true}
-      MEM0_TOP_K: ${MEM0_TOP_K:-5}
-      AI_WEB_SEARCH_ENABLED: ${AI_WEB_SEARCH_ENABLED:-true}
-      AI_WEB_SEARCH_MAX_RESULTS: ${AI_WEB_SEARCH_MAX_RESULTS:-6}
-      AI_WEB_SEARCH_REQUIRE_CITATIONS: ${AI_WEB_SEARCH_REQUIRE_CITATIONS:-true}
-      NODE_ENV: development
-      # 勿在此覆寫 GOOGLE_MAPS_* / NEXT_PUBLIC_GOOGLE_MAPS_*：會蓋掉 env_file，且 ${} 常吃到 Windows 舊變數
-      HOSTNAME: 0.0.0.0
-      PORT: 3000
       CHOKIDAR_USEPOLLING: "true"
       WATCHPACK_POLLING: "true"
     ports:
-      - "3000:3000"
-    command: sh -c "npm install && npx prisma generate && npx prisma migrate deploy && npm run dev"
+      - "127.0.0.1:3000:3000"
+    command: sh -c "mkdir -p /app/.next && find /app/.next -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true; npm install && npx prisma generate && npx prisma migrate deploy && npm run dev"
     volumes:
       - ./aiyo:/app
-      - /app/node_modules
-      # 避免容器內的 Next runtime 再次讀到宿主 .env.local，把 Compose 注入的容器 env 覆寫回 localhost。
-      - ./docker/empty.env:/app/.env.local:ro
-      # 改為繫結到宿主，避免匿名卷長期快取「無 NEXT_PUBLIC_*」時的編譯結果；若仍異常請刪除本機 ./aiyo/.next 資料夾
-      - ./aiyo/.next:/app/.next
-    restart: unless-stopped
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 30s
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - backend
-    profiles: ["dev"]
-
-  # 本機正式模式驗證：掛載 ./aiyo，每次啟動在容器內 build 後 next start（見 prod-live-up.ps1）。
-  # 與 app-dev 共用埠 3000，請勿同時啟動。
-  app-prod-live:
-    build:
-      context: ./aiyo
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
-        NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID: ${NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID:-}
-        NEXT_PUBLIC_ENABLE_MOCK_MAPS: ${NEXT_PUBLIC_ENABLE_MOCK_MAPS:-}
-    container_name: aiyo-new-app-prod-live
-    env_file:
-      - ./aiyo/.env.local
-    environment:
-      DATABASE_URL: postgresql://aiyo:aiyo_password@postgres:5432/aiyo_new_db?schema=public
-      NEXTAUTH_URL: http://localhost:3000
-      OLLAMA_BASE_URL: http://host.docker.internal:11434
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:9b}
-      OLLAMA_TRAVEL_CHAT_MODEL: ${OLLAMA_TRAVEL_CHAT_MODEL:-qwen3.5:9b}
-      OLLAMA_TRIP_PLAN_MODEL: ${OLLAMA_TRIP_PLAN_MODEL:-granite4.1:3b}
-      OLLAMA_VIDEO_SUMMARY_MODEL: ${OLLAMA_VIDEO_SUMMARY_MODEL:-granite4.1:8b}
-      OLLAMA_VIDEO_SUMMARY_FAST_MODEL: ${OLLAMA_VIDEO_SUMMARY_FAST_MODEL:-mistral-small:24b}
-      OLLAMA_VIDEO_SUMMARY_FINAL_MODEL: ${OLLAMA_VIDEO_SUMMARY_FINAL_MODEL:-granite4.1:8b}
-      OLLAMA_LOCATION_MODEL: ${OLLAMA_LOCATION_MODEL:-granite4.1:8b}
-      MEM0_BASE_URL: http://mem0-memory:8000
-      MEM0_ENABLED: ${MEM0_ENABLED:-true}
-      MEM0_TOP_K: ${MEM0_TOP_K:-5}
-      AI_WEB_SEARCH_ENABLED: ${AI_WEB_SEARCH_ENABLED:-true}
-      AI_WEB_SEARCH_MAX_RESULTS: ${AI_WEB_SEARCH_MAX_RESULTS:-6}
-      AI_WEB_SEARCH_REQUIRE_CITATIONS: ${AI_WEB_SEARCH_REQUIRE_CITATIONS:-true}
-      NODE_ENV: production
-      HOSTNAME: 0.0.0.0
-      PORT: 3000
-    ports:
-      - "3000:3000"
-    # NODE_ENV=production 會讓 npm install 略過 devDependencies，但 next build 需要 @tailwindcss/postcss 等 dev 套件。
-    command: sh -c "NODE_ENV=development npm install && npx prisma generate && npx prisma migrate deploy && NODE_ENV=production npm run build && npm run start"
-    volumes:
-      - ./aiyo:/app
-      - /app/node_modules
-      - ./docker/empty.env:/app/.env.local:ro
-      - ./aiyo/.next:/app/.next
+      - aiyo_new_node_modules_dev:/app/node_modules
+      - aiyo_new_next_dev:/app/.next
     restart: unless-stopped
     healthcheck:
       test:
@@ -125,17 +140,18 @@ services:
       interval: 10s
       timeout: 5s
       retries: 18
-      start_period: 300s
+      start_period: 45s
     depends_on:
-      postgres:
+      aiyo-new-postgres-dev:
         condition: service_healthy
-      redis:
+      aiyo-new-redis:
+        condition: service_healthy
+      open-webui:
         condition: service_healthy
     networks:
       - backend
-    profiles: ["prod-live"]
 
-  app:
+  aiyo-new-app-prod-live:
     build:
       context: ./aiyo
       dockerfile: Dockerfile
@@ -143,31 +159,16 @@ services:
         NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
         NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID: ${NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID:-}
         NEXT_PUBLIC_ENABLE_MOCK_MAPS: ${NEXT_PUBLIC_ENABLE_MOCK_MAPS:-}
-    container_name: aiyo-new-app
+    container_name: aiyo-new-app-prod-live
     env_file:
-      - ./aiyo/.env.local
-    environment:
-      DATABASE_URL: postgresql://aiyo:aiyo_password@postgres:5432/aiyo_new_db?schema=public
-      NEXTAUTH_URL: http://localhost:3000
-      OLLAMA_BASE_URL: http://host.docker.internal:11434
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:9b}
-      OLLAMA_TRAVEL_CHAT_MODEL: ${OLLAMA_TRAVEL_CHAT_MODEL:-qwen3.5:9b}
-      OLLAMA_TRIP_PLAN_MODEL: ${OLLAMA_TRIP_PLAN_MODEL:-granite4.1:3b}
-      OLLAMA_VIDEO_SUMMARY_MODEL: ${OLLAMA_VIDEO_SUMMARY_MODEL:-granite4.1:8b}
-      OLLAMA_VIDEO_SUMMARY_FAST_MODEL: ${OLLAMA_VIDEO_SUMMARY_FAST_MODEL:-mistral-small:24b}
-      OLLAMA_VIDEO_SUMMARY_FINAL_MODEL: ${OLLAMA_VIDEO_SUMMARY_FINAL_MODEL:-granite4.1:8b}
-      OLLAMA_LOCATION_MODEL: ${OLLAMA_LOCATION_MODEL:-granite4.1:8b}
-      MEM0_BASE_URL: http://mem0-memory:8000
-      MEM0_ENABLED: ${MEM0_ENABLED:-true}
-      MEM0_TOP_K: ${MEM0_TOP_K:-5}
-      AI_WEB_SEARCH_ENABLED: ${AI_WEB_SEARCH_ENABLED:-true}
-      AI_WEB_SEARCH_MAX_RESULTS: ${AI_WEB_SEARCH_MAX_RESULTS:-6}
-      AI_WEB_SEARCH_REQUIRE_CITATIONS: ${AI_WEB_SEARCH_REQUIRE_CITATIONS:-true}
-      HOSTNAME: 0.0.0.0
-      PORT: 3000
+      - ./aiyo/.env.prod-live
     ports:
-      - "3000:3000"
-    command: sh -c "npx prisma migrate deploy && npm run start"
+      - "127.0.0.1:3001:3000"
+    command: sh -c "mkdir -p /app/.next && find /app/.next -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true; NODE_ENV=development npm install && npx prisma generate && npx prisma migrate deploy && NODE_ENV=production npm run build && npm run start"
+    volumes:
+      - ./aiyo:/app
+      - aiyo_new_node_modules_prod_live:/app/node_modules
+      - aiyo_new_next_prod_live:/app/.next
     restart: unless-stopped
     healthcheck:
       test:
@@ -177,177 +178,28 @@ services:
         ]
       interval: 10s
       timeout: 5s
-      retries: 6
-      start_period: 20s
+      retries: 24
+      start_period: 320s
     depends_on:
-      postgres:
+      aiyo-new-postgres-prod:
         condition: service_healthy
-      redis:
+      aiyo-new-redis:
         condition: service_healthy
-    networks:
-      - backend
-
-  mem0-memory:
-    build:
-      # 預設為本儲存庫 vendor/mem0（已同捆；若目錄缺失可執行 scripts/clone-mem0.ps1 或 .sh）；可用 MEM0_REPO_PATH 覆寫。
-      context: ${MEM0_REPO_PATH:-./vendor/mem0}
-      dockerfile: server/dev.Dockerfile
-    container_name: mem0-memory
-    environment:
-      POSTGRES_HOST: mem0-memory-postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_COLLECTION_NAME: aiyo_memories_local
-      JWT_SECRET: mem0-local-dev-secret-change-me
-      AUTH_DISABLED: "true"
-      DASHBOARD_URL: http://localhost:3010
-      APP_DB_NAME: mem0_app
-      MEM0_DEFAULT_LLM_PROVIDER: ollama
-      MEM0_DEFAULT_EMBEDDER_PROVIDER: ollama
-      MEM0_DEFAULT_LLM_MODEL: qwen3.5:9b
-      MEM0_DEFAULT_EMBEDDER_MODEL: nomic-embed-text
-      MEM0_DEFAULT_EMBEDDING_DIMS: 768
-      OLLAMA_BASE_URL: http://host.docker.internal:11434
-      MEM0_TELEMETRY: "false"
-      # mem0 預設寫入 /app/history/history.db，映像內常無此目錄
-      HISTORY_DB_PATH: /tmp/mem0_history.db
-      REQUEST_LOG_RETENTION_DAYS: 30
-      PYTHONDONTWRITEBYTECODE: "1"
-      PYTHONUNBUFFERED: "1"
-      PYTHONPATH: ""
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "8890:8000"
-    volumes:
-      - "./docker/mem0/patch_main_for_ollama.py:/tmp/patch_main_for_ollama.py:ro"
-      - "./docker/mem0/ensure_mem0_app_db.py:/tmp/ensure_mem0_app_db.py:ro"
-    command: |
-      sh -c "python - <<'PY'
-      import os, time, urllib.request
-      base = os.environ.get('OLLAMA_BASE_URL', 'http://host.docker.internal:11434').rstrip('/')
-      url = base + '/api/tags'
-      for attempt in range(1, 121):
-          try:
-              with urllib.request.urlopen(url, timeout=3) as response:
-                  if response.status == 200:
-                      print(f'Ollama is reachable at {base}', flush=True)
-                      raise SystemExit(0)
-          except Exception as exc:
-              print(f'Waiting for Ollama at {base} ({attempt}/120): {exc}', flush=True)
-              time.sleep(5)
-      raise SystemExit('Ollama did not become reachable; start Ollama or update OLLAMA_BASE_URL.')
-      PY
-      python /tmp/patch_main_for_ollama.py &&
-      rm -rf /app/packages &&
-      # mem0ai 的 Ollama LLM/嵌入需 PyPI 套件 ollama（僅 HTTP client，連 host 上的 ollama serve；非安裝 Ollama 本體）
-      # 勿用雙引號包住 ollama 版本：Compose 會誤判插值，截斷後續 && alembic / uvicorn。
-      pip install -q --force-reinstall --no-deps mem0ai 'ollama>=0.3.0' &&
-      pip install -q 'spacy>=3.7.0' &&
-      python -m spacy download en_core_web_sm &&
-      python /tmp/ensure_mem0_app_db.py &&
-      alembic upgrade head &&
-      uvicorn main:app --host 0.0.0.0 --port 8000"
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/docs')\"",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-    depends_on:
-      mem0-memory-postgres:
+      open-webui:
         condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - backend
-    profiles: ["mem0"]
-
-  mem0-memory-postgres:
-    image: ankane/pgvector:v0.5.1
-    container_name: mem0-memory-postgres
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
-    volumes:
-      - mem0_memory_postgres_data:/var/lib/postgresql/data
-      - "./docker/mem0/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro"
-    restart: unless-stopped
-    profiles: ["mem0"]
-    healthcheck:
-      test: ["CMD", "pg_isready", "-q", "-d", "postgres", "-U", "postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - backend
-
-  postgres:
-    image: pgvector/pgvector:pg16
-    container_name: aiyo-new-postgres
-    environment:
-      POSTGRES_USER: aiyo
-      POSTGRES_PASSWORD: aiyo_password
-      POSTGRES_DB: aiyo_new_db
-    ports:
-      - "5432:5432"
-    volumes:
-      - aiyo_new_postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U aiyo -d aiyo_new_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - backend
-
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: aiyo-new-pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-    ports:
-      - "5050:80"
-    volumes:
-      - aiyo_new_pgadmin_data:/var/lib/pgadmin
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - backend
-
-  redis:
-    image: redis:7-alpine
-    container_name: aiyo-new-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - aiyo_new_redis_data:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
     networks:
       - backend
 
 networks:
-  # 所有服務掛在同一後端網路，服務主機名 postgres、redis、mem0-memory 才可互相解析。
-  # 請用專案目錄的 dev-up.ps1 或 docker compose，勿只執行 docker start（容器可能脫離 compose 網路）。
-  backend: {}
+  backend:
+    driver: bridge
 
 volumes:
-  aiyo_new_postgres_data:
-  aiyo_new_pgadmin_data:
+  aiyo_new_postgres_dev_data:
+  aiyo_new_postgres_prod_data:
   aiyo_new_redis_data:
-  mem0_memory_postgres_data:
+  open_webui_data:
+  aiyo_new_node_modules_dev:
+  aiyo_new_node_modules_prod_live:
+  aiyo_new_next_dev:
+  aiyo_new_next_prod_live:

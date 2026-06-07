@@ -107,8 +107,10 @@ export async function acceptPreferenceReuseIfVisible(
   chatTimeoutMs = 240_000,
 ): Promise<ChatApiPayload | undefined> {
   const panel = page.getByTestId("preference-reuse-panel");
+  const acceptButton = page.getByTestId("preference-reuse-accept");
   try {
     await panel.waitFor({ state: "visible", timeout: 4_000 });
+    await expect(acceptButton).toBeEnabled({ timeout: Math.min(chatTimeoutMs, 30_000) });
   } catch {
     return undefined;
   }
@@ -117,7 +119,7 @@ export async function acceptPreferenceReuseIfVisible(
     (res) => res.url().includes("/api/ai/chat") && res.request().method() === "POST",
     { timeout: chatTimeoutMs },
   );
-  await page.getByTestId("preference-reuse-accept").click();
+  await acceptButton.click();
   const res = await chatResponse;
   try {
     return (await res.json()) as ChatApiPayload;
@@ -144,6 +146,40 @@ export async function isWorkflowQuestionCardVisible(page: Page): Promise<boolean
   return inlineCard.isVisible().catch(() => false);
 }
 
+async function pickQuestionCardCalendarDate(
+  field: import("@playwright/test").Locator,
+  target: Date,
+) {
+  const trigger = field.locator("button").first();
+  await trigger.click();
+
+  const popup = field.locator("div.absolute");
+  await expect(popup).toBeVisible({ timeout: 15_000 });
+
+  const targetMonthLabel = target.toLocaleDateString("zh-TW", {
+    year: "numeric",
+    month: "long",
+  });
+  const monthLabel = popup.locator("p.text-sm.font-semibold").first();
+  const navButtons = popup.locator("button").filter({ has: popup.locator("svg") });
+  const nextMonthButton = navButtons.nth(1);
+
+  for (let index = 0; index < 12; index += 1) {
+    const currentMonthLabel = (await monthLabel.textContent())?.trim() || "";
+    if (currentMonthLabel === targetMonthLabel) {
+      break;
+    }
+    await nextMonthButton.click();
+  }
+
+  const dayButton = popup
+    .locator(".grid.grid-cols-7.gap-1 button:not(.bg-transparent):not([disabled])")
+    .filter({ hasText: new RegExp(`^${target.getDate()}$`) })
+    .first();
+  await expect(dayButton).toBeVisible({ timeout: 15_000 });
+  await dayButton.click();
+}
+
 /** Click first/recommended options in workflow question card and submit. */
 export async function answerQuestionCardDefaults(page: Page, timeoutMs = 60_000) {
   const activeSelector = '[data-submitted="false"]:has(button.rounded-full:not([disabled]))';
@@ -164,11 +200,11 @@ export async function answerQuestionCardDefaults(page: Page, timeoutMs = 60_000)
 
   const dateInputs = card.locator('input[type="date"]');
   const dateCount = await dateInputs.count();
+  const start = new Date();
+  start.setDate(start.getDate() + 14);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 2);
   if (dateCount > 0) {
-    const start = new Date();
-    start.setDate(start.getDate() + 14);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 2);
     const fmt = (value: Date) => value.toISOString().slice(0, 10);
     if (dateCount >= 1) {
       await dateInputs.nth(0).fill(fmt(start));
@@ -176,6 +212,15 @@ export async function answerQuestionCardDefaults(page: Page, timeoutMs = 60_000)
     if (dateCount >= 2) {
       await dateInputs.nth(1).fill(fmt(end));
     }
+  }
+
+  const calendarFields = card.locator("div.relative.space-y-1");
+  const calendarFieldCount = await calendarFields.count();
+  if (calendarFieldCount >= 1) {
+    await pickQuestionCardCalendarDate(calendarFields.nth(0), start);
+  }
+  if (calendarFieldCount >= 2) {
+    await pickQuestionCardCalendarDate(calendarFields.nth(1), end);
   }
 
   const textInputs = card.locator('input[type="text"], input[type="number"]');
@@ -235,11 +280,12 @@ async function advanceLivePlanningDialogues(
     }
 
     if (await isWorkflowQuestionCardVisible(page)) {
-      await answerQuestionCardDefaults(page);
-      const followUpResponse = await page.waitForResponse(
+      const followUpResponsePromise = page.waitForResponse(
         (res) => res.url().includes("/api/ai/chat") && res.request().method() === "POST" && res.ok(),
         { timeout: chatTimeoutMs },
       );
+      await answerQuestionCardDefaults(page);
+      const followUpResponse = await followUpResponsePromise;
       try {
         payload = (await followUpResponse.json()) as ChatApiPayload;
       } catch {

@@ -141,6 +141,86 @@ export function retimeDayItems(items: TripPlanItem[], options?: RetimeDayItemsOp
   });
 }
 
+function buildTravelPatchedItem(
+  item: TripPlanItem,
+  patch: Partial<TripPlanItem>,
+): TripPlanItem {
+  const next = { ...item, ...patch, id: item.id };
+  if (Object.prototype.hasOwnProperty.call(patch, "transport")) {
+    next.transportDurationMinutes = undefined;
+    next.transportDistanceMeters = undefined;
+    next.transportDataSource = undefined;
+  }
+  return next;
+}
+
+export function cascadeDayItemsAfterTravelEdit(
+  items: TripPlanItem[],
+  itemId: string,
+  patch: Partial<TripPlanItem>,
+): TripPlanItem[] {
+  const targetIndex = items.findIndex((item) => item.id === itemId);
+  if (targetIndex < 0) {
+    return items;
+  }
+
+  const patched = items.map((item) =>
+    item.id === itemId ? buildTravelPatchedItem(item, patch) : { ...item },
+  );
+  const timeChanged = typeof patch.time === "string" && patch.time.trim().length > 0;
+  const transportChanged = Object.prototype.hasOwnProperty.call(patch, "transport");
+
+  if (!timeChanged && !transportChanged) {
+    return patched;
+  }
+
+  const next = [...patched];
+  let startIndex = 0;
+  if (transportChanged && !timeChanged) {
+    startIndex = Math.max(1, targetIndex);
+  } else if (targetIndex > 0) {
+    startIndex = targetIndex + 1;
+  } else {
+    startIndex = 1;
+  }
+
+  if (transportChanged && !timeChanged && targetIndex > 0) {
+    const previous = next[targetIndex - 1]!;
+    const current = next[targetIndex]!;
+    const travelMinutes = travelMinutesBetween(previous, current);
+    current.time = toClock(toMinutes(previous.time) + travelMinutes);
+    current.transportDurationMinutes = travelMinutes;
+    const fromCoord = itemCoordinates(previous);
+    const toCoord = itemCoordinates(current);
+    current.transportDistanceMeters =
+      fromCoord && toCoord ? Math.round(estimateDistanceKm(fromCoord, toCoord) * 1000) : undefined;
+    current.transportDataSource = undefined;
+  } else if (targetIndex === 0 && timeChanged) {
+    next[0] = {
+      ...next[0]!,
+      time: patch.time!.trim(),
+      transportDurationMinutes: undefined,
+      transportDistanceMeters: undefined,
+      transportDataSource: undefined,
+    };
+  }
+
+  for (let index = startIndex; index < next.length; index += 1) {
+    const previous = next[index - 1]!;
+    const current = next[index]!;
+    const travelMinutes = travelMinutesBetween(previous, current);
+    current.time = toClock(toMinutes(previous.time) + travelMinutes);
+    current.transportDurationMinutes = travelMinutes;
+    const fromCoord = itemCoordinates(previous);
+    const toCoord = itemCoordinates(current);
+    current.transportDistanceMeters =
+      fromCoord && toCoord ? Math.round(estimateDistanceKm(fromCoord, toCoord) * 1000) : undefined;
+    current.transportDataSource = undefined;
+  }
+
+  return next;
+}
+
 /** Reorder by id list and retime using the pre-reorder day anchor and dwell map. */
 export function reorderItemsWithRetime(
   items: TripPlanItem[],

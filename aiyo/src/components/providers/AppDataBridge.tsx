@@ -6,8 +6,10 @@ import { signOut, useSession } from "next-auth/react";
 import { zhTW as t } from "@/locales/zh-TW";
 import { clearPersistedState } from "@/services/persistence";
 import { ApiRequestError, apiGet } from "@/services/apiClient";
+import { geocodeItineraryItemsMissingLocation } from "@/services/geocodeItineraryItems";
 import { reconcileTripMapState } from "@/services/mapSync";
 import { syncService } from "@/services/syncService";
+import { repairSparseItineraryDaysFromTravelPlan } from "@/lib/generatedTripPlan";
 import { useChatStore } from "@/stores/useChatStore";
 import { useCollabStore } from "@/stores/useCollabStore";
 import { useMapStore } from "@/stores/useMapStore";
@@ -86,7 +88,7 @@ export default function AppDataBridge() {
 
     void syncService
       .loadBootstrap()
-      .then((snapshot) => {
+      .then(async (snapshot) => {
         if (!mounted) {
           return;
         }
@@ -95,6 +97,54 @@ export default function AppDataBridge() {
           forceTrip: true,
         });
         syncService.startRealtime(snapshot.collaboration?.roomId || null);
+        if (snapshot.trip) {
+          const latestTravelPlan = [...snapshot.chatMessages]
+            .reverse()
+            .find((message) => message.responseType === "travel_plan" && message.travelPlan);
+          const repairedItinerary =
+            latestTravelPlan?.travelPlan
+              ? repairSparseItineraryDaysFromTravelPlan(
+                  snapshot.trip.itinerary,
+                  latestTravelPlan.travelPlan,
+                  snapshot.trip.days,
+                )
+              : null;
+          if (repairedItinerary) {
+            withSyncMutationSource("local-user-edit", () => {
+              useTripStore.setState({
+                itinerary: repairedItinerary,
+                lastUpdatedAt: new Date().toISOString(),
+              });
+            });
+            const updates = await geocodeItineraryItemsMissingLocation(
+              repairedItinerary.flatMap((day) =>
+                day.items
+                  .filter((item) => !item.location || !item.location.verified || !item.location.placeId)
+                  .map((item) => ({ dayNumber: day.dayNumber, item })),
+              ),
+              snapshot.trip.destination,
+            );
+            if (updates.length > 0) {
+              withSyncMutationSource("local-user-edit", () => {
+                useTripStore.setState((state) => ({
+                  itinerary: state.itinerary.map((day) =>
+                    ({
+                      ...day,
+                      items: day.items.map((item) => {
+                        const update = updates.find(
+                          (entry) => entry.dayNumber === day.dayNumber && entry.itemId === item.id,
+                        );
+                        return update ? { ...item, location: update.location } : item;
+                      }),
+                    }),
+                  ),
+                  lastUpdatedAt: new Date().toISOString(),
+                }));
+              });
+            }
+            await syncService.flushTripSyncNow({ force: true });
+          }
+        }
       })
       .catch((error) => {
         const message = error instanceof Error ? error.message : "";

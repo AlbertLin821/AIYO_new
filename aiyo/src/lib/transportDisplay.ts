@@ -2,6 +2,18 @@ import { zhTW as t } from "@/locales/zh-TW";
 
 export type TransportDisplayOption = { value: string; label: string };
 
+export type TransportDisplayIcon =
+  | "car"
+  | "train"
+  | "bus"
+  | "walk"
+  | "bike"
+  | "taxi";
+
+function normalizeTransportValue(value: string): string {
+  return value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+}
+
 export function transportDisplayLabel(value: string, options: TransportDisplayOption[] = []): string {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -13,7 +25,7 @@ export function transportDisplayLabel(value: string, options: TransportDisplayOp
     return option.label;
   }
 
-  const normalized = trimmed.toLowerCase().replace(/[\s-]+/g, "_");
+  const normalized = normalizeTransportValue(trimmed);
   const labelByValue: Record<string, string> = {
     driving: t.itineraryPanel.transportDriving,
     drive: t.itineraryPanel.transportDriving,
@@ -39,4 +51,28 @@ export function transportDisplayLabel(value: string, options: TransportDisplayOp
   };
 
   return labelByValue[normalized] ?? trimmed;
+}
+
+export function transportDisplayIcon(value: string): TransportDisplayIcon {
+  const normalized = normalizeTransportValue(value);
+  if (/walking|walk|步行|徒歩|走路/u.test(normalized)) {
+    return "walk";
+  }
+  if (/bicycling|bicycle|bike|自行車|單車|腳踏車|cycling/u.test(normalized)) {
+    return "bike";
+  }
+  if (/taxi|計程車/u.test(normalized)) {
+    return "taxi";
+  }
+  if (/bus|公車/u.test(normalized)) {
+    return "bus";
+  }
+  if (
+    /transit|public_transport|metro|subway|mrt|train|jr|高鐵|台鐵|火車|rail|tram|大眾/u.test(
+      normalized,
+    )
+  ) {
+    return "train";
+  }
+  return "car";
 }

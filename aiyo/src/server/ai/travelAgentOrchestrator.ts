@@ -204,7 +204,7 @@ function isModifyIntent(message: string, context?: ChatContext): boolean {
   if (!context?.itinerary?.length) {
     return false;
   }
-  const hasMutationVerb = /改成|改到|改為|換成|調整到|新增|加入|加上|加到|刪除|刪掉|移除|取消|不要了|不用了|提前|延後|移到/u.test(message);
+  const hasMutationVerb = /改成|改到|改為|換成|調整到|新增|加入|加上|加到|加(?:一個|個)?|刪除|刪掉|移除|取消|不要了|不用了|提前|延後|移到/u.test(message);
   const mentionsCurrentPlanTarget =
     /第\s*[\d一二兩两三四五六七八九十]+\s*天|地\s*[\d一二兩两三四五六七八九十]+\s*天|最後一天|最后一天|行程/u.test(message) ||
     context.itinerary.some((day) => day.items.some((item) => item.title && message.includes(item.title)));

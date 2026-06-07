@@ -1,6 +1,6 @@
-# Loads aiyo/.env (+ optional .env.local) into the current PowerShell session so
-# docker compose ${VAR} substitution and build args use project keys, not stale
-# Windows user environment variables (e.g. deleted GCP Maps keys).
+# Loads the selected aiyo/.env.<mode> file into the current PowerShell session so
+# docker compose ${VAR} substitution and build args follow the project env file
+# instead of stale Windows user environment variables.
 
 function Read-AiyoDotEnvMap {
     param([string] $FilePath)
@@ -26,11 +26,21 @@ function Read-AiyoDotEnvMap {
 }
 
 function Import-AiyoComposeDotEnv {
-    param([string] $Root = (Get-Location).Path)
+    param(
+        [string] $Root = (Get-Location).Path,
+        [ValidateSet("dev", "prod-live")]
+        [string] $Mode = "dev",
+        [switch] $IncludeLocal
+    )
+
+    $files = @("aiyo/.env.$Mode")
+    if ($IncludeLocal) {
+        $files += "aiyo/.env.local"
+    }
 
     $merged = @{}
-    foreach ($name in @(".env", ".env.local")) {
-        $path = Join-Path $Root "aiyo\$name"
+    foreach ($relativePath in $files) {
+        $path = Join-Path $Root $relativePath
         $fileMap = Read-AiyoDotEnvMap -FilePath $path
         foreach ($entry in $fileMap.GetEnumerator()) {
             $merged[$entry.Key] = $entry.Value
@@ -47,5 +57,5 @@ function Import-AiyoComposeDotEnv {
 if ($MyInvocation.InvocationName -ne ".") {
     $root = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { Get-Location }
     $count = Import-AiyoComposeDotEnv -Root $root
-    Write-Host "Imported $count keys from aiyo/.env (+ .env.local if present) for docker compose substitution."
+    Write-Host "Imported $count keys from the active aiyo/.env.<mode> file for docker compose substitution."
 }

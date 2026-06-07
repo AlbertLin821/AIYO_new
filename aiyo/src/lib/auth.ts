@@ -22,10 +22,14 @@ const providers: NextAuthOptions["providers"] = [];
 
 if (process.env.NODE_ENV !== "production") {
   if (!process.env.NEXTAUTH_SECRET) {
-    console.warn("[auth] NEXTAUTH_SECRET is missing; set it in .env.local");
+    console.warn(
+      "[auth] NEXTAUTH_SECRET is missing; set it in aiyo/.env.dev or aiyo/.env.prod-live",
+    );
   }
   if (!process.env.NEXTAUTH_URL) {
-    console.warn("[auth] NEXTAUTH_URL is missing; set it in .env.local");
+    console.warn(
+      "[auth] NEXTAUTH_URL is missing; set it in aiyo/.env.dev or aiyo/.env.prod-live",
+    );
   }
   // 開發時請讓 NEXTAUTH_URL 與瀏覽器實際網址一致（含 http/https、主機名與埠號），否則 Cookie／Session 可能與 API 驗證不一致。
 }

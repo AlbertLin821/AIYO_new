@@ -282,6 +282,7 @@ function compactSummaryFromSimpleExtraction(input: {
 function buildSimpleSegments(input: {
   places: SimpleExtractedPlace[];
   foods: SimpleExtractedFood[];
+  transcriptSource: VideoSummaryDebugMeta["transcriptSource"];
 }): VideoSummarySegment[] {
   const timedPlaces = input.places
     .filter((place) => typeof place.startSeconds === "number")
@@ -307,8 +308,12 @@ function buildSimpleSegments(input: {
       summary: place.evidence || `影片提到 ${place.name}`,
       locationHints: [place.name],
       foods: relatedFoods,
-      timestampSource: "youtube-transcript",
-      timestampConfidence: "high",
+      timestampSource:
+        input.transcriptSource === "fallback-description"
+          ? "description-fallback"
+          : "youtube-transcript",
+      timestampConfidence:
+        input.transcriptSource === "fallback-description" ? "low" : "high",
       extractionSource: "ai-polished",
     };
   });
@@ -499,11 +504,14 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
       title: metadata.title,
       description: metadata.description,
       transcriptLines: preprocessedLines,
+      destinationHint: input.destination,
+      transcriptLanguage: transcriptResult.captionLanguage,
     });
     const extractedFoodNames = simpleResult.foods.map((food) => food.name);
     const resolvedSegments = buildSimpleSegments({
       places: simpleResult.places,
       foods: simpleResult.foods,
+      transcriptSource,
     });
     const mapReadyLocations = await buildSimpleMapReadyLocations({
       places: simpleResult.places,
@@ -523,7 +531,8 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     });
     const summarySource: VideoSummaryDebugMeta["summarySource"] =
       transcriptSource === "fallback-description" ? "ollama-description-fallback" : "ollama-transcript";
-    const segmentSource: VideoSummaryDebugMeta["segmentSource"] = "transcript-chunks";
+    const segmentSource: VideoSummaryDebugMeta["segmentSource"] =
+      transcriptSource === "fallback-description" ? "description-fallback" : "transcript-chunks";
 
     const video: VideoRecommendation = {
       id: metadata.id,
@@ -555,10 +564,12 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
       extractedFoods: extractedFoodNames,
       mapsProvenance: syncedLocations.length > 0 ? deriveMapsProvenance(syncedLocations) : undefined,
       fallbackReason:
-        simpleResult.debug?.failedChunkCount &&
-        resolvedSegments.length === 0 &&
-        extractedLocationNames.length === 0 &&
-        extractedFoodNames.length === 0
+        transcriptSource === "fallback-description"
+          ? transcriptResult.fallbackReason || "無法取得逐字稿，以下根據影片描述欄整理，時間與片段僅供參考。"
+          : simpleResult.debug?.failedChunkCount &&
+              resolvedSegments.length === 0 &&
+              extractedLocationNames.length === 0 &&
+              extractedFoodNames.length === 0
           ? `部分字幕片段分析逾時或失敗，未能擷取地點與片段。失敗片段數：${simpleResult.debug.failedChunkCount}。`
           : extractedLocationNames.length === 0 && extractedFoodNames.length === 0
             ? NO_SIMPLE_RESULTS_MESSAGE
@@ -576,6 +587,14 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
         finalPlaceCount: simpleResult.debug?.finalPlaceCount,
         finalFoodCount: simpleResult.debug?.finalFoodCount,
         failedChunkCount: simpleResult.debug?.failedChunkCount,
+        ...(simpleResult.debug?.failedChunks?.length
+          ? {
+              placeExtractionPipelineVersion: simpleResult.debug.failedChunks
+                .map((chunk) => `chunk${chunk.chunkIndex}:${chunk.reason}`)
+                .join(" | ")
+                .slice(0, 280),
+            }
+          : {}),
       },
     };
 

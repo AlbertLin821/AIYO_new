@@ -5,6 +5,8 @@ import {
   isApplyPreviousItineraryCommand,
   isFullItineraryRevisionCommand,
   isPersonalMemoryRecallIntent,
+  shouldAttachDecisionPreferenceConfirmation,
+  shouldRenderInlinePreferenceReusePanel,
   shouldShowPlanningWorkflowRail,
 } from "@/lib/chat/workflowRailVisibility";
 
@@ -81,6 +83,69 @@ test("shouldShowPlanningWorkflowRail continues question card flow when inQuestio
     shouldShowPlanningWorkflowRail({
       message: "隨便一句話",
       inQuestionCardFlow: true,
+    }),
+    true,
+  );
+});
+
+test("shouldAttachDecisionPreferenceConfirmation only surfaces confirm_preferences responses", () => {
+  assert.equal(
+    shouldAttachDecisionPreferenceConfirmation({
+      travelAgentMode: "confirm_preferences",
+      responseType: "text_message",
+      replyPreferenceConfirmation: null,
+      decisionPreferenceConfirmation: {
+        summary: "中等預算",
+        preferences: {},
+        prompt: "要沿用這些偏好嗎？",
+      },
+    }),
+    true,
+  );
+
+  assert.equal(
+    shouldAttachDecisionPreferenceConfirmation({
+      travelAgentMode: "generate_itinerary",
+      responseType: "travel_plan",
+      replyPreferenceConfirmation: null,
+      decisionPreferenceConfirmation: {
+        summary: "中等預算",
+        preferences: {},
+        prompt: "需求已足夠，可以進入行程生成。",
+      },
+    }),
+    false,
+  );
+});
+
+test("shouldRenderInlinePreferenceReusePanel hides stale confirmation on travel plan replies", () => {
+  assert.equal(
+    shouldRenderInlinePreferenceReusePanel({
+      role: "assistant",
+      isLastMessage: true,
+      responseType: "travel_plan",
+      hasQuestionCard: false,
+      messagePreferenceConfirmation: {
+        summary: "中等預算",
+        preferences: {},
+        prompt: "需求已足夠，可以進入行程生成。",
+      },
+    }),
+    false,
+  );
+
+  assert.equal(
+    shouldRenderInlinePreferenceReusePanel({
+      role: "assistant",
+      isLastMessage: true,
+      responseType: "text_message",
+      hasQuestionCard: false,
+      workflowRailMode: "confirm_preferences",
+      workflowRailPreferenceConfirmation: {
+        summary: "中等預算",
+        preferences: {},
+        prompt: "要沿用這些偏好嗎？",
+      },
     }),
     true,
   );

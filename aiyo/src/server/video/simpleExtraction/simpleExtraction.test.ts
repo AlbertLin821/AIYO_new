@@ -64,3 +64,22 @@ test("mergeSimpleExtractionResults dedupes and keeps foods out of places unless 
     ["熊本拉麵", "馬肉刺身"],
   );
 });
+
+test("mergeSimpleExtractionResults strips leading copula/prefix fragments before dedupe", () => {
+  const merged = mergeSimpleExtractionResults({
+    chunkResults: [
+      {
+        places: [
+          { name: "是林聰明砂鍋魚頭", type: "restaurant", evidence: "是林聰明砂鍋魚頭", startSeconds: 90 },
+          { name: "位於文化夜市", type: "market", evidence: "位於文化夜市", startSeconds: 35 },
+        ],
+        foods: [],
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    merged.places.map((place) => place.name),
+    ["林聰明砂鍋魚頭", "文化夜市"],
+  );
+});

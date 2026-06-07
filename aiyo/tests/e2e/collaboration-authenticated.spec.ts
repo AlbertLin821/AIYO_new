@@ -65,3 +65,48 @@ test("authenticated collaboration roles enforce view, edit, and permission manag
   }
 });
 
+test("shared itinerary shows realtime collaborator cursors for owner and collaborator", async ({ browser, page }) => {
+  const { owner, collaborator } = await seedAuthUsers();
+  const trip = await seedTripForUser(owner.id, "E2E Collaboration Cursor Trip");
+
+  await loginAs(page, E2E_OWNER);
+  await page.goto(`/itinerary?tripId=${trip.id}`);
+  const addCollaboratorResponse = await page.request.post(`/api/trips/${trip.id}/collaborators`, {
+    data: { email: E2E_COLLABORATOR.email, role: "editor" },
+  });
+  expect(addCollaboratorResponse.status()).toBe(201);
+
+  const collaboratorContext = await browser.newContext();
+  const collaboratorPage = await collaboratorContext.newPage();
+
+  try {
+    await loginAs(collaboratorPage, E2E_COLLABORATOR);
+    await collaboratorPage.goto(`/itinerary?tripId=${trip.id}`);
+
+    const ownerEditor = page.getByTestId("itinerary-editor");
+    const collaboratorEditor = collaboratorPage.getByTestId("itinerary-editor");
+    await expect(ownerEditor).toBeVisible({ timeout: 40_000 });
+    await expect(collaboratorEditor).toBeVisible({ timeout: 40_000 });
+
+    const ownerBox = await ownerEditor.boundingBox();
+    const collaboratorBox = await collaboratorEditor.boundingBox();
+    expect(ownerBox).not.toBeNull();
+    expect(collaboratorBox).not.toBeNull();
+
+    await page.mouse.move(ownerBox!.x + ownerBox!.width * 0.35, ownerBox!.y + 120);
+    await collaboratorPage.mouse.move(
+      collaboratorBox!.x + collaboratorBox!.width * 0.65,
+      collaboratorBox!.y + 180,
+    );
+
+    await expect(
+      collaboratorPage.getByTestId(`presence-cursor-${owner.id}`),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.getByTestId(`presence-cursor-${collaborator.id}`),
+    ).toBeVisible({ timeout: 10_000 });
+  } finally {
+    await collaboratorContext.close();
+  }
+});
+

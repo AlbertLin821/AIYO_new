@@ -134,3 +134,44 @@ export function shouldShowPlanningWorkflowRail(input: {
 
   return false;
 }
+
+export function shouldAttachDecisionPreferenceConfirmation(input: {
+  travelAgentMode?: ConversationMode | null;
+  responseType?: ChatMessage["responseType"];
+  replyPreferenceConfirmation?: ChatMessage["preferenceConfirmation"] | null;
+  decisionPreferenceConfirmation?: ChatMessage["preferenceConfirmation"] | null;
+}): boolean {
+  return Boolean(
+    input.travelAgentMode === "confirm_preferences" &&
+      input.responseType !== "travel_plan" &&
+      !input.replyPreferenceConfirmation &&
+      input.decisionPreferenceConfirmation,
+  );
+}
+
+export function shouldRenderInlinePreferenceReusePanel(input: {
+  role?: ChatMessage["role"];
+  isLastMessage: boolean;
+  responseType?: ChatMessage["responseType"];
+  hasQuestionCard?: boolean;
+  messagePreferenceConfirmation?: ChatMessage["preferenceConfirmation"] | null;
+  workflowRailPreferenceConfirmation?: ChatMessage["preferenceConfirmation"] | null;
+  workflowRailMode?: ConversationMode | null;
+}): boolean {
+  if (!input.isLastMessage || input.role === "user" || input.hasQuestionCard) {
+    return false;
+  }
+
+  if (input.responseType === "travel_plan") {
+    return false;
+  }
+
+  if (
+    input.workflowRailMode === "confirm_preferences" &&
+    input.workflowRailPreferenceConfirmation
+  ) {
+    return true;
+  }
+
+  return Boolean(input.messagePreferenceConfirmation);
+}

@@ -1,160 +1,115 @@
 # AIYO App
 
-This is the active application inside `AIYO_new/aiyo`. It now includes:
+`AIYO_new/aiyo` is the main application. The active runtime model is:
 
-- Next.js BFF routes for AI, video, trip, profile, auth, and collaboration
-- Ollama-backed chat and trip planning
-- PostgreSQL + Prisma persistence
-- NextAuth identity with Google OAuth + email/password credentials
-- server-streamed collaboration snapshots and presence heartbeats
+- AIYO app containers for `dev` and `prod-live`
+- split PostgreSQL databases
+- shared Redis
+- Open WebUI as the authenticated AI gateway
+- Ollama on the host machine
 
-## Stack
+The repository root owns the Docker workflow. Start there unless you are running app-only commands.
 
-- Next.js 16 App Router
-- React 19
-- TypeScript
-- Zustand for UI state
-- Prisma ORM with PostgreSQL
-- NextAuth
-- Ollama through server-side adapters and Next route handlers
+## Environment files
 
-## Local setup
+The active project env files are:
 
-1. Copy envs:
+- `aiyo/.env.dev`
+- `aiyo/.env.prod-live`
+- `aiyo/.env.dev.example`
+- `aiyo/.env.prod-live.example`
 
-```bash
-cp .env.example .env.local
-```
-開發時請只維護 `.env.local`。本專案內建的 Prisma scripts 也會先載入 `.env.local`。
+`aiyo/.env.example` is only a compatibility starter template. New work should use `.env.dev` or `.env.prod-live`.
 
-2. Install packages:
+## Local stack
+
+1. Create the env files if they do not exist yet:
 
 ```bash
-npm install
+cp .env.dev.example .env.dev
+cp .env.prod-live.example .env.prod-live
 ```
 
-3. Start Docker services from the `AIYO_new` root:
+2. From the repository root, start the dev stack:
 
 ```bash
 cd ..
-docker compose up -d --build
+powershell -ExecutionPolicy Bypass -File .\dev-up.ps1
 ```
 
-Container names:
-
-- `aiyo-new-app`
-- `aiyo-new-postgres`
-- `aiyo-new-redis`
-- `aiyo-new-pgadmin`
-
-The app container runs `prisma migrate deploy` before `next start`. You can verify app-to-database connectivity at `http://localhost:3000/api/health`.
-
-4. Back in `AIYO_new/aiyo`, generate Prisma client, apply schema, and seed:
+Or run Compose directly:
 
 ```bash
-cd aiyo
+docker compose --env-file ./aiyo/.env.dev up -d --build --force-recreate \
+  aiyo-new-postgres-dev aiyo-new-redis open-webui aiyo-new-app-dev
+```
+
+3. Open:
+
+- App: `http://127.0.0.1:3000`
+- Open WebUI: `http://127.0.0.1:8080`
+- Health: `http://127.0.0.1:3000/api/health`
+
+## Open WebUI
+
+AIYO now uses Open WebUI as the main AI gateway:
+
+- primary chat completions go through `POST /api/chat/completions`
+- legacy Ollama-specific paths route through the Open WebUI Ollama proxy
+- `GET /api/ai/ollama-status` remains the frontend compatibility route
+
+On first startup, Open WebUI uses `OPENWEBUI_ADMIN_EMAIL` and `OPENWEBUI_ADMIN_PASSWORD` from the env file to create the admin account when the data volume is empty. After signing in:
+
+1. Open Settings and create an API key.
+2. Paste that key into `OPENWEBUI_API_KEY` in `aiyo/.env.dev` and `aiyo/.env.prod-live`.
+3. Recreate `open-webui` and the matching app container.
+
+## App commands
+
+Run these inside `AIYO_new/aiyo`:
+
+```bash
+npm install
 npm run prisma:generate
-npx dotenvx run -f .env.local -- prisma migrate deploy
-npm run db:seed
+npm run build
+npm test
 ```
 
-If `prisma migrate deploy` fails, you can apply the migrations manually (in order):
+Planner checks:
 
 ```bash
-npx dotenvx run -f .env.local -- prisma db execute --file prisma/migrations/20260416_000001_phase3_init/migration.sql --schema prisma/schema.prisma
-npx dotenvx run -f .env.local -- prisma db execute --file prisma/migrations/20260416_000002_add_password_hash/migration.sql --schema prisma/schema.prisma
+npm run test:e2e:phase7
+npm run test:e2e:phase8
 ```
 
-5. Start Ollama:
+Live AI itinerary check, only after `OPENWEBUI_API_KEY` is configured and the stack is healthy:
 
-```bash
-ollama serve
-ollama pull gemma4:26B
-ollama pull mistral-small:24b
-ollama pull qwen3.6:27b
+```powershell
+$env:E2E_LIVE_AI="1"
+npm run test:e2e:live-ai:itinerary
 ```
 
-6. Start the app:
-
-```bash
-npm run dev
-```
-
-Open `http://localhost:3000`.
-
-## Required env vars
+## Required env values
 
 - `DATABASE_URL`
+- `REDIS_URL`
 - `NEXTAUTH_URL`
 - `NEXTAUTH_SECRET`
-- `OLLAMA_BASE_URL`
-- `OLLAMA_MODEL`
+- `OPENWEBUI_BASE_URL`
+- `OPENWEBUI_API_KEY`
+- `OPENWEBUI_MODEL`
 
-Optional:
+Optional but commonly used:
 
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
+- `YOUTUBE_API_KEY`
+- `GOOGLE_MAPS_API_KEY`
+- `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`
+- `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID`
+- `OLLAMA_*` model overrides
 
-### Phase 3.5 (YouTube + Maps real data)
+## Reference docs
 
-Set these for production-like behavior (see also `next.config.ts` for `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` mapping):
-
-- `YOUTUBE_API_KEY` — YouTube Data API v3 (search + video metadata)
-- `GOOGLE_MAPS_API_KEY` — server-side Geocoding API
-- `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` — browser Maps JavaScript API (same key is fine if APIs are enabled for it)
-- `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID` — optional Map ID from Cloud Console (Map Management); enables vector map + `AdvancedMarkerElement`. If omitted, classic markers are used
-- `OLLAMA_BASE_URL` / **`OLLAMA_MODEL`** — 預設端點與後備模型；預設 `gemma4:26B`
-- **`OLLAMA_VIDEO_SUMMARY_MODEL`** / **`OLLAMA_VIDEO_SUMMARY_FAST_MODEL`** / **`OLLAMA_VIDEO_SUMMARY_FINAL_MODEL`** — 影片摘要與段落 JSON 拋光（`video-moment-polish` 走 FINAL）；FAST 預設 `mistral-small:24b`，其餘預設與 `OLLAMA_MODEL` 同系
-- **`OLLAMA_LOCATION_MODEL`** — `location-filter`（可選）；預設 `qwen3.6:27b`
-- **`OLLAMA_TRIP_PLAN_MODEL`** — 僅行程 JSON（`trip-plan`／語音建行程）；未設則同 `OLLAMA_MODEL`。強結構化 JSON 可試 **IBM Granite 4.1**（如 `granite4.1:3b`），見 `docs/ollama-prompts.md`
-- `OLLAMA_VIDEO_SEGMENT_JSON_POLISH` — defaults to `true`（影片段落 JSON 拋光，見 `docs/ollama-prompts.md`）
-- `OLLAMA_VIDEO_LOCATION_JSON_FILTER` — defaults to `false`（可選地名 JSON 篩選）
-
-Fallback switches (default `false`):
-
-- `ENABLE_MOCK_VIDEO_PROVIDER` — force local mock video list instead of YouTube
-- `ENABLE_MOCK_MAPS` — reserved; maps fallback is automatic when the client key or SDK fails
-
-## Main directories
-
-- `src/app/`: pages and route handlers
-- `src/components/`: UI
-- `src/stores/`: local UI and cached remote state
-- `src/services/`: client-side fetch, sync, persistence, and mapping helpers
-- `src/server/`: AI adapters, provider integrations, and data services
-- `src/types/`: shared contracts
-- `prisma/`: schema, migration, and seed
-
-## Implemented routes
-
-- `POST /api/ai/chat`
-- `POST /api/ai/plan`
-- `GET /api/bootstrap`
-- `GET|PUT /api/profile`
-- `GET|PUT /api/trips/current`
-- `GET /api/collab/room`
-- `POST /api/collab/comments`
-- `POST /api/realtime/presence`
-- `GET /api/realtime/stream`
-- `POST /api/videos/summarize`
-- `POST /api/videos/recommendations`
-
-Protected routes:
-
-- `/profile`
-- `/itinerary`
-- `/collaborate`（導向 `/itinerary`，舊書籤相容）
-
-Compatibility routes retained:
-
-- `POST /api/ai/plan-trip`
-- `POST /api/youtube/analyze`
-
-## Additional docs
-
-- `../README.md`（儲存庫根目錄：啟動與 Docker 主說明）
-- `../docs/README.md`（專案層 `docs/` 索引）
-- `docs/README.md`（本目錄 `aiyo/docs/` 與 `testing/` 索引）
-- `../docs/architecture.md`
-- `../docs/implementation_report.md`
-- `docs/phase3_production_upgrade_report.md`
+- [`../README.md`](../README.md)
+- [`../docs/README.md`](../docs/README.md)
+- [`../docs/architecture.md`](../docs/architecture.md)
+- [`docs/README.md`](./docs/README.md)

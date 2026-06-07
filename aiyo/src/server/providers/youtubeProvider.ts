@@ -1119,7 +1119,10 @@ export async function fetchYouTubeTranscript(videoId: string): Promise<Transcrip
     return {
       entries: [],
       source: "none",
-      fallbackReason: "No usable caption track was available for this video.",
+      fallbackReason:
+        tracks.length > 0
+          ? "YouTube 顯示此影片有字幕軌，但目前無法取得字幕內容。"
+          : "No usable caption track was available for this video.",
       captionLanguage: undefined,
       captionKind: undefined,
       captionSource: undefined,
