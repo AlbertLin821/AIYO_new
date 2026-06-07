@@ -61,14 +61,19 @@ test.describe("影片摘要套用到地圖與行程", () => {
 
     await page.goto("/map");
     const mapView = page.getByTestId("map-view");
-    await expect(mapView.getByRole("button", { name: "林聰明砂鍋魚頭" })).toBeVisible({
-      timeout: 40_000,
-    });
-    await expect(mapView.getByRole("button", { name: "民主火雞肉飯" })).toBeVisible();
-
+    await expect
+      .poll(
+        () =>
+          page.getByTestId("map-pin-marker").evaluateAll((els) =>
+            els.map((el) => el.getAttribute("aria-label") || ""),
+          ),
+        { timeout: 40_000 },
+      )
+      .toContain("林聰明砂鍋魚頭");
     const mapPins = await page.getByTestId("map-pin-marker").evaluateAll((els) =>
       els.map((el) => el.getAttribute("aria-label") || ""),
     );
+    expect(mapPins.some((label) => label.includes("民主火雞肉飯"))).toBeTruthy();
     expect(mapPins.join("\n")).not.toContain("走路就能逛夜市");
     expect(mapPins.join("\n")).not.toContain("火雞肉飯加青菜配無糖茶");
     writeArtifactJson("apply-video-summary-map-pins.json", { mapPins });

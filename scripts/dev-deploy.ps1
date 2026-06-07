@@ -371,15 +371,24 @@ if ($SkipDocker) {
 }
 else {
     $composeProfiles = @("--profile", "dev")
-    $services = @("postgres", "redis", "searxng", "app-dev")
+    $services = @("postgres", "redis", "app-dev")
     if ($mem0On) {
         $composeProfiles += @("--profile", "mem0")
-        $services = @("postgres", "redis", "searxng", "mem0-memory-postgres", "mem0-memory", "app-dev")
+        $services = @("postgres", "redis", "mem0-memory-postgres", "mem0-memory", "app-dev")
     }
 
-    $buildArgs = @("compose", "--env-file", "./aiyo/.env") + $composeProfiles + @("build") + $services
-    $upArgs = @("compose", "--env-file", "./aiyo/.env") + $composeProfiles + @("up", "-d", "--no-build") + $services
-    $psArgs = @("compose", "--env-file", "./aiyo/.env") + $composeProfiles + @("ps")
+    . (Join-Path $Root "scripts\import-compose-dotenv.ps1")
+    $null = Import-AiyoComposeDotEnv -Root $Root
+
+    $composeEnvArgs = @("--env-file", "./aiyo/.env")
+    $envLocalPath = Join-Path $Root "aiyo\.env.local"
+    if (Test-Path -LiteralPath $envLocalPath) {
+        $composeEnvArgs += @("--env-file", "./aiyo/.env.local")
+    }
+
+    $buildArgs = @("compose") + $composeEnvArgs + $composeProfiles + @("build") + $services
+    $upArgs = @("compose") + $composeEnvArgs + $composeProfiles + @("up", "-d", "--force-recreate", "--no-build") + $services
+    $psArgs = @("compose") + $composeEnvArgs + $composeProfiles + @("ps")
 
     Write-ServiceTargetList -Label "target services" -Services $services
 
@@ -402,4 +411,4 @@ $script:OverallStopwatch.Stop()
 Write-Progress -Id 1 -Activity "AIYO dev deploy" -Completed
 Write-Host ""
 Write-FinalStageSummary
-Write-Host "Done. App: http://localhost:3000  SearXNG: http://localhost:8081  Mem0: http://localhost:8890" -ForegroundColor Green
+Write-Host "Done. App: http://localhost:3000  Mem0: http://localhost:8890" -ForegroundColor Green

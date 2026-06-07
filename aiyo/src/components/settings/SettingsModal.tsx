@@ -464,6 +464,7 @@ export default function SettingsModal() {
                       const isSavingMem = savingMemoryId === memory.id;
                       const isDeletingMem = deletingMemoryId === memory.id;
                       const updatedAt = memory.updated_at || memory.created_at;
+                      const isTripSummary = memory.kind === "trip_summary" || memory.metadata?.source === "trip-summary";
 
                       return (
                         <div key={memory.id} className="rounded-2xl border border-border-light bg-cream/35 p-4">
@@ -495,6 +496,11 @@ export default function SettingsModal() {
                             </div>
                           ) : (
                             <>
+                              {isTripSummary ? (
+                                <div className="mb-2 inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
+                                  行程記憶
+                                </div>
+                              ) : null}
                               <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
                                 {memory.memory}
                               </p>
@@ -502,25 +508,27 @@ export default function SettingsModal() {
                                 <p className="text-[11px] text-muted">
                                   {updatedAt ? `${t.profile.memoryEditedAt} ${new Date(updatedAt).toLocaleString("zh-TW")}` : ""}
                                 </p>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => { setEditingMemoryId(memory.id); setEditingMemoryText(memory.memory); }}
-                                    className="inline-flex items-center gap-1 rounded-xl border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface"
-                                  >
-                                    <Pencil className="size-3" />
-                                    {t.profile.memoryEdit}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => void handleDeleteMemory(memory.id)}
-                                    disabled={isDeletingMem}
-                                    className="inline-flex items-center gap-1 rounded-xl border border-danger/20 px-2.5 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-50"
-                                  >
-                                    <Trash2 className="size-3" />
-                                    {isDeletingMem ? t.profile.memoryDeleting : t.profile.memoryDelete}
-                                  </button>
-                                </div>
+                                {!isTripSummary ? (
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => { setEditingMemoryId(memory.id); setEditingMemoryText(memory.memory); }}
+                                      className="inline-flex items-center gap-1 rounded-xl border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface"
+                                    >
+                                      <Pencil className="size-3" />
+                                      {t.profile.memoryEdit}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleDeleteMemory(memory.id)}
+                                      disabled={isDeletingMem}
+                                      className="inline-flex items-center gap-1 rounded-xl border border-danger/20 px-2.5 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      <Trash2 className="size-3" />
+                                      {isDeletingMem ? t.profile.memoryDeleting : t.profile.memoryDelete}
+                                    </button>
+                                  </div>
+                                ) : null}
                               </div>
                             </>
                           )}

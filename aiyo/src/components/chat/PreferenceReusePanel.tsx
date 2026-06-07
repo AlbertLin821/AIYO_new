@@ -30,7 +30,7 @@ export default function PreferenceReusePanel({
   currentDays?: number;
   onAccept: () => void;
   onDecline: () => void;
-  onEditSubmit: (message: string, displayMessage: string) => void;
+  onEditSubmit: (message: string, displayMessage: string, draft: EditablePreferences) => void;
   className?: string;
   variant?: "rail" | "inline";
 }) {
@@ -203,7 +203,7 @@ export default function PreferenceReusePanel({
               disabled={disabled}
               onClick={() => {
                 const message = buildPreferenceOverrideMessage(draft);
-                onEditSubmit(message, t.chat.preferenceReuseEditSubmitDisplay);
+                onEditSubmit(message, t.chat.preferenceReuseEditSubmitDisplay, draft);
               }}
               className={cn(
                 "rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark",

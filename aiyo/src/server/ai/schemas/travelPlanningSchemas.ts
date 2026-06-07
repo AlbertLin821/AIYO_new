@@ -157,6 +157,7 @@ const AssistantActionItemSchema = z.object({
   endTime: z.string().trim().max(20).nullable().optional(),
   notes: z.string().trim().max(500).nullable().optional(),
   category: z.string().trim().max(40).nullable().optional(),
+  transport: z.string().trim().max(120).nullable().optional(),
   lat: z.number().nullable().optional(),
   lng: z.number().nullable().optional(),
   source: z.enum(["assistant", "search", "video", "manual"]).optional(),
@@ -210,6 +211,7 @@ export const AssistantActionSchema = z.discriminatedUnion("type", [
       tripId: z.string().trim().optional(),
       title: z.string().trim().max(120).optional(),
       destination: z.string().trim().max(120).optional(),
+      days: z.number().int().min(1).max(30).optional(),
       budgetLevel: z.string().trim().max(40).optional(),
       travelStyles: z.array(z.string().trim().max(40)).max(12).optional(),
       pace: z.string().trim().max(40).optional(),
@@ -262,11 +264,38 @@ export const TripPlanResultSchema = z.object({
           sourceSnippet: z.string().trim().optional(),
           confidence: z.enum(["high", "medium", "low"]).optional(),
         }),
-      ),
+      ).min(1),
     }),
-  ),
+  ).min(1),
   warnings: z.array(z.string()).optional(),
 });
+
+export const ChatPlanningOutputSchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("generate_itinerary"),
+    replyText: z.string().trim(),
+    itinerary: TripPlanResultSchema,
+    assistantActions: z.tuple([]),
+    // Legacy compatibility only. New flow should consume `itinerary`.
+    proposedChanges: z.array(AiProposedChangeSchema),
+  }),
+  z.object({
+    mode: z.literal("modify_itinerary"),
+    replyText: z.string().trim(),
+    itinerary: z.null(),
+    assistantActions: z.array(AssistantActionSchema).max(6),
+    // Legacy compatibility only. New flow should consume `assistantActions`.
+    proposedChanges: z.array(AiProposedChangeSchema),
+  }),
+  z.object({
+    mode: z.literal("answer_question"),
+    replyText: z.string().trim(),
+    itinerary: z.null(),
+    assistantActions: z.tuple([]),
+    // Legacy compatibility only. New flow should keep this empty.
+    proposedChanges: z.array(AiProposedChangeSchema),
+  }),
+]);
 
 const CitationTextSchema = z.object({
   text: z.string().trim().min(1),
@@ -354,4 +383,5 @@ export const travelResearchToolRequestJsonSchema = z.toJSONSchema(
 ) as Record<string, unknown>;
 export const structuredChatOutputJsonSchema = z.toJSONSchema(StructuredChatOutputSchema) as Record<string, unknown>;
 export const tripPlanResultJsonSchema = z.toJSONSchema(TripPlanResultSchema) as Record<string, unknown>;
+export const chatPlanningOutputJsonSchema = z.toJSONSchema(ChatPlanningOutputSchema) as Record<string, unknown>;
 export const travelPlanResponseJsonSchema = z.toJSONSchema(TravelPlanResponseSchema) as Record<string, unknown>;

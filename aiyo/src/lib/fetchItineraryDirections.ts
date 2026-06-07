@@ -18,28 +18,6 @@ type MapsWithImport = GoogleMapsApi & {
   TravelMode?: Record<string, string>;
 };
 
-type DirectionsLeg = { duration?: { value?: number } };
-type DirectionsRouteTyped = {
-  overview_path?: Array<{ lat(): number; lng(): number } | LatLngPoint>;
-  legs?: DirectionsLeg[];
-};
-
-type DirectionsCallbackResult = {
-  routes: DirectionsRouteTyped[];
-} | null;
-
-type DirectionsServiceInstance = {
-  route: (
-    request: Record<string, unknown>,
-    callback: (result: DirectionsCallbackResult, status: string) => void,
-  ) => void;
-};
-
-type MapsWithDirections = GoogleMapsApi & {
-  DirectionsService?: new () => DirectionsServiceInstance;
-  TravelMode?: Record<string, string>;
-};
-
 type RouteComputeResult = {
   routes?: Array<{
     path?: unknown[];
@@ -49,12 +27,8 @@ type RouteComputeResult = {
 
 let cachedRouteCompute: { computeRoutes: (req: Record<string, unknown>) => Promise<RouteComputeResult> } | null = null;
 
-function normalizeOverviewPoint(pt: { lat(): number; lng(): number } | LatLngPoint): LatLngPoint {
-  if (typeof (pt as LatLngPoint).lat === "number" && typeof (pt as LatLngPoint).lng === "number") {
-    return pt as LatLngPoint;
-  }
-  const ll = pt as { lat: () => number; lng: () => number };
-  return { lat: ll.lat(), lng: ll.lng() };
+export function resetFetchItineraryDirectionsCacheForTest(): void {
+  cachedRouteCompute = null;
 }
 
 function normalizePathPoint(pt: unknown): LatLngPoint | null {
@@ -91,35 +65,16 @@ function pathFromRoute(route: { path?: unknown[] } | undefined): LatLngPoint[] {
   return out;
 }
 
-function sumLegDurationSeconds(route: DirectionsRouteTyped): number {
-  const legs = route.legs;
-  if (!legs?.length) {
-    return 0;
-  }
-  let total = 0;
-  for (const leg of legs) {
-    const v = leg.duration?.value;
-    if (typeof v === "number" && v > 0) {
-      total += v;
-    }
-  }
-  return total;
-}
-
-/** Routes API 慣用 latitude／longitude；部分環境亦接受 lat／lng。 */
-function buildComputeRoutesWaypoint(segment: ItineraryRouteSegment, end: "from" | "to"): Record<string, unknown> {
+/**
+ * Route.computeRoutes 接受 LatLngLiteral / address / Place resource name。
+ * 我們目前持有的是 Places placeId，而不是 Route API 要求的 Place resource name，
+ * 因此這裡統一直接使用經緯度，避免新版 API 因 request shape 不符而回退到 DirectionsService。
+ */
+function buildComputeRoutesWaypoint(segment: ItineraryRouteSegment, end: "from" | "to"): LatLngPoint {
   const latlng = end === "from" ? segment.from : segment.to;
-  const placeId = end === "from" ? segment.fromPlaceId : segment.toPlaceId;
-  if (placeId) {
-    return { location: { placeId } };
-  }
   return {
-    location: {
-      latLng: {
-        latitude: latlng.lat,
-        longitude: latlng.lng,
-      },
-    },
+    lat: latlng.lat,
+    lng: latlng.lng,
   };
 }
 
@@ -132,9 +87,8 @@ export async function fetchItineraryRoutePaths(
   segments: ItineraryRouteSegment[],
   options: { cancelled: () => boolean; region?: string },
 ): Promise<ResolvedRoutePath[]> {
-  const api = mapsApi as MapsWithImport & MapsWithDirections;
+  const api = mapsApi as MapsWithImport;
   const region = options.region ?? "tw";
-  const statusOk = "OK";
 
   let RouteClass: { computeRoutes: (req: Record<string, unknown>) => Promise<RouteComputeResult> } | null =
     cachedRouteCompute;
@@ -187,63 +141,12 @@ export async function fetchItineraryRoutePaths(
     }
   }
 
-  async function requestPathDirectionsLegacy(
-    segment: ItineraryRouteSegment,
-    travelModeKey: ReturnType<typeof resolveGoogleTravelMode>,
-    useTransitTime: boolean,
-  ): Promise<{ path: LatLngPoint[]; durationSeconds: number } | null> {
-    if (!api.DirectionsService || !api.TravelMode) {
-      return null;
-    }
-    const travelMode = api.TravelMode[travelModeKey];
-    if (!travelMode) {
-      return null;
-    }
-    const service = new api.DirectionsService();
-    const request: Record<string, unknown> = {
-      origin: segment.fromPlaceId ? { placeId: segment.fromPlaceId } : segment.from,
-      destination: segment.toPlaceId ? { placeId: segment.toPlaceId } : segment.to,
-      travelMode,
-      region,
-    };
-    if (travelModeKey === "TRANSIT" && useTransitTime) {
-      request.transitOptions = { departureTime: new Date() };
-    }
-    return await new Promise<{ path: LatLngPoint[]; durationSeconds: number } | null>((resolve) => {
-      try {
-        service.route(request, (result, status) => {
-          if (status !== statusOk || !result?.routes?.[0]) {
-            resolve(null);
-            return;
-          }
-          const route0 = result.routes[0];
-          const overview = route0.overview_path;
-          if (!overview?.length) {
-            resolve(null);
-            return;
-          }
-          const durationSeconds = sumLegDurationSeconds(route0);
-          resolve({
-            path: overview.map(normalizeOverviewPoint),
-            durationSeconds,
-          });
-        });
-      } catch {
-        resolve(null);
-      }
-    });
-  }
-
   async function requestPath(
     segment: ItineraryRouteSegment,
     travelModeKey: ReturnType<typeof resolveGoogleTravelMode>,
     useTransitTime: boolean,
   ): Promise<{ path: LatLngPoint[]; durationSeconds: number } | null> {
-    let best = await requestPathComputeRoutes(segment, travelModeKey, useTransitTime);
-    if (!best?.path.length) {
-      best = await requestPathDirectionsLegacy(segment, travelModeKey, useTransitTime);
-    }
-    return best;
+    return await requestPathComputeRoutes(segment, travelModeKey, useTransitTime);
   }
 
   const out: ResolvedRoutePath[] = [];

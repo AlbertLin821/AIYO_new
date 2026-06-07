@@ -44,6 +44,8 @@ function applySummaryResult(result: VideoSummaryResult): void {
       geocodeWarnings: result.geocodeWarnings,
       summaryUnavailable: result.summaryUnavailable,
       unavailableReason: result.unavailableReason,
+      fallbackReason: result.fallbackReason,
+      failedChunkCount: result.debug?.failedChunkCount,
     });
   }
 }

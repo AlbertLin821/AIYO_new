@@ -66,8 +66,16 @@ export function resolveModelForTask(
   if (task === "location-filter" && serverConfig.ollamaLocationModel) {
     return serverConfig.ollamaLocationModel;
   }
-  if (task === "video-place-candidate-extract" && serverConfig.ollamaLocationModel) {
-    return serverConfig.ollamaLocationModel;
+  if (task === "video-place-candidate-extract") {
+    if (serverConfig.ollamaVideoExtractModel) {
+      return serverConfig.ollamaVideoExtractModel;
+    }
+    if (serverConfig.ollamaTravelChatModel) {
+      return serverConfig.ollamaTravelChatModel;
+    }
+    if (serverConfig.ollamaLocationModel) {
+      return serverConfig.ollamaLocationModel;
+    }
   }
   if (task === "trip-plan" && serverConfig.ollamaTripPlanModel) {
     return serverConfig.ollamaTripPlanModel;
@@ -79,13 +87,15 @@ export function resolveModelForTask(
 }
 
 function shouldUseThinkingForTask(task: OllamaChatOptions["task"] = "default"): boolean {
+  if (task === "video-place-candidate-extract") {
+    return serverConfig.ollamaVideoExtractThink;
+  }
   if (
     task === "video-summary" ||
     task === "video-summary-fast" ||
     task === "video-summary-final" ||
     task === "location-filter" ||
-    task === "video-moment-polish" ||
-    task === "video-place-candidate-extract"
+    task === "video-moment-polish"
   ) {
     return serverConfig.ollamaVideoThink;
   }
@@ -113,7 +123,7 @@ export function formatOllamaErrorMessage(
     parts.push(detail);
   }
   if (error.code === "http_error" || error.code === "network_error") {
-    parts.push(`使用模型：${model}。請確認 Ollama 已啟動、模型已 pull，或調整 aiyo/.env 的 OLLAMA_MODEL / OLLAMA_TRAVEL_CHAT_MODEL。`);
+    parts.push(`使用模型：${model}。請確認 Ollama 已啟動、模型已 pull，或調整 aiyo/.env.local 的 OLLAMA_MODEL / OLLAMA_TRAVEL_CHAT_MODEL。`);
   }
   return parts.join(" ");
 }
@@ -143,6 +153,7 @@ export async function chatWithOllama({
       body: JSON.stringify({
         model: resolveModelForTask(task, model),
         stream: false,
+        keep_alive: serverConfig.ollamaKeepAlive,
         think: shouldUseThinkingForTask(task),
         format,
         options: {

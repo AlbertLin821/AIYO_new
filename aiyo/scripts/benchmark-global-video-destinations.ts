@@ -2,7 +2,7 @@
  * 全球 26 目的地 × N 支 YouTube 影片：搜尋、summarizeVideo、品質檢查、報告。
  * 執行：cd aiyo && npm run benchmark:global-videos
  * 選項：--only=tokyo,paris --resume --videos-per-dest=6 --delay-ms=2000
- * 不修改 .env；需 YOUTUBE_API_KEY、GOOGLE_MAPS_API_KEY（建議）。
+ * 不修改 .env.local；需 YOUTUBE_API_KEY、GOOGLE_MAPS_API_KEY（建議）。
  */
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";

@@ -3,8 +3,10 @@
 # NEXT_PUBLIC_* 會在 Docker 映像「建置」（npm run build）時打入前端程式；若在 builder 時為空，
 # 之後只靠 env_file 重啟容器也無效。請在 build 時讓 Compose 代入變數，例如：
 #   docker compose --env-file ./aiyo/.env build [--profile dev app-dev | app]
-# 或將同樣鍵放在與本檔同一層資料夾的 .env（Docker Compose 用於 ${} 替換）。
+# 或將同樣鍵放在與本檔同一層資料夾的 shell env / 啟動腳本中（Docker Compose 用於 ${} 替換）。
 # 詳見：https://docs.docker.com/compose/how-tos/environment-variables/set-environment-variables/
+# 啟動時請帶 --env-file ./aiyo/.env.local，否則下方 ${GOOGLE_MAPS_*} 可能為空。
+# 勿只用 docker start app-dev（會脫離 backend 網路且保留映像內舊金鑰）。改 keys 後請 --force-recreate app-dev。
 
 services:
   app-dev:
@@ -17,7 +19,7 @@ services:
         NEXT_PUBLIC_ENABLE_MOCK_MAPS: ${NEXT_PUBLIC_ENABLE_MOCK_MAPS:-}
     container_name: aiyo-new-app-dev
     env_file:
-      - ./aiyo/.env
+      - ./aiyo/.env.local
     environment:
       DATABASE_URL: postgresql://aiyo:aiyo_password@postgres:5432/aiyo_new_db?schema=public
       NEXTAUTH_URL: http://localhost:3000
@@ -32,19 +34,11 @@ services:
       MEM0_BASE_URL: http://mem0-memory:8000
       MEM0_ENABLED: ${MEM0_ENABLED:-true}
       MEM0_TOP_K: ${MEM0_TOP_K:-5}
-      SEARXNG_BASE_URL: ${SEARXNG_BASE_URL:-http://localhost:8081}
-      SEARXNG_INTERNAL_BASE_URL: http://searxng:8080
-      # SearXNG is kept only for legacy/manual search experiments; AI chat search only uses Serper/Tavily.
-      SEARXNG_ENABLED: ${SEARXNG_ENABLED:-false}
-      SEARXNG_TIMEOUT_MS: ${SEARXNG_TIMEOUT_MS:-12000}
-      SEARXNG_DEFAULT_LANGUAGE: ${SEARXNG_DEFAULT_LANGUAGE:-zh-TW}
-      SEARXNG_DEFAULT_CATEGORIES: ${SEARXNG_DEFAULT_CATEGORIES:-general}
-      SEARXNG_RESULT_LIMIT: ${SEARXNG_RESULT_LIMIT:-8}
-      SEARXNG_SAFE_SEARCH: ${SEARXNG_SAFE_SEARCH:-1}
       AI_WEB_SEARCH_ENABLED: ${AI_WEB_SEARCH_ENABLED:-true}
       AI_WEB_SEARCH_MAX_RESULTS: ${AI_WEB_SEARCH_MAX_RESULTS:-6}
       AI_WEB_SEARCH_REQUIRE_CITATIONS: ${AI_WEB_SEARCH_REQUIRE_CITATIONS:-true}
       NODE_ENV: development
+      # 勿在此覆寫 GOOGLE_MAPS_* / NEXT_PUBLIC_GOOGLE_MAPS_*：會蓋掉 env_file，且 ${} 常吃到 Windows 舊變數
       HOSTNAME: 0.0.0.0
       PORT: 3000
       CHOKIDAR_USEPOLLING: "true"
@@ -55,6 +49,8 @@ services:
     volumes:
       - ./aiyo:/app
       - /app/node_modules
+      # 避免容器內的 Next runtime 再次讀到宿主 .env.local，把 Compose 注入的容器 env 覆寫回 localhost。
+      - ./docker/empty.env:/app/.env.local:ro
       # 改為繫結到宿主，避免匿名卷長期快取「無 NEXT_PUBLIC_*」時的編譯結果；若仍異常請刪除本機 ./aiyo/.next 資料夾
       - ./aiyo/.next:/app/.next
     restart: unless-stopped
@@ -73,13 +69,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      searxng:
-        condition: service_started
     networks:
       - backend
     profiles: ["dev"]
 
-  app:
+  # 本機正式模式驗證：掛載 ./aiyo，每次啟動在容器內 build 後 next start（見 prod-live-up.ps1）。
+  # 與 app-dev 共用埠 3000，請勿同時啟動。
+  app-prod-live:
     build:
       context: ./aiyo
       dockerfile: Dockerfile
@@ -87,9 +83,9 @@ services:
         NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
         NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID: ${NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID:-}
         NEXT_PUBLIC_ENABLE_MOCK_MAPS: ${NEXT_PUBLIC_ENABLE_MOCK_MAPS:-}
-    container_name: aiyo-new-app
+    container_name: aiyo-new-app-prod-live
     env_file:
-      - ./aiyo/.env
+      - ./aiyo/.env.local
     environment:
       DATABASE_URL: postgresql://aiyo:aiyo_password@postgres:5432/aiyo_new_db?schema=public
       NEXTAUTH_URL: http://localhost:3000
@@ -104,15 +100,66 @@ services:
       MEM0_BASE_URL: http://mem0-memory:8000
       MEM0_ENABLED: ${MEM0_ENABLED:-true}
       MEM0_TOP_K: ${MEM0_TOP_K:-5}
-      SEARXNG_BASE_URL: ${SEARXNG_BASE_URL:-http://localhost:8081}
-      SEARXNG_INTERNAL_BASE_URL: http://searxng:8080
-      # SearXNG is kept only for legacy/manual search experiments; AI chat search only uses Serper/Tavily.
-      SEARXNG_ENABLED: ${SEARXNG_ENABLED:-false}
-      SEARXNG_TIMEOUT_MS: ${SEARXNG_TIMEOUT_MS:-12000}
-      SEARXNG_DEFAULT_LANGUAGE: ${SEARXNG_DEFAULT_LANGUAGE:-zh-TW}
-      SEARXNG_DEFAULT_CATEGORIES: ${SEARXNG_DEFAULT_CATEGORIES:-general}
-      SEARXNG_RESULT_LIMIT: ${SEARXNG_RESULT_LIMIT:-8}
-      SEARXNG_SAFE_SEARCH: ${SEARXNG_SAFE_SEARCH:-1}
+      AI_WEB_SEARCH_ENABLED: ${AI_WEB_SEARCH_ENABLED:-true}
+      AI_WEB_SEARCH_MAX_RESULTS: ${AI_WEB_SEARCH_MAX_RESULTS:-6}
+      AI_WEB_SEARCH_REQUIRE_CITATIONS: ${AI_WEB_SEARCH_REQUIRE_CITATIONS:-true}
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    # NODE_ENV=production 會讓 npm install 略過 devDependencies，但 next build 需要 @tailwindcss/postcss 等 dev 套件。
+    command: sh -c "NODE_ENV=development npm install && npx prisma generate && npx prisma migrate deploy && NODE_ENV=production npm run build && npm run start"
+    volumes:
+      - ./aiyo:/app
+      - /app/node_modules
+      - ./docker/empty.env:/app/.env.local:ro
+      - ./aiyo/.next:/app/.next
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 300s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+    profiles: ["prod-live"]
+
+  app:
+    build:
+      context: ./aiyo
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
+        NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID: ${NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID:-}
+        NEXT_PUBLIC_ENABLE_MOCK_MAPS: ${NEXT_PUBLIC_ENABLE_MOCK_MAPS:-}
+    container_name: aiyo-new-app
+    env_file:
+      - ./aiyo/.env.local
+    environment:
+      DATABASE_URL: postgresql://aiyo:aiyo_password@postgres:5432/aiyo_new_db?schema=public
+      NEXTAUTH_URL: http://localhost:3000
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:9b}
+      OLLAMA_TRAVEL_CHAT_MODEL: ${OLLAMA_TRAVEL_CHAT_MODEL:-qwen3.5:9b}
+      OLLAMA_TRIP_PLAN_MODEL: ${OLLAMA_TRIP_PLAN_MODEL:-granite4.1:3b}
+      OLLAMA_VIDEO_SUMMARY_MODEL: ${OLLAMA_VIDEO_SUMMARY_MODEL:-granite4.1:8b}
+      OLLAMA_VIDEO_SUMMARY_FAST_MODEL: ${OLLAMA_VIDEO_SUMMARY_FAST_MODEL:-mistral-small:24b}
+      OLLAMA_VIDEO_SUMMARY_FINAL_MODEL: ${OLLAMA_VIDEO_SUMMARY_FINAL_MODEL:-granite4.1:8b}
+      OLLAMA_LOCATION_MODEL: ${OLLAMA_LOCATION_MODEL:-granite4.1:8b}
+      MEM0_BASE_URL: http://mem0-memory:8000
+      MEM0_ENABLED: ${MEM0_ENABLED:-true}
+      MEM0_TOP_K: ${MEM0_TOP_K:-5}
       AI_WEB_SEARCH_ENABLED: ${AI_WEB_SEARCH_ENABLED:-true}
       AI_WEB_SEARCH_MAX_RESULTS: ${AI_WEB_SEARCH_MAX_RESULTS:-6}
       AI_WEB_SEARCH_REQUIRE_CITATIONS: ${AI_WEB_SEARCH_REQUIRE_CITATIONS:-true}
@@ -137,8 +184,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      searxng:
-        condition: service_started
     networks:
       - backend
 
@@ -293,18 +338,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-    networks:
-      - backend
-
-  searxng:
-    # Legacy/manual search service. AI chat and itinerary generation must not use SearXNG.
-    image: searxng/searxng:latest
-    container_name: aiyo-new-searxng
-    ports:
-      - "8081:8080"
-    volumes:
-      - "./searxng:/etc/searxng:rw"
-    restart: unless-stopped
     networks:
       - backend
 

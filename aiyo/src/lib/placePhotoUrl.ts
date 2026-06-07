@@ -15,6 +15,29 @@ export function buildPlacePhotoProxyUrl(photoReference: string, maxwidth = 480):
   return `${PLACE_PHOTO_PROXY_PATH}?${params.toString()}`;
 }
 
+export function isPlacePhotoProxyUrl(url?: string | null): boolean {
+  return Boolean(url?.trim().startsWith(PLACE_PHOTO_PROXY_PATH));
+}
+
+export function hasUsablePlacePhotoUrl(url?: string | null): boolean {
+  const resolved = resolvePlacePhotoUrl(url);
+  if (!resolved) {
+    return false;
+  }
+  return !isPlacePhotoProxyUrl(resolved);
+}
+
+function withPlaceId(url: string, placeId?: string | null): string {
+  const trimmedPlaceId = placeId?.trim();
+  if (!trimmedPlaceId) {
+    return url;
+  }
+  const [pathname, search = ""] = url.split("?", 2);
+  const params = new URLSearchParams(search);
+  params.set("placeId", trimmedPlaceId);
+  return `${pathname}?${params.toString()}`;
+}
+
 function extractPhotoReferenceFromGoogleUrl(url: URL): string | null {
   if (!url.pathname.includes("/place/photo")) {
     return null;
@@ -26,14 +49,14 @@ function extractPhotoReferenceFromGoogleUrl(url: URL): string | null {
   return ref;
 }
 
-export function resolvePlacePhotoUrl(url?: string | null): string | undefined {
+export function resolvePlacePhotoUrl(url?: string | null, placeId?: string | null): string | undefined {
   if (!url?.trim()) {
     return undefined;
   }
 
   const trimmed = url.trim();
   if (trimmed.startsWith(PLACE_PHOTO_PROXY_PATH)) {
-    return trimmed;
+    return withPlaceId(trimmed, placeId);
   }
 
   try {
@@ -41,11 +64,17 @@ export function resolvePlacePhotoUrl(url?: string | null): string | undefined {
       ? new URL(trimmed)
       : new URL(trimmed, "https://local.invalid");
     const ref = extractPhotoReferenceFromGoogleUrl(parsed);
-    if (!ref) {
-      return undefined;
+    if (ref) {
+      const maxwidth = Number(parsed.searchParams.get("maxwidth")) || 480;
+      return withPlaceId(buildPlacePhotoProxyUrl(ref, maxwidth), placeId);
     }
-    const maxwidth = Number(parsed.searchParams.get("maxwidth")) || 480;
-    return buildPlacePhotoProxyUrl(ref, maxwidth);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return trimmed;
+    }
+    if (parsed.origin === "https://local.invalid" && trimmed.startsWith("/")) {
+      return trimmed;
+    }
+    return undefined;
   } catch {
     return undefined;
   }

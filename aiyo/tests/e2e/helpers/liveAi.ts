@@ -1,10 +1,9 @@
 import { expect, type TestInfo } from "@playwright/test";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import type { ChatApiPayload } from "./chat";
 import { fetchTripItineraryFromBootstrap, sendChatMessage } from "./chat";
 import { forbiddenPlaceholderTitles } from "../../../src/server/ai/planning/itineraryPlanningStandard";
+import { readProjectEnvLocal } from "../../../src/lib/projectEnv";
 
 export type ItineraryBootstrapDay = {
   dayNumber: number;
@@ -284,7 +283,7 @@ export async function completeLiveTripPlanningFlow(
   lastPayload = await advanceLivePlanningDialogues(page, lastPayload, chatTimeoutMs, maxQuestionRounds);
   await waitForChatComposerIdle(page, chatTimeoutMs).catch(() => undefined);
 
-  let itemCount = await countItineraryItems(page);
+  const itemCount = await countItineraryItems(page);
   if (itemCount === 0 && !(await isWorkflowQuestionCardVisible(page))) {
     const dest = options?.destination || "這個目的地";
     const nudge = `請直接幫我排完整${dest}三天兩夜行程，列出每日具體景點與餐廳，不用再追問細節。`;
@@ -346,17 +345,7 @@ function readEnvValue(name: string): string {
   if (fromProcess) {
     return fromProcess;
   }
-  const envPath = join(process.cwd(), ".env");
-  if (!existsSync(envPath)) {
-    return "";
-  }
-  const line = readFileSync(envPath, "utf8")
-    .split(/\r?\n/u)
-    .find((row) => row.startsWith(`${name}=`));
-  if (!line) {
-    return "";
-  }
-  return line.slice(name.length + 1).trim().replace(/^['"]|['"]$/g, "");
+  return readProjectEnvLocal(process.cwd())[name]?.trim() || "";
 }
 
 export function hasLiveSearchApiKeys(): boolean {
@@ -371,25 +360,40 @@ export async function probeLiveAiChat(page: Page): Promise<LiveAiProbeResult> {
     return { available: false, reason: "E2E_LIVE_AI 未設為 1" };
   }
 
-  const probe = await page.evaluate(async () => {
-    const response = await fetch("/api/ai/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "ping" }),
+  let probe:
+    | {
+        ok: boolean;
+        status: number;
+        success?: boolean;
+        errorMessage?: string;
+      }
+    | undefined;
+  try {
+    probe = await page.evaluate(async () => {
+      const response = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "ping" }),
+      });
+      let body: { success?: boolean; error?: { message?: string } } | null = null;
+      try {
+        body = (await response.json()) as { success?: boolean; error?: { message?: string } };
+      } catch {
+        body = null;
+      }
+      return {
+        ok: response.ok,
+        status: response.status,
+        success: body?.success,
+        errorMessage: body?.error?.message,
+      };
     });
-    let body: { success?: boolean; error?: { message?: string } } | null = null;
-    try {
-      body = (await response.json()) as { success?: boolean; error?: { message?: string } };
-    } catch {
-      body = null;
-    }
+  } catch (error) {
     return {
-      ok: response.ok,
-      status: response.status,
-      success: body?.success,
-      errorMessage: body?.error?.message,
+      available: false,
+      reason: error instanceof Error ? error.message : "probe fetch failed",
     };
-  });
+  }
 
   if (!probe.ok) {
     return {

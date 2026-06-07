@@ -1,7 +1,7 @@
 import { serverConfig } from "@/server/config";
 import { tavilySearch } from "@/server/providers/tavilySearch";
 import { searchSerper } from "@/server/search/serperClient";
-import type { WebSearchOptions, WebSearchResult } from "@/server/search/searxngClient";
+import type { WebSearchOptions, WebSearchResult } from "@/server/search/webSearchTypes";
 
 export type WebSearchBackend = "serper" | "tavily" | "none";
 

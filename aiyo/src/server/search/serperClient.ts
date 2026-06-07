@@ -1,5 +1,5 @@
 import { serverConfig } from "@/server/config";
-import type { WebSearchOptions, WebSearchResult } from "@/server/search/searxngClient";
+import type { WebSearchOptions, WebSearchResult } from "@/server/search/webSearchTypes";
 
 type SerperJson = {
   organic?: Array<{
@@ -19,7 +19,10 @@ export async function searchSerper(options: WebSearchOptions): Promise<WebSearch
 
   const limit = Math.min(10, Math.max(1, options.limit ?? serverConfig.aiWebSearchMaxResults));
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), Math.max(3_000, serverConfig.searxngTimeoutMs));
+  const timeout = setTimeout(
+    () => controller.abort(),
+    Math.max(3_000, serverConfig.travelResearchProviderTimeoutMs),
+  );
 
   try {
     const response = await fetch("https://google.serper.dev/search", {
@@ -28,7 +31,12 @@ export async function searchSerper(options: WebSearchOptions): Promise<WebSearch
         "Content-Type": "application/json",
         "X-API-KEY": key,
       },
-      body: JSON.stringify({ q: query, num: limit, hl: options.language || "zh-tw" }),
+      body: JSON.stringify({
+        q: query,
+        num: limit,
+        hl: options.language || "zh-tw",
+        page: Math.max(1, options.page ?? 1),
+      }),
       cache: "no-store",
       signal: controller.signal,
     });

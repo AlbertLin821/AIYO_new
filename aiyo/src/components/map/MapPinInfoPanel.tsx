@@ -39,6 +39,7 @@ export default function MapPinInfoPanel({ pin, linkedItem, onClose, className }:
       <div className="relative">
         <PlaceThumbnail
           src={resolvedPin.thumbnail || resolvedPin.photoUrl}
+          placeId={resolvedPin.placeId}
           alt={t.map.infoThumbnail}
           placeholder={t.map.infoThumbnail}
         />

@@ -36,8 +36,15 @@ function getTripId(action: AssistantAction): string | undefined {
 }
 
 function findDay(context: PersonalizedAIContext, dayId: string) {
+  if (!context.currentTrip) {
+    return null;
+  }
+  const byId = context.currentTrip.days.find((day) => day.id === dayId);
+  if (byId) {
+    return byId;
+  }
   const dayNumber = dayNumberFromDayId(dayId);
-  if (!dayNumber || !context.currentTrip) {
+  if (!dayNumber) {
     return null;
   }
   return context.currentTrip.days.find((day) => day.dayNumber === dayNumber) || null;
@@ -68,33 +75,37 @@ export function validateAssistantActions(input: {
   const warnings: string[] = [];
   const context = input.structuredContext;
   const ownedTripId = context?.currentTrip?.id;
+  const pushRejected = (action: unknown, reason: string) => {
+    rejectedActions.push(reject(action, reason));
+    warnings.push(reason);
+  };
 
   if (context && context.userId !== input.userId) {
     return {
       validActions: [],
       rejectedActions: input.actions.map((action) => reject(action, "structuredContext userId does not match current user")),
-      warnings: ["structuredContext user mismatch"],
+      warnings: ["structuredContext userId does not match current user"],
     };
   }
 
   for (const action of input.actions.slice(0, MAX_ACTIONS)) {
     if (!isKnownAction(action)) {
-      rejectedActions.push(reject(action, "unknown action type"));
+      pushRejected(action, "unknown action type");
       continue;
     }
     if (hasDangerousText(action)) {
-      rejectedActions.push(reject(action, "dangerous text rejected"));
+      pushRejected(action, "dangerous text rejected");
       continue;
     }
 
     const actionTripId = getTripId(action) || input.tripId || ownedTripId;
     if (action.type !== "map.focus_location") {
       if (!context?.currentTrip || !ownedTripId) {
-        rejectedActions.push(reject(action, "missing owned current trip context"));
+        pushRejected(action, "missing owned current trip context");
         continue;
       }
       if (actionTripId && actionTripId !== ownedTripId) {
-        rejectedActions.push(reject(action, "trip does not belong to current user"));
+        pushRejected(action, "trip does not belong to current user");
         continue;
       }
     }
@@ -111,13 +122,13 @@ export function validateAssistantActions(input: {
 
     const day = findDay(context!, action.payload.dayId);
     if (!day) {
-      rejectedActions.push(reject(action, "dayId does not exist in current trip"));
+      pushRejected(action, "dayId does not exist in current trip");
       continue;
     }
 
     if (action.type === "itinerary.add_item") {
       if (!action.payload.item.title.trim()) {
-        rejectedActions.push(reject(action, "add_item title is required"));
+        pushRejected(action, "add_item title is required");
         continue;
       }
       validActions.push({ ...action, payload: { ...action.payload, tripId: ownedTripId } });
@@ -126,11 +137,11 @@ export function validateAssistantActions(input: {
 
     if (action.type === "itinerary.replace_day") {
       if (!action.payload.items.length) {
-        rejectedActions.push(reject(action, "replace_day items cannot be empty"));
+        pushRejected(action, "replace_day items cannot be empty");
         continue;
       }
       if (action.payload.items.length > MAX_REPLACE_DAY_ITEMS) {
-        rejectedActions.push(reject(action, "replace_day has too many items"));
+        pushRejected(action, "replace_day has too many items");
         continue;
       }
       validActions.push({ ...action, payload: { ...action.payload, tripId: ownedTripId } });
@@ -141,7 +152,7 @@ export function validateAssistantActions(input: {
       const currentIds = day.items.map((item) => item.id).sort();
       const nextIds = [...action.payload.orderedItemIds].sort();
       if (currentIds.length !== nextIds.length || currentIds.some((id, index) => id !== nextIds[index])) {
-        rejectedActions.push(reject(action, "orderedItemIds must match day item ids exactly"));
+        pushRejected(action, "orderedItemIds must match day item ids exactly");
         continue;
       }
       validActions.push({ ...action, payload: { ...action.payload, tripId: ownedTripId } });
@@ -150,12 +161,12 @@ export function validateAssistantActions(input: {
 
     const itemExists = day.items.some((item) => item.id === action.payload.itemId);
     if (!itemExists) {
-      rejectedActions.push(reject(action, "itemId does not exist in target day"));
+      pushRejected(action, "itemId does not exist in target day");
       continue;
     }
 
     if (action.type === "itinerary.update_item" && !Object.keys(action.payload.patch).length) {
-      rejectedActions.push(reject(action, "update_item patch cannot be empty"));
+      pushRejected(action, "update_item patch cannot be empty");
       continue;
     }
 

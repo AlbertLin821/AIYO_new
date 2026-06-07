@@ -54,6 +54,11 @@ export default function AppDataBridge() {
             title: t.ollama.offlineTitle,
             description: t.ollama.offlineDesc,
           });
+        } else if (payload.ollamaStatus === "ready") {
+          void fetch("/api/ai/ollama-warm", {
+            method: "POST",
+            credentials: "include",
+          });
         }
       })
       .catch(() => {

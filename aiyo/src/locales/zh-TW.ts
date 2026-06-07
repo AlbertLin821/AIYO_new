@@ -62,6 +62,17 @@ export const zhTW = {
     emptyHint: "請輸入關鍵字或貼上 YouTube 連結。",
     noApiResults: "沒有符合的影片結果",
     adSectionTitle: "合作夥伴優惠",
+    adScrollPrev: "往左滑動廣告",
+    adScrollNext: "往右滑動廣告",
+    travelArticlesTitle: "旅遊文章推薦",
+    travelArticlesLoading: "載入文章中…",
+    travelArticlesShowMore: "顯示更多",
+    travelArticlesShowLess: "收起",
+    travelArticlesRefresh: "換一批",
+    travelArticlesRefreshing: "換一批中…",
+    travelArticlesError: "旅遊文章暫時無法載入，請稍後再試。",
+    travelArticlesEmptyTitle: "目前沒有相關文章",
+    travelArticlesEmptyHint: "試試其他關鍵字，或稍後再來看看。",
   },
   video: {
     search: "搜尋",
@@ -166,6 +177,12 @@ export const zhTW = {
     labelAdministrative: "行政區與地名",
     authError:
       "Google 地圖拒絕此金鑰（無效、過期或未啟用 Maps JavaScript API）。請檢查 Cloud Console 與帳單。",
+    apiTargetBlockedError:
+      "此 API 金鑰無法使用 Maps JavaScript API（ApiTargetBlockedMapError）。請在 Cloud Console 啟用「Maps JavaScript API」，並在金鑰的 API 限制中勾選該 API（不要只開 Geocoding）。本機請加 HTTP referrer：http://localhost:3000/*。",
+    apiTargetBlockedHint:
+      "開發者可查看 GET /api/map/setup-check 取得金鑰探測結果。",
+    deletedApiProjectError:
+      "此 Google Maps 金鑰所屬的 Cloud 專案已刪除（DeletedApiProjectMapError）。請在 aiyo/.env.local 設定新金鑰，並以 docker compose --env-file ./aiyo/.env.local --profile dev up -d --force-recreate app-dev 重建容器（勿只用 docker start）。",
     advancedMarkerFailTitle: "進階標記無法使用",
     advancedMarkerFailDesc:
       "已改為傳統標記。請確認 Cloud Console 的 Map ID 與 NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID。",
@@ -224,6 +241,8 @@ export const zhTW = {
     placeholder: "請描述想調整的路線、預算或節奏",
     requestFailed: "對話請求失敗",
     requestFailedGeneric: "對話請求失敗。",
+    ollamaLoadingError:
+      "本機 AI 模型可能正在載入或連線中斷。請稍候幾秒後重試；若仍失敗可執行 ollama ps 確認模型是否為 loaded。",
     retry: "重試",
     userShort: "你",
     aiShort: "AI",
@@ -262,6 +281,7 @@ export const zhTW = {
     workflowModalHint: "請在彈出視窗中完成行程條件設定。",
     workflowProcessing: "正在規劃行程…",
     assistantTyping: "正在回覆…",
+    typingPopupTitle: "AIYO 思考中",
     typingMessages: {
       preference: [
         "我來查看你的旅遊偏好",
@@ -758,6 +778,18 @@ export const zhTW = {
     sourceSegmentsUnavailable: "片段：無",
     noExtractedLocations: "未擷取到明確地點。",
     noExtractedFoods: "未擷取到明確食物名稱。",
+    summaryCompleteTitle: "影片摘要處理完成！",
+    summaryCompleteDescription: "重點片段與地點資訊已更新。",
+    summaryPartialCompleteTitle: "影片摘要已部分完成",
+    summaryPartialCompleteDescription:
+      "重點片段已更新；部分地點僅在字幕中提及，尚無法對應地圖座標，無法加入行程。",
+    summaryProcessingCompleteEmptyTitle: "影片分析已完成",
+    summaryProcessingCompleteEmptyDescription: "此影片未擷取到可用的重點片段或地點。",
+    unmappedLocationBadge: "僅字幕提及",
+    unmappedLocationHint: "此名稱無法對應地圖座標，僅供對照重點片段，無法加入行程。",
+    analysisFallbackNote: "分析備註",
+    partialChunkAnalysisNote:
+      "有 {count} 段字幕分析未完成，已顯示其餘片段與地點。點右上角「重新分析」可再試一次。",
   },
   publishDialog: {
     title: "公開行程",

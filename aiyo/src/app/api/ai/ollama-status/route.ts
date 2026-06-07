@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
 import { resolveModelForTask } from "@/server/ai/ollamaClient";
+import { scheduleOllamaWarmup } from "@/server/ai/ollamaModelWarmup";
 import { requireSessionUser } from "@/server/auth";
 import { serverConfig } from "@/server/config";
 
@@ -66,6 +67,10 @@ export async function GET() {
       names.has(model) ||
       [...names].some((n) => n === model || n.startsWith(`${model}:`));
     const modelPresent = isModelPresent(tripPlanModel);
+
+    if (modelPresent) {
+      scheduleOllamaWarmup();
+    }
 
     return NextResponse.json(
       createSuccess({

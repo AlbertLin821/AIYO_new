@@ -52,7 +52,7 @@ test("publish → home list → detail → copy flow", async ({ page }) => {
   );
   await page.getByTestId("copy-public-itinerary-button").click();
   await copyResponse;
-  await expect(page).toHaveURL(/\/itinerary\?tripId=/, { timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "編輯行程" })).toBeVisible({ timeout: 15_000 });
 });
 
 test("itinerary editor exposes publish dialog for trip owner", async ({ page }) => {

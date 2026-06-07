@@ -114,18 +114,11 @@ export function mergeAssistantActionsWithLegacy(input: {
   const proposedChanges = [...(input.proposedChanges || [])];
 
   if (!assistantActions.length && proposedChanges.length) {
+    // Legacy compatibility: old payloads may still arrive with proposedChanges only.
     assistantActions.push(
       ...proposedChanges
         .map((change) => legacyProposedChangeToAssistantAction(change))
         .filter((action): action is AssistantAction => Boolean(action)),
-    );
-  }
-
-  if (!proposedChanges.length && assistantActions.length) {
-    proposedChanges.push(
-      ...assistantActions
-        .map((action) => assistantActionToLegacyProposedChange(action))
-        .filter((change): change is AiProposedChange => Boolean(change)),
     );
   }
 

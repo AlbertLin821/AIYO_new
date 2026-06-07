@@ -1,5 +1,5 @@
 import type { LocationReference, MapPin as MapPinType } from "@/types";
-import { resolvePlacePhotoUrl } from "@/lib/placePhotoUrl";
+import { isPlacePhotoProxyUrl, resolvePlacePhotoUrl } from "@/lib/placePhotoUrl";
 import { zhTW as t } from "@/locales/zh-TW";
 
 export type LinkedItineraryItem = {
@@ -32,13 +32,21 @@ export function buildLocationBackfilledPin(
   if (!location) {
     return pin;
   }
+  const photoUrl =
+    pin.photoUrl && (!isPlacePhotoProxyUrl(pin.photoUrl) || !location.photoUrl)
+      ? pin.photoUrl
+      : location.photoUrl || pin.photoUrl;
+  const thumbnail =
+    pin.thumbnail && (!isPlacePhotoProxyUrl(pin.thumbnail) || !(location.thumbnail || location.photoUrl))
+      ? pin.thumbnail
+      : location.thumbnail || location.photoUrl || pin.thumbnail;
   return {
     ...pin,
     description: pin.description || linkedItem?.notes || location.description,
     address: pin.address || location.address,
     placeId: pin.placeId || location.placeId,
-    photoUrl: pin.photoUrl || location.photoUrl,
-    thumbnail: pin.thumbnail || location.thumbnail || location.photoUrl,
+    photoUrl,
+    thumbnail,
     openingHours: pin.openingHours || location.openingHours,
     phoneNumber: pin.phoneNumber || location.phoneNumber,
     website: pin.website || location.website,
@@ -187,7 +195,10 @@ export function buildPinInfoContent(pin: MapPinType, linkedItem?: LinkedItinerar
   const resolvedPin = buildLocationBackfilledPin(pin, linkedItem);
   const routeUrl = buildRoutePlanningUrl(resolvedPin);
   const googleMapsUrl = buildGoogleMapsUrl(resolvedPin);
-  const thumbnail = resolvePlacePhotoUrl(resolvedPin.thumbnail || resolvedPin.photoUrl);
+  const thumbnail = resolvePlacePhotoUrl(
+    resolvedPin.thumbnail || resolvedPin.photoUrl,
+    resolvedPin.placeId,
+  );
   const empty = t.map.notProvided;
 
   return `

@@ -4,6 +4,7 @@ import { formatOllamaErrorMessage, OllamaRequestError } from "@/server/ai/ollama
 import { buildPersonalizedAIContext, type AIContextBuildResult } from "@/server/ai/aiContextBuilder";
 import { completeChatProgress, ensureChatProgressSession } from "@/server/chat/chatProgressStore";
 import { addMemories, formatMemoryContext } from "@/server/memory/mem0Client";
+import { buildStableMemoryMessages } from "@/server/memory/memoryPresentation";
 import { isPersonalMemoryRecallIntent } from "@/server/memory/personalMemoryRecall";
 import { retrieveRelevantMemoriesForUser } from "@/server/memory/memoryRetrieval";
 import { requireSessionUser } from "@/server/auth";
@@ -13,6 +14,7 @@ import type { ChatContext, ChatMessage, ChatQuestionAnswer, TripProfile } from "
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 function logChatRouteFailure(messagePreview: string, error: unknown) {
   if (process.env.NODE_ENV === "production") {
@@ -140,14 +142,17 @@ async function handleChatPost(request: Request) {
       }
 
       try {
+        const memoryMessages = buildStableMemoryMessages({
+          userMessage: userPersistContent || "",
+          tripProfile: response.tripProfile,
+          aiContext: personalizedContext,
+          response,
+        });
         await addMemories({
           userId: persistedUserId,
-          messages: [
-            { role: "user", content: userPersistContent || "[questionnaire_answers_submitted]" },
-            { role: "assistant", content: response.reply.content },
-          ],
+          messages: memoryMessages,
           metadata: {
-            source: "aiyo-chat",
+            source: "aiyo-chat-summary",
             tripId: persistedTripId,
           },
         });

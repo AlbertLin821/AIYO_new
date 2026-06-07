@@ -323,11 +323,24 @@ export default function VideoSummaryDrawer({
     setImportTargetDay(importDayOptions[0] ?? 1);
   }, [importDayOptions, importDayPickerOpen, importTargetDay]);
 
-  const verifiedLocations = video?.extractedLocations ?? [];
+  const extractedLocationRows = video?.extractedLocations ?? [];
+  const geocodedLocations = useMemo(
+    () =>
+      extractedLocationRows.filter(
+        (location) => Number.isFinite(location.lat) && Number.isFinite(location.lng),
+      ),
+    [extractedLocationRows],
+  );
+  const unmappedLocations = useMemo(
+    () =>
+      extractedLocationRows.filter(
+        (location) => !Number.isFinite(location.lat) || !Number.isFinite(location.lng),
+      ),
+    [extractedLocationRows],
+  );
   const previewPins = useMemo<TripMapPin[]>(
     () =>
-      verifiedLocations
-        .filter((location) => Number.isFinite(location.lat) && Number.isFinite(location.lng))
+      geocodedLocations
         .map((location, index) => ({
           id: `preview_${index}_${location.placeId ?? location.name}`,
           name: location.name,
@@ -336,7 +349,7 @@ export default function VideoSummaryDrawer({
           lng: location.lng as number,
           color: PREVIEW_PIN_COLORS[index % PREVIEW_PIN_COLORS.length]!,
         })),
-    [verifiedLocations],
+    [geocodedLocations],
   );
   const selectedPreviewPinId = useMemo(
     () => previewPins.find((pin) => pin.name === selectedPreviewLocationName)?.id ?? null,
@@ -349,11 +362,45 @@ export default function VideoSummaryDrawer({
 
   const activeVideo = video;
   const imageFailed = failedImageVideoId === activeVideo.id;
+  const hasSummarySegments = (activeVideo.summarySegments || []).length > 0;
+  const hasExtractedLocationRows = extractedLocationRows.length > 0;
+  const hasMapReadyLocations = geocodedLocations.length > 0;
   const isProcessingVideo =
-    isSummarizing &&
-    !summaryDiagnostics?.summaryUnavailable &&
-    ((activeVideo.summarySegments || []).length === 0 || activeVideo.extractedLocations.length === 0);
+    isSummarizing && !summaryDiagnostics?.summaryUnavailable;
   const drawerProcessingWaitKey = isProcessingVideo ? `drawer-processing:${videoId || activeVideo.id}` : null;
+  const failedChunkCount = summaryDiagnostics?.failedChunkCount ?? 0;
+  const hasPartialChunkFailure = failedChunkCount > 0;
+  const isPartialVideoSummary =
+    !isProcessingVideo &&
+    !summaryDiagnostics?.summaryUnavailable &&
+    (hasPartialChunkFailure ||
+      (hasSummarySegments && importCandidates.length === 0));
+  const shouldAnnounceVideoSummaryComplete =
+    open &&
+    !isProcessingVideo &&
+    !summaryDiagnostics?.summaryUnavailable &&
+    (hasSummarySegments || hasExtractedLocationRows);
+  const videoSummaryCompletionTitle = !shouldAnnounceVideoSummaryComplete
+    ? t.drawer.summaryCompleteTitle
+    : isPartialVideoSummary
+      ? t.drawer.summaryPartialCompleteTitle
+      : hasSummarySegments || hasMapReadyLocations
+        ? t.drawer.summaryCompleteTitle
+        : t.drawer.summaryProcessingCompleteEmptyTitle;
+  const videoSummaryCompletionDescription = !shouldAnnounceVideoSummaryComplete
+    ? t.drawer.summaryCompleteDescription
+    : isPartialVideoSummary
+      ? t.drawer.summaryPartialCompleteDescription
+      : hasSummarySegments || hasMapReadyLocations
+        ? t.drawer.summaryCompleteDescription
+        : t.drawer.summaryProcessingCompleteEmptyDescription;
+  const partialChunkNote = hasPartialChunkFailure
+    ? t.drawer.partialChunkAnalysisNote.replace("{count}", String(failedChunkCount))
+    : null;
+  const analysisWarningNote =
+    !hasPartialChunkFailure && summaryDiagnostics?.fallbackReason?.trim()
+      ? summaryDiagnostics.fallbackReason.trim()
+      : summaryDiagnostics?.geocodeWarnings?.[0]?.trim() || null;
 
   function bumpSeek(seconds: number) {
     if (!videoId) {
@@ -693,6 +740,18 @@ export default function VideoSummaryDrawer({
                   </div>
                 </div>
 
+                {partialChunkNote ? (
+                  <p className="rounded-xl border border-border-light bg-muted/30 px-3 py-2 text-xs leading-relaxed text-foreground">
+                    {partialChunkNote}
+                  </p>
+                ) : null}
+                {analysisWarningNote ? (
+                  <p className="rounded-xl border border-amber-200/80 bg-amber-50/80 px-3 py-2 text-xs leading-relaxed text-amber-950">
+                    <span className="font-semibold">{t.drawer.analysisFallbackNote}：</span>
+                    {analysisWarningNote}
+                  </p>
+                ) : null}
+
                 <div>
                   <h4 className="mb-3 text-sm font-semibold text-foreground">
                     {t.drawer.keySegments}
@@ -813,55 +872,85 @@ export default function VideoSummaryDrawer({
                       <p className="mb-3 text-[11px] text-muted">{t.drawer.importPickLocationsHint}</p>
                     )}
                     <div className="flex flex-col gap-2" data-testid="video-location-list">
-                      {verifiedLocations.length > 0 ? (
-                        verifiedLocations.map((location, locIdx) => {
-                          const canImport = importCandidates.some((c) => c.name === location.name);
-                          return (
-                            <div
-                              key={`${activeVideo.id}_loc_${locIdx}_${location.placeId ?? location.name}`}
-                              className={cn(
-                                "flex items-start gap-3 rounded-xl border border-border-light bg-cream/50 px-3 py-2.5",
-                                selectedPreviewLocationName === location.name && "border-primary/50 bg-primary/5",
-                              )}
-                              data-testid="video-location-item"
-                              onClick={() => setSelectedPreviewLocationName(location.name)}
-                            >
-                              {canImport ? (
-                                <input
-                                  type="checkbox"
-                                  className="mt-2 size-4 shrink-0 cursor-pointer accent-primary"
-                                  checked={selectedLocationNames.has(location.name)}
-                                  onChange={() => {
-                                    setSelectedLocationNames((prev) => {
-                                      const next = new Set(prev);
-                                      if (next.has(location.name)) {
-                                        next.delete(location.name);
-                                      } else {
-                                        next.add(location.name);
-                                      }
-                                      return next;
-                                    });
-                                  }}
-                                  aria-label={t.drawer.toggleLocationImport.replace("{name}", location.name)}
-                                />
-                              ) : (
-                                <span className="mt-2 size-4 shrink-0" aria-hidden />
-                              )}
+                      {hasExtractedLocationRows ? (
+                        <>
+                          {geocodedLocations.map((location, locIdx) => {
+                            const canImport = importCandidates.some(
+                              (candidate) => candidate.name === location.name,
+                            );
+                            return (
                               <div
-                                className="mt-0.5 flex size-8 flex-shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white"
-                                style={{
-                                  backgroundColor:
-                                    PREVIEW_PIN_COLORS[locIdx % PREVIEW_PIN_COLORS.length] ?? "#6366f1",
-                                }}
+                                key={`${activeVideo.id}_loc_${locIdx}_${location.placeId ?? location.name}`}
+                                className={cn(
+                                  "flex items-start gap-3 rounded-xl border border-border-light bg-cream/50 px-3 py-2.5",
+                                  selectedPreviewLocationName === location.name &&
+                                    "border-primary/50 bg-primary/5",
+                                )}
+                                data-testid="video-location-item"
+                                onClick={() => setSelectedPreviewLocationName(location.name)}
                               >
-                                {locIdx + 1}
+                                {canImport ? (
+                                  <input
+                                    type="checkbox"
+                                    className="mt-2 size-4 shrink-0 cursor-pointer accent-primary"
+                                    checked={selectedLocationNames.has(location.name)}
+                                    onChange={() => {
+                                      setSelectedLocationNames((prev) => {
+                                        const next = new Set(prev);
+                                        if (next.has(location.name)) {
+                                          next.delete(location.name);
+                                        } else {
+                                          next.add(location.name);
+                                        }
+                                        return next;
+                                      });
+                                    }}
+                                    aria-label={t.drawer.toggleLocationImport.replace(
+                                      "{name}",
+                                      location.name,
+                                    )}
+                                  />
+                                ) : (
+                                  <span className="mt-2 size-4 shrink-0" aria-hidden />
+                                )}
+                                <div
+                                  className="mt-0.5 flex size-8 flex-shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white"
+                                  style={{
+                                    backgroundColor:
+                                      PREVIEW_PIN_COLORS[locIdx % PREVIEW_PIN_COLORS.length] ??
+                                      "#6366f1",
+                                  }}
+                                >
+                                  {locIdx + 1}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium text-foreground">{location.name}</p>
+                                </div>
                               </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium text-foreground">{location.name}</p>
-                              </div>
-                            </div>
-                          );
-                        })
+                            );
+                          })}
+                          {unmappedLocations.length > 0 ? (
+                            <>
+                              <p className="pt-1 text-[11px] text-muted">{t.drawer.unmappedLocationHint}</p>
+                              {unmappedLocations.map((location, locIdx) => (
+                                <div
+                                  key={`${activeVideo.id}_unmapped_${locIdx}_${location.name}`}
+                                  className="flex items-start gap-3 rounded-xl border border-dashed border-border-light bg-muted/10 px-3 py-2.5"
+                                  data-testid="video-location-item-unmapped"
+                                >
+                                  <span className="mt-2 size-4 shrink-0" aria-hidden />
+                                  <div className="mt-0.5 flex size-8 flex-shrink-0 items-center justify-center rounded-lg bg-muted text-[10px] font-semibold text-muted-foreground">
+                                    —
+                                  </div>
+                                  <div className="min-w-0 flex-1 space-y-1">
+                                    <p className="text-sm font-medium text-foreground">{location.name}</p>
+                                    <p className="text-[11px] text-muted">{t.drawer.unmappedLocationBadge}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </>
+                          ) : null}
+                        </>
                       ) : isProcessingVideo ? (
                         <ProcessingRow label={t.drawer.videoProcessing} />
                       ) : (
@@ -1092,12 +1181,12 @@ export default function VideoSummaryDrawer({
       <PlanningWaitGame
         isWaiting={open && isProcessingVideo}
         waitKey={drawerProcessingWaitKey}
-        planningComplete={open ? !isProcessingVideo : false}
+        planningComplete={shouldAnnounceVideoSummaryComplete}
         promptDelayMs={3000}
         promptTitle="影片摘要處理中，先玩個小遊戲吧！"
         gameDescription="正在整理影片重點與地點資訊，先玩小遊戲打發等待時間。"
-        completionTitle="影片摘要處理完成！"
-        completionDescription="重點片段與地點資訊已更新。"
+        completionTitle={videoSummaryCompletionTitle}
+        completionDescription={videoSummaryCompletionDescription}
       />
     </>
   );

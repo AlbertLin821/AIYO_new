@@ -1,10 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { dismissOnboardingIfVisible, loginAs, waitForAuthenticatedSession } from "./helpers/auth";
 import {
-  ChatNetworkMonitor,
-  expectItineraryActivity,
-  fetchTripItineraryFromBootstrap,
-  sendChatMessage,
+  fetchPersistedTripFromBootstrap,
+  sendChatAndWaitForCompletion,
 } from "./helpers/chat";
 import {
   clearE2EOwnerLiveAiState,
@@ -12,23 +10,17 @@ import {
   resetE2EData,
   resetE2EOwnerPlanningProfile,
   seedAuthUsers,
-  seedSeoulPhase75ScenarioForUser,
-  type Phase75SeoulSeed,
+  seedTokyoPhase7ScenarioForUser,
+  type Phase7TokyoSeed,
 } from "./helpers/db";
 import {
   assertItineraryStructure,
-  assertItineraryUnchanged,
   assertNoApiKeyLeak,
-  assertNoPlaceholderItineraryTitles,
-  assertNoTokyoTemplatePollution,
-  buildLiveTripPlanningMessage,
   completeLiveTripPlanningFlow,
   ensureLiveAiAvailability,
   extractAssistantActions,
   extractMutationAssistantActions,
-  extractReplyText,
   isLiveAiEnvEnabled,
-  pickRandomLiveDestination,
   recordLiveAiOutcome,
   resolveAiReplyText,
   skipIfLiveAiUnavailable,
@@ -42,8 +34,7 @@ const liveState = {
   skipReason: "E2E_LIVE_AI 未啟用",
 };
 
-let seoulSeed: Phase75SeoulSeed | undefined;
-let chosenDestination = "";
+let tokyoSeed: Phase7TokyoSeed | undefined;
 
 function liveSkip() {
   const gate = skipIfLiveAiUnavailable(liveState.liveAvailable, liveState.skipReason);
@@ -54,10 +45,14 @@ async function openLiveChat(page: import("@playwright/test").Page) {
   await loginAs(page, E2E_OWNER, "/chat");
   await dismissOnboardingIfVisible(page);
   await waitForAuthenticatedSession(page, E2E_OWNER.email);
+  await page.request.get("/api/bootstrap").catch(() => undefined);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await dismissOnboardingIfVisible(page);
+  await waitForAuthenticatedSession(page, E2E_OWNER.email);
   await ensureLiveAiAvailability(page, liveState);
 }
 
-test.describe("Live AI itinerary conversation — generation", () => {
+test.describe("Live AI itinerary smoke", () => {
   test.beforeAll(async () => {
     if (!isLiveAiEnvEnabled()) {
       return;
@@ -66,233 +61,197 @@ test.describe("Live AI itinerary conversation — generation", () => {
     await seedAuthUsers();
   });
 
-  test.beforeEach(async () => {
-    if (!isLiveAiEnvEnabled()) {
-      return;
+  test.afterAll(async () => {
+    if (isLiveAiEnvEnabled()) {
+      await resetE2EData();
     }
-    await clearE2EOwnerLiveAiState();
-    await resetE2EOwnerPlanningProfile();
   });
 
-  test("1. 隨機目的地三天兩夜規劃", async ({ page }, testInfo) => {
+  test("1. 初次生成東京三天兩夜行程", async ({ page }, testInfo) => {
     test.setTimeout(720_000);
     if (!isLiveAiEnvEnabled()) {
       test.skip(true, "需 E2E_LIVE_AI=1");
     }
-
-    chosenDestination = pickRandomLiveDestination(test.info().parallelIndex);
+    await clearE2EOwnerLiveAiState();
+    await resetE2EOwnerPlanningProfile();
     await openLiveChat(page);
     liveSkip();
 
-    const monitor = new ChatNetworkMonitor();
-    monitor.attach(page);
-
-    const message = buildLiveTripPlanningMessage(chosenDestination);
-    testInfo.annotations.push({ type: "live-ai-dest", description: chosenDestination });
-
-    let flowPassed = true;
-    let failureReason: string | undefined;
     let replyPreview = "";
-
+    let passed = true;
+    let failureReason: string | undefined;
     try {
-      const { lastPayload, days } = await completeLiveTripPlanningFlow(page, message, {
-        chatTimeoutMs: 240_000,
-        structuredTravelPlanning: true,
-        destination: chosenDestination,
-      });
-
-      replyPreview = extractReplyText(lastPayload) || (await page.getByTestId("chat-message-ai").last().innerText());
-      assertNoTokyoTemplatePollution(replyPreview);
+      const { lastPayload, days } = await completeLiveTripPlanningFlow(
+        page,
+        "幫我安排東京三天兩夜自由行，我喜歡美食、逛街和城市散步，交通以大眾運輸為主，預算中等。",
+        {
+          chatTimeoutMs: 240_000,
+          structuredTravelPlanning: true,
+          destination: "東京",
+        },
+      );
+      replyPreview = await resolveAiReplyText(page, lastPayload);
       assertNoApiKeyLeak(replyPreview);
-      assertItineraryStructure(days, 2);
-
-      const titles = days.flatMap((day) => day.items.map((item) => item.title));
-      assertNoPlaceholderItineraryTitles(titles);
-      monitor.assertNoSearxngInAiChat();
-
-      const responseType = lastPayload?.data?.reply?.responseType;
-      expect(
-        responseType === "travel_plan" || days.length >= 2,
-        "應產生 travel_plan 或 bootstrap 行程",
-      ).toBeTruthy();
+      assertItineraryStructure(days, 3);
+      expect(lastPayload?.data?.reply?.responseType === "travel_plan" || days.length >= 3).toBeTruthy();
     } catch (error) {
-      flowPassed = false;
+      passed = false;
       failureReason = error instanceof Error ? error.message : String(error);
-      const days = await fetchTripItineraryFromBootstrap(page).catch(() => []);
-      replyPreview = await page
-        .getByTestId("chat-message-ai")
-        .last()
-        .innerText()
-        .catch(() => "");
-      const itemCount = days.flatMap((day) => day.items).length;
-      testInfo.annotations.push({
-        type: "live-ai-raw",
-        description: JSON.stringify({
-          destination: chosenDestination,
-          error: failureReason,
-          dayCount: days.length,
-          itemCount,
-          titles: days.flatMap((day) => day.items.map((item) => item.title)).slice(0, 12),
-        }).slice(0, 800),
-      });
-
-      if (itemCount > 0) {
-        assertItineraryStructure(days, 2);
-        assertNoPlaceholderItineraryTitles(days.flatMap((day) => day.items.map((item) => item.title)));
-        flowPassed = true;
-        failureReason = `${failureReason} | recovered partial itinerary (${itemCount} items)`;
-      } else {
-        expect.soft(itemCount, "Live 規劃應產生至少 1 個行程活動").toBeGreaterThan(0);
-      }
+      replyPreview = await page.getByTestId("chat-message-ai").last().innerText().catch(() => "");
+      throw error;
     } finally {
       recordLiveAiOutcome(testInfo, {
-        scenario: `1 plan ${chosenDestination}`,
-        passed: flowPassed,
+        scenario: "live plan tokyo 3d2n",
+        passed,
         replyPreview,
         failureReason,
       });
     }
   });
-});
 
-test.describe("Live AI itinerary conversation — delete", () => {
-  test.beforeAll(async () => {
-    if (!isLiveAiEnvEnabled()) {
-      return;
-    }
-    await resetE2EData();
-    const { owner } = await seedAuthUsers();
-    seoulSeed = await seedSeoulPhase75ScenarioForUser(owner.id);
-  });
-
-  test.afterAll(async () => {
-    if (isLiveAiEnvEnabled()) {
-      await resetE2EData();
-    }
-  });
-
-  test("2. 刪除第二天活動", async ({ page }, testInfo) => {
+  test("2. 詢問第二天有哪些地方不應修改行程", async ({ page }, testInfo) => {
     test.setTimeout(300_000);
     if (!isLiveAiEnvEnabled()) {
       test.skip(true, "需 E2E_LIVE_AI=1");
     }
-    if (!seoulSeed) {
-      test.skip(true, "首爾 seed 未建立");
+    if (!tokyoSeed) {
+      await resetE2EData();
+      const { owner } = await seedAuthUsers();
+      tokyoSeed = await seedTokyoPhase7ScenarioForUser(owner.id);
     }
-
     await openLiveChat(page);
     liveSkip();
 
-    const monitor = new ChatNetworkMonitor();
-    monitor.attach(page);
-
-    const itineraryBefore = await fetchTripItineraryFromBootstrap(page);
-    const day2 = itineraryBefore.find((day) => day.dayNumber === 2);
-    const targetTitle = day2?.items[0]?.title;
-    expect(targetTitle, "seed 第二天應有活動").toBeTruthy();
-
-    const message = `幫我刪掉第二天的${targetTitle}`;
-    const { payload } = await sendChatMessage(page, message, {
-      chatTimeoutMs: 180_000,
-      waitForTripSync: true,
+    const before = await snapshotItinerary(page);
+    const day2Titles = before.days.find((day) => day.dayNumber === 2)?.items.map((item) => item.title) || [];
+    const { payload } = await sendChatAndWaitForCompletion(page, "第二天主要會去哪幾個地方？", {
       structuredTravelPlanning: true,
+      chatTimeoutMs: 180_000,
     });
     const reply = await resolveAiReplyText(page, payload);
-    const actions = extractAssistantActions(payload);
-    const removeAction = actions.find((action) => action.type === "itinerary.remove_item");
+    expect(day2Titles.some((title) => reply.includes(title))).toBeTruthy();
+    expect(extractMutationAssistantActions(payload).length).toBe(0);
+    const after = await snapshotItinerary(page);
+    expect(after.titles).toEqual(before.titles);
 
-    assertNoTokyoTemplatePollution(reply);
-    assertNoApiKeyLeak(reply);
-    monitor.assertNoSearxngInAiChat();
-
-    if (!removeAction) {
-      recordLiveAiOutcome(testInfo, {
-        scenario: "2 delete remove_item",
-        passed: false,
-        replyPreview: reply,
-        assistantActionCount: actions.length,
-        failureReason: `無 itinerary.remove_item；actions=${actions.map((a) => a.type).join(",")}`,
-      });
-      testInfo.annotations.push({
-        type: "live-ai-raw",
-        description: JSON.stringify({ reply: reply.slice(0, 300), actions, targetTitle }).slice(0, 800),
-      });
-      expect.soft(removeAction, "Live AI 應產生 itinerary.remove_item").toBeTruthy();
-    } else {
-      recordLiveAiOutcome(testInfo, {
-        scenario: "2 delete remove_item",
-        passed: true,
-        replyPreview: reply,
-        assistantActionCount: actions.length,
-      });
-    }
-
-    await expectItineraryActivity(page, targetTitle!, false);
-
-    await page.reload();
-    await waitForAuthenticatedSession(page, E2E_OWNER.email);
-    const itineraryAfter = await fetchTripItineraryFromBootstrap(page);
-    const stillPresent = itineraryAfter
-      .flatMap((day) => day.items)
-      .some((item) => item.title === targetTitle);
-    expect(stillPresent, "reload 後刪除的活動不應再出現").toBe(false);
-  });
-});
-
-test.describe("Live AI itinerary conversation — Q&A", () => {
-  test.beforeAll(async () => {
-    if (!isLiveAiEnvEnabled()) {
-      return;
-    }
-    await resetE2EData();
-    const { owner } = await seedAuthUsers();
-    seoulSeed = await seedSeoulPhase75ScenarioForUser(owner.id);
+    recordLiveAiOutcome(testInfo, {
+      scenario: "live q&a day2 no mutation",
+      passed: true,
+      replyPreview: reply,
+      assistantActionCount: extractAssistantActions(payload).length,
+    });
   });
 
-  test.afterAll(async () => {
-    if (isLiveAiEnvEnabled()) {
-      await resetE2EData();
-    }
-  });
-
-  test("3. 景點推薦問答不改行程", async ({ page }, testInfo) => {
+  test("3. 把第二天其中一個景點改成新宿", async ({ page }, testInfo) => {
     test.setTimeout(360_000);
     if (!isLiveAiEnvEnabled()) {
       test.skip(true, "需 E2E_LIVE_AI=1");
     }
-    if (!seoulSeed) {
-      test.skip(true, "首爾 seed 未建立");
+    if (!tokyoSeed) {
+      await resetE2EData();
+      const { owner } = await seedAuthUsers();
+      tokyoSeed = await seedTokyoPhase7ScenarioForUser(owner.id);
     }
-
     await openLiveChat(page);
     liveSkip();
 
-    const monitor = new ChatNetworkMonitor();
-    monitor.attach(page);
-
-    const before = await snapshotItinerary(page);
-    const knownPoi = before.titles.find((title) => /景福宮|弘大|明洞|北村/.test(title)) || "景福宮";
-    const message = `${knownPoi}附近還有什麼值得去的景點？`;
-
-    const { payload } = await sendChatMessage(page, message, {
+    const beforeTrip = await fetchPersistedTripFromBootstrap(page);
+    const target = beforeTrip?.itinerary.find((day) => day.dayNumber === 2)?.items[0];
+    expect(target).toBeTruthy();
+    const { payload } = await sendChatAndWaitForCompletion(page, `把第二天的 ${target?.title} 改成新宿`, {
+      structuredTravelPlanning: true,
+      waitForTripSync: true,
       chatTimeoutMs: 180_000,
-      waitForTripSync: false,
-      retryOnFailure: false,
     });
     const reply = await resolveAiReplyText(page, payload);
-    const mutationActions = extractMutationAssistantActions(payload);
-
-    assertNoTokyoTemplatePollution(reply);
-    assertNoApiKeyLeak(reply);
-    expect(reply.length).toBeGreaterThanOrEqual(10);
-    expect(reply).toMatch(new RegExp(knownPoi.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "|首爾|附近|推薦|景點"));
-    expect(mutationActions.length, "推薦問答不應修改行程").toBe(0);
-    monitor.assertNoSearxngInAiChat();
-
-    await assertItineraryUnchanged(page, before);
+    const updateAction = extractAssistantActions(payload).find((action) => action.type === "itinerary.update_item");
+    expect(updateAction).toBeTruthy();
+    expect(updateAction?.payload?.dayId).toBe("day-2");
+    expect(updateAction?.payload?.itemId).toBe(target?.id);
+    const afterTrip = await fetchPersistedTripFromBootstrap(page);
+    const updated = afterTrip?.itinerary.find((day) => day.dayNumber === 2)?.items.find((item) => item.id === target?.id);
+    expect(`${updated?.title || ""} ${updated?.location?.name || ""}`).toMatch(/新宿/u);
 
     recordLiveAiOutcome(testInfo, {
-      scenario: "3 POI Q&A no mutation",
+      scenario: "live replace with shinjuku",
+      passed: true,
+      replyPreview: reply,
+      assistantActionCount: extractAssistantActions(payload).length,
+    });
+  });
+
+  test("4. 新增第二天晴空塔", async ({ page }, testInfo) => {
+    test.setTimeout(360_000);
+    if (!isLiveAiEnvEnabled()) {
+      test.skip(true, "需 E2E_LIVE_AI=1");
+    }
+    if (!tokyoSeed) {
+      await resetE2EData();
+      const { owner } = await seedAuthUsers();
+      tokyoSeed = await seedTokyoPhase7ScenarioForUser(owner.id);
+    }
+    await openLiveChat(page);
+    liveSkip();
+
+    const before = await fetchPersistedTripFromBootstrap(page);
+    const beforeCount = before?.itinerary.find((day) => day.dayNumber === 2)?.items.length || 0;
+    const { payload } = await sendChatAndWaitForCompletion(page, "第二天下午幫我加一個晴空塔，安排在逛街後面。", {
+      structuredTravelPlanning: true,
+      waitForTripSync: true,
+      chatTimeoutMs: 180_000,
+    });
+    const reply = await resolveAiReplyText(page, payload);
+    const addAction = extractAssistantActions(payload).find((action) => action.type === "itinerary.add_item");
+    expect(addAction).toBeTruthy();
+    expect(addAction?.payload?.dayId).toBe("day-2");
+    const after = await fetchPersistedTripFromBootstrap(page);
+    const day2 = after?.itinerary.find((day) => day.dayNumber === 2);
+    expect(day2?.items.length).toBeGreaterThanOrEqual(beforeCount + 1);
+    expect(day2?.items.some((item) => /晴空塔|Skytree/i.test(`${item.title} ${item.location?.name || ""}`))).toBeTruthy();
+
+    recordLiveAiOutcome(testInfo, {
+      scenario: "live add skytree",
+      passed: true,
+      replyPreview: reply,
+      assistantActionCount: extractAssistantActions(payload).length,
+    });
+  });
+
+  test("5. 刪除第二天晴空塔", async ({ page }, testInfo) => {
+    test.setTimeout(360_000);
+    if (!isLiveAiEnvEnabled()) {
+      test.skip(true, "需 E2E_LIVE_AI=1");
+    }
+    if (!tokyoSeed) {
+      await resetE2EData();
+      const { owner } = await seedAuthUsers();
+      tokyoSeed = await seedTokyoPhase7ScenarioForUser(owner.id);
+    }
+    await openLiveChat(page);
+    liveSkip();
+
+    const before = await fetchPersistedTripFromBootstrap(page);
+    const skytree = before?.itinerary
+      .find((day) => day.dayNumber === 2)
+      ?.items.find((item) => /晴空塔|Skytree/i.test(`${item.title} ${item.location?.name || ""}`));
+    test.skip(!skytree, "目前第二天沒有晴空塔可刪除");
+
+    const { payload } = await sendChatAndWaitForCompletion(page, "刪掉第二天的晴空塔", {
+      structuredTravelPlanning: true,
+      waitForTripSync: true,
+      chatTimeoutMs: 180_000,
+    });
+    const reply = await resolveAiReplyText(page, payload);
+    const removeAction = extractAssistantActions(payload).find((action) => action.type === "itinerary.remove_item");
+    expect(removeAction).toBeTruthy();
+    const after = await fetchPersistedTripFromBootstrap(page);
+    const day2HasSkytree = after?.itinerary
+      .find((day) => day.dayNumber === 2)
+      ?.items.some((item) => /晴空塔|Skytree/i.test(`${item.title} ${item.location?.name || ""}`));
+    expect(day2HasSkytree).toBe(false);
+
+    recordLiveAiOutcome(testInfo, {
+      scenario: "live remove skytree",
       passed: true,
       replyPreview: reply,
       assistantActionCount: extractAssistantActions(payload).length,

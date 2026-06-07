@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  isApplyPreviousItineraryCommand,
+  isFullItineraryRevisionCommand,
   isPersonalMemoryRecallIntent,
   shouldShowPlanningWorkflowRail,
 } from "@/lib/chat/workflowRailVisibility";
@@ -24,6 +26,18 @@ test("shouldShowPlanningWorkflowRail hides rail for partial itinerary adjustment
 
 test("shouldShowPlanningWorkflowRail shows rail for full itinerary revision", () => {
   assert.equal(shouldShowPlanningWorkflowRail({ message: "幫我重新規劃整份行程" }), true);
+});
+
+test("simple planning request is not treated as full itinerary revision", () => {
+  assert.equal(isFullItineraryRevisionCommand("幫我規劃一下行程"), false);
+  assert.equal(isFullItineraryRevisionCommand("幫我完整規劃整份行程"), true);
+});
+
+test("apply previous itinerary command accepts text-description wording", () => {
+  assert.equal(isApplyPreviousItineraryCommand("把他文字敘述的內容改到我的行程裡"), true);
+  assert.equal(isApplyPreviousItineraryCommand("把這些內容加到我的行程裡面"), true);
+  assert.equal(isApplyPreviousItineraryCommand("把這些行程丟到我的即時行程裡面"), true);
+  assert.equal(isApplyPreviousItineraryCommand("那直接替換到現有的行程"), true);
 });
 
 test("shouldShowPlanningWorkflowRail hides rail for answer_trip_question mode", () => {

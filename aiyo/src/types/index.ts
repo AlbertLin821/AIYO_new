@@ -217,6 +217,7 @@ export type AssistantActionItemInput = {
   endTime?: string | null;
   notes?: string | null;
   category?: string | null;
+  transport?: string | null;
   lat?: number | null;
   lng?: number | null;
   source?: "assistant" | "search" | "video" | "manual";
@@ -270,6 +271,7 @@ export type AssistantAction =
         tripId?: string;
         title?: string;
         destination?: string;
+        days?: number;
         budgetLevel?: "low" | "medium" | "high" | string;
         travelStyles?: string[];
         pace?: "relaxed" | "balanced" | "intensive" | string;
@@ -283,6 +285,43 @@ export type AssistantAction =
         lng?: number | null;
         zoom?: number;
       };
+    };
+
+export type ChatPlanningMode =
+  | "generate_itinerary"
+  | "modify_itinerary"
+  | "answer_question";
+
+export type ChatPlanningOutput =
+  | {
+      mode: "generate_itinerary";
+      replyText: string;
+      itinerary: TripPlanResult;
+      assistantActions: [];
+      /**
+       * Legacy compatibility only. New flow must use `itinerary`.
+       */
+      proposedChanges: AiProposedChange[];
+    }
+  | {
+      mode: "modify_itinerary";
+      replyText: string;
+      itinerary: null;
+      assistantActions: AssistantAction[];
+      /**
+       * Legacy compatibility only. New flow must use `assistantActions`.
+       */
+      proposedChanges: AiProposedChange[];
+    }
+  | {
+      mode: "answer_question";
+      replyText: string;
+      itinerary: null;
+      assistantActions: [];
+      /**
+       * Legacy compatibility only. New flow should keep this empty.
+       */
+      proposedChanges: AiProposedChange[];
     };
 
 export type ChatResponseType = "text_message" | "question_card" | "status_step" | "travel_plan" | "error";
@@ -373,7 +412,6 @@ export type StatusStepProvider =
   | "open_meteo"
   | "tavily"
   | "youtube"
-  | "searxng"
   | "serper"
   | "mock_web"
   | "ollama";
@@ -1013,4 +1051,7 @@ export interface MemoryRecord {
   metadata?: Record<string, unknown> | null;
   created_at?: string;
   updated_at?: string;
+  kind?: "mem0" | "trip_summary";
+  editable?: boolean;
+  deletable?: boolean;
 }

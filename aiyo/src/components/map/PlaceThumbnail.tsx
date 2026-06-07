@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 type PlaceThumbnailProps = {
   src?: string | null;
+  placeId?: string | null;
   alt: string;
   placeholder: string;
   className?: string;
@@ -14,13 +15,14 @@ type PlaceThumbnailProps = {
 
 export default function PlaceThumbnail({
   src,
+  placeId,
   alt,
   placeholder,
   className,
   imageClassName,
 }: PlaceThumbnailProps) {
   const [failed, setFailed] = useState(false);
-  const resolved = resolvePlacePhotoUrl(src);
+  const resolved = resolvePlacePhotoUrl(src, placeId);
 
   useEffect(() => {
     setFailed(false);

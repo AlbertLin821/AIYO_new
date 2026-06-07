@@ -26,7 +26,7 @@
 
 ## 開發模式（Docker）：啟動所有服務
 
-此處的**開發模式**指：在儲存庫根目錄用 Compose **設定檔 `dev`** 啟動 **`app-dev`**，容器內執行 `npm run dev`（熱重載），並連同 **PostgreSQL**、**Redis**、**SearXNG**（舊版／手動搜尋實驗用）一併啟動。AI 對話搜尋與行程生成只允許 Serper 與 Tavily，不會 fallback 到 SearXNG。
+此處的**開發模式**指：在儲存庫根目錄用 Compose **設定檔 `dev`** 啟動 **`app-dev`**，容器內執行 `npm run dev`（熱重載），並連同 **PostgreSQL**、**Redis** 一併啟動。AI 對話搜尋與行程生成使用 **Serper** 與 **Tavily**（需設定對應 API 金鑰）。
 
 ### 開發模式會啟動哪些服務？
 
@@ -35,7 +35,6 @@
 | `app-dev` | `aiyo-new-app-dev` | Next.js 開發伺服器，`http://localhost:3000` |
 | `postgres` | `aiyo-new-postgres` | `localhost:5432`，資料庫 `aiyo_new_db` |
 | `redis` | `aiyo-new-redis` | `localhost:6379` |
-| `searxng` | `aiyo-new-searxng` | `localhost:8081`（對應容器內 `8080`），僅保留給舊版／手動搜尋實驗；AI 對話搜尋不使用 |
 
 **未包含在上一列指令內（可另外啟動）：**
 
@@ -70,12 +69,12 @@
 在儲存庫**根目錄**（與 `docker-compose.yml` 同層）執行：
 
 ```bash
-docker compose --env-file ./aiyo/.env --profile dev up -d --build postgres redis searxng app-dev
+docker compose --env-file ./aiyo/.env --profile dev up -d --build postgres redis app-dev
 ```
 
 - **首次建置**或曾修改 Dockerfile／依賴時，保留 `--build**。  
 - **`--env-file ./aiyo/.env`** 與 `scripts/dev-deploy.ps1`、`dev-up.ps1` 一致，讓 Compose 的 `${…}` 替換與容器內 `OLLAMA_*`、`MEM0_*` 等與 `aiyo/.env` 對齊。  
-- 上述指令會依 `depends_on` 等待 `postgres`、`redis` 健康、`searxng` 已啟動後再啟動 `app-dev`；`app-dev` 啟動後會執行 `prisma generate`、`prisma migrate deploy`，再跑 `npm run dev`。
+- 上述指令會依 `depends_on` 等待 `postgres`、`redis` 健康後再啟動 `app-dev`；`app-dev` 啟動後會執行 `prisma generate`、`prisma migrate deploy`，再跑 `npm run dev`。
 
 ### 確認容器是否正常
 
@@ -83,7 +82,7 @@ docker compose --env-file ./aiyo/.env --profile dev up -d --build postgres redis
 docker compose --env-file ./aiyo/.env --profile dev ps
 ```
 
-預期 **`aiyo-new-app-dev`**、**`aiyo-new-postgres`**、**`aiyo-new-redis`**、**`aiyo-new-searxng`** 的 **STATUS** 為 **`Up`**（資料庫與 Redis 另應顯示 **`healthy`**）。若 `app-dev` 長時間非 `healthy`，請查看日誌：
+預期 **`aiyo-new-app-dev`**、**`aiyo-new-postgres`**、**`aiyo-new-redis`** 的 **STATUS** 為 **`Up`**（資料庫與 Redis 另應顯示 **`healthy`**）。若 `app-dev` 長時間非 `healthy`，請查看日誌：
 
 ```bash
 docker compose --env-file ./aiyo/.env --profile dev logs -f app-dev --tail=120
@@ -107,13 +106,13 @@ curl http://localhost:3000/api/health
 .\dev-deploy.ps1
 ```
 
-會依序：`npm install`（`aiyo/`）、確認本機 Ollama 可連線並**僅拉取缺少的**模型（自 `aiyo/.env` 讀取 `OLLAMA_*`；若 `.env` 未寫某鍵則以與 `docker-compose.yml` 相同的預設 `qwen3.5:9b` 補齊；若啟用 Mem0 另含 `qwen3.5:9b`、`nomic-embed-text`）、`scripts/clone-mem0.ps1`，再以 `docker compose --env-file ./aiyo/.env` 啟動 `postgres`、`redis`、`searxng`、`app-dev`（及 mem0 相關容器）。若不需要 Mem0：`.\dev-deploy.ps1 -NoMem0`。
+會依序：`npm install`（`aiyo/`）、確認本機 Ollama 可連線並**僅拉取缺少的**模型（自 `aiyo/.env` 讀取 `OLLAMA_*`；若 `.env` 未寫某鍵則以與 `docker-compose.yml` 相同的預設 `qwen3.5:9b` 補齊；若啟用 Mem0 另含 `qwen3.5:9b`、`nomic-embed-text`）、`scripts/clone-mem0.ps1`，再以 `docker compose --env-file ./aiyo/.env` 啟動 `postgres`、`redis`、`app-dev`（及 mem0 相關容器）。若不需要 Mem0：`.\dev-deploy.ps1 -NoMem0`。
 
 ### Windows：僅 Docker（會嘗試啟動 Mem0）
 
 專案根目錄的 `dev-up.ps1` 會：若尚無 `aiyo/.env` 則自 `aiyo/.env.example` 建立；執行 `scripts/clone-mem0.ps1`（若 `vendor/mem0/` 已存在則略過，否則嘗試自 GitHub shallow clone；失敗時請改用手動指令）；再執行：
 
-`docker compose --env-file ./aiyo/.env --profile dev --profile mem0 up -d postgres redis searxng mem0-memory-postgres mem0-memory app-dev`
+`docker compose --env-file ./aiyo/.env --profile dev --profile mem0 up -d postgres redis mem0-memory-postgres mem0-memory app-dev`
 
 若不需要 Mem0，請勿使用 `dev-up.ps1`，改用上節「啟動指令（建議：不含 Mem0）」的 `docker compose …`（不加 `--profile mem0`）。
 
@@ -132,12 +131,15 @@ docker compose --profile dev down
 可依團隊習慣擇一或並用：
 
 1. **開發模式（Docker 跑 `app-dev`）**  
-   見上一節 **「開發模式（Docker）：啟動所有服務」**（PostgreSQL + Redis + SearXNG + `app-dev` + 宿主 Ollama）。
+   見上一節 **「開發模式（Docker）：啟動所有服務」**（PostgreSQL + Redis + `app-dev` + 宿主 Ollama）。
 
 2. **僅資料庫／快取用 Docker，本機跑 Next**  
    在根目錄啟動 `postgres`（與選用的 `redis`），於 `aiyo/` 執行 `npm install`、`prisma migrate`、`npm run dev`。
 
-3. **應用程式在 Docker 內跑正式建置**  
+3. **本機正式模式驗證（掛載程式碼 + 每次啟動 build）**  
+   使用 `app-prod-live`（`.\prod-live-up.ps1`，profile `prod-live`），見「二、2.2.2」。
+
+4. **應用程式在 Docker 內跑正式建置（映像內程式碼）**  
    使用 Compose 服務 `app`（`next start`，容器名 `aiyo-new-app`），見下節「二、2.1」。
 
 以下分節說明前置需求、環境變數、資料庫與其他啟動流程。
@@ -204,6 +206,7 @@ https://docs.docker.com/compose/how-tos/environment-variables/set-environment-va
 | `OLLAMA_VIDEO_SUMMARY_FINAL_MODEL` | 彙整／定稿用模型 |
 | `OLLAMA_LOCATION_MODEL` | 地點相關推論用模型 |
 | `OLLAMA_TIMEOUT_MS` | 逾時毫秒 |
+| `OLLAMA_KEEP_ALIVE` | 模型常駐 VRAM（預設 `-1`）；任務仍由 `resolveModelForTask` 自動選模型 |
 
 **Mem0（記憶／檢索；`docker-compose.yml` 與 `.env.example`）：**
 
@@ -266,6 +269,55 @@ docker compose --profile dev up -d --build postgres redis app-dev
 ```
 
 `app-dev` 會掛載 `./aiyo` 到容器內，並將 `.next` 綁到宿主 `./aiyo/.next`；啟動流程含 `prisma generate`、`prisma migrate deploy` 後再執行 `npm run dev`。
+
+### 2.2.1 三種應用容器對照
+
+| 模式 | Compose 服務 | Profile | 程式碼 | 執行方式 | 容器名 |
+|------|----------------|---------|--------|----------|--------|
+| **開發（熱重載）** | `app-dev` | `dev` | 掛載 `./aiyo` | `npm run dev` | `aiyo-new-app-dev` |
+| **本機正式驗證** | `app-prod-live` | `prod-live` | 掛載 `./aiyo` | 每次啟動：`npm run build` → `npm run start` | `aiyo-new-app-prod-live` |
+| **映像正式版** | `app` | （預設） | 映像內（需 `docker compose build app`） | `next start` | `aiyo-new-app` |
+
+`app-dev` 與 `app-prod-live` **共用埠 3000**，請二擇一啟動。切換模式時若前端資源異常，可刪除本機 `./aiyo/.next` 後再啟動。
+
+### 2.2.2 Prod-live（本機正式模式驗證）
+
+用於在本機驗證接近正式環境的行為（`NODE_ENV=production`、`next start`），仍掛載原始碼；**不會**自動 `git pull`，請自行更新程式後重跑腳本。
+
+**啟動（儲存庫根目錄）：**
+
+```powershell
+.\prod-live-up.ps1
+```
+
+等同於（不含 Mem0；若存在 `aiyo/.env.local` 請一併帶入）：
+
+```bash
+docker compose --env-file ./aiyo/.env [--env-file ./aiyo/.env.local] --profile prod-live up -d --build --force-recreate postgres redis app-prod-live
+```
+
+- 與 `dev-up.ps1` 相同：`prod-live-up.ps1` 會先匯入 `aiyo/.env`（及可選的 `.env.local`）到目前 shell，避免 Windows 使用者環境變數覆寫 Compose 的 `${NEXT_PUBLIC_*}` build args。
+- Compose 容器執行時亦讀取 `aiyo/.env` + 可選 `aiyo/.env.local`（見 `docker-compose.yml` 的 `app-prod-live.env_file`）。
+- 首次或改動程式／環境變數後請重新執行 `prod-live-up.ps1`（或上述 `docker compose … --force-recreate app-prod-live`），容器才會重新 `npm run build`。
+- 若 `app-dev` 仍在跑，腳本會提示先 `docker compose --env-file ./aiyo/.env --profile dev down`。
+- 需要 Mem0：`.\prod-live-up.ps1 -WithMem0`。
+- `NEXT_PUBLIC_*` 在容器內 build 時從掛載的 `aiyo/.env` / `.env.local` 與 Compose build args 讀取；變更後請重啟 prod-live 以觸發重新 build。
+- 從 dev 切換過來若地圖或前端資源異常，可刪除本機 `./aiyo/.next` 後再執行 `prod-live-up.ps1`。
+
+**驗證：**
+
+```bash
+curl http://localhost:3000/api/health
+```
+
+**切回開發：**
+
+```bash
+docker compose --env-file ./aiyo/.env [--env-file ./aiyo/.env.local] --profile prod-live down
+.\dev-up.ps1
+```
+
+（或改用不含 Mem0 的 `docker compose --profile dev up …`。）
 
 ### 2.3 Mem0 設定檔（`mem0`）與 `dev-up.ps1` 注意事項
 

@@ -164,6 +164,22 @@ test("formatPersonalMemoryDeterministicReply lists known destinations", () => {
   assert.match(reply, /大阪/);
 });
 
+test("formatPersonalMemoryDeterministicReply includes representative itinerary places for matched trip queries", () => {
+  const aiContext = makeAiContextWithTrips(["熊本"]);
+  aiContext.structuredContext.recentTrips[0]!.representativeItems = ["熊本城", "草千里之濱", "黑亭"];
+
+  const reply = formatPersonalMemoryDeterministicReply(
+    buildPersonalMemoryBundle({
+      aiContext,
+    }),
+    "我之前熊本行程去過哪些地方",
+  );
+
+  assert.match(reply, /熊本城/);
+  assert.match(reply, /草千里之濱/);
+  assert.match(reply, /黑亭/);
+});
+
 test("isUserFacingMemorySnippet rejects internal prompt and chat leak patterns", () => {
   assert.equal(isUserFacingMemorySnippet("[近期全域聊天摘要]"), false);
   assert.equal(isUserFacingMemorySnippet("assistant: 好的"), false);

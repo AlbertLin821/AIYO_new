@@ -5,7 +5,7 @@
 - `AIYO_new/docs/` — migration and implementation documents
 - `AIYO_new/aiyo/` — active Next.js 16 app (product)
 - `AIYO_new/aiyo/src/components/chat/skyDash/` — in-chat Sky Dash mini-game UI (canonical implementation)
-- `AIYO_new/docker-compose.yml` — Postgres, Redis (reserved), SearXNG, optional Mem0
+- `AIYO_new/docker-compose.yml` — Postgres, Redis (reserved), optional Mem0
 
 ## Application Structure
 

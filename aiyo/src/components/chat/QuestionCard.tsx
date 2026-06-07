@@ -133,8 +133,6 @@ export default function QuestionCard({
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const locked = submitted;
   const fieldsDisabled = disabled || locked;
-  const REQUIRED_SLOTS = new Set(["destination", "duration_days"]);
-
   function isAnswered(question: ChatQuestion, value: unknown): boolean {
     if (question.type === "multi_choice") {
       return Array.isArray(value) && value.length > 0;
@@ -194,14 +192,7 @@ export default function QuestionCard({
     slot: question.slot,
     value: answers[question.slot] ?? (question.type === "multi_choice" ? [] : ""),
   }));
-  const canSubmit = card.questions.every((question) => {
-    const value = answers[question.slot];
-    const required = REQUIRED_SLOTS.has(question.slot);
-    if (!required) {
-      return true;
-    }
-    return isAnswered(question, value);
-  });
+  const canSubmit = card.questions.every((question) => isAnswered(question, answers[question.slot]));
 
   const cardLabel =
     card.questions.find((question) => question.question.trim())?.question ||
@@ -359,7 +350,7 @@ export default function QuestionCard({
                 className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
               />
             )}
-            {submitAttempted && REQUIRED_SLOTS.has(question.slot) && !isAnswered(question, answers[question.slot]) ? (
+            {submitAttempted && !isAnswered(question, answers[question.slot]) ? (
               <p className="text-xs text-rose-600">此欄位為必填，請先完成。</p>
             ) : null}
           </div>

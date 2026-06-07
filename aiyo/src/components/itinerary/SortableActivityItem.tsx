@@ -9,6 +9,7 @@ import { zhTW as t } from "@/locales/zh-TW";
 import type { TripPlanItem } from "@/types";
 import { useTripStore } from "@/stores/useTripStore";
 import { getRegionalTransitOptions } from "@/lib/tripTransportRegion";
+import { transportDisplayLabel } from "@/lib/transportDisplay";
 import { activityTypeColors, activityTypeLabel, activityTypeOptions } from "./itineraryUi";
 
 type EditDraft = {
@@ -178,7 +179,7 @@ function SortableActivityItem({
             {item.transport && (
               <p className={cn("flex items-center gap-1", isDark ? "text-zinc-400" : "text-muted")}>
                 <Train className="size-3" />
-                {item.transport}
+                {transportDisplayLabel(item.transport, transportChoices)}
               </p>
             )}
             {item.notes && <p className={cn(isDark ? "text-zinc-500" : "text-muted")}>{item.notes}</p>}

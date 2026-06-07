@@ -130,10 +130,10 @@
 
 ### 完成項目
 
-- **統一網搜**：`server/search/webSearchService.ts` 的 `runUnifiedWebSearch`；`auto` 順序為 **Serper（有 `SERPER_API_KEY`）→ Tavily（有 key）→ SearxNG（啟用）→ mock（`AIYO_WEB_SEARCH_MOCK=1`）**。可強制 **`WEB_SEARCH_PROVIDER=auto|serper|tavily|searxng|mock`**。Serper 實作於 `server/search/serperClient.ts`；mock 於 `server/search/mockWebSearch.ts`。
+- **統一網搜**：`server/search/webSearchService.ts` 的 `runUnifiedWebSearch`；`auto` 順序為 **Serper（有 `SERPER_API_KEY`）→ Tavily（有 key）→ none**。可強制 **`WEB_SEARCH_PROVIDER=auto|serper|tavily`**。Serper 實作於 `server/search/serperClient.ts`。
 - **設定**：`server/config.ts` — `webSearchProvider`、`serperApiKey`、`aiWebSearchMock`（沿用既有 Tavily / Searx 欄位）。
 - **行程規劃**：`travelPlannerService.runWebSearch` 改呼叫 `runUnifiedWebSearch`；`StatusStepProvider` 新增 **`serper`**、**`mock_web`**。
-- **`POST /api/search/web`**：回傳 **`data.provider`**（實際後端：`serper` | `tavily` | `searxng` | `mock_web`）。
+- **`POST /api/search/web`**：回傳 **`data.provider`**（實際後端：`serper` | `tavily` | `none`）。
 - **Grounded 來源**：`lib/sources/webSearchToSourceReferences.ts` — `webSearchResultsToSourceReferences` / `chatSourcesRecordToReferences` → `SourceReference[]`。
 - **RAG-lite**：`server/memory/memoryRetrieval.ts` — Mem0 開啟時優先語意搜尋，否則 **list + 關鍵字排序**；**`POST /api/memories/retrieve`**（需登入），body：`{ query, topK? }`。主流程 **`/api/ai/chat`**、**`/api/trip/revise`**、**`/api/ai/plan`** 的 `memoryContext` 皆改經 **`retrieveRelevantMemoriesForUser`**，與上述 API 同一套檢索邏輯。
 - **行程匯出**：`server/export/tripMarkdown.ts` 的 `buildTripMarkdown`；**`GET /api/trips/[id]/export/markdown`**（需登入且具 **view** 權限），`Content-Type: text/markdown` 下載。
@@ -143,7 +143,7 @@
 
 | 變數 | 說明 |
 |------|------|
-| `WEB_SEARCH_PROVIDER` | `auto`（預設）或 `serper` / `tavily` / `searxng` / `mock` |
+| `WEB_SEARCH_PROVIDER` | `auto`（預設）或 `serper` / `tavily` |
 | `SERPER_API_KEY` | Serper Google Search API |
 | `AIYO_WEB_SEARCH_MOCK` | `1` 啟用離線示範結果（亦受 unified 邏輯約束） |
 

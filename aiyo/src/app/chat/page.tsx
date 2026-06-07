@@ -55,28 +55,33 @@ import {
 } from "@/lib/frontendDebug";
 import { buildWorkflowSteps } from "@/lib/workflowSteps";
 import {
-  buildChatTypingContext,
-  resolveChatTypingLabel,
-} from "@/lib/chat/chatTypingMessages";
-import {
   buildItineraryItemFromAiChange,
   findItineraryItemTarget,
 } from "@/app/chat/itineraryPatchUtils";
 import { applyAssistantActions } from "@/lib/assistantActions/applyAssistantActions";
-import { CHAT_HISTORY_WINDOW } from "@/lib/chatConstants";
 import {
+  travelPlanResponseToTripPlanResult,
+  tripPlanHasItems,
+} from "@/lib/travelPlanConversion";
+import { CHAT_HISTORY_WINDOW } from "@/lib/chatConstants";
+import { isStructuredTripPlanningRequest } from "@/lib/chat/isStructuredTripPlanningRequest";
+import {
+  isApplyPreviousItineraryCommand,
   isFullItineraryRevisionCommand,
   isItineraryMutationCommand,
-  isLikelyTripWorkflowMessage,
+  isPlanningConfirmationCommand,
   shouldShowPlanningWorkflowRail,
 } from "@/lib/chat/workflowRailVisibility";
+import { findLatestApplicableItinerarySource } from "@/lib/chat/latestItinerarySource";
 import { cn } from "@/lib/utils";
+import { ApiRequestError } from "@/services/apiClient";
 import {
   reviseTripPlan,
   sendChatMessage,
 } from "@/services/aiClient";
 import { createNewTrip, setActiveTrip } from "@/services/itineraryClient";
 import { geocodeItineraryItemsMissingLocation } from "@/services/geocodeItineraryItems";
+import { reconcileTripMapState } from "@/services/mapSync";
 import { syncService } from "@/services/syncService";
 import {
   fetchVideoRecommendations,
@@ -94,12 +99,15 @@ import type { SourceReference } from "@/lib/types/sources";
 import type {
   AiProposedChange,
   ChatMessage,
+  ChatResponsePayload,
   ChatQuestionAnswer,
   StatusStepPayload,
   TripPlanDay,
   TripPlanItem,
+  TripPlanResult,
   TripProfile,
   TravelAgentDecision,
+  TravelAgentKnownPreferences,
   TravelAgentPreferenceConfirmation,
   VideoRecommendation,
   VideoSummaryResult,
@@ -346,14 +354,76 @@ function buildTripProfileFromPreferenceConfirmation(
     return null;
   }
 
+  return buildTripProfileFromPreferenceDraft(confirmation, preferences);
+}
+
+/** Keep traveler/dates from chat; overlay budget/pace/transport from preference confirmation. */
+function mergePreferenceWithExistingTripProfile(
+  confirmationProfile: TripProfile | null,
+  existing: TripProfile | null,
+): TripProfile | undefined {
+  if (!confirmationProfile && !existing) {
+    return undefined;
+  }
+  if (!confirmationProfile) {
+    return existing ?? undefined;
+  }
+  if (!existing) {
+    return confirmationProfile;
+  }
+  return {
+    ...existing,
+    ...confirmationProfile,
+    travel_dates: existing.travel_dates ?? confirmationProfile.travel_dates,
+    traveler_count: existing.traveler_count ?? confirmationProfile.traveler_count,
+    companions: existing.companions ?? confirmationProfile.companions,
+    departure_location: existing.departure_location ?? confirmationProfile.departure_location,
+  };
+}
+
+function buildTripProfileFromPreferenceDraft(
+  confirmation: TravelAgentPreferenceConfirmation | null,
+  draft: TravelAgentKnownPreferences,
+): TripProfile | null {
+  const confirmed = confirmation?.preferences;
+  const destination = draft.destination || confirmed?.destination;
+  const days = draft.days || confirmed?.days;
+  const budget =
+    draft.budgetLevel === "high"
+      ? 80_000
+      : draft.budgetLevel === "low"
+        ? 30_000
+        : draft.budgetLevel === "medium"
+          ? 50_000
+          : typeof draft.budget === "number"
+            ? draft.budget
+            : typeof confirmed?.budget === "number"
+              ? confirmed.budget
+              : undefined;
+
   return buildTripProfileFallback({
-    destination: preferences.destination,
-    days: preferences.days,
-    budget: typeof preferences.budget === "number" ? preferences.budget : undefined,
-    transportPreference: preferences.transportPreference || null,
-    pace: preferences.pace || null,
-    interests: preferences.travelStyle || preferences.travelStyles || [],
+    destination,
+    days,
+    budget,
+    transportPreference: draft.transportPreference || confirmed?.transportPreference || null,
+    pace: draft.pace || confirmed?.pace || null,
+    interests:
+      draft.travelStyle?.length
+        ? draft.travelStyle
+        : draft.travelStyles?.length
+          ? draft.travelStyles
+          : confirmed?.travelStyle || confirmed?.travelStyles || [],
   });
+}
+
+function hasItineraryItems(days: TripPlanDay[]): boolean {
+  return days.some((day) => day.items.length > 0);
+}
+
+function isConcreteItineraryMutationCommand(message: string): boolean {
+  return /新增|加入|加上|刪除|刪掉|移除|取消|去掉|修改|調整|改成|換成|改到|提前|延後|移到|重排|重新規劃|第\s*[\d一二兩两三四五六七八九十]+天|day\s*\d+/iu.test(
+    message,
+  );
 }
 
 export default function ChatPage() {
@@ -366,6 +436,7 @@ export default function ChatPage() {
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [historySidebarExpanded, setHistorySidebarExpanded] = useState(false);
+  const [skyDashOpen, setSkyDashOpen] = useState(false);
   const [tripProfile, setTripProfile] = useState<TripProfile | null>(null);
   const [streamingStatusSteps, setStreamingStatusSteps] = useState<StatusStepPayload[]>([]);
   const [workflowRail, setWorkflowRail] = useState<WorkflowRailState>({
@@ -395,15 +466,15 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const statusStreamRef = useRef<EventSource | null>(null);
   const chatAbortControllerRef = useRef<AbortController | null>(null);
+  const chatStoppedByUserRef = useRef(false);
   const speechRecognitionRef = useRef<ChatSpeechRecognition | null>(null);
+  const speechIgnoreResultsRef = useRef(false);
   const speechBaseInputRef = useRef("");
   const speechFinalTranscriptRef = useRef("");
   const chatRequestEpochRef = useRef(0);
   const chatSendLockRef = useRef(false);
   const planningWorkflowActiveRef = useRef(false);
   const [planningWorkflowActive, setPlanningWorkflowActive] = useState(false);
-  const typingSeedRef = useRef(Math.floor(Math.random() * 10_000));
-  const [typingTick, setTypingTick] = useState(0);
   const videoSummaryQueueTokenRef = useRef(0);
   const videoSummaryInflightRef = useRef(new Map<string, Promise<VideoSummaryResult>>());
   const autoSummaryActiveRef = useRef(false);
@@ -440,17 +511,6 @@ export default function ChatPage() {
       speechRecognitionRef.current = null;
     };
   }, []);
-
-  useEffect(() => {
-    if (!isSending) {
-      setTypingTick(0);
-      return;
-    }
-    const intervalId = window.setInterval(() => {
-      setTypingTick((current) => current + 1);
-    }, 3000);
-    return () => window.clearInterval(intervalId);
-  }, [isSending]);
 
   useEffect(() => {
     if (!isSending || streamingStatusSteps.length === 0 || !planningWorkflowActiveRef.current) {
@@ -670,29 +730,6 @@ export default function ChatPage() {
     (hasWorkflowRail &&
       !planningComplete &&
       activePlanningSteps.some((step) => step.status === "running"));
-  const showStructuredPlanningProgress =
-    (planningWorkflowActive && Boolean(streamingStatusSteps.length)) ||
-    Boolean(workflowRail.steps.length) ||
-    Boolean(workflowRail.preferenceConfirmation);
-  const assistantTypingLabel = useMemo(() => {
-    const typingContext = buildChatTypingContext({
-      steps: activePlanningSteps,
-      travelAgentMode: workflowRail.travelAgentMode,
-      hasPreferenceConfirmation: Boolean(workflowRail.preferenceConfirmation),
-      isStructuredPlanning: showStructuredPlanningProgress,
-    });
-    return resolveChatTypingLabel(typingContext, {
-      seed: typingSeedRef.current,
-      tick: typingTick,
-    });
-  }, [
-    activePlanningSteps,
-    workflowRail.travelAgentMode,
-    workflowRail.preferenceConfirmation,
-    showStructuredPlanningProgress,
-    typingTick,
-  ]);
-
   useEffect(() => {
     if (itinerarySyncState.status === "syncing" || itinerarySyncState.status === "failed") {
       return;
@@ -901,6 +938,7 @@ export default function ChatPage() {
   }
 
   function handleStopGeneration() {
+    chatStoppedByUserRef.current = true;
     chatRequestEpochRef.current += 1;
     const controller = chatAbortControllerRef.current;
     if (controller && !controller.signal.aborted) {
@@ -1141,7 +1179,7 @@ export default function ChatPage() {
     }));
     void handleSend(scopedInstruction, {
       displayMessage: "沿用先前偏好",
-      tripProfile: confirmationProfile ?? tripProfile ?? undefined,
+      tripProfile: mergePreferenceWithExistingTripProfile(confirmationProfile, tripProfile),
     });
   }
 
@@ -1153,17 +1191,40 @@ export default function ChatPage() {
     void handleSend("這次不用沿用", { displayMessage: "這次重新填寫偏好" });
   }
 
-  function handlePreferenceEditSubmit(message: string, displayMessage: string) {
+  function handlePreferenceEditSubmit(
+    message: string,
+    displayMessage: string,
+    draft: TravelAgentKnownPreferences,
+  ) {
+    const confirmation = workflowRail.preferenceConfirmation;
+    const confirmationProfile = buildTripProfileFromPreferenceDraft(confirmation, draft);
+    const destination = confirmationProfile?.destination?.trim();
+    const days = confirmationProfile?.duration_days;
+    const scopedInstruction = [
+      message,
+      "請依這些偏好直接開始規劃",
+      destination || "",
+      days ? `${days} 天` : "",
+      "完整行程。",
+    ]
+      .filter(Boolean)
+      .join("，");
     setWorkflowRail((prev) => ({
       ...prev,
       preferenceConfirmation: null,
     }));
-    void handleSend(message, { displayMessage });
+    void handleSend(scopedInstruction, {
+      displayMessage,
+      tripProfile: mergePreferenceWithExistingTripProfile(confirmationProfile, tripProfile),
+    });
   }
 
   function handleToggleVoiceInput() {
     if (isVoiceInputActive) {
+      speechIgnoreResultsRef.current = true;
       speechRecognitionRef.current?.stop();
+      speechBaseInputRef.current = "";
+      speechFinalTranscriptRef.current = "";
       setIsVoiceInputActive(false);
       return;
     }
@@ -1186,6 +1247,7 @@ export default function ChatPage() {
     const initialInput = input.trim();
     speechBaseInputRef.current = initialInput ? `${initialInput} ` : "";
     speechFinalTranscriptRef.current = "";
+    speechIgnoreResultsRef.current = false;
     speechRecognitionRef.current?.abort();
     speechRecognitionRef.current = recognition;
     recognition.lang = "zh-TW";
@@ -1193,6 +1255,9 @@ export default function ChatPage() {
     recognition.interimResults = true;
 
     recognition.onresult = (event) => {
+      if (speechIgnoreResultsRef.current) {
+        return;
+      }
       let interimTranscript = "";
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
         const result = event.results[index];
@@ -1208,6 +1273,10 @@ export default function ChatPage() {
       );
     };
     recognition.onerror = () => {
+      if (speechIgnoreResultsRef.current) {
+        return;
+      }
+      speechIgnoreResultsRef.current = true;
       setIsVoiceInputActive(false);
       pushToast({
         variant: "warning",
@@ -1219,6 +1288,10 @@ export default function ChatPage() {
       setIsVoiceInputActive(false);
       if (speechRecognitionRef.current === recognition) {
         speechRecognitionRef.current = null;
+      }
+      if (speechIgnoreResultsRef.current) {
+        speechBaseInputRef.current = "";
+        speechFinalTranscriptRef.current = "";
       }
       chatInputRef.current?.focus();
     };
@@ -1463,6 +1536,13 @@ export default function ChatPage() {
     }
 
     chatSendLockRef.current = true;
+    chatStoppedByUserRef.current = false;
+    speechIgnoreResultsRef.current = true;
+    speechRecognitionRef.current?.abort();
+    speechRecognitionRef.current = null;
+    speechBaseInputRef.current = "";
+    speechFinalTranscriptRef.current = "";
+    setIsVoiceInputActive(false);
 
     stopAutoVideoSummaryQueue();
 
@@ -1521,6 +1601,51 @@ export default function ChatPage() {
           interests: userStore.interests,
         }) ??
         undefined;
+      const latestItinerarySource = findLatestApplicableItinerarySource(
+        previousMessages,
+      );
+      if (!hasQuestionAnswers && isApplyPreviousItineraryCommand(message) && latestItinerarySource) {
+        const sourceMessage = latestItinerarySource.message;
+        const applyProfile: TripProfile = {
+          ...(sourceMessage.tripProfile || activeProfile || {}),
+          plan_integration: "direct_merge",
+        } as TripProfile;
+        const applyReply: ChatMessage = {
+          id: `assistant_${Date.now()}`,
+          role: "assistant",
+          content: "已把上一份行程提案套用到右側即時行程。",
+          timestamp: new Date().toLocaleTimeString("zh-TW", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          responseType: "text_message",
+          tripProfile: applyProfile,
+        };
+        appendMessage(applyReply);
+        await applyItineraryUpdateFromResponse(
+          {
+            reply: {
+              ...sourceMessage,
+              tripProfile: applyProfile,
+            },
+            itinerarySuggestion: latestItinerarySource.plan,
+            tripProfile: applyProfile,
+          },
+          {
+            sourceMessageId: sourceMessage.id,
+          },
+        );
+        updateFrontendDebugProcess(chatProcessId, "applied-latest-travel-plan", {
+          sourceMessageId: sourceMessage.id,
+          sourceKind: latestItinerarySource.plan ? "text_itinerary" : "travel_plan",
+        });
+        finishFrontendDebugProcess(chatProcessId, {
+          progressSessionId,
+          finalReplyType: "text_message",
+          appliedLatestTravelPlan: true,
+        });
+        return;
+      }
       const shouldUseTripRevisionFlow =
         !hasQuestionAnswers &&
         Boolean(activeProfile) &&
@@ -1574,22 +1699,9 @@ export default function ChatPage() {
             activeConversation?.title ||
             displayMessage,
         );
-        if (response.itinerarySuggestion) {
-          await applyGeneratedTripPlan(response);
-        } else if (response.assistantActions?.length) {
-          await applyAssistantActions(response.assistantActions, { persist: true });
-        } else if (response.proposedChanges?.length) {
-          await applyAiProposedChanges(response.proposedChanges, {
-            navigate: false,
-            sourceMessageId: response.reply.id,
-          });
-        } else {
-          pushToast({
-            variant: "warning",
-            title: "沒有可套用的行程變更",
-            description: "AI 已回覆，但這次沒有產生可直接同步到行程的修改內容。",
-          });
-        }
+        await applyItineraryUpdateFromResponse(response, {
+          sourceMessageId: response.reply.id,
+        });
         updateFrontendDebugProcess(chatProcessId, "reply-received", {
           replyType: response.reply.responseType,
           replyId: response.reply.id,
@@ -1606,18 +1718,40 @@ export default function ChatPage() {
       updateFrontendDebugProcess(chatProcessId, "request-dispatched", {
         progressSessionId,
       });
-      const outgoingProfile = options?.tripProfile ?? tripProfile ?? undefined;
+      const outgoingProfile =
+        !hasQuestionAnswers && isApplyPreviousItineraryCommand(message)
+          ? ({
+              ...(options?.tripProfile ?? tripProfile ?? activeProfile),
+              plan_integration: "direct_merge",
+            } as TripProfile)
+          : options?.tripProfile ?? tripProfile ?? undefined;
       const confirmedDays =
         typeof outgoingProfile?.duration_days === "number" && outgoingProfile.duration_days > 0
           ? outgoingProfile.duration_days
           : undefined;
+      const isPlanningConfirmation =
+        isPlanningConfirmationCommand(message) &&
+        Boolean(
+          workflowRail.visible ||
+            workflowRail.travelAgentMode === "collect_requirements" ||
+            workflowRail.travelAgentMode === "confirm_preferences" ||
+            outgoingProfile?.destination ||
+            planningSnapshot.destination,
+        );
+      const currentItineraryHasItems = hasItineraryItems(useTripStore.getState().itinerary);
+      const shouldTreatAsStructuredMutation =
+        isItineraryMutationCommand(message) &&
+        (currentItineraryHasItems || isConcreteItineraryMutationCommand(message)) &&
+        !(!currentItineraryHasItems && isFullItineraryRevisionCommand(message));
       const shouldUseStructuredPlanning =
         Boolean(options?.questionAnswers?.length) ||
         Boolean(options?.tripProfile) ||
         Boolean(workflowRail.questionMessageId) ||
-        isLikelyTripWorkflowMessage(message) ||
-        isItineraryMutationCommand(message) ||
-        isFullItineraryRevisionCommand(message);
+        isApplyPreviousItineraryCommand(message) ||
+        isStructuredTripPlanningRequest(message) ||
+        isPlanningConfirmation ||
+        shouldTreatAsStructuredMutation ||
+        (currentItineraryHasItems && isFullItineraryRevisionCommand(message));
       const response = await sendChatMessage(
         {
           message,
@@ -1735,28 +1869,24 @@ export default function ChatPage() {
       const shouldDirectMergeGeneratedPlan =
         response.reply.responseType === "travel_plan" &&
         response.tripProfile?.plan_integration !== "self_merge";
+      const shouldApplyGeneratedPlan =
+        shouldDirectMergeGeneratedPlan &&
+        Boolean(response.itinerarySuggestion || response.reply.travelPlan);
       const hasApplicableProposedChanges = Boolean(
         response.proposedChanges?.length && response.reply.responseType !== "question_card",
       );
       const shouldApplyItineraryUpdate =
         Boolean(
-          response.itinerarySuggestion ||
+          shouldApplyGeneratedPlan ||
             hasApplicableProposedChanges ||
             response.assistantActions?.length ||
             isItineraryMutationCommand(message) ||
-            shouldDirectMergeGeneratedPlan,
+            (isApplyPreviousItineraryCommand(message) && response.tripProfile?.plan_integration !== "self_merge"),
         );
       if (shouldApplyItineraryUpdate) {
-        if (response.itinerarySuggestion) {
-          await applyGeneratedTripPlan(response);
-        } else if (response.assistantActions?.length) {
-          await applyAssistantActions(response.assistantActions, { persist: true });
-        } else if (response.proposedChanges?.length) {
-          await applyAiProposedChanges(response.proposedChanges, {
-            navigate: false,
-            sourceMessageId: response.reply.id,
-          });
-        }
+        await applyItineraryUpdateFromResponse(response, {
+          sourceMessageId: response.reply.id,
+        });
       } else if (
         response.reply.responseType === "travel_plan" &&
         response.tripProfile?.plan_integration === "self_merge"
@@ -1795,10 +1925,13 @@ export default function ChatPage() {
       });
     } catch (error) {
       if (isAbortError(error) || signal.aborted) {
-        useChatStore.getState().removeMessageById(optimisticMessage.id);
+        const superseded = requestEpoch !== chatRequestEpochRef.current;
+        if (superseded || chatStoppedByUserRef.current) {
+          useChatStore.getState().removeMessageById(optimisticMessage.id);
+        }
+        chatStoppedByUserRef.current = false;
         return;
       }
-      useChatStore.getState().removeMessageById(optimisticMessage.id);
       failFrontendDebugProcess(chatProcessId, error, {
         progressSessionId,
       });
@@ -1814,7 +1947,11 @@ export default function ChatPage() {
         setInput(options.displayMessage);
       }
       const description =
-        error instanceof Error ? error.message : t.chat.requestFailedGeneric;
+        error instanceof ApiRequestError && error.code === "ollama_error"
+          ? t.chat.ollamaLoadingError
+          : error instanceof Error
+            ? error.message
+            : t.chat.requestFailedGeneric;
       setErrorMessage(description);
       const retryOptions = options;
       pushToast({
@@ -1916,22 +2053,9 @@ export default function ChatPage() {
       if (response.tripProfile) {
         setTripProfile(response.tripProfile);
       }
-      if (response.itinerarySuggestion) {
-        await applyGeneratedTripPlan(response);
-      } else if (response.assistantActions?.length) {
-        await applyAssistantActions(response.assistantActions, { persist: true });
-      } else if (response.proposedChanges?.length) {
-        await applyAiProposedChanges(response.proposedChanges, {
-          navigate: false,
-          sourceMessageId: response.reply.id,
-        });
-      } else {
-        pushToast({
-          variant: "warning",
-          title: "沒有可套用的行程變更",
-          description: "AI 已回覆，但這次沒有產生可直接同步到行程的修改內容。",
-        });
-      }
+      await applyItineraryUpdateFromResponse(response, {
+        sourceMessageId: response.reply.id,
+      });
       finishFrontendDebugProcess(reviseProcessId, {
         progressSessionId,
         replyType: response.reply.responseType,
@@ -1950,7 +2074,11 @@ export default function ChatPage() {
         visible: prev.steps.length > 0,
       }));
       const description =
-        error instanceof Error ? error.message : t.chat.requestFailedGeneric;
+        error instanceof ApiRequestError && error.code === "ollama_error"
+          ? t.chat.ollamaLoadingError
+          : error instanceof Error
+            ? error.message
+            : t.chat.requestFailedGeneric;
       setErrorMessage(description);
       pushToast({
         variant: "error",
@@ -2138,11 +2266,102 @@ export default function ChatPage() {
     }
   }
 
+  function resolveGeneratedTripPlan(response: ChatResponsePayload): TripPlanResult | null {
+    if (response.itinerarySuggestion) {
+      return response.itinerarySuggestion;
+    }
+    if (!response.reply.travelPlan) {
+      return null;
+    }
+    const currentTrip = useTripStore.getState();
+    const targetDayCount =
+      response.tripProfile?.duration_days ??
+      planningSnapshot.days ??
+      currentTrip.itinerary?.length;
+    return travelPlanResponseToTripPlanResult(response.reply.travelPlan, {
+      targetDayCount: targetDayCount && targetDayCount > 0 ? targetDayCount : undefined,
+    });
+  }
+
+  async function applyItineraryUpdateFromResponse(
+    response: ChatResponsePayload,
+    options: { sourceMessageId?: string; silent?: boolean } = {},
+  ) {
+    const shouldApplyGeneratedPlan =
+      response.reply.responseType === "travel_plan" &&
+      response.tripProfile?.plan_integration !== "self_merge" &&
+      Boolean(response.itinerarySuggestion || response.reply.travelPlan);
+
+    if (shouldApplyGeneratedPlan) {
+      const applied = await applyGeneratedTripPlan(response, { silent: options.silent });
+      if (applied) {
+        return;
+      }
+    }
+
+    if (response.assistantActions?.length) {
+      await applyAssistantActions(response.assistantActions, { persist: true });
+      return;
+    }
+
+    if (response.proposedChanges?.length) {
+      // Legacy fallback only. New structured itinerary edits should arrive via assistantActions.
+      await applyAiProposedChanges(response.proposedChanges, {
+        navigate: false,
+        sourceMessageId: options.sourceMessageId ?? response.reply.id,
+      });
+      return;
+    }
+
+    if (response.reply.responseType === "travel_plan") {
+      pushToast({
+        variant: "warning",
+        title: "沒有可套用的行程變更",
+        description: "AI 已回覆行程提案，但無法寫入右側每日項目。",
+      });
+    }
+  }
+
+  async function handleApplyTravelPlanMessage(message: ChatMessage) {
+    if (!message.travelPlan) {
+      return;
+    }
+    const applyProfile: TripProfile = {
+      ...(message.tripProfile || tripProfile || {}),
+      plan_integration: "direct_merge",
+    } as TripProfile;
+    await applyItineraryUpdateFromResponse(
+      {
+        reply: {
+          ...message,
+          tripProfile: applyProfile,
+        },
+        tripProfile: applyProfile,
+      },
+      {
+        sourceMessageId: message.id,
+      },
+    );
+  }
+
   async function applyGeneratedTripPlan(
-    response: Awaited<ReturnType<typeof reviseTripPlan>>,
+    response: ChatResponsePayload,
     options: { silent?: boolean } = {},
   ) {
-    if (!response.itinerarySuggestion) {
+    const plan = resolveGeneratedTripPlan(response);
+    if (!plan || !tripPlanHasItems(plan)) {
+      if (response.reply.travelPlan && !options.silent) {
+        setItinerarySyncState({
+          status: "failed",
+          title: "無法寫入即時行程",
+          detail: "行程提案沒有可套用的地點或活動。",
+        });
+        pushToast({
+          variant: "warning",
+          title: "無法同步到右側行程",
+          description: "AI 有行程提案，但內容無法寫入每日項目。",
+        });
+      }
       return false;
     }
     setItinerarySyncState({
@@ -2151,20 +2370,24 @@ export default function ChatPage() {
       detail: "AI 正在把新的每日行程寫入右側行程欄。",
     });
     const currentTrip = useTripStore.getState();
-    currentTrip.replaceTripPlan(response.itinerarySuggestion, {
+    currentTrip.replaceTripPlan(plan, {
       destination: currentTrip.destination || response.tripProfile?.destination || planningSnapshot.destination,
-      days: response.itinerarySuggestion.days.length,
+      days: plan.days.length,
       budget:
         currentTrip.budget ||
         planningSnapshot.budget ||
         readBudgetAmountFromText(response.tripProfile?.budget),
       title: currentTrip.title || response.tripProfile?.destination || currentTrip.destination,
     });
+    const reconciled = reconcileTripMapState(useTripStore.getState().itinerary, useMapStore.getState().pins);
+    useTripStore.getState().setItinerary(reconciled.itinerary);
+    useMapStore.getState().setPins(reconciled.pins);
+    syncService.markLocalTripPayloadAsSynced();
     await syncService.flushTripSyncNow({ force: true });
     setItinerarySyncState({
       status: "synced",
       title: "已同步到目前行程",
-      detail: `已更新 ${response.itinerarySuggestion.days.length} 天行程內容。`,
+      detail: `已更新 ${plan.days.length} 天行程內容。`,
     });
     if (!options.silent) {
       pushToast({
@@ -2195,6 +2418,8 @@ export default function ChatPage() {
       geocodeWarnings: result.geocodeWarnings,
       summaryUnavailable: result.summaryUnavailable,
       unavailableReason: result.unavailableReason,
+      fallbackReason: result.fallbackReason,
+      failedChunkCount: result.debug?.failedChunkCount,
     };
   }
 
@@ -2470,7 +2695,7 @@ export default function ChatPage() {
                           ? "rounded-br-md bg-slate-900 text-white"
                           : message.responseType === "travel_plan"
                             ? "rounded-bl-md bg-transparent p-0 text-foreground"
-                            : "rounded-bl-md border border-slate-200 bg-white text-slate-800 shadow-none"
+                            : "chat-assistant-surface rounded-bl-md text-slate-800"
                       }`}
                     >
                       {message.responseType === "travel_plan" && message.travelPlan ? (
@@ -2481,6 +2706,7 @@ export default function ChatPage() {
                           <TravelPlanCard
                             plan={message.travelPlan}
                             revisionDisabled={isSending}
+                            onApply={() => void handleApplyTravelPlanMessage(message)}
                             onRevise={(instruction) => void handleRevisePlan(instruction, message.tripProfile || tripProfile)}
                             onOpenGroundedSource={handleOpenSourceDrawer}
                           />
@@ -2597,20 +2823,21 @@ export default function ChatPage() {
 
           {isSending ? (
             <m.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex items-center gap-2"
-              data-testid="chat-typing-indicator"
-              role="status"
-              aria-live="polite"
-              aria-busy="true"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              data-testid="chat-message-ai-thinking"
+              className="flex justify-start"
             >
-              <div className="flex size-8 items-center justify-center rounded-full bg-slate-700 text-xs text-white">
-                {t.chat.aiShort}
-              </div>
-              <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">
-                <Loader2 className="size-4 shrink-0 animate-spin text-slate-700" aria-hidden />
-                <span>{assistantTypingLabel}</span>
+              <div className="flex max-w-[70%] items-end gap-2">
+                <div className="flex size-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-700 text-xs font-bold text-white">
+                  {t.chat.aiShort}
+                </div>
+                <div className="chat-assistant-surface rounded-2xl rounded-bl-md px-4 py-3 text-sm text-slate-800">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="size-4 animate-spin text-slate-500" aria-hidden />
+                    <span>{t.chat.assistantTyping}</span>
+                  </div>
+                </div>
               </div>
             </m.div>
           ) : null}
@@ -2727,7 +2954,14 @@ export default function ChatPage() {
         </div>
 
         <div className="relative z-10 border-t border-slate-200 bg-white/88 px-4 pb-5 pt-4 backdrop-blur sm:px-6 sm:pb-6">
-          <div className="flex min-h-[58px] items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 shadow-[0_12px_32px_rgba(15,23,42,0.06)] transition-colors focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/20 sm:min-h-[64px] sm:gap-3 sm:px-5">
+          <div
+            className={cn(
+              "flex min-h-[58px] items-center gap-2 rounded-full border bg-white px-3 py-2 shadow-[0_12px_32px_rgba(15,23,42,0.06)] transition-all duration-200 sm:min-h-[64px] sm:gap-3 sm:px-5",
+              isVoiceInputActive
+                ? "border-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.14),0_16px_38px_rgba(185,28,28,0.16)] ring-2 ring-red-500/30 focus-within:border-red-500 focus-within:ring-red-500/35"
+                : "border-slate-200 focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/20",
+            )}
+          >
             <button
               type="button"
               onClick={() => chatInputRef.current?.focus()}
@@ -2757,9 +2991,9 @@ export default function ChatPage() {
               type="button"
               onClick={handleToggleVoiceInput}
               className={cn(
-                "flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors sm:size-10",
+                "flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full transition-all sm:size-10",
                 isVoiceInputActive
-                  ? "bg-primary/10 text-primary"
+                  ? "bg-red-500 text-white shadow-[0_0_0_6px_rgba(239,68,68,0.14)]"
                   : "text-slate-700 hover:bg-slate-100 hover:text-slate-950",
               )}
               aria-label={isVoiceInputActive ? "停止語音輸入" : "開始語音輸入"}
@@ -2833,7 +3067,12 @@ export default function ChatPage() {
       <PlanningWaitGame
         steps={activePlanningSteps}
         isPlanning={isPlanningActive}
+        isWaiting={isSending}
         planningComplete={planningComplete}
+        promptDelayMs={15000}
+        suppressFloatingPrompt={false}
+        gameOpen={skyDashOpen}
+        onGameOpenChange={setSkyDashOpen}
       />
 
       <VideoSummaryDrawer

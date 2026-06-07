@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { serverConfig } from "@/server/config";
 import { findKnownLocationReference } from "@/server/geo/locationCatalog";
-import { geocodePlace } from "@/server/places/geocodePlace";
+import { geocodePlace, mapGeocodedPlaceResolvedFrom } from "@/server/places/geocodePlace";
 import {
   resolveTripDestinationScope,
   type TripDestinationScope,
@@ -24,6 +24,7 @@ import {
   type SimpleExtractedPlace,
 } from "@/server/video/simpleExtraction";
 import { preprocessTranscript } from "@/server/video/transcriptProcessing";
+import { syncExtractedLocationsWithSegments } from "@/server/video/syncExtractedLocationsWithSegments";
 import { selectTravelExtractionProfile } from "@/server/video/travelExtractionProfiles";
 import type {
   LocationReference,
@@ -344,9 +345,9 @@ async function buildSimpleMapReadyLocations(input: {
           normalizedName: place.name,
           cleanedName: place.name,
           rawMention: place.name,
-          confidence: 0.78,
+          confidence: geocoded.place.confidence ?? 0.78,
           verified: true,
-          resolvedFrom: "google-geocode",
+          resolvedFrom: mapGeocodedPlaceResolvedFrom(geocoded.place.provider),
           extractionSource: "ai-polished",
         });
         continue;
@@ -499,17 +500,23 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
       description: metadata.description,
       transcriptLines: preprocessedLines,
     });
-    const extractedLocationNames = simpleResult.places.map((place) => place.name);
     const extractedFoodNames = simpleResult.foods.map((food) => food.name);
+    const resolvedSegments = buildSimpleSegments({
+      places: simpleResult.places,
+      foods: simpleResult.foods,
+    });
     const mapReadyLocations = await buildSimpleMapReadyLocations({
       places: simpleResult.places,
       destinationHint: input.destination,
       destinationScope,
     });
-    const resolvedSegments = buildSimpleSegments({
-      places: simpleResult.places,
-      foods: simpleResult.foods,
+    const syncedLocations = await syncExtractedLocationsWithSegments({
+      segments: resolvedSegments,
+      mapReadyLocations,
+      destinationHint: input.destination,
+      destinationScope,
     });
+    const extractedLocationNames = syncedLocations.map((place) => place.name);
     const summary = compactSummaryFromSimpleExtraction({
       places: simpleResult.places,
       foods: simpleResult.foods,
@@ -532,7 +539,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
       publishedAt: metadata.publishedAt,
       timestamps: toTimestamps(resolvedSegments),
       summarySegments: resolvedSegments,
-      extractedLocations: mapReadyLocations,
+      extractedLocations: syncedLocations,
       extractedFoods: extractedFoodNames,
     };
 
@@ -546,10 +553,13 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
       segments: resolvedSegments,
       extractedLocations: extractedLocationNames,
       extractedFoods: extractedFoodNames,
-      mapsProvenance: mapReadyLocations.length > 0 ? deriveMapsProvenance(mapReadyLocations) : undefined,
+      mapsProvenance: syncedLocations.length > 0 ? deriveMapsProvenance(syncedLocations) : undefined,
       fallbackReason:
-        simpleResult.debug?.failedChunkCount
-          ? `部分字幕片段分析逾時或失敗，已保留成功片段。失敗片段數：${simpleResult.debug.failedChunkCount}。`
+        simpleResult.debug?.failedChunkCount &&
+        resolvedSegments.length === 0 &&
+        extractedLocationNames.length === 0 &&
+        extractedFoodNames.length === 0
+          ? `部分字幕片段分析逾時或失敗，未能擷取地點與片段。失敗片段數：${simpleResult.debug.failedChunkCount}。`
           : extractedLocationNames.length === 0 && extractedFoodNames.length === 0
             ? NO_SIMPLE_RESULTS_MESSAGE
             : undefined,
@@ -570,6 +580,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     };
 
     await cacheVideoSummary(resolvedCacheKey, result);
+
     return result;
   }
   const finalPlaceResult = await extractFinalVideoPlaces({
@@ -579,7 +590,9 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     destinationHint: input.destination,
     destinationScope,
     enableGeocode: Boolean(serverConfig.googleMapsApiKey),
-    enableSearch: serverConfig.searxngEnabled,
+    enableSearch:
+      serverConfig.aiWebSearchEnabled &&
+      Boolean(serverConfig.serperApiKey.trim() || serverConfig.tavilyApiKey.trim()),
   });
   const finalPlaces = finalPlaceResult.places;
   /** 正式 UI：不含僅 heuristic 通過的地點（需 VIDEO_PLACE_ALLOW_HEURISTIC_FALLBACK 才可能進入 pipeline）。 */

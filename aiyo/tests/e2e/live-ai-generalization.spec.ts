@@ -86,8 +86,6 @@ test.describe("Phase 7.6 Live AI generalization", () => {
     assertNoTokyoTemplatePollution(reply);
     assertMentionsAny(reply, [/嘉義/, /阿里山/, /文化路/, /火雞肉飯/], "嘉義相關需求");
     assertNoApiKeyLeak(reply);
-    monitor.assertNoSearxngInAiChat();
-
     recordLiveAiOutcome(testInfo, {
       scenario: "A Chiayi",
       passed: true,
@@ -121,8 +119,6 @@ test.describe("Phase 7.6 Live AI generalization", () => {
     assertNoTokyoTemplatePollution(reply);
     assertMentionsAny(reply, [/大阪/, /美食/, /購物|逛街/, /預算|中等/], "大阪美食購物需求");
     assertNoApiKeyLeak(reply);
-    monitor.assertNoSearxngInAiChat();
-
     recordLiveAiOutcome(testInfo, {
       scenario: "B Osaka",
       passed: true,
@@ -156,8 +152,6 @@ test.describe("Phase 7.6 Live AI generalization", () => {
     assertNoTokyoTemplatePollution(reply);
     assertMentionsAny(reply, [/首爾|韓國|Seoul/, /咖啡|咖啡廳/, /購物|逛街/, /韓劇/], "首爾旅遊語境");
     assertNoApiKeyLeak(reply);
-    monitor.assertNoSearxngInAiChat();
-
     recordLiveAiOutcome(testInfo, {
       scenario: "C Seoul",
       passed: true,
@@ -197,8 +191,6 @@ test.describe("Phase 7.6 Live AI generalization", () => {
     expect(reply, "不應以泛用 placeholder 填滿巴黎行程").not.toMatch(/市區自由探索|河岸散策|文創街区漫步/);
     expect(reply).not.toMatch(/日本|東京|大阪|京都/);
     assertNoApiKeyLeak(reply);
-    monitor.assertNoSearxngInAiChat();
-
     recordLiveAiOutcome(testInfo, {
       scenario: "D Paris",
       passed: true,
@@ -235,8 +227,6 @@ test.describe("Phase 7.6 Live AI generalization", () => {
     assertNoSearchProviders(monitor.searchProviders);
     assertNoAssistantActions(payload);
     assertNoApiKeyLeak(reply);
-    monitor.assertNoSearxngInAiChat();
-
     recordLiveAiOutcome(testInfo, {
       scenario: "E no search",
       passed: true,
@@ -280,8 +270,6 @@ test.describe("Phase 7.6 Live AI generalization", () => {
       providers,
       providers.has("serper") ? ["serper"] : ["tavily"],
     );
-    monitor.assertNoSearxngInAiChat();
-
     recordLiveAiOutcome(testInfo, {
       scenario: "F search",
       passed: true,
@@ -335,8 +323,6 @@ test.describe("Phase 7.6 Live AssistantAction smoke", () => {
 
     assertNoTokyoTemplatePollution(reply);
     assertNoApiKeyLeak(reply);
-    monitor.assertNoSearxngInAiChat();
-
     const updateAction = actions.find((action) => action.type === "itinerary.update_item");
     const proposedChanges = payload?.data?.proposedChanges || payload?.proposedChanges || [];
 

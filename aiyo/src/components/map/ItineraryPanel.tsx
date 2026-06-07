@@ -18,6 +18,7 @@ import { ChevronDown, ChevronUp, Loader2, MapPin, Plus, Search, Trash2, X } from
 import type { ItineraryListItem } from "@/lib/itinerary-sort";
 import { zhTW as t } from "@/locales/zh-TW";
 import { buildItineraryRouteSegments } from "@/lib/routeSegments";
+import { transportDisplayLabel, type TransportDisplayOption } from "@/lib/transportDisplay";
 import { getRegionalTransitOptions } from "@/lib/tripTransportRegion";
 import { cn } from "@/lib/utils";
 import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
@@ -47,36 +48,6 @@ function transportSelectRows(destination: string) {
     value: row.value,
     label: (t.itineraryPanel as Record<string, string>)[row.labelKey] ?? row.value,
   }));
-}
-
-function transportDisplayLabel(value: string, options: TransportSelectOption[]): string {
-  const trimmed = value.trim();
-  const option = options.find((row) => row.value === trimmed);
-  if (option) {
-    return option.label;
-  }
-  const normalized = trimmed.toLowerCase();
-  const labelByValue: Record<string, string> = {
-    driving: t.itineraryPanel.transportDriving,
-    drive: t.itineraryPanel.transportDriving,
-    car: t.itineraryPanel.transportCar,
-    transit: t.itineraryPanel.transportTransit,
-    public_transport: t.itineraryPanel.transportTransit,
-    publictransport: t.itineraryPanel.transportTransit,
-    walking: t.itineraryPanel.transportWalking,
-    walk: t.itineraryPanel.transportWalking,
-    bicycling: t.itineraryPanel.transportBicycling,
-    bicycle: t.itineraryPanel.transportBicycling,
-    bike: t.itineraryPanel.transportBicycling,
-    metro: t.itineraryPanel.transportMetro,
-    subway: t.itineraryPanel.transportMetro,
-    mrt: t.itineraryPanel.transportMetro,
-    train: t.itineraryPanel.transportTrain,
-    bus: t.itineraryPanel.transportBus,
-    taxi: t.itineraryPanel.transportTaxi,
-    mixed: t.itineraryPanel.transportMixed,
-  };
-  return labelByValue[normalized.replace(/[\s-]+/g, "_")] ?? trimmed;
 }
 
 function buildPinFromItineraryItem(item: TripPlanItem, dayNumber: number): TripMapPin | null {
@@ -109,7 +80,7 @@ function buildPinFromItineraryItem(item: TripPlanItem, dayNumber: number): TripM
   };
 }
 
-type TransportSelectOption = { value: string; label: string };
+type TransportSelectOption = TransportDisplayOption;
 
 type SortableStopProps = {
   item: TripPlanItem;
@@ -365,6 +336,8 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
     setPreferredPoiDay,
     pendingPoi,
     preferredPoiDay,
+    setVisibleRouteDayNumbers,
+    clearVisibleRouteDayNumbers,
   } = useMapStore();
   const pushToast = useToastStore((state) => state.pushToast);
   const sensors = useSensors(
@@ -550,6 +523,20 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
       });
     },
     [pushToast, reorderItineraryItem],
+  );
+
+  const handleDayHeaderClick = useCallback(
+    (dayNumber: number) => {
+      if (expandedDay === dayNumber) {
+        setExpandedDay(-1);
+        clearVisibleRouteDayNumbers();
+        return;
+      }
+
+      setExpandedDay(dayNumber);
+      setVisibleRouteDayNumbers([dayNumber]);
+    },
+    [clearVisibleRouteDayNumbers, expandedDay, setVisibleRouteDayNumbers],
   );
 
   return (
@@ -795,9 +782,7 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
               <div key={day.dayNumber} className="border-b border-border last:border-b-0">
                 <button
                   type="button"
-                  onClick={() =>
-                    setExpandedDay(expandedDay === day.dayNumber ? -1 : day.dayNumber)
-                  }
+                  onClick={() => handleDayHeaderClick(day.dayNumber)}
                   className="flex w-full cursor-pointer items-center justify-between px-5 py-3 transition-colors hover:bg-cream/50"
                 >
                   <div className="flex items-center gap-3">

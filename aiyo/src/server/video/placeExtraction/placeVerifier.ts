@@ -4,7 +4,7 @@ import { serverConfig } from "@/server/config";
 import { evaluateGeocodeConfidenceGate } from "@/server/geo/geocodeService";
 import { findKnownLocationReference, resolveLocationReference } from "@/server/geo/locationCatalog";
 import { geocodePlace } from "@/server/places/geocodePlace";
-import { searchWeb } from "@/server/search/searxngClient";
+import { runUnifiedWebSearch } from "@/server/search/webSearchService";
 import { validatePoiNameQuality } from "@/server/video/placeExtraction/placeNameQualityGate";
 import { scoreSearchEvidence } from "@/server/video/placeExtraction/searchEvidenceScorer";
 import type { CanonicalPlaceCandidate, VerifiedVideoPlace } from "@/server/video/placeExtraction/types";
@@ -165,10 +165,10 @@ async function verifyWithSearchEvidence(
   const results = (
     await Promise.all(
       queries.map((query) =>
-        searchWeb({
+        runUnifiedWebSearch({
           query,
           limit: 5,
-        }),
+        }).then((res) => res.results),
       ),
     )
   ).flat();

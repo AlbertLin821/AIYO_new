@@ -3,11 +3,11 @@
  * Run: cd aiyo && npx tsx scripts/manual-verify-trip-destination-scope.ts
  */
 
-import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { TripDestinationScope } from "@/lib/tripDestinationScope";
+import { readProjectEnvLocal } from "@/lib/projectEnv";
 import type { TripPlanResult } from "@/types";
 
 const ROOT = process.cwd();
@@ -19,31 +19,11 @@ type Check = { name: string; pass: boolean; detail: string };
 const checks: Check[] = [];
 
 function loadDotEnv() {
-  try {
-    const raw = readFileSync(path.join(ROOT, ".env"), "utf8");
-    for (const line of raw.split(/\r?\n/)) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith("#")) {
-        continue;
-      }
-      const eq = trimmed.indexOf("=");
-      if (eq <= 0) {
-        continue;
-      }
-      const key = trimmed.slice(0, eq).trim();
-      let val = trimmed.slice(eq + 1).trim();
-      if (
-        (val.startsWith('"') && val.endsWith('"')) ||
-        (val.startsWith("'") && val.endsWith("'"))
-      ) {
-        val = val.slice(1, -1);
-      }
-      if (process.env[key] === undefined) {
-        process.env[key] = val;
-      }
+  const envLocal = readProjectEnvLocal(ROOT);
+  for (const [key, value] of Object.entries(envLocal)) {
+    if (process.env[key] === undefined) {
+      process.env[key] = value;
     }
-  } catch {
-    // .env optional
   }
 }
 

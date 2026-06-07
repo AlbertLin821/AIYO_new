@@ -1,4 +1,5 @@
 import { expect, type Page, type Response } from "@playwright/test";
+import type { BootstrapPayload, PersistedTripPayload } from "@/types";
 import { openItineraryEditor } from "./itinerary";
 
 export type ChatApiPayload = {
@@ -21,10 +22,34 @@ export type ChatApiPayload = {
   error?: { code?: string; message?: string };
 };
 
+export type UiItineraryItemSnapshot = {
+  title: string;
+  time?: string;
+};
+
+export type UiItineraryDaySnapshot = {
+  dayNumber: number;
+  title: string;
+  items: UiItineraryItemSnapshot[];
+};
+
+export type UiItinerarySnapshot = {
+  days: UiItineraryDaySnapshot[];
+};
+
+export type ConsoleCapture = {
+  errors: Array<{ type: "console" | "pageerror"; text: string }>;
+  detach: () => void;
+};
+
+export type NetworkFailureCapture = {
+  failures: Array<{ url: string; method: string; status?: number; errorText?: string }>;
+  detach: () => void;
+};
+
 export class ChatNetworkMonitor {
   readonly chatResponses: ChatApiPayload[] = [];
   readonly searchProviders = new Set<string>();
-  readonly searxngHits: string[] = [];
   private attached = false;
 
   attach(page: Page) {
@@ -36,9 +61,6 @@ export class ChatNetworkMonitor {
     page.on("response", async (response: Response) => {
       const url = response.url();
       if (!url.includes("/api/ai/chat") || response.request().method() !== "POST") {
-        if (url.includes("searxng") && (url.includes("/api/ai") || url.includes("web-search"))) {
-          this.searxngHits.push(url);
-        }
         return;
       }
       try {
@@ -49,30 +71,77 @@ export class ChatNetworkMonitor {
             this.searchProviders.add(step.provider);
           }
         }
-        const bodyText = JSON.stringify(payload);
-        if (/searxng/i.test(bodyText)) {
-          this.searxngHits.push(url);
-        }
       } catch {
         // ignore non-json
       }
     });
   }
 
-  assertNoSearxngInAiChat() {
-    expect(this.searxngHits, "AI chat 路徑不應出現 searxng provider").toEqual([]);
-    for (const provider of this.searchProviders) {
-      expect(provider, `不允許的搜尋 provider: ${provider}`).not.toBe("searxng");
-      expect(
-        ["serper", "tavily", "mock_web", "ollama", "google_places", "open_meteo", "youtube"].includes(provider) ||
-          provider === undefined,
-      ).toBeTruthy();
-    }
-  }
-
   lastChatPayload(): ChatApiPayload | undefined {
     return this.chatResponses.at(-1);
   }
+}
+
+export function captureConsoleErrors(page: Page): ConsoleCapture {
+  const errors: ConsoleCapture["errors"] = [];
+  const onConsole = (msg: import("@playwright/test").ConsoleMessage) => {
+    if (msg.type() === "error") {
+      errors.push({ type: "console", text: msg.text() });
+    }
+  };
+  const onPageError = (error: Error) => {
+    errors.push({ type: "pageerror", text: error.message });
+  };
+  page.on("console", onConsole);
+  page.on("pageerror", onPageError);
+  return {
+    errors,
+    detach: () => {
+      page.off("console", onConsole);
+      page.off("pageerror", onPageError);
+    },
+  };
+}
+
+export function captureNetworkFailures(page: Page): NetworkFailureCapture {
+  const failures: NetworkFailureCapture["failures"] = [];
+  const onRequestFailed = (request: import("@playwright/test").Request) => {
+    const url = request.url();
+    if (!/\/api\/(ai\/chat|chat\/message|trips|bootstrap|map\/geocode|places\/geocode|search)/.test(url)) {
+      return;
+    }
+    const errorText = request.failure()?.errorText;
+    if (errorText === "net::ERR_ABORTED") {
+      return;
+    }
+    failures.push({
+      url,
+      method: request.method(),
+      errorText,
+    });
+  };
+  const onResponse = (response: Response) => {
+    const url = response.url();
+    if (!/\/api\/(ai\/chat|chat\/message|trips|bootstrap|map\/geocode|places\/geocode|search)/.test(url)) {
+      return;
+    }
+    if (!response.ok()) {
+      failures.push({
+        url,
+        method: response.request().method(),
+        status: response.status(),
+      });
+    }
+  };
+  page.on("requestfailed", onRequestFailed);
+  page.on("response", onResponse);
+  return {
+    failures,
+    detach: () => {
+      page.off("requestfailed", onRequestFailed);
+      page.off("response", onResponse);
+    },
+  };
 }
 
 function postDataMatchesMessage(postData: string | null, message: string): boolean {
@@ -170,12 +239,12 @@ async function withStructuredTravelPlanningRoute<T>(
   }
   const handler = async (route: import("@playwright/test").Route) => {
     if (route.request().method() !== "POST" || !route.request().url().includes("/api/ai/chat")) {
-      await route.continue();
+      await route.fallback();
       return;
     }
     const postData = route.request().postDataJSON() as Record<string, unknown>;
     postData.structuredTravelPlanning = true;
-    await route.continue({ postData: JSON.stringify(postData) });
+    await route.fallback({ postData: JSON.stringify(postData) });
   };
   await page.route("**/api/ai/chat", handler);
   try {
@@ -183,6 +252,26 @@ async function withStructuredTravelPlanningRoute<T>(
   } finally {
     await page.unroute("**/api/ai/chat", handler);
   }
+}
+
+async function waitForAssistantRender(page: Page, timeoutMs: number) {
+  const assistantBubbles = page.getByTestId("chat-message-ai");
+  const travelPlanCards = page.locator("[data-travel-plan-message-id]");
+  await expect
+    .poll(
+      async () => {
+        const [assistantCount, travelPlanCount] = await Promise.all([
+          assistantBubbles.count(),
+          travelPlanCards.count(),
+        ]);
+        return assistantCount > 0 || travelPlanCount > 0;
+      },
+      {
+        timeout: timeoutMs,
+        message: "expected assistant reply to render in chat",
+      },
+    )
+    .toBeTruthy();
 }
 
 async function sendChatMessageOnce(
@@ -235,7 +324,7 @@ async function sendChatMessageOnce(
     });
   }
 
-  await expect(page.getByTestId("chat-message-ai").last()).toBeVisible({ timeout: 60_000 });
+  await waitForAssistantRender(page, 60_000);
 
   if (tripPutResponse) {
     await tripPutResponse;
@@ -285,6 +374,42 @@ export async function sendChatMessage(
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
+export async function getChatLastAssistantMessage(page: Page): Promise<string> {
+  await waitForAssistantRender(page, 60_000);
+
+  const assistantBubbles = page.getByTestId("chat-message-ai");
+  if ((await assistantBubbles.count()) > 0) {
+    const bubble = assistantBubbles.last();
+    await expect(bubble).toBeVisible({ timeout: 60_000 });
+    return ((await bubble.innerText()) || "").trim();
+  }
+
+  const card = page.locator("[data-travel-plan-message-id]").last();
+  await expect(card).toBeVisible({ timeout: 60_000 });
+  return ((await card.innerText()) || "").trim();
+}
+
+export async function sendChatAndWaitForCompletion(
+  page: Page,
+  message: string,
+  options?: SendChatMessageOptions,
+): Promise<SendChatMessageResult & { lastAssistantMessage: string }> {
+  const result = await sendChatMessage(page, message, options);
+  const stopButton = page.getByTestId("chat-stop-button");
+  await stopButton.waitFor({ state: "hidden", timeout: options?.chatTimeoutMs ?? 120_000 }).catch(() => undefined);
+  await expect(page.getByTestId("chat-send-button")).toBeVisible({ timeout: 30_000 });
+  const lastAssistantMessage = await getChatLastAssistantMessage(page).catch(() => {
+    const replyContent =
+      result.payload?.data?.reply?.content ||
+      (result.payload as { reply?: { content?: string } } | undefined)?.reply?.content;
+    if (replyContent?.trim()) {
+      return replyContent.trim();
+    }
+    throw new Error("assistant reply did not render in chat UI and payload had no replyText");
+  });
+  return { ...result, lastAssistantMessage };
+}
+
 export async function expectItineraryActivity(page: Page, title: string, visible = true) {
   await page.goto("/itinerary");
   await openItineraryEditor(page);
@@ -323,6 +448,127 @@ export async function fetchTripItineraryFromBootstrap(page: Page) {
     }
     return json.data?.trip?.itinerary || [];
   });
+}
+
+export async function fetchBootstrapPayload(page: Page): Promise<BootstrapPayload> {
+  return page.evaluate(async () => {
+    const response = await fetch("/api/bootstrap", { cache: "no-store", credentials: "same-origin" });
+    const json = (await response.json()) as {
+      success?: boolean;
+      error?: { message?: string };
+      data?: BootstrapPayload;
+    };
+    if (!response.ok || !json.success || !json.data) {
+      throw new Error(
+        `bootstrap ${response.status}: ${json.error?.message || "unknown error"} (${new URL(response.url).pathname})`,
+      );
+    }
+    return json.data;
+  });
+}
+
+export async function fetchCurrentTripId(page: Page): Promise<string | null> {
+  return page.evaluate(async () => {
+    const response = await fetch("/api/trips/current", { cache: "no-store", credentials: "same-origin" });
+    const json = (await response.json()) as {
+      success?: boolean;
+      data?: { tripId?: string | null };
+    };
+    return json.success ? json.data?.tripId || null : null;
+  });
+}
+
+export async function fetchPersistedTripFromBootstrap(page: Page): Promise<PersistedTripPayload | null> {
+  const payload = await fetchBootstrapPayload(page);
+  return payload.trip;
+}
+
+export async function getCurrentItineraryFromUI(page: Page): Promise<UiItinerarySnapshot> {
+  const originalPath = new URL(page.url()).pathname;
+  let navigatedToItinerary = false;
+  let dayCards = page.getByTestId("itinerary-day-card");
+  if ((await dayCards.count()) === 0) {
+    navigatedToItinerary = originalPath !== "/itinerary";
+    await page.goto("/itinerary");
+    await openItineraryEditor(page);
+    dayCards = page.getByTestId("itinerary-day-card");
+  }
+  await expect(dayCards.first()).toBeVisible({ timeout: 40_000 });
+  const dayCount = await dayCards.count();
+  const days: UiItineraryDaySnapshot[] = [];
+
+  for (let index = 0; index < dayCount; index += 1) {
+    const dayCard = dayCards.nth(index);
+    const cardText = ((await dayCard.innerText()) || "").trim();
+    const dayNumberMatch = cardText.match(/Day\s*(\d+)|第\s*(\d+)\s*天/u);
+    const dayNumber = Number(dayNumberMatch?.[1] || dayNumberMatch?.[2] || index + 1);
+    const activityCards = dayCard.getByTestId("activity-card");
+    const itemCount = await activityCards.count();
+    const items: UiItineraryItemSnapshot[] = [];
+
+    for (let itemIndex = 0; itemIndex < itemCount; itemIndex += 1) {
+      const text = ((await activityCards.nth(itemIndex).innerText()) || "").trim();
+      const lines = text
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter(Boolean);
+      const time = lines.find((line) => /^\d{1,2}:\d{2}/u.test(line));
+      const title = lines.find((line) => !/^\d{1,2}:\d{2}/u.test(line)) || lines[0] || "";
+      items.push({ title, time });
+    }
+
+    days.push({
+      dayNumber,
+      title: cardText.split(/\r?\n/u)[0] || `Day ${dayNumber}`,
+      items,
+    });
+  }
+
+  const snapshot = { days };
+  if (navigatedToItinerary) {
+    await page.goto(originalPath);
+  }
+  return snapshot;
+}
+
+export function assertItineraryUnchanged(before: UiItinerarySnapshot, after: UiItinerarySnapshot) {
+  expect(after).toEqual(before);
+}
+
+export function assertOnlyTargetItemChanged(
+  before: UiItinerarySnapshot,
+  after: UiItinerarySnapshot,
+  targetDay: number,
+  targetTitleOrId: string,
+) {
+  expect(after.days.length).toBe(before.days.length);
+
+  for (const beforeDay of before.days) {
+    const afterDay = after.days.find((candidate) => candidate.dayNumber === beforeDay.dayNumber);
+    expect(afterDay, `missing day ${beforeDay.dayNumber}`).toBeTruthy();
+    if (!afterDay) {
+      continue;
+    }
+
+    if (beforeDay.dayNumber !== targetDay) {
+      expect(afterDay.items).toEqual(beforeDay.items);
+      continue;
+    }
+
+    expect(afterDay.items.length).toBe(beforeDay.items.length);
+    let changedCount = 0;
+    for (let index = 0; index < beforeDay.items.length; index += 1) {
+      const beforeItem = beforeDay.items[index];
+      const afterItem = afterDay.items[index];
+      const targetMatch =
+        beforeItem?.title.includes(targetTitleOrId) || afterItem?.title.includes(targetTitleOrId);
+      if (beforeItem?.title !== afterItem?.title || beforeItem?.time !== afterItem?.time) {
+        changedCount += 1;
+        expect(targetMatch, `unexpected item changed on day ${targetDay}`).toBeTruthy();
+      }
+    }
+    expect(changedCount, `expected one target change on day ${targetDay}`).toBeGreaterThanOrEqual(1);
+  }
 }
 
 function day2TitlesMatchOrder(titles: string[], orderedTitles: string[]) {

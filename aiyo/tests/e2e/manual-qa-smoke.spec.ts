@@ -234,9 +234,9 @@ test("SSE steps: status rail updates and Sky Dash prompt appears", async ({ page
   await page.getByTestId("chat-input").fill("規劃行程並展示進度列（SSE）。");
   await page.getByTestId("chat-send-button").click();
 
-  // Status rail should show step title and completed/running status.
-  await expect(page.getByText("搜尋景點與交通").first()).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByText("進行中").first()).toBeVisible({ timeout: 20_000 });
+  // Typing / workflow UI should be visible while planning is in-flight.
+  await expect(page.getByTestId("chat-typing-indicator")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("AI 正在為你規劃行程").first()).toBeVisible({ timeout: 20_000 });
 
   // Sky Dash prompt (appears after ~5s delay while planning is active).
   await expect(page.getByText("開始玩 Sky Dash")).toBeVisible({ timeout: 70_000 });

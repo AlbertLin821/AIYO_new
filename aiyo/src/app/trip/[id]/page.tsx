@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { zhTW as t } from "@/locales/zh-TW";
 import { ApiRequestError } from "@/services/apiClient";
@@ -138,6 +138,7 @@ export default function TripByIdPage() {
           onClick={() => setPanelOpen(true)}
           className="absolute top-4 right-4 z-20 flex cursor-pointer items-center gap-2 rounded-xl border-2 border-border bg-surface px-3 py-2 text-sm font-medium text-foreground shadow-soft-lg transition-colors hover:border-primary/40 hover:bg-surface-elevated"
         >
+          <CalendarDays className="size-4 text-primary" aria-hidden />
           {t.mapPage.openItineraryPanel}
         </button>
       )}

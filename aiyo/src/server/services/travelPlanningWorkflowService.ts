@@ -95,6 +95,8 @@ export async function runStructuredTripWorkflow(
   const profile = deps.applyQuestionAnswers(withText, input.questionAnswers);
   if (input.forceStructuredRevision && input.context?.itinerary?.length) {
     profile.plan_integration = "direct_merge";
+  } else if (profile.plan_integration !== "direct_merge") {
+    profile.plan_integration = "self_merge";
   }
 
   const fallbackCard = deps.buildFallbackQuestionCard(profile, input.context);

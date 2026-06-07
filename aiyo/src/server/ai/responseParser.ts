@@ -1,8 +1,13 @@
 import { parseTimestampToSeconds } from "@/lib/videoTimestamp";
 import { isUsableMapCoordinate } from "@/lib/geoCoordinates";
 import { getItineraryItemTitleViolation } from "@/lib/itineraryPlaceTitle";
+import {
+  ChatPlanningOutputSchema,
+  TripPlanResultSchema,
+} from "@/server/ai/schemas/travelPlanningSchemas";
 import { mergeVideoSummarySegmentsByStartSeconds } from "@/server/video/momentSegmentBuilder";
 import type {
+  ChatPlanningOutput,
   ChatMessage,
   ChatResponsePayload,
   LocationReference,
@@ -106,6 +111,13 @@ function repairJsonLikeString(input: string): string {
     .replace(/[\u2018\u2019]/g, "'");
 }
 
+function validateTripPlanResultStrict(
+  parsed: unknown,
+): TripPlanResult | null {
+  const result = TripPlanResultSchema.safeParse(parsed);
+  return result.success ? result.data : null;
+}
+
 function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 }
@@ -163,6 +175,44 @@ function timeToMinutes(value: string): number {
     return Number.MAX_SAFE_INTEGER;
   }
   return h * 60 + m;
+}
+
+function collectRawDayItems(day: Record<string, unknown>): Array<Record<string, unknown>> {
+  const structured = toArray(
+    (day.items as unknown) ?? day.activities ?? day.stops ?? day.events,
+  ).map((entry) => toRecord(entry));
+  if (structured.length > 0) {
+    return structured;
+  }
+
+  const spots = toArray(day.spots).map((entry) => toRecord(entry));
+  const foods = toArray(day.food_recommendations).map((entry) => toRecord(entry));
+  if (spots.length === 0 && foods.length === 0) {
+    return [];
+  }
+
+  return [
+    ...spots.map((spot, index) => ({
+      title: spot.name ?? spot.title,
+      name: spot.name,
+      type: "attraction",
+      notes: spot.feature ?? spot.description ?? spot.desc,
+      time: spot.time,
+      id: spot.id,
+      location: spot.location ?? spot.place ?? spot.poi,
+      _fallbackIndex: index,
+    })),
+    ...foods.map((food, index) => ({
+      title: food.name ?? food.title,
+      name: food.name,
+      type: "restaurant",
+      notes: food.description ?? food.feature ?? food.desc,
+      time: food.time,
+      id: food.id,
+      location: food.location ?? food.place ?? food.poi,
+      _fallbackIndex: spots.length + index,
+    })),
+  ];
 }
 
 function normalizeLocation(
@@ -267,6 +317,17 @@ function parseTripPlanJson(
   };
 
   const root = toRecord(parsed);
+  const strictResult = validateTripPlanResultStrict(root);
+  if (strictResult) {
+    return {
+      result: strictResult,
+      diagnostics: {
+        parseMode: mode,
+        repairStage: mode === "repaired" ? "json_repair" : "none",
+        issues: [],
+      },
+    };
+  }
   const rawDays = toArray(
     (root.days as unknown) ?? root.day ?? root.itinerary ?? root.planDays,
   ).map((entry) => toRecord(entry));
@@ -295,10 +356,13 @@ function parseTripPlanJson(
       normalized = true;
     }
 
-    const rawItems = toArray(
-      (day.items as unknown) ?? day.activities ?? day.stops ?? day.events,
-    ).map((entry) => toRecord(entry));
-    if (!Array.isArray(day.items)) {
+    const rawItems = collectRawDayItems(day);
+    if (
+      !Array.isArray(day.items) &&
+      (Array.isArray(day.spots) || Array.isArray(day.food_recommendations))
+    ) {
+      normalized = true;
+    } else if (!Array.isArray(day.items)) {
       normalized = true;
     }
     if (rawItems.length === 0) {
@@ -306,7 +370,7 @@ function parseTripPlanJson(
     }
 
     const items = rawItems.map((record, itemIndex) => {
-        const title = String(record.title || `行程點 ${itemIndex + 1}`);
+        const title = String(record.title || record.name || `行程點 ${itemIndex + 1}`);
         const locationInput = record.location || record.place || record.poi;
         const normalizedItem = {
           id:
@@ -462,6 +526,36 @@ export function parseTripPlanResponse(
   }
 
   throw new StructuredOutputError("MODEL_OUTPUT_JSON_INVALID");
+}
+
+export function parseChatPlanningOutput(raw: string): ChatPlanningOutput {
+  const jsonBlock = extractJsonBlock(raw);
+  if (!jsonBlock) {
+    throw new StructuredOutputError("MODEL_OUTPUT_JSON_MISSING");
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonBlock);
+  } catch {
+    try {
+      parsed = JSON.parse(repairJsonLikeString(jsonBlock));
+    } catch {
+      throw new StructuredOutputError("MODEL_OUTPUT_JSON_INVALID");
+    }
+  }
+
+  const validated = ChatPlanningOutputSchema.safeParse(parsed);
+  if (!validated.success) {
+    throw new StructuredOutputError("MODEL_OUTPUT_JSON_INVALID");
+  }
+  return {
+    ...validated.data,
+    proposedChanges: validated.data.proposedChanges.map((change) => ({
+      ...change,
+      source: "ai-chat" as const,
+    })),
+  } as ChatPlanningOutput;
 }
 
 export function parseVideoSummaryResponse(

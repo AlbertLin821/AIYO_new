@@ -1,4 +1,4 @@
-import type { WebSearchResult } from "@/server/search/searxngClient";
+import type { WebSearchResult } from "@/server/search/webSearchTypes";
 import type { DailyForecastLine } from "@/server/providers/openMeteoWeather";
 import type { TavilySearchResult } from "@/server/providers/tavilySearch";
 import type { ChatSource } from "@/types";

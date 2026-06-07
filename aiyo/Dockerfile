@@ -13,7 +13,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # NEXT_PUBLIC_* 會在 npm run build 時內嵌進前端程式；請由 docker-compose 傳入 build args，
-# 或於建置內含可讀取的 .env（勿將含機密的映像對外公開）。
+# 或於建置內含可讀取的 .env.local（勿將含機密的映像對外公開）。
 ARG NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
 ARG NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID
 ARG NEXT_PUBLIC_ENABLE_MOCK_MAPS
