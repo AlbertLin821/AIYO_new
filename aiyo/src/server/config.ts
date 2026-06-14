@@ -102,6 +102,7 @@ export const serverConfig = {
   videoExtractionChunkConcurrency: readNumber("VIDEO_EXTRACTION_CHUNK_CONCURRENCY", 1),
   videoExtractionOptionalVerify: readBoolean("VIDEO_EXTRACTION_OPTIONAL_VERIFY", false),
   mem0BaseUrl: readString("MEM0_BASE_URL", "http://localhost:8890"),
+  mem0ApiKey: readString("MEM0_API_KEY", ""),
   mem0Enabled: readBoolean("MEM0_ENABLED", false),
   mem0TopK: readNumber("MEM0_TOP_K", 5),
   mem0TimeoutMs: readNumber("MEM0_TIMEOUT_MS", 12000),

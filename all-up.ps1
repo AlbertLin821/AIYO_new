@@ -28,7 +28,9 @@ $null = Import-AiyoComposeDotEnv -Root $PSScriptRoot -Mode "dev"
 $devComposeEnvArgs = @("--env-file", "./aiyo/.env.dev")
 $sharedServices = @(
     "aiyo-new-postgres",
+    "aiyo-new-mem0-postgres",
     "aiyo-new-redis",
+    "aiyo-new-mem0",
     "open-webui",
     "aiyo-new-app-dev"
 )

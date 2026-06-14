@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
+import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { CitationGroup } from "@/components/chat/SourceTag";
 import TravelPlanDayAccordion from "@/components/chat/TravelPlanDayAccordion";
 import TravelPlanSourcePanel from "@/components/chat/TravelPlanSourcePanel";
@@ -98,27 +98,6 @@ export default function TravelPlanCard({
             </div>
           </div>
         </div>
-
-        {plan.revision ? (
-          <div className="border-b border-amber-200/80 bg-amber-50/90 px-5 py-4">
-            <div className="flex items-start gap-2">
-              <Sparkles className="mt-0.5 size-4 shrink-0 text-amber-700" aria-hidden />
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-900">本次調整摘要</p>
-                <div className="mt-2.5 flex flex-wrap gap-2">
-                  {plan.revision.change_summary.map((item, index) => (
-                    <span
-                      key={`${index}_${item}`}
-                      className="rounded-full border border-amber-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-800 shadow-sm"
-                    >
-                      {item}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
       </div>
 
       <div className="space-y-5">

@@ -111,7 +111,9 @@ export function buildPersonalMemoryBundle(input: {
   tripProfile?: TripProfile | null;
 }): PersonalMemoryBundle {
   const structured = input.aiContext?.structuredContext;
+  const currentTrip = structured?.currentTrip;
   const destinations = dedupeStrings([
+    currentTrip?.destination || "",
     ...(structured?.recentTrips.map((trip) => trip.destination || "").filter(Boolean) || []),
     ...(structured?.preferences.destinationPreferences || []),
     ...(input.tripProfile?.visited_before || []),
@@ -119,14 +121,30 @@ export function buildPersonalMemoryBundle(input: {
 
   const snippets = collectMem0Snippets(input);
 
-  const recentTrips: PersonalMemoryTripRecord[] = (structured?.recentTrips || []).map((trip) => ({
-    title: trip.title,
-    destination: trip.destination,
-    daysCount: trip.daysCount,
-    summary: trip.summary,
-    representativeItems: trip.representativeItems,
-    createdAt: trip.createdAt,
-  }));
+  const recentTrips: PersonalMemoryTripRecord[] = dedupeStrings([
+    ...(currentTrip?.destination
+      ? [
+          JSON.stringify({
+            title: currentTrip.title,
+            destination: currentTrip.destination,
+            daysCount: currentTrip.days.length,
+            representativeItems: dedupeStrings(
+              currentTrip.days.flatMap((day) => day.items.map((item) => item.title)),
+            ).slice(0, 6),
+          }),
+        ]
+      : []),
+    ...((structured?.recentTrips || []).map((trip) =>
+      JSON.stringify({
+        title: trip.title,
+        destination: trip.destination,
+        daysCount: trip.daysCount,
+        summary: trip.summary,
+        representativeItems: trip.representativeItems,
+        createdAt: trip.createdAt,
+      }),
+    ) || []),
+  ]).map((row) => JSON.parse(row) as PersonalMemoryTripRecord);
 
   const tripsWithDestination = recentTrips.filter((trip) => trip.destination?.trim());
 
