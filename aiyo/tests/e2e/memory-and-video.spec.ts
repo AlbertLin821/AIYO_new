@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { E2E_OWNER, loginAs, seedAuthUsers } from "./helpers/auth";
 import { resetE2EData, seedTripForUser } from "./helpers/db";
+import { expandAllItineraryDays, openItineraryEditor } from "./helpers/itinerary";
 
 test.describe.configure({ mode: "serial" });
 
@@ -128,7 +129,21 @@ test("AI planning, video indexing, and map pins workflow works end to end", asyn
   test.skip(plannedItems.length === 0, "AI planning returned no itinerary items in this environment.");
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "第 2 天" })).toBeVisible({ timeout: 30000 });
+  await openItineraryEditor(page);
+  await expect
+    .poll(async () => {
+      const dayCount = await page.evaluate(async () => {
+        const response = await fetch("/api/bootstrap", { cache: "no-store" });
+        const json = (await response.json()) as {
+          data?: { trip?: { itinerary?: unknown[] } | null };
+        };
+        return json.data?.trip?.itinerary?.length ?? 0;
+      });
+      return dayCount;
+    })
+    .toBeGreaterThanOrEqual(2);
+  await expandAllItineraryDays(page);
+  await expect.poll(() => page.getByTestId("activity-card").count()).toBeGreaterThan(0);
   const plannedActivityCount = await page.getByTestId("activity-card").count();
 
   await page.goto("/");
@@ -149,8 +164,12 @@ test("AI planning, video indexing, and map pins workflow works end to end", asyn
 
   await page.waitForTimeout(3000);
   await page.goto("/map");
+  await expect(page.getByTestId("map-view")).toBeVisible({ timeout: 40000 });
   const markerPins = page.getByTestId("map-pin-marker");
   await expect(markerPins.first()).toBeVisible({ timeout: 30000 });
-  await markerPins.first().click();
-  await expect(page.getByTestId("map-pin-info-panel")).toBeVisible({ timeout: 30000 });
+  const infoPanel = page.getByTestId("map-pin-info-panel");
+  if (!(await infoPanel.isVisible().catch(() => false))) {
+    await markerPins.first().click({ force: true });
+  }
+  await expect(infoPanel).toBeVisible({ timeout: 30000 });
 });

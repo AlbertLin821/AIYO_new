@@ -2008,6 +2008,53 @@ test("question answer summary does not overwrite Tokyo destination", async () =>
   assert.ok(!(response.reply.questionCard?.title || "").includes("？：兩人"));
 });
 
+test("blank dietary answer is treated as no restriction and planning continues", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "",
+    structuredTravelPlanning: true,
+    tripProfile: {
+      ...makeStructuredProfile(),
+      destination: "大阪",
+      duration_days: 5,
+      duration_nights: 4,
+      travel_dates: { start: "2026-06-24", end: "2026-06-28" },
+      traveler_count: 4,
+      dietary_restrictions: [],
+    },
+    questionAnswers: [
+      {
+        slot: "dietary_restrictions",
+        value: "",
+      },
+    ],
+  });
+
+  assert.deepEqual(response.tripProfile?.dietary_restrictions, ["無特殊飲食限制"]);
+  assert.notEqual(response.reply.responseType, "question_card");
+});
+
+test("personal memory recall does not overwrite destination from the recall query text", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ message: { content: "你去過大阪。" } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+
+  try {
+    const response = await chatWithTravelAssistant({
+      message: "我之前去過哪些地方",
+      tripProfile: makeStructuredProfile(),
+      aiContext: makeMemoryAiContext(["大阪"]),
+    });
+
+    assert.notEqual(response.tripProfile?.destination, "過哪些地方");
+    assert.match(response.reply.content, /大阪/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("convertTripPlanToTravelPlanWithSources omits canned fallback notes from display fields", () => {
   const response = convertTripPlanToTravelPlanWithSources(
     {

@@ -30,6 +30,25 @@ services:
     networks:
       - backend
 
+  aiyo-new-mem0-postgres:
+    image: pgvector/pgvector:pg16
+    container_name: aiyo-new-mem0-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - aiyo_new_mem0_postgres_data:/var/lib/postgresql/data
+      - ./docker/mem0/init-db.sh:/docker-entrypoint-initdb.d/20-init-mem0-app-db.sh:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+
   aiyo-new-redis:
     image: redis:7-alpine
     container_name: aiyo-new-redis
@@ -43,6 +62,52 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    networks:
+      - backend
+
+  aiyo-new-mem0:
+    build:
+      context: .
+      dockerfile: docker/mem0-service/Dockerfile
+    container_name: aiyo-new-mem0
+    environment:
+      POSTGRES_HOST: aiyo-new-mem0-postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_COLLECTION_NAME: ${MEM0_COLLECTION_NAME:-aiyo_memories}
+      APP_DB_NAME: mem0_app
+      JWT_SECRET: ${MEM0_API_KEY:-replace-with-mem0-api-key}
+      ADMIN_API_KEY: ${MEM0_API_KEY:-replace-with-mem0-api-key}
+      AUTH_DISABLED: ${MEM0_AUTH_DISABLED:-false}
+      MEM0_DEFAULT_LLM_PROVIDER: ${MEM0_LLM_PROVIDER:-ollama}
+      MEM0_DEFAULT_LLM_MODEL: ${MEM0_LLM_MODEL:-qwen3.5:9b}
+      MEM0_DEFAULT_LLM_BASE_URL: ${MEM0_LLM_BASE_URL:-http://host.docker.internal:11434}
+      MEM0_DEFAULT_EMBEDDER_PROVIDER: ${MEM0_EMBEDDER_PROVIDER:-huggingface}
+      MEM0_DEFAULT_EMBEDDER_MODEL: ${MEM0_EMBEDDER_MODEL:-sentence-transformers/multi-qa-MiniLM-L6-cos-v1}
+      MEM0_DEFAULT_EMBEDDING_DIMS: ${MEM0_EMBEDDING_DIMS:-384}
+      OLLAMA_BASE_URL: ${MEM0_LLM_BASE_URL:-http://host.docker.internal:11434}
+      MEM0_TELEMETRY: "false"
+      DASHBOARD_URL: http://127.0.0.1:3000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8890:8890"
+    restart: unless-stopped
+    depends_on:
+      aiyo-new-mem0-postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8890/docs')\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 45s
     networks:
       - backend
 
@@ -121,6 +186,8 @@ services:
         condition: service_healthy
       aiyo-new-redis:
         condition: service_healthy
+      aiyo-new-mem0:
+        condition: service_healthy
       open-webui:
         condition: service_healthy
     networks:
@@ -160,6 +227,8 @@ services:
         condition: service_healthy
       aiyo-new-redis:
         condition: service_healthy
+      aiyo-new-mem0:
+        condition: service_healthy
       open-webui:
         condition: service_healthy
     networks:
@@ -172,6 +241,7 @@ networks:
 volumes:
   aiyo_new_postgres_data:
     name: aiyo_new_aiyo_new_postgres_data
+  aiyo_new_mem0_postgres_data:
   aiyo_new_redis_data:
   open_webui_data:
   aiyo_new_node_modules_dev:

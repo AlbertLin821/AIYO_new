@@ -53,14 +53,6 @@ const PHASE_META: Record<
   },
 };
 
-const STATUS_RANK: Record<StatusStepPayload["status"], number> = {
-  failed: 5,
-  running: 4,
-  waiting_input: 3,
-  pending: 2,
-  completed: 1,
-};
-
 export type WorkflowStepView = {
   key: string;
   label: string;
@@ -70,10 +62,6 @@ export type WorkflowStepView = {
   userTitle: string;
   userDescription: string;
 };
-
-function pickDominantStatus(steps: StatusStepPayload[]): StatusStepPayload["status"] {
-  return [...steps].sort((left, right) => STATUS_RANK[right.status] - STATUS_RANK[left.status])[0]?.status || "pending";
-}
 
 function resolveUserCopy(
   phase: WorkflowPhaseKey,
@@ -119,7 +107,7 @@ export function buildWorkflowSteps(steps: StatusStepPayload[]): WorkflowStepView
       return null;
     }
     const last = matches[matches.length - 1];
-    const status = pickDominantStatus(matches);
+    const status = last.status;
     const copy = resolveUserCopy(phase, status, last.detail || last.label);
     return {
       key: phase,

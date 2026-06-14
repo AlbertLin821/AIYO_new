@@ -29,6 +29,18 @@ export function formatQuestionAnswerSummary(
       const range = answer.value as { start?: string; end?: string };
       return `${question?.question || answer.slot}：${range.start || "未指定"} ~ ${range.end || "未指定"}`;
     }
+    if (answer.slot === "dietary_restrictions") {
+      const rawValue = Array.isArray(answer.value)
+        ? answer.value.join("、")
+        : String(answer.value || "").trim();
+      if (!rawValue) {
+        return `${question?.question || answer.slot}：無`;
+      }
+      if (/^(?:無|沒有|都可以|不限|無特殊|沒有飲食限制|無特殊飲食限制|no|none|no restrictions?|no allergies?)$/iu.test(rawValue)) {
+        return `${question?.question || answer.slot}：無`;
+      }
+      return `${question?.question || answer.slot}：${rawValue}`;
+    }
     const values = Array.isArray(answer.value)
       ? answer.value
       : answer.value === null || answer.value === undefined
@@ -45,6 +57,9 @@ export function formatQuestionAnswerSummary(
       const rawValue = Array.isArray(answer.value)
         ? answer.value.join("、")
         : String(answer.value || "").trim();
+      if (!rawValue) {
+        return "沒有飲食限制，請繼續幫我安排。";
+      }
       if (/^(?:無|沒有|都可以|不限|無特殊|沒有飲食限制|無特殊飲食限制|no|none|no restrictions?|no allergies?)$/iu.test(rawValue)) {
         return "沒有飲食限制，請繼續幫我安排。";
       }

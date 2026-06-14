@@ -1,0 +1,46 @@
+name: aiyo-ci
+
+on:
+  pull_request:
+    paths:
+      - "aiyo/**"
+      - ".github/workflows/aiyo-ci.yml"
+  push:
+    branches:
+      - master
+    paths:
+      - "aiyo/**"
+      - ".github/workflows/aiyo-ci.yml"
+
+defaults:
+  run:
+    working-directory: aiyo
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: aiyo/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          REDIS_URL: redis://localhost:6379
+          NEXTAUTH_SECRET: ci-nextauth-secret-min-32-chars-long
+          NEXTAUTH_URL: http://127.0.0.1:3000

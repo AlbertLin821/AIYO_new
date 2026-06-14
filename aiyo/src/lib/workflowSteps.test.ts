@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getProgressLabel, getProgressBadge, type WorkflowStepView } from "./workflowSteps";
+import {
+  buildWorkflowSteps,
+  getProgressLabel,
+  getProgressBadge,
+  getProgressPercent,
+  type WorkflowStepView,
+} from "./workflowSteps";
 
 const COMPLETE_STEPS: WorkflowStepView[] = [
   {
@@ -41,4 +47,22 @@ const COMPLETE_STEPS: WorkflowStepView[] = [
 test("getProgressLabel reports completion instead of last step heading", () => {
   assert.equal(getProgressBadge(COMPLETE_STEPS), "已完成");
   assert.equal(getProgressLabel(COMPLETE_STEPS), "行程已整理完成");
+});
+
+test("buildWorkflowSteps uses the latest phase status instead of stale running events", () => {
+  const steps = buildWorkflowSteps([
+    { type: "status_step", phase: "understand", label: "理解需求", status: "running" },
+    { type: "status_step", phase: "understand", label: "理解需求", status: "completed" },
+    { type: "status_step", phase: "plan", label: "規劃查詢", status: "running" },
+    { type: "status_step", phase: "plan", label: "規劃查詢", status: "completed" },
+    { type: "status_step", phase: "research", label: "搜尋資料", status: "running" },
+    { type: "status_step", phase: "research", label: "搜尋資料", status: "completed" },
+    { type: "status_step", phase: "compose", label: "整理行程", status: "running" },
+  ]);
+
+  assert.deepEqual(
+    steps.map((step) => step.status),
+    ["completed", "completed", "completed", "running"],
+  );
+  assert.equal(getProgressPercent(steps), 87.5);
 });

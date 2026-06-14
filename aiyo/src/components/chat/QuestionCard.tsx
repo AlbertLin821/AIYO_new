@@ -134,6 +134,9 @@ export default function QuestionCard({
   const locked = submitted;
   const fieldsDisabled = disabled || locked;
   function isAnswered(question: ChatQuestion, value: unknown): boolean {
+    if (question.slot === "dietary_restrictions" && question.type === "text") {
+      return value === undefined || typeof value === "string";
+    }
     if (question.type === "multi_choice") {
       return Array.isArray(value) && value.length > 0;
     }

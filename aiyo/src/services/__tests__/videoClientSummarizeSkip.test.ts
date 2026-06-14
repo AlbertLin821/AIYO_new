@@ -57,14 +57,14 @@ test("should skip when extractedLocations non-empty", () => {
   );
 });
 
-test("should skip when timestamps non-empty", () => {
+test("should not skip when only YouTube chapter timestamps are present", () => {
   assert.equal(
     shouldSkipClientVideoSummarize(
       baseVideo({
         timestamps: [{ label: "0:00", time: "0:00" }],
       }),
     ),
-    true,
+    false,
   );
 });
 

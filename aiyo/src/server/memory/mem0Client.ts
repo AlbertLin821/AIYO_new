@@ -38,12 +38,16 @@ async function mem0Fetch<T>(path: string, init?: RequestInit): Promise<T> {
   const timeout = setTimeout(() => controller.abort(), serverConfig.mem0TimeoutMs);
 
   try {
+    const headers = new Headers(init?.headers);
+    if (!headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+    if (serverConfig.mem0ApiKey.trim() && !headers.has("X-API-Key")) {
+      headers.set("X-API-Key", serverConfig.mem0ApiKey.trim());
+    }
     const response = await fetch(`${serverConfig.mem0BaseUrl}${path}`, {
       ...init,
-      headers: {
-        "Content-Type": "application/json",
-        ...(init?.headers || {}),
-      },
+      headers,
       signal: controller.signal,
       cache: "no-store",
     });

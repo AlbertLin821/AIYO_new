@@ -825,7 +825,7 @@ function hasAnsweredDietaryRestrictions(values?: string[] | null): boolean {
 function parseDietaryRestrictionsInput(value: string): string[] {
   const trimmed = value.trim();
   if (!trimmed) {
-    return [];
+    return [DIETARY_NO_RESTRICTION_LABEL];
   }
   if (/^(?:無|沒有|都可以|不限|無特殊|沒有飲食限制|無特殊飲食限制|no|none|no restrictions?|no allergies?)$/iu.test(trimmed)) {
     return [DIETARY_NO_RESTRICTION_LABEL];
@@ -1089,6 +1089,9 @@ export function buildTravelPlanRevisionMeta(input: {
 
 function updateTripProfileFromText(profile: TripProfile, message: string): TripProfile {
   const next = mergeTripProfile(profile);
+  if (isPersonalMemoryRecallIntent(message)) {
+    return next;
+  }
   const duration = message.match(/([一二兩三四五六七八九十\d]+)\s*天(?:\s*([一二兩三四五六七八九十\d]+)\s*夜)?/u);
   if (duration?.[1]) {
     const days = parseFlexibleNumber(duration[1]);
@@ -1506,8 +1509,8 @@ export function buildQuestionCard(profile: TripProfile, context?: ChatContext): 
       slot: "dietary_restrictions",
       question: "有沒有需要先避開的飲食限制或過敏？",
       type: "text",
-      placeholder: "例如：素食、不吃牛、海鮮過敏；若沒有請填無",
-      helperText: "這會直接影響餐廳與用餐安排。",
+      placeholder: "例如：素食、不吃牛、海鮮過敏；留白視為無",
+      helperText: "這會直接影響餐廳與用餐安排。留白時會視為無飲食限制。",
     });
   }
 

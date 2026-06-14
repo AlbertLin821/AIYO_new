@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
   findItineraryItemDayNumber,
   itineraryDayContainerId,
@@ -23,23 +24,23 @@ const sampleItinerary: TripPlanDay[] = [
 
 describe("itineraryDragUtils", () => {
   it("maps container ids to day numbers", () => {
-    expect(itineraryDayContainerId(2)).toBe("day-container-2");
-    expect(parseItineraryDayContainerId("day-container-2")).toBe(2);
-    expect(parseItineraryDayContainerId("item-1")).toBeNull();
+    assert.equal(itineraryDayContainerId(2), "day-container-2");
+    assert.equal(parseItineraryDayContainerId("day-container-2"), 2);
+    assert.equal(parseItineraryDayContainerId("item-1"), null);
   });
 
   it("finds the day that owns an item", () => {
-    expect(findItineraryItemDayNumber(sampleItinerary, "c")).toBe(2);
-    expect(findItineraryItemDayNumber(sampleItinerary, "missing")).toBeNull();
+    assert.equal(findItineraryItemDayNumber(sampleItinerary, "c"), 2);
+    assert.equal(findItineraryItemDayNumber(sampleItinerary, "missing"), null);
   });
 
   it("resolves drop targets for items and empty day containers", () => {
-    expect(resolveItineraryDragTarget(sampleItinerary, "b")).toEqual({ dayNumber: 2, index: 0 });
-    expect(resolveItineraryDragTarget(sampleItinerary, itineraryDayContainerId(1))).toEqual({
+    assert.deepEqual(resolveItineraryDragTarget(sampleItinerary, "b"), { dayNumber: 2, index: 0 });
+    assert.deepEqual(resolveItineraryDragTarget(sampleItinerary, itineraryDayContainerId(1)), {
       dayNumber: 1,
       index: 1,
     });
-    expect(resolveItineraryDragTarget(sampleItinerary, itineraryDayContainerId(99))).toEqual({
+    assert.deepEqual(resolveItineraryDragTarget(sampleItinerary, itineraryDayContainerId(99)), {
       dayNumber: 99,
       index: 0,
     });

@@ -1,125 +1,130 @@
 # AIYO App
 
-`AIYO_new/aiyo` is the main application. The active runtime model is:
+這個目錄是 `AIYO_new` 的主應用程式。若你要看完整部署流程、Docker 服務拓樸、Open WebUI、mem0、Google OAuth 與 `.env` 設定，請先讀 repo root 的 [README.md](../README.md)。
 
-- AIYO app containers for `dev` and `prod-live`
-- shared PostgreSQL database
-- shared Redis
-- Open WebUI as the authenticated AI gateway
-- Ollama on the host machine
+這份 README 只補充 app 開發者最常用的內容。
 
-The repository root owns the Docker workflow. Start there unless you are running app-only commands.
+## 你大多數時候會在哪裡工作
 
-## Environment files
+| 路徑 | 用途 |
+|------|------|
+| [src/](./src) | 前後端主程式 |
+| [prisma/](./prisma) | Prisma schema 與 migration |
+| [package.json](./package.json) | npm scripts |
+| [docs/](./docs) | app 內部測試與設計文件 |
+| [AGENTS.md](./AGENTS.md) | 進入 `aiyo/` 開發前要遵守的規則 |
 
-The active project env files are:
+## 環境變數
 
-- `aiyo/.env.dev`
-- `aiyo/.env.prod-live`
-- `aiyo/.env.dev.example`
-- `aiyo/.env.prod-live.example`
+app 實際使用的是：
 
-`aiyo/.env.example` is only a compatibility starter template. New work should use `.env.dev` or `.env.prod-live`.
+- [aiyo/.env.dev](./.env.dev)
+- [aiyo/.env.prod-live](./.env.prod-live)
 
-## Local stack
+範例檔：
 
-1. Create the env files if they do not exist yet:
+- [aiyo/.env.dev.example](./.env.dev.example)
+- [aiyo/.env.prod-live.example](./.env.prod-live.example)
 
-```bash
-cp .env.dev.example .env.dev
-cp .env.prod-live.example .env.prod-live
-```
+如果你改了以下任一組設定，請記得通常需要同時更新兩份：
 
-2. From the repository root, start the dev stack:
+- `NEXTAUTH_*`
+- `OPENWEBUI_*`
+- `MEM0_*`
+- `OLLAMA_*`
+- `GOOGLE_*`
+- `NEXT_PUBLIC_GOOGLE_MAPS_*`
 
-```bash
-cd ..
-powershell -ExecutionPolicy Bypass -File .\dev-up.ps1
-```
+## 啟動方式
 
-Or run Compose directly:
-
-```bash
-docker compose --env-file ./aiyo/.env.dev up -d --build --force-recreate \
-  aiyo-new-postgres aiyo-new-redis open-webui aiyo-new-app-dev
-```
-
-Additional root scripts:
+日常不要在 `aiyo/` 目錄直接手動組整套 Docker 指令，請回 repo root 用腳本：
 
 ```powershell
+cd ..
+.\dev-up.ps1
+```
+
+或：
+
+```powershell
+cd ..
+.\prod-live-up.ps1
+```
+
+或：
+
+```powershell
+cd ..
 .\all-up.ps1
+```
+
+如果你只想重建 app containers：
+
+```powershell
+cd ..
 .\frontend-up.ps1
 ```
 
-- `all-up.ps1`: recreate shared services plus both app containers
-- `frontend-up.ps1`: recreate only `aiyo-new-app-dev` and `aiyo-new-app-prod-live`
+## 本地 app 指令
 
-3. Open:
+在這個目錄執行：
 
-- App: `http://127.0.0.1:3000`
-- Open WebUI: `http://127.0.0.1:8080`
-- Health: `http://127.0.0.1:3000/api/health`
-
-## Open WebUI
-
-AIYO now uses Open WebUI as the main AI gateway:
-
-- primary chat completions go through `POST /api/chat/completions`
-- legacy Ollama-specific paths route through the Open WebUI Ollama proxy
-- `GET /api/ai/ollama-status` remains the frontend compatibility route
-
-On first startup, Open WebUI uses `OPENWEBUI_ADMIN_EMAIL` and `OPENWEBUI_ADMIN_PASSWORD` from the env file to create the admin account when the data volume is empty. After signing in:
-
-1. Open Settings and create an API key.
-2. Paste that key into `OPENWEBUI_API_KEY` in `aiyo/.env.dev` and `aiyo/.env.prod-live`.
-3. Recreate `open-webui` and the matching app container.
-
-## App commands
-
-Run these inside `AIYO_new/aiyo`:
-
-```bash
+```powershell
 npm install
 npm run prisma:generate
-npm run build
 npm test
+npm run build
 ```
 
-Planner checks:
+常用 E2E：
 
-```bash
+```powershell
 npm run test:e2e:phase7
 npm run test:e2e:phase8
 ```
 
-Live AI itinerary check, only after `OPENWEBUI_API_KEY` is configured and the stack is healthy:
+Live AI 驗證：
 
 ```powershell
 $env:E2E_LIVE_AI="1"
 npm run test:e2e:live-ai:itinerary
 ```
 
-## Required env values
+## 開發時最常遇到的幾件事
 
-- `DATABASE_URL`
-- `REDIS_URL`
-- `NEXTAUTH_URL`
-- `NEXTAUTH_SECRET`
-- `OPENWEBUI_BASE_URL`
+### 1. Google 登入顯示未設定
+
+請確認：
+
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+
+### 2. NextAuth 警告 `NEXTAUTH_URL is missing`
+
+請確認：
+
+- dev 用 `http://127.0.0.1:3000`
+- prod-live 用 `http://127.0.0.1:3001`
+
+### 3. AI 回應很慢或失敗
+
+先檢查：
+
 - `OPENWEBUI_API_KEY`
 - `OPENWEBUI_MODEL`
+- Open WebUI 是否能看到 Ollama 模型
 
-Optional but commonly used:
+### 4. 記憶功能看起來沒作用
 
-- `YOUTUBE_API_KEY`
-- `GOOGLE_MAPS_API_KEY`
-- `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`
-- `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID`
-- `OLLAMA_*` model overrides
+先檢查：
 
-## Reference docs
+- `MEM0_ENABLED=true`
+- `MEM0_BASE_URL=http://aiyo-new-mem0:8890`
+- `MEM0_API_KEY` 有值
 
-- [`../README.md`](../README.md)
-- [`../docs/README.md`](../docs/README.md)
-- [`../docs/architecture.md`](../docs/architecture.md)
-- [`docs/README.md`](./docs/README.md)
+## 參考文件
+
+- [README.md](../README.md)
+- [docs/README.md](../docs/README.md)
+- [docs/architecture.md](../docs/architecture.md)
+- [aiyo/docs/README.md](./docs/README.md)
