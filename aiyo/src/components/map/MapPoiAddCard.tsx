@@ -123,6 +123,7 @@ export default function MapPoiAddCard({
         <>
           <PlaceThumbnail
             src={preview.thumbnail || preview.photoUrl}
+            placeId={preview.placeId}
             alt={t.map.infoThumbnail}
             placeholder={t.map.infoThumbnail}
             className="mt-3 rounded-xl"

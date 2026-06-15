@@ -84,6 +84,7 @@ import {
 } from "@/services/aiClient";
 import { createNewTrip, setActiveTrip } from "@/services/itineraryClient";
 import { geocodeItineraryItemsMissingLocation } from "@/services/geocodeItineraryItems";
+import { hydrateItineraryTransportFields } from "@/services/itineraryTransport";
 import { reconcileTripMapState } from "@/services/mapSync";
 import { syncService } from "@/services/syncService";
 import {
@@ -2554,16 +2555,22 @@ export default function ChatPage() {
         }
       }
     }
+    const hydratedTransportDays = hydrateItineraryTransportFields(geocodedPlan.days, {
+      destination:
+        currentTrip.destination || response.tripProfile?.destination || planningSnapshot.destination,
+      preferredTransport:
+        useUserStore.getState().preferredTransport || response.tripProfile?.transportation || null,
+    });
     currentTrip.replaceTripPlan(plan, {
       destination: currentTrip.destination || response.tripProfile?.destination || planningSnapshot.destination,
-      days: geocodedPlan.days.length,
+      days: hydratedTransportDays.length,
       budget:
         currentTrip.budget ||
         planningSnapshot.budget ||
         readBudgetAmountFromText(response.tripProfile?.budget),
       title: currentTrip.title || response.tripProfile?.destination || currentTrip.destination,
     });
-    currentTrip.setItinerary(geocodedPlan.days);
+    currentTrip.setItinerary(hydratedTransportDays);
     const reconciled = reconcileTripMapState(useTripStore.getState().itinerary, useMapStore.getState().pins);
     useTripStore.getState().setItinerary(reconciled.itinerary);
     useMapStore.getState().setPins(reconciled.pins);
@@ -2572,7 +2579,7 @@ export default function ChatPage() {
     setItinerarySyncState({
       status: "synced",
       title: "已同步到目前行程",
-      detail: `已更新 ${geocodedPlan.days.length} 天行程內容。`,
+      detail: `已更新 ${hydratedTransportDays.length} 天行程內容。`,
     });
     if (!options.silent) {
       pushToast({

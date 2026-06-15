@@ -1,12 +1,22 @@
 import { zhTW as t } from "@/locales/zh-TW";
 import { repairSparseItineraryFromLatestChatTravelPlan } from "@/lib/generatedTripPlan";
+import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
+import { hydrateItineraryTransportFields } from "@/services/itineraryTransport";
 import { markPersistenceServerHydrated, persistActiveUserSnapshotNow } from "@/services/persistence";
+import {
+  applyLocationUpdatesToItinerary,
+  collectItineraryItemsMissingLocation,
+  collectItineraryItemsMissingPlacePhotos,
+  enrichItineraryItemsMissingPlacePhotos,
+  geocodeItineraryItemsMissingLocation,
+  resolveGeocodeQueryForItem,
+} from "@/services/geocodeItineraryItems";
 import { reconcileTripMapState } from "@/services/mapSync";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/services/apiClient";
 import { getRemoteConversationId, useChatStore } from "@/stores/useChatStore";
 import { useCollabStore } from "@/stores/useCollabStore";
 import { useMapStore } from "@/stores/useMapStore";
-import { getSyncMutationSource } from "@/stores/syncMutationSource";
+import { getSyncMutationSource, withSyncMutationSource } from "@/stores/syncMutationSource";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
 import { useUIStore } from "@/stores/useUIStore";
@@ -59,6 +69,9 @@ class SyncService {
   private isApplyingRemote = false;
   private isSyncing = false;
   private lastSyncedPayloadKey: string | null = null;
+  private lastLocationHydrationKey: string | null = null;
+  private lastPhotoHydrationKey: string | null = null;
+  private lastTransportHydrationKey: string | null = null;
   private debouncedTripSync = debouncedVoidRunner(() => {
     void this.syncTripState("debounced");
   }, 350);
@@ -72,6 +85,9 @@ class SyncService {
     this.debouncedTripSync.cancel();
     this.hydrated = false;
     this.lastSyncedPayloadKey = null;
+    this.lastLocationHydrationKey = null;
+    this.lastPhotoHydrationKey = null;
+    this.lastTransportHydrationKey = null;
     this.isSyncing = false;
     this.isApplyingRemote = false;
   }
@@ -187,6 +203,150 @@ class SyncService {
 
   private getPayloadKey(payload: PersistedTripPayload) {
     return JSON.stringify(this.normalizePayload(payload));
+  }
+
+  private buildLocationHydrationKey(payload: PersistedTripPayload) {
+    const missingItems = collectItineraryItemsMissingLocation(payload.itinerary);
+    if (missingItems.length === 0) {
+      return null;
+    }
+    return JSON.stringify({
+      tripId: payload.tripId || "",
+      destination: payload.destination || "",
+      items: missingItems.map(({ dayNumber, item }) => ({
+        dayNumber,
+        itemId: item.id,
+        query: resolveGeocodeQueryForItem(item),
+      })),
+    });
+  }
+
+  private buildPhotoHydrationKey(payload: PersistedTripPayload) {
+    const photoMissingItems = collectItineraryItemsMissingPlacePhotos(payload.itinerary);
+    if (photoMissingItems.length === 0) {
+      return null;
+    }
+    return JSON.stringify({
+      tripId: payload.tripId || "",
+      destination: payload.destination || "",
+      items: photoMissingItems.map(({ dayNumber, item }) => ({
+        dayNumber,
+        itemId: item.id,
+        placeId: item.location?.placeId ?? "",
+        lat: item.location?.lat ?? null,
+        lng: item.location?.lng ?? null,
+      })),
+    });
+  }
+
+  private buildTransportHydrationKey(payload: PersistedTripPayload) {
+    const candidates = payload.itinerary.flatMap((day) =>
+      day.items.map((item, index) => ({
+        dayNumber: day.dayNumber,
+        itemId: item.id,
+        index,
+        transport: item.transport || "",
+        duration: item.transportDurationMinutes || 0,
+        distance: item.transportDistanceMeters || 0,
+        hasLocation: Boolean(item.location && hasUsableMapCoordinate(item.location)),
+      })),
+    );
+    const needsHydration = candidates.some(
+      (item) =>
+        item.index > 0 &&
+        (!item.transport.trim() || item.transport.toLowerCase() === "ai_recommend" || item.duration <= 0 || item.distance <= 0),
+    );
+    if (!needsHydration) {
+      return null;
+    }
+    return JSON.stringify({
+      tripId: payload.tripId || "",
+      destination: payload.destination || "",
+      preferredTransport: useUserStore.getState().preferredTransport || "",
+      items: candidates,
+    });
+  }
+
+  async hydrateCurrentTripLocationsIfNeeded(options?: { force?: boolean }) {
+    const payload = this.buildCurrentTripPayload();
+    let nextItinerary = useTripStore.getState().itinerary;
+    let changed = false;
+
+    const missingItems = collectItineraryItemsMissingLocation(payload.itinerary);
+    if (missingItems.length === 0) {
+      this.lastLocationHydrationKey = null;
+    } else {
+      const hydrationKey = this.buildLocationHydrationKey(payload);
+      if (hydrationKey) {
+        if (options?.force || hydrationKey !== this.lastLocationHydrationKey) {
+          this.lastLocationHydrationKey = hydrationKey;
+          const updates = await geocodeItineraryItemsMissingLocation(
+            missingItems,
+            payload.destination,
+          );
+          if (updates.length > 0) {
+            nextItinerary = applyLocationUpdatesToItinerary(nextItinerary, updates);
+            changed = true;
+          }
+        }
+      } else {
+        this.lastLocationHydrationKey = null;
+      }
+    }
+
+    const photoHydrationKey = this.buildPhotoHydrationKey({
+      ...payload,
+      itinerary: nextItinerary,
+    });
+    if (!photoHydrationKey) {
+      this.lastPhotoHydrationKey = null;
+    } else if (options?.force || photoHydrationKey !== this.lastPhotoHydrationKey) {
+      this.lastPhotoHydrationKey = photoHydrationKey;
+      const photoUpdates = await enrichItineraryItemsMissingPlacePhotos(
+        collectItineraryItemsMissingPlacePhotos(nextItinerary),
+        payload.destination,
+      );
+      if (photoUpdates.length > 0) {
+        nextItinerary = applyLocationUpdatesToItinerary(nextItinerary, photoUpdates);
+        changed = true;
+      }
+    }
+
+    const transportHydrationKey = this.buildTransportHydrationKey({
+      ...payload,
+      itinerary: nextItinerary,
+    });
+    if (!transportHydrationKey) {
+      this.lastTransportHydrationKey = null;
+    } else if (options?.force || transportHydrationKey !== this.lastTransportHydrationKey) {
+      this.lastTransportHydrationKey = transportHydrationKey;
+      const hydratedTransport = hydrateItineraryTransportFields(nextItinerary, {
+        destination: payload.destination,
+        preferredTransport: useUserStore.getState().preferredTransport,
+      });
+      const transportChanged =
+        JSON.stringify(hydratedTransport) !== JSON.stringify(nextItinerary);
+      if (transportChanged) {
+        nextItinerary = hydratedTransport;
+        changed = true;
+      }
+    }
+
+    if (!changed) {
+      return false;
+    }
+
+    const reconciled = reconcileTripMapState(nextItinerary, useMapStore.getState().pins);
+
+    withSyncMutationSource("local-user-edit", () => {
+      useTripStore.setState({
+        itinerary: reconciled.itinerary,
+        lastUpdatedAt: new Date().toISOString(),
+      });
+      useMapStore.getState().setPins(reconciled.pins, "local-user-edit");
+    });
+
+    return true;
   }
 
   async loadBootstrap(): Promise<BootstrapPayload> {
@@ -315,6 +475,17 @@ class SyncService {
 
     this.hydrated = true;
     persistActiveUserSnapshotNow();
+    if (snapshot.trip) {
+      void this
+        .hydrateCurrentTripLocationsIfNeeded({ force: true })
+        .then((updated) => {
+          if (updated) {
+            return this.flushTripSyncNow({ force: true });
+          }
+          return undefined;
+        })
+        .catch(() => {});
+    }
   }
 
   applyTripSwitch(snapshot: {
@@ -369,6 +540,15 @@ class SyncService {
 
     this.hydrated = true;
     persistActiveUserSnapshotNow();
+    void this
+      .hydrateCurrentTripLocationsIfNeeded({ force: true })
+      .then((updated) => {
+        if (updated) {
+          return this.flushTripSyncNow({ force: true });
+        }
+        return undefined;
+      })
+      .catch(() => {});
   }
 
   startRealtime(roomId?: string | null) {

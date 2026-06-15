@@ -46,6 +46,7 @@ import {
   suggestedMealTime,
 } from "@/server/ai/planning/itineraryPlanningStandard";
 import { resolveTripItemDisplayNote } from "@/lib/tripItemNotes";
+import { resolvePlanningTransportPreference } from "@/lib/transportPreference";
 import { validateItineraryQuality } from "@/server/ai/planning/itineraryQualityValidator";
 import { buildTripPlanResearchPlan } from "@/server/ai/planning/tripPlanResearchPolicy";
 import {
@@ -3119,6 +3120,10 @@ function toUserFacingPlanWarnings(warnings?: string[]): string[] {
 function profileToTripPlanRequest(profile: TripProfile, context?: ChatContext): TripPlanRequest {
   const pace = profile.pace === "relaxed" || profile.pace === "intensive" ? profile.pace : "moderate";
   const dietaryRestrictions = profile.dietary_restrictions.filter(Boolean);
+  const transportPreference = resolvePlanningTransportPreference(
+    profile.transportation,
+    profile.destination || context?.destination || "",
+  );
   return {
     destination: profile.destination || "未指定目的地",
     days: Math.max(1, profile.duration_days || 3),
@@ -3128,7 +3133,7 @@ function profileToTripPlanRequest(profile: TripProfile, context?: ChatContext): 
     preferences: {
       interests: profile.preferences.length ? profile.preferences : ["景點", "美食"],
       pace,
-      transportPreference: profile.transportation || "ai_recommend",
+      transportPreference,
       budget: budgetToNumber(profile.budget),
       notes: [
         profile.departure_location ? `出發地：${profile.departure_location}` : "",

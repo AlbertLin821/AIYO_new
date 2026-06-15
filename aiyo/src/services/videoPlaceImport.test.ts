@@ -14,6 +14,7 @@ const sampleLocation = {
   verified: true,
   confidence: 0.91,
 };
+const originalFetch = globalThis.fetch;
 
 function buildVideo(overrides: Partial<Video> = {}): Video {
   return {
@@ -42,10 +43,12 @@ beforeEach(() => {
     segmentDirectionsMinutes: {},
   });
   mock.method(syncService, "flushTripSyncNow", async () => undefined);
+  globalThis.fetch = originalFetch;
 });
 
 afterEach(() => {
   mock.reset();
+  globalThis.fetch = originalFetch;
 });
 
 test("importVideoVerifiedPlacesToTrip creates days up to targetDayNumber", async () => {
@@ -128,4 +131,44 @@ test("importVideoVerifiedPlacesToTrip keeps pin linked to the matching place aft
     assert.equal(item?.location?.lat, pin.lat);
     assert.equal(item?.location?.lng, pin.lng);
   }
+});
+
+test("importVideoVerifiedPlacesToTrip enriches imported place photos when placeId exists", async () => {
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        success: true,
+        data: {
+          results: [
+            {
+              details: {
+                photoUrl: "/api/map/place-photo?ref=chiayi-fish&placeId=fish-head",
+                thumbnail: "/api/map/place-photo?ref=chiayi-fish&placeId=fish-head",
+              },
+            },
+          ],
+        },
+      }),
+      { status: 200 },
+    );
+
+  await importVideoVerifiedPlacesToTrip(
+    buildVideo({
+      extractedLocations: [
+        {
+          ...sampleLocation,
+          placeId: "fish-head",
+        },
+      ],
+    }),
+    {
+      selectedNames: [sampleLocation.name],
+      targetDayNumber: 1,
+    },
+  );
+
+  const item = useTripStore.getState().itinerary[0]?.items[0];
+  const pin = useMapStore.getState().pins[0];
+  assert.equal(item?.location?.photoUrl, "/api/map/place-photo?ref=chiayi-fish&placeId=fish-head");
+  assert.equal(pin?.photoUrl, "/api/map/place-photo?ref=chiayi-fish&placeId=fish-head");
 });

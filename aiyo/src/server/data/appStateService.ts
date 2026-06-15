@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { applyChatMessageMetadata, extractChatMessageMetadata } from "@/lib/chatMessageMetadata";
 import { prisma } from "@/lib/prisma";
 import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
 import { findLinkedPinForItem } from "@/lib/mapPinItineraryLink";
 import { reconcileTripMapState } from "@/services/mapSync";
+import { repairTripHydration } from "@/server/services/repairTripHydration";
 import { getTripAccess, requireTripAccess } from "@/server/tripAccess";
 import type { TripPlanItem } from "@/types";
 import type {
@@ -488,6 +490,35 @@ export function normalizeTripStorageTitle(
   return "";
 }
 
+export function assignFreshIdsForNewTripPayload(input: PersistedTripPayload): PersistedTripPayload {
+  const itemIdMap = new Map<string, string>();
+
+  const itinerary = input.itinerary.map((day) => ({
+    ...day,
+    items: day.items.map((item) => {
+      const nextId = randomUUID();
+      itemIdMap.set(item.id, nextId);
+      return {
+        ...item,
+        id: nextId,
+      };
+    }),
+  }));
+
+  const pins = input.pins.map((pin) => ({
+    ...pin,
+    id: randomUUID(),
+    linkedTripItemId: pin.linkedTripItemId ? itemIdMap.get(pin.linkedTripItemId) : undefined,
+  }));
+
+  return {
+    ...input,
+    tripId: "",
+    itinerary,
+    pins,
+  };
+}
+
 /** 行程資料夾列表：mine 僅本人擁有；recent 含本人與協作；shared 僅他人擁有且本人為協作者。 */
 export async function listTripsForLibrary(
   userId: string,
@@ -623,20 +654,37 @@ export async function getBootstrapPayload(userId: string): Promise<BootstrapPayl
     destination: user.profile?.destination,
   });
   const chatMessages = serializeChatMessages(messages);
+  const preferredTransport =
+    typeof profile.preferredTransport === "string" && profile.preferredTransport.trim()
+      ? profile.preferredTransport.trim()
+      : null;
 
   const room = tripRecord ? await ensureCollaborationRoom(tripRecord.id) : null;
-  const tripPayload = tripRecord
+  const serializedTrip = tripRecord
+    ? serializeTrip({
+        ...tripRecord,
+        itineraryDays: tripRecord.itineraryDays,
+        items: tripRecord.items,
+        pins: tripRecord.pins,
+      })
+    : null;
+  let tripPayload = serializedTrip
     ? sanitizeBootstrapTrip({
-        trip: serializeTrip({
-          ...tripRecord,
-          itineraryDays: tripRecord.itineraryDays,
-          items: tripRecord.items,
-          pins: tripRecord.pins,
-        }),
+        trip: serializedTrip,
         profile,
         chatMessages,
       })
     : null;
+  if (tripPayload?.tripId) {
+    const repaired = await repairTripHydration(tripPayload, { preferredTransport });
+    if (repaired.changed) {
+      await saveTripPayload(userId, {
+        ...repaired.trip,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    tripPayload = repaired.trip;
+  }
 
   const prefs = parseProfilePreferencesRecord(user.profile?.preferences);
   const welcomeSaved = prefs.welcomeCompleted === true;
@@ -686,8 +734,15 @@ export async function getTripSwitchPayload(userId: string, tripId: string) {
   }
 
   const room = await ensureCollaborationRoom(tripRecord.id);
-  return {
-    trip: {
+  const profile = toUserProfile({
+    name: user.name,
+    email: user.email,
+    preferences: user.profile?.preferences,
+    budget: user.profile?.budget,
+    destination: user.profile?.destination,
+  });
+  const repaired = await repairTripHydration(
+    {
       ...serializeTrip({
         ...tripRecord,
         itineraryDays: tripRecord.itineraryDays,
@@ -696,6 +751,21 @@ export async function getTripSwitchPayload(userId: string, tripId: string) {
       }),
       budget: user.profile?.budget ?? 0,
     },
+    {
+      preferredTransport:
+        typeof profile.preferredTransport === "string" && profile.preferredTransport.trim()
+          ? profile.preferredTransport.trim()
+          : null,
+    },
+  );
+  if (repaired.changed) {
+    await saveTripPayload(userId, {
+      ...repaired.trip,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  return {
+    trip: repaired.trip,
     chatMessages: serializeChatMessages(messages),
     collaboration: serializeCollaboration(room),
   };
@@ -803,32 +873,34 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
     await requireTripAccess(userId, input.tripId, "edit");
   }
 
+  const payload = input.tripId ? input : assignFreshIdsForNewTripPayload(input);
+
   const coverPatch =
-    input.coverImageUrl !== undefined
+    payload.coverImageUrl !== undefined
       ? {
           coverImageUrl:
-            input.coverImageUrl !== null && input.coverImageUrl.trim().length > 0
-              ? input.coverImageUrl.trim()
+            payload.coverImageUrl !== null && payload.coverImageUrl.trim().length > 0
+              ? payload.coverImageUrl.trim()
               : null,
         }
       : undefined;
 
-  const resolvedTitle = normalizeTripStorageTitle(input.title, input.destination);
+  const resolvedTitle = normalizeTripStorageTitle(payload.title, payload.destination);
 
-  const trip = input.tripId
+  const trip = payload.tripId
     ? await prisma.trip.upsert({
-        where: { id: input.tripId },
+        where: { id: payload.tripId },
         update: {
           title: resolvedTitle,
-          destination: input.destination,
-          days: Math.max(0, input.itinerary.length || input.days),
+          destination: payload.destination,
+          days: Math.max(0, payload.itinerary.length || payload.days),
           ...(coverPatch ?? {}),
         },
         create: {
           userId,
           title: resolvedTitle,
-          destination: input.destination,
-          days: Math.max(0, input.itinerary.length || input.days),
+          destination: payload.destination,
+          days: Math.max(0, payload.itinerary.length || payload.days),
           ...(coverPatch ?? {}),
         },
       })
@@ -836,8 +908,8 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
         data: {
           userId,
           title: resolvedTitle,
-          destination: input.destination,
-          days: Math.max(0, input.itinerary.length || input.days),
+          destination: payload.destination,
+          days: Math.max(0, payload.itinerary.length || payload.days),
           ...(coverPatch ?? {}),
         },
       });
@@ -846,7 +918,7 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
   await prisma.tripItem.deleteMany({ where: { tripId: trip.id } });
   await prisma.mapPin.deleteMany({ where: { tripId: trip.id } });
 
-  const normalizedDays = input.itinerary;
+  const normalizedDays = payload.itinerary;
 
   if (normalizedDays.length > 0) {
     await prisma.tripDay.createMany({
@@ -904,7 +976,7 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
     });
   }
 
-  const validPins = input.pins.filter((pin) => hasUsableMapCoordinate(pin));
+  const validPins = payload.pins.filter((pin) => hasUsableMapCoordinate(pin));
   if (validPins.length > 0) {
     await prisma.mapPin.createMany({
       data: validPins.map((pin) => ({

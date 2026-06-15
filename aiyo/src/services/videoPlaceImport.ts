@@ -1,10 +1,12 @@
-import { ensureItineraryDayCount } from "@/lib/ensureItineraryDays";
-import { buildPinsFromLocations } from "@/services/mapSync";
+import { enrichItineraryItemsMissingPlacePhotos } from "@/services/geocodeItineraryItems";
+import { buildPinsFromLocations, reconcileTripMapState } from "@/services/mapSync";
+import { apiPut } from "@/services/apiClient";
 import { syncService } from "@/services/syncService";
 import { recordAppliedVideoSummary } from "@/services/videoClient";
 import { useMapStore } from "@/stores/useMapStore";
+import { withSyncMutationSource } from "@/stores/syncMutationSource";
 import { useTripStore } from "@/stores/useTripStore";
-import type { LocationReference, Video } from "@/types";
+import type { LocationReference, PersistedTripPayload, TripPlanDay, Video } from "@/types";
 
 type VideoPlaceImportResult = {
   addedItems: number;
@@ -74,6 +76,47 @@ function isVerifiedMapLocation(location: LocationReference) {
   );
 }
 
+function buildDraftItineraryWithTargetDay(
+  itinerary: TripPlanDay[],
+  targetDayNumber?: number,
+): TripPlanDay[] {
+  const normalizedTarget =
+    typeof targetDayNumber === "number" && Number.isFinite(targetDayNumber) && targetDayNumber >= 1
+      ? Math.floor(targetDayNumber)
+      : null;
+  const next = itinerary.map((day) => ({
+    ...day,
+    items: day.items.map((item) => ({ ...item })),
+  }));
+
+  if (next.length === 0) {
+    next.push({
+      dayNumber: 1,
+      theme: "Day 1",
+      summary: "尚未安排內容",
+      items: [],
+    });
+  }
+
+  const requiredDays = Math.max(next.length, normalizedTarget ?? 1);
+  while (next.length < requiredDays) {
+    const nextDayNumber = next.length + 1;
+    next.push({
+      dayNumber: nextDayNumber,
+      theme: `Day ${nextDayNumber}`,
+      summary: "尚未安排內容",
+      items: [],
+    });
+  }
+
+  return next.map((day, index) => ({
+    ...day,
+    dayNumber: index + 1,
+    theme: day.theme?.trim() ? day.theme : `Day ${index + 1}`,
+    items: day.items.map((item) => ({ ...item, dayNumber: index + 1 })),
+  }));
+}
+
 export function getVerifiedGeocodedVideoLocations(video: Video) {
   return video.extractedLocations.filter(isVerifiedMapLocation);
 }
@@ -97,16 +140,37 @@ export async function importVideoVerifiedPlacesToTrip(
     return { addedItems: 0, addedPins: 0 };
   }
 
-  ensureItineraryDayCount(options?.targetDayNumber);
-
+  const enrichedPhotoUpdates = await enrichItineraryItemsMissingPlacePhotos(
+    verified.map((location, index) => ({
+      dayNumber: 1,
+      item: {
+        id: `video_import_preview_${index}`,
+        title: location.name,
+        time: "09:00",
+        type: "attraction",
+        location,
+      },
+    })),
+    useTripStore.getState().destination,
+  );
+  if (enrichedPhotoUpdates.length > 0) {
+    const enrichedByName = new Map(
+      enrichedPhotoUpdates.map((entry) => [normalizeLocationName(entry.location.name), entry.location]),
+    );
+    verified = verified.map((location) => {
+      const enriched = enrichedByName.get(normalizeLocationName(location.name));
+      return enriched ?? location;
+    });
+  }
   const current = useTripStore.getState().itinerary;
-  const availableDayNumbers = current.length > 0 ? current.map((day) => day.dayNumber) : [1];
+  const nextItinerary = buildDraftItineraryWithTargetDay(current, options?.targetDayNumber);
+  const availableDayNumbers = nextItinerary.map((day) => day.dayNumber);
   const fixedTargetDay =
     options?.targetDayNumber && availableDayNumbers.includes(options.targetDayNumber)
       ? options.targetDayNumber
       : null;
   const existingNames = new Set(
-    current
+    nextItinerary
       .flatMap((day) => day.items)
       .map((item) => normalizeLocationName(item.location?.name || item.title)),
   );
@@ -125,8 +189,12 @@ export async function importVideoVerifiedPlacesToTrip(
     const inferredType = location.mentionedFoods?.length || /餐|飯|魚頭|夜市|市場|美食|店/.test(location.name)
       ? "restaurant"
       : "attraction";
+    const targetDay = nextItinerary.find((day) => day.dayNumber === targetDayNumber);
+    if (!targetDay) {
+      return;
+    }
 
-    useTripStore.getState().addItineraryItem(targetDayNumber, {
+    targetDay.items.push({
       id: itemId,
       dayNumber: targetDayNumber,
       time: `${String(9 + index * 2).padStart(2, "0")}:00`,
@@ -160,8 +228,41 @@ export async function importVideoVerifiedPlacesToTrip(
       linkedTripItemId: matchedEntry?.itemId,
     };
   });
-  useMapStore.getState().addPins(pins);
-  await syncService.flushTripSyncNow({ force: true });
+  const reconciled = reconcileTripMapState(nextItinerary, [
+    ...useMapStore.getState().pins,
+    ...pins,
+  ]);
+
+  withSyncMutationSource("local-user-edit", () => {
+    useTripStore.setState({
+      itinerary: reconciled.itinerary,
+      days: Math.max(1, reconciled.itinerary.length),
+      lastUpdatedAt: new Date().toISOString(),
+    });
+    useMapStore.getState().setPins(reconciled.pins, "local-user-edit");
+  });
+
+  if (typeof window === "undefined") {
+    await syncService.flushTripSyncNow({ force: true });
+  } else {
+    const tripState = useTripStore.getState();
+    const savedTrip = await apiPut<PersistedTripPayload, PersistedTripPayload>("/api/trips/current", {
+      tripId: tripState.tripId || "",
+      title: tripState.title,
+      destination: tripState.destination,
+      days: Math.max(1, reconciled.itinerary.length),
+      budget: tripState.budget,
+      coverImageUrl: tripState.coverImageUrl ?? null,
+      itinerary: reconciled.itinerary,
+      pins: reconciled.pins,
+      updatedAt: new Date().toISOString(),
+    });
+
+    useTripStore.getState().setRemoteTrip(savedTrip, tripState.budget, "server-ack");
+    useMapStore.getState().setPins(savedTrip.pins, "server-ack");
+    syncService.markLocalTripPayloadAsSynced();
+  }
+
   await recordAppliedVideoSummary({
     tripId: useTripStore.getState().tripId,
     videoId: video.videoId || video.id,

@@ -1,8 +1,11 @@
 "use client";
 
+import { useEffect } from "react";
 import dynamic from "next/dynamic";
 import { CalendarDays } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { zhTW as t } from "@/locales/zh-TW";
+import { syncService } from "@/services/syncService";
 import { useMapStore } from "@/stores/useMapStore";
 
 const MapView = dynamic(() => import("@/components/map/MapView"), {
@@ -12,7 +15,35 @@ const MapView = dynamic(() => import("@/components/map/MapView"), {
 const ItineraryPanel = dynamic(() => import("@/components/map/ItineraryPanel"), { ssr: false });
 
 export default function MapPage() {
+  const { status } = useSession();
   const { panelOpen, setPanelOpen } = useMapStore();
+
+  useEffect(() => {
+    if (status !== "authenticated") {
+      return;
+    }
+
+    let cancelled = false;
+
+    void syncService
+      .loadBootstrap()
+      .then((snapshot) => {
+        if (cancelled) {
+          return;
+        }
+        syncService.applyBootstrap(snapshot, {
+          source: "map-route-refresh",
+          forceTrip: true,
+        });
+      })
+      .catch(() => {
+        // 避免地圖頁因刷新快照失敗而中斷既有互動。
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [status]);
 
   return (
     <div className="relative flex h-[100dvh] max-lg:h-[calc(100dvh-3.5rem-env(safe-area-inset-bottom,0px))] min-h-0 w-full flex-col overflow-hidden bg-background">

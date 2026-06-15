@@ -6,7 +6,6 @@ import { signOut, useSession } from "next-auth/react";
 import { zhTW as t } from "@/locales/zh-TW";
 import { clearPersistedState } from "@/services/persistence";
 import { ApiRequestError, apiGet } from "@/services/apiClient";
-import { geocodeItineraryItemsMissingLocation } from "@/services/geocodeItineraryItems";
 import { reconcileTripMapState } from "@/services/mapSync";
 import { syncService } from "@/services/syncService";
 import { repairSparseItineraryDaysFromTravelPlan } from "@/lib/generatedTripPlan";
@@ -116,32 +115,7 @@ export default function AppDataBridge() {
                 lastUpdatedAt: new Date().toISOString(),
               });
             });
-            const updates = await geocodeItineraryItemsMissingLocation(
-              repairedItinerary.flatMap((day) =>
-                day.items
-                  .filter((item) => !item.location || !item.location.verified || !item.location.placeId)
-                  .map((item) => ({ dayNumber: day.dayNumber, item })),
-              ),
-              snapshot.trip.destination,
-            );
-            if (updates.length > 0) {
-              withSyncMutationSource("local-user-edit", () => {
-                useTripStore.setState((state) => ({
-                  itinerary: state.itinerary.map((day) =>
-                    ({
-                      ...day,
-                      items: day.items.map((item) => {
-                        const update = updates.find(
-                          (entry) => entry.dayNumber === day.dayNumber && entry.itemId === item.id,
-                        );
-                        return update ? { ...item, location: update.location } : item;
-                      }),
-                    }),
-                  ),
-                  lastUpdatedAt: new Date().toISOString(),
-                }));
-              });
-            }
+            await syncService.hydrateCurrentTripLocationsIfNeeded({ force: true });
             await syncService.flushTripSyncNow({ force: true });
           }
         }
