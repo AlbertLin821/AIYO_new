@@ -9,16 +9,20 @@ import {
 } from "@/components/ui/dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import SkyDashGame from "@/components/chat/skyDash/SkyDashGame";
+import SnakeGame from "@/components/chat/snake/SnakeGame";
 import {
   buildWorkflowSteps,
   getActiveWorkflowStep,
   type WorkflowStepView,
 } from "@/lib/workflowSteps";
 import { getSkyDashHighScore, saveSkyDashHighScore } from "@/lib/skyDashStorage";
+import { getSnakeHighScore, saveSnakeHighScore } from "@/lib/snakeStorage";
 import type { StatusStepPayload } from "@/types";
 
 const WAIT_GAME_PHASES = new Set(["research", "compose"]);
 const PROMPT_DELAY_MS = 5000;
+
+export type WaitGameId = "sky-dash" | "snake";
 
 type PlanningWaitGameProps = {
   steps?: StatusStepPayload[];
@@ -38,8 +42,34 @@ type PlanningWaitGameProps = {
   onGameOpenChange?: (open: boolean) => void;
 };
 
+const GAME_META: Record<
+  WaitGameId,
+  { title: string; ariaLabel: string; buttonLabel: string; storageKey: string }
+> = {
+  "sky-dash": {
+    title: "Sky Dash",
+    ariaLabel: "Sky Dash 小遊戲",
+    buttonLabel: "開始玩 Sky Dash",
+    storageKey: "aiyo-sky-dash-high-score",
+  },
+  snake: {
+    title: "貪吃蛇",
+    ariaLabel: "貪吃蛇 小遊戲",
+    buttonLabel: "開始玩貪吃蛇",
+    storageKey: "aiyo-snake-high-score",
+  },
+};
+
 function isWaitGamePhase(step: WorkflowStepView | null): boolean {
   return Boolean(step && WAIT_GAME_PHASES.has(step.key) && step.status === "running");
+}
+
+function getHighScore(gameId: WaitGameId): number {
+  return gameId === "sky-dash" ? getSkyDashHighScore() : getSnakeHighScore();
+}
+
+function saveHighScore(gameId: WaitGameId, score: number): number {
+  return gameId === "sky-dash" ? saveSkyDashHighScore(score) : saveSnakeHighScore(score);
 }
 
 export default function PlanningWaitGame({
@@ -51,7 +81,7 @@ export default function PlanningWaitGame({
   promptDelayMs = PROMPT_DELAY_MS,
   promptTitle = "等太久了嗎？玩一下小遊戲等待完成規劃吧！",
   promptDescription,
-  gameTitle = "Sky Dash",
+  gameTitle,
   gameDescription = "",
   completionTitle = "旅遊規劃完成囉！",
   completionDescription,
@@ -68,6 +98,7 @@ export default function PlanningWaitGame({
 
   const [promptVisible, setPromptVisible] = useState(false);
   const [internalGameOpen, setInternalGameOpen] = useState(false);
+  const [activeGame, setActiveGame] = useState<WaitGameId | null>(null);
   const gameOpen = controlledGameOpen ?? internalGameOpen;
   const setGameOpen = useCallback(
     (nextOpen: boolean) => {
@@ -76,12 +107,16 @@ export default function PlanningWaitGame({
       } else {
         setInternalGameOpen(nextOpen);
       }
+      if (!nextOpen) {
+        setActiveGame(null);
+      }
     },
     [onGameOpenChange],
   );
   const [completionToastVisible, setCompletionToastVisible] = useState(false);
   const [escHint, setEscHint] = useState<string | null>(null);
-  const [savedHighScore, setSavedHighScore] = useState(0);
+  const [skyDashHighScore, setSkyDashHighScore] = useState(0);
+  const [snakeHighScore, setSnakeHighScore] = useState(0);
 
   const phaseStartedAtRef = useRef<number | null>(null);
   const lastPhaseKeyRef = useRef<string | null>(null);
@@ -90,6 +125,11 @@ export default function PlanningWaitGame({
   const hadWaitingSessionRef = useRef(false);
   const latestScoreRef = useRef(0);
   const escSavedOnceRef = useRef(false);
+
+  const refreshHighScores = useCallback(() => {
+    setSkyDashHighScore(getSkyDashHighScore());
+    setSnakeHighScore(getSnakeHighScore());
+  }, []);
 
   const clearPromptTimer = useCallback(() => {
     if (promptTimerRef.current !== null) {
@@ -104,6 +144,7 @@ export default function PlanningWaitGame({
     lastPhaseKeyRef.current = null;
     setPromptVisible(false);
     setGameOpen(false);
+    setActiveGame(null);
     setCompletionToastVisible(false);
     setEscHint(null);
     completionNotifiedRef.current = false;
@@ -168,18 +209,22 @@ export default function PlanningWaitGame({
   }, [waitingDone]);
 
   useEffect(() => {
-    if (!gameOpen) {
+    if (!gameOpen || !activeGame) {
       return;
     }
-    queueMicrotask(() => setSavedHighScore(getSkyDashHighScore()));
+    queueMicrotask(() => refreshHighScores());
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") {
         return;
       }
       event.preventDefault();
-      const saved = saveSkyDashHighScore(latestScoreRef.current);
-      setSavedHighScore(saved);
+      const saved = saveHighScore(activeGame, latestScoreRef.current);
+      if (activeGame === "sky-dash") {
+        setSkyDashHighScore(saved);
+      } else {
+        setSnakeHighScore(saved);
+      }
 
       if (waitingDone || escSavedOnceRef.current) {
         setGameOpen(false);
@@ -195,7 +240,7 @@ export default function PlanningWaitGame({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [gameOpen, setGameOpen, waitingDone]);
+  }, [activeGame, gameOpen, refreshHighScores, setGameOpen, waitingDone]);
 
   useEffect(() => {
     if (waitingDone && escHint) {
@@ -207,32 +252,57 @@ export default function PlanningWaitGame({
     if (!waitingActive && !promptVisible && !gameOpen) {
       return;
     }
-    queueMicrotask(() => setSavedHighScore(getSkyDashHighScore()));
-  }, [gameOpen, promptVisible, waitingActive]);
+    queueMicrotask(() => refreshHighScores());
+  }, [gameOpen, promptVisible, refreshHighScores, waitingActive]);
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
-      if (event.key !== "aiyo-sky-dash-high-score") {
+      if (
+        event.key !== GAME_META["sky-dash"].storageKey &&
+        event.key !== GAME_META.snake.storageKey
+      ) {
         return;
       }
-      setSavedHighScore(getSkyDashHighScore());
+      refreshHighScores();
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
-  }, []);
+  }, [refreshHighScores]);
 
-  const handlePersistScore = useCallback((score: number, highScore: number) => {
-    latestScoreRef.current = score;
-    setSavedHighScore((current) => Math.max(current, highScore));
-  }, []);
+  const handlePersistScore = useCallback(
+    (score: number, highScore: number) => {
+      latestScoreRef.current = score;
+      if (activeGame === "sky-dash") {
+        setSkyDashHighScore((current) => Math.max(current, highScore));
+      } else if (activeGame === "snake") {
+        setSnakeHighScore((current) => Math.max(current, highScore));
+      }
+    },
+    [activeGame],
+  );
 
-  const openGame = useCallback(() => {
-    setSavedHighScore(getSkyDashHighScore());
-    setPromptVisible(false);
-    setGameOpen(true);
-    setEscHint(null);
-    escSavedOnceRef.current = false;
-  }, [setGameOpen]);
+  const openGame = useCallback(
+    (gameId: WaitGameId) => {
+      refreshHighScores();
+      setActiveGame(gameId);
+      setPromptVisible(false);
+      setGameOpen(true);
+      setEscHint(null);
+      escSavedOnceRef.current = false;
+    },
+    [refreshHighScores, setGameOpen],
+  );
+
+  const closeGame = useCallback(() => {
+    if (activeGame) {
+      saveHighScore(activeGame, latestScoreRef.current);
+    }
+    setGameOpen(false);
+  }, [activeGame, setGameOpen]);
+
+  const activeGameMeta = activeGame ? GAME_META[activeGame] : null;
+  const dialogTitle = gameTitle || activeGameMeta?.title || "小遊戲";
+  const dialogAriaLabel = activeGameMeta?.ariaLabel || "小遊戲";
 
   if (!waitingActive && !gameOpen && !completionToastVisible) {
     return null;
@@ -251,16 +321,29 @@ export default function PlanningWaitGame({
           >
             <div className="rounded-2xl border border-primary/20 bg-white px-4 py-4 shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
               <p className="text-sm font-medium text-slate-900">{promptTitle}</p>
-              <div className="mt-3 flex items-center justify-between gap-3">
-                <p className="text-xs text-slate-500">{promptDescription || `上次最高分：${savedHighScore}`}</p>
-                <button
-                  type="button"
-                  onClick={openGame}
-                  className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary/90"
-                >
-                  <Gamepad2 className="size-3.5" aria-hidden />
-                  開始玩 Sky Dash
-                </button>
+              <div className="mt-3 space-y-3">
+                <p className="text-xs text-slate-500">
+                  {promptDescription ||
+                    `Sky Dash 最高分：${skyDashHighScore} · 貪吃蛇最高分：${snakeHighScore}`}
+                </p>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openGame("sky-dash")}
+                    className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary/90"
+                  >
+                    <Gamepad2 className="size-3.5" aria-hidden />
+                    {GAME_META["sky-dash"].buttonLabel}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openGame("snake")}
+                    className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
+                  >
+                    <Gamepad2 className="size-3.5" aria-hidden />
+                    {GAME_META.snake.buttonLabel}
+                  </button>
+                </div>
               </div>
             </div>
           </m.div>
@@ -274,19 +357,21 @@ export default function PlanningWaitGame({
             if (!planningComplete) {
               return;
             }
-            saveSkyDashHighScore(latestScoreRef.current);
+            if (activeGame) {
+              saveHighScore(activeGame, latestScoreRef.current);
+            }
             setGameOpen(false);
           }
         }}
       >
         <DialogContent
           showCloseButton={false}
-          aria-label="Sky Dash 小遊戲"
+          aria-label={dialogAriaLabel}
           className="w-full max-w-md gap-0 overflow-hidden rounded-[28px] border border-slate-200 bg-white p-0 shadow-[0_28px_80px_rgba(15,23,42,0.25)] sm:max-w-md"
         >
           <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
             <div>
-              <p className="text-sm font-semibold text-slate-900">{gameTitle}</p>
+              <p className="text-sm font-semibold text-slate-900">{dialogTitle}</p>
               <p className="mt-1 text-xs leading-5 text-slate-500">
                 {gameDescription ? (
                   <>
@@ -302,10 +387,7 @@ export default function PlanningWaitGame({
               variant="ghost"
               size="icon-sm"
               aria-label="關閉遊戲"
-              onClick={() => {
-                saveSkyDashHighScore(latestScoreRef.current);
-                setGameOpen(false);
-              }}
+              onClick={closeGame}
               className="rounded-full border border-slate-200"
             >
               <X className="size-4" aria-hidden />
@@ -318,9 +400,11 @@ export default function PlanningWaitGame({
                 {escHint}
               </p>
             ) : null}
-            <SkyDashGame
-              onPersistScore={handlePersistScore}
-            />
+            {activeGame === "sky-dash" ? (
+              <SkyDashGame onPersistScore={handlePersistScore} />
+            ) : activeGame === "snake" ? (
+              <SnakeGame onPersistScore={handlePersistScore} />
+            ) : null}
           </div>
         </DialogContent>
       </Dialog>

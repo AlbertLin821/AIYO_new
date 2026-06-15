@@ -33,6 +33,14 @@ function normalizeTimeValue(raw: string | undefined, fallbackHour: number): stri
   return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
 
+function timeToMinutes(value: string): number {
+  const [hours, minutes] = value.split(":").map((part) => Number(part));
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+  return hours * 60 + minutes;
+}
+
 function slugifyTitle(title: string): string {
   return (
     title
@@ -162,6 +170,34 @@ function buildFoodItem(
   };
 }
 
+function applyDayTransportation(
+  items: TripPlanItem[],
+  transportation: Array<{ text: string }>,
+): TripPlanItem[] {
+  if (items.length <= 1 || transportation.length === 0) {
+    return items;
+  }
+
+  const nextItems = items.map((item) => ({ ...item }));
+  for (const segment of transportation) {
+    const text = segment.text?.trim();
+    if (!text) {
+      continue;
+    }
+    const routeMatch = text.match(/^(.+?)\s*(?:→|->)\s*(.+?)\s*[：:]\s*(.+)$/u);
+    if (routeMatch?.[2] && routeMatch[3]) {
+      const toTitle = routeMatch[2].trim();
+      const transport = routeMatch[3].trim().replace(/，約.+$/u, "").trim();
+      const targetIndex = nextItems.findIndex((item, index) => index > 0 && item.title === toTitle);
+      if (targetIndex > 0 && transport) {
+        nextItems[targetIndex] = { ...nextItems[targetIndex]!, transport };
+      }
+      continue;
+    }
+  }
+  return nextItems;
+}
+
 function convertTravelPlanDay(
   day: TravelPlanResponse["days"][number],
   index: number,
@@ -169,10 +205,15 @@ function convertTravelPlanDay(
   const dayNumber = parseDayLabelToNumber(day.day, index);
   const spots = day.spots || [];
   const foods = day.food_recommendations || [];
-  const items: TripPlanItem[] = [
+  const unsortedItems: TripPlanItem[] = [
     ...spots.map((spot, spotIndex) => buildSpotItem(dayNumber, spotIndex, spot)),
     ...foods.map((food, foodIndex) => buildFoodItem(dayNumber, foodIndex, food, spots.length)),
   ];
+  const sortedItems = [...unsortedItems].sort((left, right) => timeToMinutes(left.time) - timeToMinutes(right.time));
+  const items = applyDayTransportation(
+    sortedItems,
+    Array.isArray(day.transportation) ? day.transportation : [],
+  );
 
   return {
     dayNumber,

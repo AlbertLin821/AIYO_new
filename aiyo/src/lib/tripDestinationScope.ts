@@ -582,14 +582,22 @@ export function geocodeResultFailsDestinationScope(
   }
   if (scope.countryCodes.includes("TW") && effectiveCountry === "TW") {
     const placeName = result.placeName?.trim() || "";
+    const formattedAddress = result.formattedAddress?.trim() || "";
+    const placeNameInScope = placeName
+      ? isTextInTripDestinationScope(placeName, scope, { strictCountryLevel: true })
+      : false;
+    const addressInScope = formattedAddress
+      ? isTextInTripDestinationScope(formattedAddress, scope, { strictCountryLevel: true })
+      : false;
     if (
       placeName &&
-      !isTextInTripDestinationScope(placeName, scope, { strictCountryLevel: true }) &&
+      !placeNameInScope &&
+      !addressInScope &&
       !isExplicitDepartureOrForeignPlace(placeName, "TW")
     ) {
       return "Place name is outside Taiwan video scope.";
     }
-    const compactAddress = (result.formattedAddress || "").replace(/\s/g, "");
+    const compactAddress = formattedAddress.replace(/\s/g, "");
     if (/^(台灣|臺灣|台湾){2}$/i.test(compactAddress) || /^taiwan$/i.test(compactAddress)) {
       return "Geocoded address is too vague for Taiwan place.";
     }

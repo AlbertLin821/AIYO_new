@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { resolvePlacePhotoUrl } from "@/lib/placePhotoUrl";
 import { cn } from "@/lib/utils";
 
@@ -22,8 +22,35 @@ export default function PlaceThumbnail({
   imageClassName,
 }: PlaceThumbnailProps) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const [retryToken, setRetryToken] = useState(0);
   const resolved = resolvePlacePhotoUrl(src, placeId);
-  const showImage = Boolean(resolved) && failedSrc !== resolved;
+  const displaySrc = useMemo(() => {
+    if (!resolved) {
+      return undefined;
+    }
+    if (!retryToken) {
+      return resolved;
+    }
+    try {
+      const parsed = resolved.startsWith("http")
+        ? new URL(resolved)
+        : new URL(resolved, "https://local.invalid");
+      parsed.searchParams.set("_imgRetry", String(retryToken));
+      if (parsed.origin === "https://local.invalid" && resolved.startsWith("/")) {
+        return `${parsed.pathname}${parsed.search}`;
+      }
+      return parsed.toString();
+    } catch {
+      const separator = resolved.includes("?") ? "&" : "?";
+      return `${resolved}${separator}_imgRetry=${retryToken}`;
+    }
+  }, [resolved, retryToken]);
+  const showImage = Boolean(displaySrc) && failedSrc !== resolved;
+
+  useEffect(() => {
+    setFailedSrc(null);
+    setRetryToken(0);
+  }, [resolved]);
 
   return (
     <div
@@ -35,10 +62,16 @@ export default function PlaceThumbnail({
       {showImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={resolved}
+          src={displaySrc}
           alt={alt}
           className={cn("size-full object-cover", imageClassName)}
-          onError={() => setFailedSrc(resolved ?? null)}
+          onError={() => {
+            if (resolved && retryToken === 0) {
+              setRetryToken(Date.now());
+              return;
+            }
+            setFailedSrc(resolved ?? null);
+          }}
         />
       ) : (
         <span className="text-xs text-muted">{placeholder}</span>

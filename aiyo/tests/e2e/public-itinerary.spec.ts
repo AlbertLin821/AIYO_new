@@ -27,12 +27,7 @@ test("publish → home list → detail → copy flow", async ({ page }) => {
   const listBody = await authedList.text();
   expect(authedList.ok(), `public list failed: ${authedList.status()} ${listBody}`).toBeTruthy();
 
-  const listReady = page.waitForResponse(
-    (res) => res.url().includes("/api/trips/public") && res.request().method() === "GET" && res.ok(),
-    { timeout: 30_000 },
-  );
   await page.getByTestId("home-recommend-tab-itineraries").click();
-  await listReady;
 
   const card = page.getByTestId("recommended-itinerary-card").filter({ hasText: "E2E 公開台南" });
   await expect(card).toBeVisible({ timeout: 15_000 });
@@ -53,6 +48,16 @@ test("publish → home list → detail → copy flow", async ({ page }) => {
   await page.getByTestId("copy-public-itinerary-button").click();
   await copyResponse;
   await expect(page.getByRole("button", { name: "編輯行程" })).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "去看地圖" }).click();
+  await expect(page).toHaveURL(/\/trip\//, { timeout: 20_000 });
+  await expect(
+    page.getByTestId("map-view").getByRole("button", { name: "赤崁樓", exact: true }),
+  ).toBeVisible({ timeout: 20_000 });
+  await page.getByRole("link", { name: "行程規劃" }).click();
+  await expect(page).toHaveURL(/\/itinerary/, { timeout: 20_000 });
+  await expect(page.getByTestId("activity-card").filter({ hasText: "赤崁樓" })).toBeVisible({
+    timeout: 20_000,
+  });
 });
 
 test("itinerary editor exposes publish dialog for trip owner", async ({ page }) => {

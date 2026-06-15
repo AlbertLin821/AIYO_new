@@ -111,6 +111,22 @@ test("geocodeResultFailsDestinationScope rejects vague Taiwan-only geocode for f
   assert.ok(failure);
 });
 
+test("geocodeResultFailsDestinationScope accepts Penghu place when address matches scope", () => {
+  const scope = resolveTripDestinationScope("澎湖");
+  assert.ok(scope);
+  const failure = geocodeResultFailsDestinationScope(
+    {
+      countryCode: "TW",
+      lat: 23.5638542,
+      lng: 119.5609494,
+      formattedAddress: "880台灣澎湖縣馬公市復興里新復路2巷22號",
+      placeName: "篤行十村",
+    },
+    scope,
+  );
+  assert.equal(failure, null);
+});
+
 test("geocodeResultFailsDestinationScope rejects mis-geocoded Sapporo in Taiwan for Japan scope", () => {
   const scope = resolveTripDestinationScope("日本");
   assert.ok(scope);

@@ -69,6 +69,35 @@ test("travelPlanResponseToTripPlanResult maps spots and food into items", () => 
   assert.ok(tripPlanHasItems(result));
 });
 
+test("travelPlanResponseToTripPlanResult sorts mixed meal stops by time and maps route labels", () => {
+  const result = travelPlanResponseToTripPlanResult({
+    ...samplePlan,
+    days: [
+      {
+        day: "Day 1",
+        theme: "澎湖",
+        transportation: [
+          { text: "西吉嶼藍洞(北岸海蝕洞) → 篤行十村：自駕，約 40 分鐘" },
+          { text: "篤行十村 → 富園小吃：自駕，約 12 分鐘" },
+          { text: "富園小吃 → 阿婆抱墩：自駕，約 35 分鐘" },
+        ],
+        spots: [
+          { name: "西吉嶼藍洞(北岸海蝕洞)", feature: "" },
+          { name: "篤行十村", feature: "" },
+          { name: "阿婆抱墩", feature: "" },
+        ],
+        food_recommendations: [{ name: "富園小吃", description: "" }],
+        tips: [],
+      },
+    ],
+  });
+
+  assert.equal(result.days[0]?.items.map((item) => item.title).join(" -> "), "西吉嶼藍洞(北岸海蝕洞) -> 篤行十村 -> 富園小吃 -> 阿婆抱墩");
+  assert.equal(result.days[0]?.items[1]?.transport, "自駕");
+  assert.equal(result.days[0]?.items[2]?.transport, "自駕");
+  assert.equal(result.days[0]?.items[3]?.transport, "自駕");
+});
+
 test("ensureTripPlanDayCount pads empty middle days", () => {
   const sparse = travelPlanResponseToTripPlanResult({
     ...samplePlan,
