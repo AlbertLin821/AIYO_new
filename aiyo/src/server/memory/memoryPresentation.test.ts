@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildStableMemoryMessages } from "@/server/memory/memoryPresentation";
+import { prisma } from "@/lib/prisma";
+import {
+  buildStableMemoryMessages,
+  listDisplayMemoriesForUser,
+} from "@/server/memory/memoryPresentation";
 import type { ChatResponsePayload, TripProfile, TripPlanResult } from "@/types";
 
 function makeTripProfile(): TripProfile {
@@ -77,4 +81,42 @@ test("buildStableMemoryMessages skips empty or unstable memory writes", () => {
   });
 
   assert.deepEqual(messages, []);
+});
+
+test("buildStableMemoryMessages stores self-identification as a stable memory", () => {
+  const messages = buildStableMemoryMessages({
+    userMessage: "我是user4",
+    response: makeResponse(),
+  });
+
+  assert.deepEqual(messages, [{ role: "assistant", content: "使用者稱呼：user4" }]);
+});
+
+test("listDisplayMemoriesForUser shows trip summaries without mem0 records", async () => {
+  const originalTripFindMany = prisma.trip.findMany;
+  Object.assign(prisma.trip, {
+    findMany: async () => [
+      {
+        id: "trip_1",
+        title: "熊本兩天",
+        destination: "熊本",
+        days: 2,
+        createdAt: new Date("2026-06-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-06-02T00:00:00.000Z"),
+        items: [{ title: "熊本城" }, { title: "午餐" }, { title: "水前寺成趣園" }],
+      },
+    ],
+  });
+
+  try {
+    const memories = await listDisplayMemoriesForUser("user_1");
+
+    assert.equal(memories[0]?.kind, "trip_summary");
+    assert.match(memories[0]?.memory || "", /熊本/);
+    assert.match(memories[0]?.memory || "", /熊本城/);
+    assert.match(memories[0]?.memory || "", /水前寺成趣園/);
+    assert.doesNotMatch(memories[0]?.memory || "", /午餐/);
+  } finally {
+    Object.assign(prisma.trip, { findMany: originalTripFindMany });
+  }
 });

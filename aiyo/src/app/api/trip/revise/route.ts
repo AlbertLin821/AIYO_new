@@ -5,6 +5,7 @@ import { OllamaRequestError } from "@/server/ai/ollamaClient";
 import { completeChatProgress, ensureChatProgressSession } from "@/server/chat/chatProgressStore";
 import { addMemories, formatMemoryContext } from "@/server/memory/mem0Client";
 import { retrieveRelevantMemoriesForUser } from "@/server/memory/memoryRetrieval";
+import { guardDestructiveChatMessage } from "@/server/ai/destructiveConfirmation";
 import { requireSessionUser } from "@/server/auth";
 import { resolveSessionTrip, saveChatMessage } from "@/server/data/appStateService";
 import { chatWithTravelAssistant } from "@/server/services/travelPlannerService";
@@ -70,6 +71,28 @@ export async function POST(request: Request) {
       memoryContext = personalizedContext.promptContextText || formatMemoryContext(memories);
     } catch {
       // Revision still works without an authenticated memory lookup.
+    }
+
+    const destructiveGuard = guardDestructiveChatMessage({
+      userId: persistedUserId,
+      tripId: persistedTripId,
+      message: body.instruction.trim(),
+      context: body.context,
+    });
+    if (destructiveGuard.kind === "respond") {
+      if (persistedUserId) {
+        await saveChatMessage(
+          persistedUserId,
+          destructiveGuard.response.reply.role,
+          destructiveGuard.response.reply.content,
+          persistedTripId,
+          destructiveGuard.response.reply,
+        ).catch(() => undefined);
+      }
+      if (progressSessionId) {
+        completeChatProgress(progressSessionId);
+      }
+      return NextResponse.json(createSuccess(destructiveGuard.response));
     }
 
     const response = await chatWithTravelAssistant({

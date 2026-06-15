@@ -66,6 +66,7 @@ import { CHAT_HISTORY_WINDOW } from "@/lib/chatConstants";
 import { isStructuredTripPlanningRequest } from "@/lib/chat/isStructuredTripPlanningRequest";
 import {
   isApplyPreviousItineraryCommand,
+  isConversationOnlyMessage,
   isFullItineraryRevisionCommand,
   isItineraryMutationCommand,
   isPlanningConfirmationCommand,
@@ -1693,6 +1694,7 @@ export default function ChatPage() {
 
     const previousMessages = useChatStore.getState().messages;
     const displayMessage = options?.displayMessage || message;
+    const conversationOnlyMessage = !hasQuestionAnswers && isConversationOnlyMessage(message);
     const optimisticMessage = buildUserMessage(displayMessage);
     appendMessage(optimisticMessage);
     setInput("");
@@ -1897,14 +1899,15 @@ export default function ChatPage() {
         (currentItineraryHasItems || isConcreteItineraryMutationCommand(message)) &&
         !(!currentItineraryHasItems && isFullItineraryRevisionCommand(message));
       const shouldUseStructuredPlanning =
-        Boolean(options?.questionAnswers?.length) ||
-        Boolean(options?.tripProfile) ||
-        Boolean(workflowRail.questionMessageId) ||
-        isApplyPreviousItineraryCommand(message) ||
-        isStructuredTripPlanningRequest(message) ||
-        isPlanningConfirmation ||
-        shouldTreatAsStructuredMutation ||
-        (currentItineraryHasItems && isFullItineraryRevisionCommand(message));
+        !conversationOnlyMessage &&
+        (Boolean(options?.questionAnswers?.length) ||
+          Boolean(options?.tripProfile) ||
+          Boolean(workflowRail.questionMessageId) ||
+          isApplyPreviousItineraryCommand(message) ||
+          isStructuredTripPlanningRequest(message) ||
+          isPlanningConfirmation ||
+          shouldTreatAsStructuredMutation ||
+          (currentItineraryHasItems && isFullItineraryRevisionCommand(message)));
       const response = await sendChatMessage(
         {
           message,
@@ -2456,10 +2459,36 @@ export default function ChatPage() {
     }
 
     if (response.assistantActions?.length) {
-      const result = await applyAssistantActions(response.assistantActions, { persist: true });
+      const requestId = options.sourceMessageId ?? response.reply.id;
+      const result = await applyAssistantActions(response.assistantActions, {
+        persist: true,
+        requestId,
+      });
       const messageId = options.sourceMessageId ?? response.reply.id;
       if (messageId && result.appliedCount > 0) {
         clearProposedChangesForMessage(messageId);
+      }
+      if (result.summary.failed.length || result.summary.skipped.length) {
+        const succeeded = result.summary.succeeded.length;
+        const failedReasons = result.summary.failed
+          .map((entry) => `第 ${entry.actionIndex + 1} 個動作未執行：${entry.reason || "無法套用"}`)
+          .join("；");
+        const skippedReasons = result.summary.skipped
+          .map((entry) => `第 ${entry.actionIndex + 1} 個動作略過：${entry.reason || "已略過"}`)
+          .join("；");
+        appendMessage({
+          id: `assistant_action_summary_${Date.now()}`,
+          role: "assistant",
+          content: [`已執行 ${succeeded} 個行程動作。`, failedReasons, skippedReasons].filter(Boolean).join(" "),
+          timestamp: new Date().toLocaleTimeString("zh-TW", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          responseType: "text_message",
+          metadata: {
+            actionExecutionSummary: result.summary,
+          },
+        });
       }
       return;
     }

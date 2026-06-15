@@ -1,6 +1,10 @@
 import { isPersonalMemoryRecallIntent } from "@/lib/chat/workflowRailVisibility";
+import {
+  extractUserIdentityLabel,
+  formatUserIdentityMemory,
+} from "@/lib/chat/userIdentity";
 import type { AIContextBuildResult } from "@/server/ai/aiContextBuilder";
-import type { TripProfile } from "@/types";
+import type { ChatContext, TripProfile } from "@/types";
 
 export { isPersonalMemoryRecallIntent };
 
@@ -17,6 +21,7 @@ export type PersonalMemoryTripRecord = {
 
 export type PersonalMemoryBundle = {
   destinations: string[];
+  identityFacts?: string[];
   snippets: string[];
   recentTrips: PersonalMemoryTripRecord[];
   hasData: boolean;
@@ -104,15 +109,73 @@ function collectMem0Snippets(input: {
   ]);
 }
 
+function collectIdentityFacts(input: {
+  mem0Memories?: string[];
+  memoryContext?: string;
+  aiContext?: AIContextBuildResult | null;
+}): string[] {
+  const structured = input.aiContext?.structuredContext;
+  return dedupeStrings([
+    ...(input.mem0Memories || [])
+      .filter(isUserFacingMemorySnippet)
+      .filter((memory) => /使用者稱呼/u.test(memory)),
+    ...parseNumberedMemoryLines(input.memoryContext)
+      .filter(isUserFacingMemorySnippet)
+      .filter((memory) => /使用者稱呼/u.test(memory)),
+    ...(structured?.memorySnippets || [])
+      .filter((snippet) => snippet.source === "mem0")
+      .map((snippet) => snippet.content)
+      .filter(isUserFacingMemorySnippet)
+      .filter((memory) => /使用者稱呼/u.test(memory)),
+    ...(structured?.globalChatMemory || [])
+      .filter((message) => message.role === "user")
+      .map((message) => extractUserIdentityLabel(message.content))
+      .filter((label): label is string => Boolean(label))
+      .map(formatUserIdentityMemory),
+  ]);
+}
+
+function isUsefulItineraryTitle(title: string): boolean {
+  const trimmed = title.trim();
+  if (!trimmed) {
+    return false;
+  }
+  return !/^(早餐|午餐|晚餐|機場接送)$/u.test(trimmed);
+}
+
+function buildTripRecordFromChatContext(context?: ChatContext): PersonalMemoryTripRecord | null {
+  const destination = context?.destination?.trim();
+  const itinerary = context?.itinerary || [];
+  const representativeItems = dedupeStrings(
+    itinerary
+      .flatMap((day) => day.items.map((item) => item.title))
+      .filter(isUsefulItineraryTitle),
+  ).slice(0, 6);
+
+  if (!destination && !representativeItems.length) {
+    return null;
+  }
+
+  return {
+    title: destination ? `${destination} 行程` : "目前行程",
+    destination,
+    daysCount: context?.days || itinerary.length || undefined,
+    representativeItems,
+  };
+}
+
 export function buildPersonalMemoryBundle(input: {
   aiContext?: AIContextBuildResult | null;
   memoryContext?: string;
   mem0Memories?: string[];
   tripProfile?: TripProfile | null;
+  chatContext?: ChatContext;
 }): PersonalMemoryBundle {
   const structured = input.aiContext?.structuredContext;
   const currentTrip = structured?.currentTrip;
+  const chatContextTrip = buildTripRecordFromChatContext(input.chatContext);
   const destinations = dedupeStrings([
+    chatContextTrip?.destination || "",
     currentTrip?.destination || "",
     ...(structured?.recentTrips.map((trip) => trip.destination || "").filter(Boolean) || []),
     ...(structured?.preferences.destinationPreferences || []),
@@ -120,6 +183,7 @@ export function buildPersonalMemoryBundle(input: {
   ]);
 
   const snippets = collectMem0Snippets(input);
+  const identityFacts = collectIdentityFacts(input);
 
   const recentTrips: PersonalMemoryTripRecord[] = dedupeStrings([
     ...(currentTrip?.destination
@@ -134,6 +198,7 @@ export function buildPersonalMemoryBundle(input: {
           }),
         ]
       : []),
+    ...(chatContextTrip ? [JSON.stringify(chatContextTrip)] : []),
     ...((structured?.recentTrips || []).map((trip) =>
       JSON.stringify({
         title: trip.title,
@@ -150,10 +215,14 @@ export function buildPersonalMemoryBundle(input: {
 
   return {
     destinations,
+    identityFacts,
     snippets,
     recentTrips,
     hasData:
-      destinations.length > 0 || tripsWithDestination.length > 0 || snippets.length > 0,
+      destinations.length > 0 ||
+      identityFacts.length > 0 ||
+      tripsWithDestination.length > 0 ||
+      snippets.length > 0,
   };
 }
 
@@ -162,6 +231,10 @@ export function formatPersonalMemoryBundleForPrompt(bundle: PersonalMemoryBundle
 
   if (bundle.destinations.length) {
     sections.push(`已知去過或常去的目的地：${bundle.destinations.join("、")}`);
+  }
+
+  if (bundle.identityFacts?.length) {
+    sections.push(`使用者身份資訊：${bundle.identityFacts.join("；")}`);
   }
 
   const tripsWithDestination = bundle.recentTrips.filter((trip) => trip.destination?.trim());
@@ -219,6 +292,13 @@ export function formatPersonalMemoryDeterministicReply(bundle: PersonalMemoryBun
     lines.push(`- 目的地：${bundle.destinations.join("、")}`);
   }
 
+  if (bundle.identityFacts?.length) {
+    lines.push("- 個人資訊：");
+    for (const fact of bundle.identityFacts.slice(0, 3)) {
+      lines.push(`  - ${truncateSnippet(fact)}`);
+    }
+  }
+
   const tripsWithDestination = selectRelevantTrips(bundle, query);
   if (tripsWithDestination.length) {
     lines.push("- 近期行程：");
@@ -234,9 +314,10 @@ export function formatPersonalMemoryDeterministicReply(bundle: PersonalMemoryBun
     }
   }
 
-  if (bundle.snippets.length) {
+  const nonIdentitySnippets = bundle.snippets.filter((snippet) => !/使用者稱呼/u.test(snippet));
+  if (nonIdentitySnippets.length) {
     lines.push("- 其他偏好：");
-    for (const snippet of bundle.snippets.slice(0, 3)) {
+    for (const snippet of nonIdentitySnippets.slice(0, 3)) {
       lines.push(`  - ${truncateSnippet(snippet)}`);
     }
   }

@@ -85,7 +85,14 @@ export async function retrieveRelevantMemoriesForUser(input: {
     : query;
 
   if (serverConfig.mem0Enabled) {
-    const vectorHits = await searchMemories({ userId: input.userId, query: recallQuery, topK });
+    let vectorHits: Awaited<ReturnType<typeof searchMemories>> = [];
+    try {
+      vectorHits = await searchMemories({ userId: input.userId, query: recallQuery, topK });
+    } catch (error) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[memoryRetrieval] Mem0 search skipped", error);
+      }
+    }
     const vectorMemories: Mem0MemoryRecord[] = vectorHits.map((h) => ({
       id: h.id,
       memory: h.memory,
@@ -100,7 +107,7 @@ export async function retrieveRelevantMemoriesForUser(input: {
     }
 
     if (vectorMemories.length && input.broadRecall) {
-      const all = await listMemories(input.userId);
+      const all = await safeListMemories(input.userId);
       const ranked = rankMemoriesByKeywords(all, recallQuery, topK);
       const merged = mergeMemoryRecords(vectorMemories, ranked.length ? ranked : all, topK);
       if (merged.length) {
@@ -109,11 +116,22 @@ export async function retrieveRelevantMemoriesForUser(input: {
     }
   }
 
-  const all = await listMemories(input.userId);
+  const all = await safeListMemories(input.userId);
   const ranked = rankMemoriesByKeywords(all, recallQuery, topK);
   const memories = ranked.length ? ranked : all.slice(0, topK);
   return {
     memories,
     mode: memories.length ? "keyword-local" : "empty",
   };
+}
+
+async function safeListMemories(userId: string): Promise<Mem0MemoryRecord[]> {
+  try {
+    return await listMemories(userId);
+  } catch (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[memoryRetrieval] Mem0 list skipped", error);
+    }
+    return [];
+  }
 }

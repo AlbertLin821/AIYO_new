@@ -100,6 +100,7 @@ test("isPersonalMemoryRecallIntent matches personal history questions", () => {
   assert.equal(isPersonalMemoryRecallIntent("我之前去過哪些地方啊"), true);
   assert.equal(isPersonalMemoryRecallIntent("你還記得我的偏好嗎"), true);
   assert.equal(isPersonalMemoryRecallIntent("我的旅行紀錄有哪些"), true);
+  assert.equal(isPersonalMemoryRecallIntent("我是誰"), true);
 });
 
 test("isPersonalMemoryRecallIntent excludes active planning requests", () => {
@@ -180,6 +181,36 @@ test("formatPersonalMemoryDeterministicReply includes representative itinerary p
   assert.match(reply, /黑亭/);
 });
 
+test("buildPersonalMemoryBundle uses active chat itinerary when persisted memories are empty", () => {
+  const bundle = buildPersonalMemoryBundle({
+    aiContext: makeEmptyAiContext(),
+    chatContext: {
+      destination: "熊本",
+      days: 2,
+      itinerary: [
+        {
+          dayNumber: 1,
+          items: [
+            { id: "item_1", time: "09:00", title: "熊本城", type: "attraction" },
+            { id: "item_2", time: "12:00", title: "午餐", type: "restaurant" },
+            { id: "item_3", time: "15:00", title: "水前寺成趣園", type: "attraction" },
+          ],
+        },
+      ],
+    },
+  });
+
+  assert.equal(bundle.hasData, true);
+  assert.deepEqual(bundle.destinations, ["熊本"]);
+  assert.deepEqual(bundle.recentTrips[0]?.representativeItems, ["熊本城", "水前寺成趣園"]);
+
+  const reply = formatPersonalMemoryDeterministicReply(bundle, "我之前去過哪些地方");
+  assert.match(reply, /熊本/);
+  assert.match(reply, /熊本城/);
+  assert.match(reply, /水前寺成趣園/);
+  assert.doesNotMatch(reply, /午餐/);
+});
+
 test("isUserFacingMemorySnippet rejects internal prompt and chat leak patterns", () => {
   assert.equal(isUserFacingMemorySnippet("[近期全域聊天摘要]"), false);
   assert.equal(isUserFacingMemorySnippet("assistant: 好的"), false);
@@ -220,6 +251,24 @@ test("buildPersonalMemoryBundle ignores non-mem0 structured snippets", () => {
   });
 
   assert.equal(bundle.hasData, false);
+});
+
+test("buildPersonalMemoryBundle can recall identity from stable memories or chat history", () => {
+  const aiContext = makeEmptyAiContext();
+  aiContext.structuredContext.globalChatMemory = [
+    { role: "user", content: "我是user4", createdAt: "2026-01-01T00:00:00.000Z" },
+  ];
+
+  const bundle = buildPersonalMemoryBundle({
+    aiContext,
+    mem0Memories: ["使用者稱呼：user4"],
+  });
+
+  assert.equal(bundle.hasData, true);
+  assert.deepEqual(bundle.identityFacts, ["使用者稱呼：user4"]);
+
+  const reply = formatPersonalMemoryDeterministicReply(bundle, "我是誰");
+  assert.match(reply, /user4/);
 });
 
 test("buildPersonalMemoryBundle accepts mem0 memories without leaking section headers", () => {

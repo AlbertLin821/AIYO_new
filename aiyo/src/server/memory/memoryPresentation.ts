@@ -3,6 +3,10 @@ import { getItineraryItemTitleViolation } from "@/lib/itineraryPlaceTitle";
 import type { Mem0MemoryRecord } from "@/server/memory/mem0Client";
 import { listMemories } from "@/server/memory/mem0Client";
 import { isUserFacingMemorySnippet } from "@/server/memory/personalMemoryRecall";
+import {
+  extractUserIdentityLabel,
+  formatUserIdentityMemory,
+} from "@/lib/chat/userIdentity";
 import type { AIContextBuildResult } from "@/server/ai/aiContextBuilder";
 import type { ChatResponsePayload, MemoryRecord, TripProfile, TripPlanResult } from "@/types";
 
@@ -125,27 +129,33 @@ function normalizeMem0DisplayRecord(record: Mem0MemoryRecord): MemoryRecord | nu
 }
 
 export async function listDisplayMemoriesForUser(userId: string): Promise<MemoryRecord[]> {
-  const [trips, mem0Records] = await Promise.all([
-    prisma.trip.findMany({
-      where: { userId },
-      orderBy: { updatedAt: "desc" },
-      take: 6,
-      select: {
-        id: true,
-        title: true,
-        destination: true,
-        days: true,
-        createdAt: true,
-        updatedAt: true,
-        items: {
-          orderBy: [{ day: "asc" }, { order: "asc" }],
-          take: 16,
-          select: { title: true },
-        },
+  const trips = await prisma.trip.findMany({
+    where: { userId },
+    orderBy: { updatedAt: "desc" },
+    take: 6,
+    select: {
+      id: true,
+      title: true,
+      destination: true,
+      days: true,
+      createdAt: true,
+      updatedAt: true,
+      items: {
+        orderBy: [{ day: "asc" }, { order: "asc" }],
+        take: 16,
+        select: { title: true },
       },
-    }),
-    listMemories(userId),
-  ]);
+    },
+  });
+
+  let mem0Records: Mem0MemoryRecord[] = [];
+  try {
+    mem0Records = await listMemories(userId);
+  } catch (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[memoryPresentation] Mem0 display memories skipped", error);
+    }
+  }
 
   const tripRecords = trips
     .filter((trip) => trip.destination?.trim() || trip.items.length > 0)
@@ -201,6 +211,11 @@ export function buildStableMemoryMessages(input: {
   response: ChatResponsePayload;
 }): Array<{ role: "assistant"; content: string }> {
   const stableLines: string[] = [];
+  const identityLabel = extractUserIdentityLabel(input.userMessage);
+  if (identityLabel) {
+    stableLines.push(formatUserIdentityMemory(identityLabel));
+  }
+
   const destination =
     input.tripProfile?.destination?.trim() ||
     input.aiContext?.structuredContext.currentTrip?.destination?.trim();

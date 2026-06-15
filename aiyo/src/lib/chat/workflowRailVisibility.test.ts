@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  isDestructiveItineraryCommand,
   isApplyPreviousItineraryCommand,
+  isConversationOnlyMessage,
   isFullItineraryRevisionCommand,
   isPersonalMemoryRecallIntent,
   shouldAttachDecisionPreferenceConfirmation,
@@ -16,6 +18,22 @@ test("shouldShowPlanningWorkflowRail hides rail for personal memory recall quest
     false,
   );
   assert.equal(isPersonalMemoryRecallIntent("我之前去過哪些地方"), true);
+});
+
+test("conversation-only self-introduction hides planning rail even during a question-card flow", () => {
+  assert.equal(isConversationOnlyMessage("我是user4"), true);
+  assert.equal(
+    shouldShowPlanningWorkflowRail({
+      message: "我是user4",
+      inQuestionCardFlow: true,
+    }),
+    false,
+  );
+});
+
+test("identity recall questions are memory recall, not planning workflow", () => {
+  assert.equal(isPersonalMemoryRecallIntent("我是誰"), true);
+  assert.equal(shouldShowPlanningWorkflowRail({ message: "我是誰" }), false);
 });
 
 test("shouldShowPlanningWorkflowRail shows rail for new trip planning requests", () => {
@@ -33,6 +51,12 @@ test("shouldShowPlanningWorkflowRail shows rail for full itinerary revision", ()
 test("simple planning request is not treated as full itinerary revision", () => {
   assert.equal(isFullItineraryRevisionCommand("幫我規劃一下行程"), false);
   assert.equal(isFullItineraryRevisionCommand("幫我完整規劃整份行程"), true);
+});
+
+test("destructive day clear is detected separately from full trip revision", () => {
+  assert.equal(isDestructiveItineraryCommand("第二天全部清空。"), true);
+  assert.equal(isFullItineraryRevisionCommand("第二天全部清空。"), false);
+  assert.equal(shouldShowPlanningWorkflowRail({ message: "第二天全部清空。" }), false);
 });
 
 test("apply previous itinerary command accepts text-description wording", () => {

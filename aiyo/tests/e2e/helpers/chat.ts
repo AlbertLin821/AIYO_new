@@ -61,7 +61,7 @@ export class ChatNetworkMonitor {
 
     page.on("response", async (response: Response) => {
       const url = response.url();
-      if (!url.includes("/api/ai/chat") || response.request().method() !== "POST") {
+      if (!isChatApiUrl(url) || response.request().method() !== "POST") {
         return;
       }
       try {
@@ -150,11 +150,21 @@ function postDataMatchesMessage(postData: string | null, message: string): boole
     return false;
   }
   try {
-    const body = JSON.parse(postData) as { message?: string };
-    return body.message?.trim() === message.trim();
+    const body = JSON.parse(postData) as {
+      displayMessage?: string;
+      instruction?: string;
+      message?: string;
+    };
+    return [body.message, body.instruction, body.displayMessage].some(
+      (candidate) => candidate?.trim() === message.trim(),
+    );
   } catch {
     return postData.includes(message);
   }
+}
+
+function isChatApiUrl(url: string): boolean {
+  return /\/api\/(?:ai\/chat|chat\/message|trip\/revise)(?:[?#]|$)/.test(url);
 }
 
 export type SendChatMessageOptions = {
@@ -239,7 +249,7 @@ async function withStructuredTravelPlanningRoute<T>(
     return run();
   }
   const handler = async (route: import("@playwright/test").Route) => {
-    if (route.request().method() !== "POST" || !route.request().url().includes("/api/ai/chat")) {
+    if (route.request().method() !== "POST" || !isChatApiUrl(route.request().url())) {
       await route.fallback();
       return;
     }
@@ -247,11 +257,15 @@ async function withStructuredTravelPlanningRoute<T>(
     postData.structuredTravelPlanning = true;
     await route.fallback({ postData: JSON.stringify(postData) });
   };
-  await page.route("**/api/ai/chat", handler);
+  await page.route("**/api/ai/chat**", handler);
+  await page.route("**/api/chat/message**", handler);
+  await page.route("**/api/trip/revise**", handler);
   try {
     return await run();
   } finally {
-    await page.unroute("**/api/ai/chat", handler);
+    await page.unroute("**/api/ai/chat**", handler);
+    await page.unroute("**/api/chat/message**", handler);
+    await page.unroute("**/api/trip/revise**", handler);
   }
 }
 
@@ -308,18 +322,29 @@ async function sendChatMessageOnce(
 
   const chatResponse = page.waitForResponse(
     (res) =>
-      res.url().includes("/api/ai/chat") &&
+      isChatApiUrl(res.url()) &&
       res.request().method() === "POST" &&
       postDataMatchesMessage(res.request().postData(), message),
     { timeout: chatTimeoutMs },
   );
+  const chatRequest = page
+    .waitForRequest(
+      (request) =>
+        isChatApiUrl(request.url()) &&
+        request.method() === "POST" &&
+        postDataMatchesMessage(request.postData(), message),
+      { timeout: 2_000 },
+    )
+    .catch(() => undefined);
   let chatCompleted = false;
   const tripPutResponse = createTripPutWaiter(page, options, () => chatCompleted);
 
   await chatInput.focus();
-  await chatInput.press("Enter").catch(async () => {
+  await chatInput.press("Enter").catch(() => undefined);
+  const requestStarted = await chatRequest;
+  if (!requestStarted) {
     await page.getByTestId("chat-send-button").click();
-  });
+  }
   const chatRes = await chatResponse;
   chatCompleted = true;
 

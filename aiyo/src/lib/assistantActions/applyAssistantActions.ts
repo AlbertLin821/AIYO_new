@@ -13,6 +13,25 @@ import { useTripStore } from "@/stores/useTripStore";
 import type { AssistantAction, AssistantActionItemInput, LocationReference, TripPlanItem } from "@/types";
 import type { PendingGeocodeTarget } from "@/types/geocode";
 
+type ActionSummaryEntry = {
+  actionIndex: number;
+  actionType: AssistantAction["type"];
+  reason?: string;
+};
+
+export type AssistantActionExecutionSummary = {
+  succeeded: ActionSummaryEntry[];
+  skipped: ActionSummaryEntry[];
+  failed: ActionSummaryEntry[];
+};
+
+export type ApplyAssistantActionsResult = {
+  appliedCount: number;
+  skippedCount: number;
+  alreadyAppliedCount: number;
+  summary: AssistantActionExecutionSummary;
+};
+
 function sourceToTripItemSource(source: AssistantActionItemInput["source"]): TripPlanItem["source"] {
   if (source === "video") return "video";
   if (source === "manual") return "manual";
@@ -41,9 +60,29 @@ function locationFromInput(input: AssistantActionItemInput | Partial<AssistantAc
   return hasUsableMapCoordinate(location) ? location : undefined;
 }
 
-function itemFromInput(input: AssistantActionItemInput, dayNumber: number): TripPlanItem {
+function stableHash(input: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function stableActionKey(action: AssistantAction, actionIndex: number, requestId?: string): string {
+  return stableHash(
+    JSON.stringify({
+      requestId: requestId || "no-request",
+      actionIndex,
+      type: action.type,
+      payload: action.payload,
+    }),
+  );
+}
+
+function itemFromInput(input: AssistantActionItemInput, dayNumber: number, id?: string): TripPlanItem {
   return {
-    id: `assistant_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    id: id || `assistant_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     dayNumber,
     time: input.startTime || "18:30",
     title: input.title,
@@ -64,20 +103,22 @@ function reconcileMapWithTrip() {
 
 export async function applyAssistantActions(
   actions: AssistantAction[],
-  options: { persist?: boolean; geocode?: boolean } = {},
-): Promise<{ appliedCount: number; skippedCount: number }> {
+  options: { persist?: boolean; geocode?: boolean; requestId?: string } = {},
+): Promise<ApplyAssistantActionsResult> {
   let appliedCount = 0;
   let skippedCount = 0;
+  let alreadyAppliedCount = 0;
   let tripMutated = false;
   const geocodeTargets: PendingGeocodeTarget[] = [];
   const geocodeSeen = new Set<string>();
   const tripState = useTripStore.getState();
+  const summary: AssistantActionExecutionSummary = { succeeded: [], skipped: [], failed: [] };
   const geocodeContext = {
     tripId: tripState.tripId,
     destinationHint: tripState.destination,
   };
 
-  for (const action of actions) {
+  for (const [actionIndex, action] of actions.entries()) {
     if (action.type === "map.focus_location") {
       useMapStore.getState().setFocusLocation(action.payload);
       const matchingPin = useMapStore
@@ -87,6 +128,7 @@ export async function applyAssistantActions(
         useMapStore.getState().setSelectedPinId(matchingPin.id);
       }
       appliedCount += 1;
+      summary.succeeded.push({ actionIndex, actionType: action.type });
       continue;
     }
 
@@ -103,6 +145,7 @@ export async function applyAssistantActions(
       }
       tripMutated = true;
       appliedCount += 1;
+      summary.succeeded.push({ actionIndex, actionType: action.type });
       continue;
     }
 
@@ -112,18 +155,34 @@ export async function applyAssistantActions(
       : null;
     if (action.type === "itinerary.add_item" && dayNumber && !day) {
       const tripStore = useTripStore.getState();
-      if (dayNumber > tripStore.itinerary.length) {
+      if (dayNumber > tripStore.itinerary.length && dayNumber <= tripStore.itinerary.length + 1) {
         tripStore.resizeItineraryToDayCount(dayNumber);
         day = useTripStore.getState().itinerary.find((candidate) => candidate.dayNumber === dayNumber) ?? null;
       }
     }
     if (!dayNumber || !day) {
       skippedCount += 1;
+      summary.failed.push({
+        actionIndex,
+        actionType: action.type,
+        reason: "dayId does not exist in current trip",
+      });
       continue;
     }
 
     if (action.type === "itinerary.add_item") {
-      const newItem = itemFromInput(action.payload.item, dayNumber);
+      const actionKey = stableActionKey(action, actionIndex, options.requestId);
+      const itemId = `assistant_${actionKey}`;
+      if (day.items.some((item) => item.id === itemId)) {
+        alreadyAppliedCount += 1;
+        summary.skipped.push({
+          actionIndex,
+          actionType: action.type,
+          reason: "already applied",
+        });
+        continue;
+      }
+      const newItem = itemFromInput(action.payload.item, dayNumber, itemId);
       useTripStore.getState().addItineraryItem(dayNumber, newItem);
       tripMutated = true;
       maybeEnqueueItemGeocodeTarget(geocodeTargets, geocodeSeen, {
@@ -134,6 +193,7 @@ export async function applyAssistantActions(
         reason: "assistant_action_add",
       });
       appliedCount += 1;
+      summary.succeeded.push({ actionIndex, actionType: action.type });
       continue;
     }
 
@@ -144,6 +204,7 @@ export async function applyAssistantActions(
       );
       tripMutated = true;
       appliedCount += 1;
+      summary.succeeded.push({ actionIndex, actionType: action.type });
       continue;
     }
 
@@ -156,6 +217,7 @@ export async function applyAssistantActions(
       );
       tripMutated = true;
       appliedCount += 1;
+      summary.succeeded.push({ actionIndex, actionType: action.type });
       continue;
     }
 
@@ -165,13 +227,16 @@ export async function applyAssistantActions(
           candidate.dayNumber === dayNumber
             ? {
                 ...candidate,
-                items: action.payload.items.map((item) => itemFromInput(item, dayNumber)),
+                items: action.payload.items.map((item, index) =>
+                  itemFromInput(item, dayNumber, `assistant_${stableActionKey(action, index, options.requestId)}`),
+                ),
               }
             : candidate,
         ),
       );
       tripMutated = true;
       appliedCount += 1;
+      summary.succeeded.push({ actionIndex, actionType: action.type });
       continue;
     }
 
@@ -199,6 +264,7 @@ export async function applyAssistantActions(
         reason: "assistant_action_update",
       });
       appliedCount += 1;
+      summary.succeeded.push({ actionIndex, actionType: action.type });
     }
   }
 
@@ -216,5 +282,5 @@ export async function applyAssistantActions(
     }
   }
 
-  return { appliedCount, skippedCount };
+  return { appliedCount, skippedCount, alreadyAppliedCount, summary };
 }

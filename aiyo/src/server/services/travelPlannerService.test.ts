@@ -831,6 +831,31 @@ test("question card skips traveler_count when party size is already known", () =
   assert.ok(card?.questions.some((question) => question.slot === "dietary_restrictions"));
 });
 
+test("structured planning flag does not turn self-introduction into a schedule", async () => {
+  const response = await chatWithTravelAssistant({
+    message: "我是user4",
+    structuredTravelPlanning: true,
+    tripProfile: {
+      ...makeStructuredProfile(),
+      travel_dates: { start: "2026-06-24", end: "2026-06-28" },
+      dietary_restrictions: ["無特殊飲食限制"],
+    },
+    context: {
+      destination: "熊本",
+      days: 5,
+      budget: 50_000,
+      itinerary: [],
+      preferences: { interests: ["food"], pace: "moderate" },
+    },
+  });
+
+  assert.equal(response.travelAgentDecision?.mode, "casual_chat");
+  assert.equal(response.reply.responseType, "text_message");
+  assert.equal(response.itinerarySuggestion, undefined);
+  assert.equal(response.reply.questionCard, undefined);
+  assert.match(response.reply.content, /user4/);
+});
+
 test("Chiayi 3d2n four travelers then accept preferences skips traveler_count question", async () => {
   const opening = "我想要去嘉義三天兩夜總共四個人去玩幫我規劃一下行程";
   const first = await chatWithTravelAssistant({

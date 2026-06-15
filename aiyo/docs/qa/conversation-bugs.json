@@ -1,0 +1,114 @@
+[
+  {
+    "id": "AIYO-CONV-HIGH-001",
+    "severity": "High",
+    "category": "intent-routing",
+    "title": "Destructive whole-day command can route through trip revision instead of confirmation",
+    "status": "fixed",
+    "evidence": "During baseline debugging, message '第二天全部清空。' rendered a production question card asking for Tokyo travel dates before the deterministic harness was extended to /api/trip/revise.",
+    "expected": "Ask for explicit destructive confirmation and emit no mutation action until confirmed.",
+    "files": [
+      "src/app/chat/page.tsx",
+      "src/services/aiClient.ts"
+    ]
+  },
+  {
+    "id": "AIYO-CONV-HIGH-002",
+    "severity": "High",
+    "category": "persistence",
+    "title": "Trip replacement write is not atomic",
+    "status": "fixed",
+    "evidence": "saveTripPayload deletes TripDay, TripItem, and MapPin rows before recreating them, without wrapping the full replacement in prisma.$transaction.",
+    "expected": "A DB failure during trip save should roll back all day/item/pin mutations.",
+    "files": [
+      "src/server/data/appStateService.ts"
+    ]
+  },
+  {
+    "id": "AIYO-CONV-HIGH-003",
+    "severity": "High",
+    "category": "reliability",
+    "title": "AssistantAction add_item is not replay safe",
+    "status": "fixed",
+    "evidence": "itemFromInput generates ids with Date.now() and Math.random(), so the same assistant action can create duplicates on retry/resend.",
+    "expected": "Assistant actions should carry stable ids or action ids and executor should be idempotent.",
+    "files": [
+      "src/lib/assistantActions/applyAssistantActions.ts"
+    ]
+  },
+  {
+    "id": "AIYO-CONV-MED-004",
+    "severity": "Medium",
+    "category": "error-handling",
+    "title": "Partial AssistantAction skips are not clearly reported to the user",
+    "status": "fixed",
+    "evidence": "applyAssistantActions returns skippedCount, but the chat apply flow does not present a partial-failure summary for AssistantActions.",
+    "expected": "Partial application should not look like full success.",
+    "files": [
+      "src/app/chat/page.tsx",
+      "src/lib/assistantActions/applyAssistantActions.ts"
+    ]
+  },
+  {
+    "id": "AIYO-CONV-MED-005",
+    "severity": "Medium",
+    "category": "capability",
+    "title": "Day-level itinerary operations are not represented as first-class actions",
+    "status": "open",
+    "evidence": "Current known action types cover item add/update/remove/reorder/replace_day and trip metadata, but not insert/delete/swap/move day.",
+    "expected": "Support explicit day operations with confirmation and access validation.",
+    "files": [
+      "src/server/ai/assistantActionValidator.ts",
+      "src/lib/assistantActions/applyAssistantActions.ts"
+    ]
+  },
+  {
+    "id": "AIYO-CONV-MED-006",
+    "severity": "Medium",
+    "category": "dialog-state",
+    "title": "Pronoun and ordinal item references lack a deterministic resolver",
+    "status": "open",
+    "evidence": "Requested cases such as '它', '剛剛加入的', and '第二個' rely on model interpretation and current context; no dedicated resolver was found in baseline coverage.",
+    "expected": "Resolve references deterministically or ask clarification when ambiguous.",
+    "files": [
+      "src/app/chat/page.tsx",
+      "src/server/ai/travelAgentOrchestrator.ts"
+    ]
+  },
+  {
+    "id": "AIYO-CONV-MED-007",
+    "severity": "Medium",
+    "category": "api-status",
+    "title": "Forbidden current-trip writes can surface as generic 500 responses",
+    "status": "fixed",
+    "evidence": "The API baseline verifies User B cannot write User A's trip through /api/trips/current, but the route catches non-unauthorized errors as internal_error.",
+    "expected": "Return a 403 permission response for forbidden writes without changing data.",
+    "files": [
+      "src/app/api/trips/current/route.ts"
+    ]
+  },
+  {
+    "id": "AIYO-CONV-MED-008",
+    "severity": "Medium",
+    "category": "coverage",
+    "title": "Live AI quality metrics are not established",
+    "status": "open",
+    "evidence": "First baseline uses deterministic mocks and does not run the core cases three times against a live model.",
+    "expected": "Record model name, success rate, action correctness, hallucination rate, memory correctness, state consistency, and flaky rate.",
+    "files": [
+      "tests/e2e/conversation"
+    ]
+  },
+  {
+    "id": "AIYO-CONV-LOW-009",
+    "severity": "Low",
+    "category": "test-infra",
+    "title": "Empty-trip itinerary page requires onboarding dismissal before assertions",
+    "status": "mitigated-in-test",
+    "evidence": "User B isolation test initially timed out waiting for editor/landing-card because a no-trip user sees an empty library and onboarding modal.",
+    "expected": "Tests should dismiss onboarding and assert the empty library state directly.",
+    "files": [
+      "tests/e2e/conversation/conversation-baseline.spec.ts"
+    ]
+  }
+]

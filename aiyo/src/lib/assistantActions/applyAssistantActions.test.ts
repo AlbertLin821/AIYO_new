@@ -189,3 +189,134 @@ test("updates item time and transport fields", async () => {
   assert.equal(item?.time, "10:30");
   assert.equal(item?.transport, "計程車");
 });
+
+test("replaying same add_item action for same message is idempotent", async () => {
+  const action = {
+    type: "itinerary.add_item" as const,
+    payload: {
+      dayId: "day-1",
+      item: { title: "晴空塔", location: "Tokyo Skytree", source: "assistant" as const },
+    },
+  };
+
+  const first = await applyAssistantActions([action], {
+    persist: false,
+    geocode: false,
+    requestId: "message-1",
+  });
+  const second = await applyAssistantActions([action], {
+    persist: false,
+    geocode: false,
+    requestId: "message-1",
+  });
+
+  const skytreeItems = useTripStore
+    .getState()
+    .itinerary[0]?.items.filter((item) => item.title === "晴空塔") || [];
+  assert.equal(first.appliedCount, 1);
+  assert.equal(second.appliedCount, 0);
+  assert.equal(second.alreadyAppliedCount, 1);
+  assert.equal(skytreeItems.length, 1);
+});
+
+test("concurrent same-request add_item retry does not create duplicate", async () => {
+  const action = {
+    type: "itinerary.add_item" as const,
+    payload: {
+      dayId: "day-1",
+      item: { title: "晴空塔", location: "Tokyo Skytree", source: "assistant" as const },
+    },
+  };
+
+  await Promise.all([
+    applyAssistantActions([action], { persist: false, geocode: false, requestId: "message-concurrent" }),
+    applyAssistantActions([action], { persist: false, geocode: false, requestId: "message-concurrent" }),
+  ]);
+
+  const skytreeItems = useTripStore
+    .getState()
+    .itinerary[0]?.items.filter((item) => item.title === "晴空塔") || [];
+  assert.equal(skytreeItems.length, 1);
+});
+
+test("refresh replay with same request id returns already applied", async () => {
+  const action = {
+    type: "itinerary.add_item" as const,
+    payload: {
+      dayId: "day-1",
+      item: { title: "晴空塔", location: "Tokyo Skytree", source: "assistant" as const },
+    },
+  };
+  await applyAssistantActions([action], { persist: false, geocode: false, requestId: "message-refresh" });
+
+  const replay = await applyAssistantActions([action], {
+    persist: false,
+    geocode: false,
+    requestId: "message-refresh",
+  });
+
+  assert.equal(replay.alreadyAppliedCount, 1);
+  assert.equal(
+    useTripStore.getState().itinerary[0]?.items.filter((item) => item.title === "晴空塔").length,
+    1,
+  );
+});
+
+test("same place name from different messages is not treated as duplicate", async () => {
+  const action = {
+    type: "itinerary.add_item" as const,
+    payload: {
+      dayId: "day-1",
+      item: { title: "晴空塔", location: "Tokyo Skytree", source: "assistant" as const },
+    },
+  };
+
+  await applyAssistantActions([action], { persist: false, geocode: false, requestId: "message-1" });
+  await applyAssistantActions([action], { persist: false, geocode: false, requestId: "message-2" });
+
+  const skytreeItems = useTripStore
+    .getState()
+    .itinerary[0]?.items.filter((item) => item.title === "晴空塔") || [];
+  assert.equal(skytreeItems.length, 2);
+});
+
+test("same message can add two separate same-name items by action index", async () => {
+  const result = await applyAssistantActions(
+    [
+      {
+        type: "itinerary.add_item",
+        payload: { dayId: "day-1", item: { title: "午餐", source: "assistant" } },
+      },
+      {
+        type: "itinerary.add_item",
+        payload: { dayId: "day-1", item: { title: "午餐", startTime: "18:00", source: "assistant" } },
+      },
+    ],
+    { persist: false, geocode: false, requestId: "message-3" },
+  );
+
+  const meals = useTripStore.getState().itinerary[0]?.items.filter((item) => item.title === "午餐") || [];
+  assert.equal(result.appliedCount, 2);
+  assert.equal(meals.length, 2);
+});
+
+test("partial action result reports success and validation failure reasons", async () => {
+  const result = await applyAssistantActions(
+    [
+      {
+        type: "itinerary.add_item",
+        payload: { dayId: "day-1", item: { title: "晴空塔", source: "assistant" } },
+      },
+      {
+        type: "itinerary.add_item",
+        payload: { dayId: "day-99", item: { title: "不存在的第九十九天", source: "assistant" } },
+      },
+    ],
+    { persist: false, geocode: false, requestId: "message-partial" },
+  );
+
+  assert.equal(result.appliedCount, 1);
+  assert.equal(result.skippedCount, 1);
+  assert.deepEqual(result.summary.succeeded.map((entry) => entry.actionIndex), [0]);
+  assert.deepEqual(result.summary.failed.map((entry) => entry.reason), ["dayId does not exist in current trip"]);
+});

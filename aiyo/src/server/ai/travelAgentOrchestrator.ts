@@ -6,6 +6,7 @@ import {
   hasMeaningfulReusablePreferences,
   isPreferenceOverrideMessage,
 } from "@/lib/personalization/preferenceDisplay";
+import { extractUserIdentityLabel } from "@/lib/chat/userIdentity";
 import { extractDestinationFromPlanningText } from "@/lib/tripPlanningSignals";
 import type {
   ChatContext,
@@ -194,10 +195,6 @@ function buildDecision(
   };
 }
 
-function isCasualChat(message: string): boolean {
-  return /^(你好|嗨|哈囉|哈啰|hello|hi|你可以幫我做什麼|你能做什麼|可以做什麼|謝謝|感謝)[！!。.\s]*$/iu.test(message);
-}
-
 function isPreferenceAcceptance(message: string): boolean {
   return /^(讚(?:喔|哦)?(?:可以)?|沿用|可以|好|好啊|沒問題|照之前|照舊|用之前|就這樣|同意|開始|開始規劃|ok|OK)(，|,|\s|。|！|!|$)/u.test(message) ||
     /照之前|沿用|照舊/u.test(message);
@@ -365,7 +362,15 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
     });
   }
 
-  if (isCasualChat(message)) {
+  const identityLabel = extractUserIdentityLabel(message);
+  if (identityLabel) {
+    return buildDecision("casual_chat", {
+      userFacingGuidance: `嗨，${identityLabel}，我記住了。你可以直接跟我聊天，也可以在想排旅程時告訴我目的地、天數和偏好。`,
+      debugReason: "matched user self-identification",
+    });
+  }
+
+  if (/^(你好|嗨|哈囉|哈啰|hello|hi|你可以幫我做什麼|你能做什麼|可以做什麼|謝謝|感謝)[！!。.\s]*$/iu.test(message)) {
     return buildDecision("casual_chat", {
       userFacingGuidance:
         "你好，我可以幫你把旅遊想法整理成順路、好執行的行程，也能依你的偏好調整目前行程。你可以直接告訴我想去哪裡、玩幾天，或貼一個想修改的安排。",

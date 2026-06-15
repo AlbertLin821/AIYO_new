@@ -7,6 +7,7 @@ import { addMemories, formatMemoryContext } from "@/server/memory/mem0Client";
 import { buildStableMemoryMessages } from "@/server/memory/memoryPresentation";
 import { isPersonalMemoryRecallIntent } from "@/server/memory/personalMemoryRecall";
 import { retrieveRelevantMemoriesForUser } from "@/server/memory/memoryRetrieval";
+import { guardDestructiveChatMessage } from "@/server/ai/destructiveConfirmation";
 import { requireSessionUser } from "@/server/auth";
 import { resolveSessionTrip, saveChatMessage } from "@/server/data/appStateService";
 import { chatWithTravelAssistant } from "@/server/services/travelPlannerService";
@@ -76,27 +77,41 @@ async function handleChatPost(request: Request) {
       if (userPersistContent) {
         await saveChatMessage(userId, "user", userPersistContent, persistedTripId);
         const recallIntent = isPersonalMemoryRecallIntent(userPersistContent);
-        const { memories } = await retrieveRelevantMemoriesForUser({
-          userId,
-          query: userPersistContent,
-          topK: recallIntent ? 20 : undefined,
-          broadRecall: recallIntent,
-        });
+        let memories: Awaited<ReturnType<typeof retrieveRelevantMemoriesForUser>>["memories"] = [];
+        try {
+          const retrieved = await retrieveRelevantMemoriesForUser({
+            userId,
+            query: userPersistContent,
+            topK: recallIntent ? 20 : undefined,
+            broadRecall: recallIntent,
+          });
+          memories = retrieved.memories;
+        } catch (error) {
+          if (process.env.NODE_ENV !== "production") {
+            console.warn("[api/ai/chat] memory retrieval skipped", error);
+          }
+        }
         const longTermMemory = formatMemoryContext(memories);
-        personalizedContext = await buildPersonalizedAIContext({
-          userId,
-          currentUserInput: userPersistContent,
-          chatContext: body.context,
-          tripId: persistedTripId,
-          memorySnippets: memories.map((memory) => ({
-            content: memory.memory,
-            source: "mem0",
-            relevance: memory.score,
-          })),
-        });
+        try {
+          personalizedContext = await buildPersonalizedAIContext({
+            userId,
+            currentUserInput: userPersistContent,
+            chatContext: body.context,
+            tripId: persistedTripId,
+            memorySnippets: memories.map((memory) => ({
+              content: memory.memory,
+              source: "mem0",
+              relevance: memory.score,
+            })),
+          });
+        } catch (error) {
+          if (process.env.NODE_ENV !== "production") {
+            console.warn("[api/ai/chat] personalized context skipped", error);
+          }
+        }
         memoryContext = recallIntent
           ? longTermMemory
-          : personalizedContext.promptContextText || longTermMemory;
+          : personalizedContext?.promptContextText || longTermMemory;
         if (recallIntent) {
           mem0Memories = memories
             .map((memory) => memory.memory?.trim() || "")
@@ -114,6 +129,27 @@ async function handleChatPost(request: Request) {
     }
 
     const effectiveMessage = normalizedMessage || displayMessage;
+    const destructiveGuard = guardDestructiveChatMessage({
+      userId: persistedUserId,
+      tripId: persistedTripId,
+      message: effectiveMessage,
+      context: body.context,
+    });
+    if (destructiveGuard.kind === "respond") {
+      if (persistedUserId) {
+        await saveChatMessage(
+          persistedUserId,
+          destructiveGuard.response.reply.role,
+          destructiveGuard.response.reply.content,
+          persistedTripId,
+          destructiveGuard.response.reply,
+        ).catch(() => undefined);
+      }
+      if (progressSessionId) {
+        completeChatProgress(progressSessionId);
+      }
+      return NextResponse.json(createSuccess(destructiveGuard.response));
+    }
 
     const response = await chatWithTravelAssistant({
       message: effectiveMessage,

@@ -868,7 +868,24 @@ export async function updateProfile(userId: string, input: Partial<User> & { wel
   });
 }
 
-export async function saveTripPayload(userId: string, input: PersistedTripPayload) {
+type SaveTripPayloadFailureInjection = {
+  failAfter?: "delete_existing_days" | "create_days" | "create_items";
+};
+
+function throwInjectedSaveFailure(
+  injection: SaveTripPayloadFailureInjection | undefined,
+  point: SaveTripPayloadFailureInjection["failAfter"],
+) {
+  if (injection?.failAfter === point) {
+    throw new Error(`injected failure: ${point}`);
+  }
+}
+
+export async function saveTripPayload(
+  userId: string,
+  input: PersistedTripPayload,
+  testFailureInjection?: SaveTripPayloadFailureInjection,
+) {
   if (input.tripId) {
     await requireTripAccess(userId, input.tripId, "edit");
   }
@@ -887,132 +904,137 @@ export async function saveTripPayload(userId: string, input: PersistedTripPayloa
 
   const resolvedTitle = normalizeTripStorageTitle(payload.title, payload.destination);
 
-  const trip = payload.tripId
-    ? await prisma.trip.upsert({
-        where: { id: payload.tripId },
-        update: {
-          title: resolvedTitle,
-          destination: payload.destination,
-          days: Math.max(0, payload.itinerary.length || payload.days),
-          ...(coverPatch ?? {}),
-        },
-        create: {
-          userId,
-          title: resolvedTitle,
-          destination: payload.destination,
-          days: Math.max(0, payload.itinerary.length || payload.days),
-          ...(coverPatch ?? {}),
-        },
-      })
-    : await prisma.trip.create({
-        data: {
-          userId,
-          title: resolvedTitle,
-          destination: payload.destination,
-          days: Math.max(0, payload.itinerary.length || payload.days),
-          ...(coverPatch ?? {}),
-        },
-      });
-
-  await prisma.tripDay.deleteMany({ where: { tripId: trip.id } });
-  await prisma.tripItem.deleteMany({ where: { tripId: trip.id } });
-  await prisma.mapPin.deleteMany({ where: { tripId: trip.id } });
-
   const normalizedDays = payload.itinerary;
 
-  if (normalizedDays.length > 0) {
-    await prisma.tripDay.createMany({
-      data: normalizedDays.map((day, index) => ({
-        tripId: trip.id,
-        dayNumber: day.dayNumber,
-        theme: day.theme || null,
-        summary: day.summary || null,
-        sortOrder: index,
-      })),
+  const freshTrip = await prisma.$transaction(async (tx) => {
+    const trip = payload.tripId
+      ? await tx.trip.upsert({
+          where: { id: payload.tripId },
+          update: {
+            title: resolvedTitle,
+            destination: payload.destination,
+            days: Math.max(0, payload.itinerary.length || payload.days),
+            ...(coverPatch ?? {}),
+          },
+          create: {
+            userId,
+            title: resolvedTitle,
+            destination: payload.destination,
+            days: Math.max(0, payload.itinerary.length || payload.days),
+            ...(coverPatch ?? {}),
+          },
+        })
+      : await tx.trip.create({
+          data: {
+            userId,
+            title: resolvedTitle,
+            destination: payload.destination,
+            days: Math.max(0, payload.itinerary.length || payload.days),
+            ...(coverPatch ?? {}),
+          },
+        });
+
+    await tx.tripDay.deleteMany({ where: { tripId: trip.id } });
+    await tx.tripItem.deleteMany({ where: { tripId: trip.id } });
+    await tx.mapPin.deleteMany({ where: { tripId: trip.id } });
+    throwInjectedSaveFailure(testFailureInjection, "delete_existing_days");
+
+    if (normalizedDays.length > 0) {
+      await tx.tripDay.createMany({
+        data: normalizedDays.map((day, index) => ({
+          tripId: trip.id,
+          dayNumber: day.dayNumber,
+          theme: day.theme || null,
+          summary: day.summary || null,
+          sortOrder: index,
+        })),
+      });
+    }
+    throwInjectedSaveFailure(testFailureInjection, "create_days");
+
+    const items = normalizedDays.flatMap((day) =>
+      day.items.map((item, index) => {
+        const location = hasUsableMapCoordinate(item.location) ? item.location : undefined;
+        return {
+          id: item.id,
+          tripId: trip.id,
+          day: day.dayNumber,
+          title: item.title,
+          description: item.notes || null,
+          timeSlot: item.time,
+          itemType: item.type,
+          transportMode: item.transport || null,
+          transportDurationMinutes: item.transportDurationMinutes ?? null,
+          transportDistanceMeters: item.transportDistanceMeters ?? null,
+          transportDataSource: item.transportDataSource ?? null,
+          source: item.source || "manual",
+          location: location?.name || null,
+          latitude: location?.lat ?? null,
+          longitude: location?.lng ?? null,
+          locationDesc: location?.description || null,
+          locationAddress: location?.address || null,
+          placeId: location?.placeId || null,
+          photoUrl: location?.photoUrl || null,
+          thumbnail: location?.thumbnail || null,
+          openingHours: location?.openingHours || null,
+          phoneNumber: location?.phoneNumber || null,
+          website: location?.website || null,
+          googleMapsUrl: location?.googleMapsUrl || null,
+          rating: location?.rating ?? null,
+          userRatingsTotal: location?.userRatingsTotal ?? null,
+          confidence: location?.confidence ?? null,
+          verified: location?.verified ?? null,
+          order: index,
+        };
+      }),
+    );
+
+    if (items.length > 0) {
+      await tx.tripItem.createMany({
+        data: items,
+        skipDuplicates: true,
+      });
+    }
+    throwInjectedSaveFailure(testFailureInjection, "create_items");
+
+    const validPins = payload.pins.filter((pin) => hasUsableMapCoordinate(pin));
+    if (validPins.length > 0) {
+      await tx.mapPin.createMany({
+        data: validPins.map((pin) => ({
+          id: pin.id,
+          tripId: trip.id,
+          label: pin.name,
+          lat: pin.lat,
+          lng: pin.lng,
+          description: pin.description,
+          address: pin.address || null,
+          placeId: pin.placeId || null,
+          photoUrl: pin.photoUrl || null,
+          thumbnail: pin.thumbnail || null,
+          openingHours: pin.openingHours || null,
+          phoneNumber: pin.phoneNumber || null,
+          website: pin.website || null,
+          googleMapsUrl: pin.googleMapsUrl || null,
+          rating: pin.rating ?? null,
+          userRatingsTotal: pin.userRatingsTotal ?? null,
+          color: pin.color || null,
+          source: pin.source || "manual",
+          confidence: pin.confidence ?? null,
+          verified: pin.verified ?? null,
+          linkedTripItemId: pin.linkedTripItemId || null,
+          dayNumber: pin.dayNumber || null,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    return tx.trip.findUniqueOrThrow({
+      where: { id: trip.id },
+      include: { itineraryDays: true, items: true, pins: true },
     });
-  }
-
-  const items = normalizedDays.flatMap((day) =>
-    day.items.map((item, index) => {
-      const location = hasUsableMapCoordinate(item.location) ? item.location : undefined;
-      return {
-        id: item.id,
-        tripId: trip.id,
-        day: day.dayNumber,
-        title: item.title,
-        description: item.notes || null,
-        timeSlot: item.time,
-        itemType: item.type,
-        transportMode: item.transport || null,
-        transportDurationMinutes: item.transportDurationMinutes ?? null,
-        transportDistanceMeters: item.transportDistanceMeters ?? null,
-        transportDataSource: item.transportDataSource ?? null,
-        source: item.source || "manual",
-        location: location?.name || null,
-        latitude: location?.lat ?? null,
-        longitude: location?.lng ?? null,
-        locationDesc: location?.description || null,
-        locationAddress: location?.address || null,
-        placeId: location?.placeId || null,
-        photoUrl: location?.photoUrl || null,
-        thumbnail: location?.thumbnail || null,
-        openingHours: location?.openingHours || null,
-        phoneNumber: location?.phoneNumber || null,
-        website: location?.website || null,
-        googleMapsUrl: location?.googleMapsUrl || null,
-        rating: location?.rating ?? null,
-        userRatingsTotal: location?.userRatingsTotal ?? null,
-        confidence: location?.confidence ?? null,
-        verified: location?.verified ?? null,
-        order: index,
-      };
-    }),
-  );
-
-  if (items.length > 0) {
-    await prisma.tripItem.createMany({
-      data: items,
-      skipDuplicates: true,
-    });
-  }
-
-  const validPins = payload.pins.filter((pin) => hasUsableMapCoordinate(pin));
-  if (validPins.length > 0) {
-    await prisma.mapPin.createMany({
-      data: validPins.map((pin) => ({
-        id: pin.id,
-        tripId: trip.id,
-        label: pin.name,
-        lat: pin.lat,
-        lng: pin.lng,
-        description: pin.description,
-        address: pin.address || null,
-        placeId: pin.placeId || null,
-        photoUrl: pin.photoUrl || null,
-        thumbnail: pin.thumbnail || null,
-        openingHours: pin.openingHours || null,
-        phoneNumber: pin.phoneNumber || null,
-        website: pin.website || null,
-        googleMapsUrl: pin.googleMapsUrl || null,
-        rating: pin.rating ?? null,
-        userRatingsTotal: pin.userRatingsTotal ?? null,
-        color: pin.color || null,
-        source: pin.source || "manual",
-        confidence: pin.confidence ?? null,
-        verified: pin.verified ?? null,
-        linkedTripItemId: pin.linkedTripItemId || null,
-        dayNumber: pin.dayNumber || null,
-      })),
-      skipDuplicates: true,
-    });
-  }
-
-  const freshTrip = await prisma.trip.findUniqueOrThrow({
-    where: { id: trip.id },
-    include: { itineraryDays: true, items: true, pins: true },
   });
 
-  await ensureCollaborationRoom(trip.id);
+  await ensureCollaborationRoom(freshTrip.id);
   return serializeTrip(freshTrip);
 }
 

@@ -56,6 +56,19 @@ test("你好 stays casual without search or itinerary generation", () => {
   assert.equal(decision.shouldGenerateItinerary, false);
 });
 
+test("self-identification stays casual instead of starting itinerary planning", () => {
+  const decision = decideTravelAgentMode({
+    message: "我是user4",
+    context: { destination: "東京", days: 3 },
+  });
+
+  assert.equal(decision.mode, "casual_chat");
+  assert.equal(decision.shouldSearch, false);
+  assert.equal(decision.shouldGenerateItinerary, false);
+  assert.match(decision.userFacingGuidance || "", /user4/);
+  assert.match(decision.debugReason, /self-identification/);
+});
+
 test("Tokyo three-day request asks for dates traveler count and dietary preference before generating", () => {
   const decision = decideTravelAgentMode({ message: "我想去東京玩三天" });
 

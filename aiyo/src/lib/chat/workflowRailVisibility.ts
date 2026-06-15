@@ -1,17 +1,21 @@
 import { isPreferenceOverrideMessage } from "@/lib/personalization/preferenceDisplay";
+import { isUserIdentityStatement } from "@/lib/chat/userIdentity";
 import type { ChatMessage, ConversationMode } from "@/types";
 
 const PLANNING_VERB_PATTERN =
   /(?:幫我|請|可以|能不能|想要|我要|我想|需要).{0,16}(?:規劃|安排|排|建立|創建|產生|生成|做一份|重新規劃|修改|調整)/u;
 
 const MEMORY_RECALL_PATTERN =
-  /(?:去過哪|去過哪些|去過什麼|去過甚麼|以前去|之前去|過去去|我去過|曾經去|旅行紀錄|旅遊紀錄|歷史行程|過往行程|我的記憶|記得我的|你記得|還記得|記得嗎|我的偏好|偏好是什麼|偏好有哪些|你記住|記住我)/u;
+  /(?:去過哪|去過哪些|去過什麼|去過甚麼|以前去|之前去|過去去|我去過|曾經去|旅行紀錄|旅遊紀錄|歷史行程|過往行程|我的記憶|記得我的|你記得|還記得|記得嗎|我是誰|我叫什麼|我的名字(?:是|叫)?什麼|我的偏好|偏好是什麼|偏好有哪些|你記住|記住我)/u;
 
 const ITINERARY_MUTATION_PATTERN =
   /新增|加入|加上|刪除|刪掉|移除|取消|去掉|修改|調整|改成|換成|改到|提前|延後|移到|重排|重新規劃|幫我(?:安排|規劃|新增|加入|調整|修改|刪除|刪掉|移除|取消|去掉)|請(?:安排|規劃|新增|加入|調整|修改|刪除|刪掉|移除|取消|去掉)/u;
 
 const FULL_ITINERARY_REVISION_PATTERN =
   /重新規劃|重排|整份|整個|全部|從頭|完整(?:安排|規劃)|(?:規劃|安排).{0,8}(?:新|完整|整份|全部)行程/u;
+
+const DESTRUCTIVE_ITINERARY_PATTERN =
+  /(?:第?\s*[\d一二兩两三四五六七八九十]+\s*天|day\s*\d+).{0,12}(?:全部|整天|整日)?(?:清空|刪除|刪掉|移除|取消|去掉)|(?:清空|刪除|刪掉|移除|取消|去掉).{0,12}(?:第?\s*[\d一二兩两三四五六七八九十]+\s*天|day\s*\d+)|(?:刪除|刪掉|清空).{0,12}(?:整份|整個|全部|東京|行程)|(?:整份|整個|全部).{0,12}(?:刪除|刪掉|清空|取代|替換)/iu;
 
 const LIKELY_TRIP_WORKFLOW_PATTERN =
   /(?:幫我|請|可以|能不能|想要|我要|我想|需要).{0,12}(?:規劃|安排|建立|創建|產生|生成|做一份|排|新增|加入|加上|修改|調整|重排|重新規劃)|(?:規劃|安排|建立|產生|生成|新增|加入|修改|調整|重排|重新規劃).{0,12}(?:行程|旅行|旅遊|景點|活動|餐廳|美食)|(?:想去|我要去|我想去).{0,30}(?:旅遊|旅行|自由行|[一二兩三四五六七八九十\d]+\s*天)|(?:玩|排)[一二兩三四五六七八九十\d]+\s*天|[一二兩三四五六七八九十\d]+\s*天[一二兩三四五六七八九十\d]*\s*夜(?:行程|旅行|旅遊|自由行)?/u;
@@ -39,6 +43,12 @@ function normalizeText(value: string): string {
   return value.trim().replace(/\s+/g, " ");
 }
 
+export function isCasualConversationMessage(message: string): boolean {
+  return /^(你好|嗨|哈囉|哈啰|hello|hi|你可以幫我做什麼|你能做什麼|可以做什麼|謝謝|感謝)[！!。.\s]*$/iu.test(
+    normalizeText(message),
+  );
+}
+
 export function isPersonalMemoryRecallIntent(message: string): boolean {
   const text = normalizeText(message);
   if (!text) {
@@ -50,6 +60,14 @@ export function isPersonalMemoryRecallIntent(message: string): boolean {
   return MEMORY_RECALL_PATTERN.test(text);
 }
 
+export function isConversationOnlyMessage(message: string): boolean {
+  return (
+    isUserIdentityStatement(message) ||
+    isPersonalMemoryRecallIntent(message) ||
+    isCasualConversationMessage(message)
+  );
+}
+
 export function isItineraryMutationCommand(message: string): boolean {
   if (isPreferenceOverrideMessage(message)) {
     return false;
@@ -57,8 +75,12 @@ export function isItineraryMutationCommand(message: string): boolean {
   return ITINERARY_MUTATION_PATTERN.test(message);
 }
 
+export function isDestructiveItineraryCommand(message: string): boolean {
+  return DESTRUCTIVE_ITINERARY_PATTERN.test(normalizeText(message));
+}
+
 export function isFullItineraryRevisionCommand(message: string): boolean {
-  return FULL_ITINERARY_REVISION_PATTERN.test(message);
+  return FULL_ITINERARY_REVISION_PATTERN.test(message) && !isDestructiveItineraryCommand(message);
 }
 
 export function isLikelyTripWorkflowMessage(message: string): boolean {
@@ -81,6 +103,11 @@ export function shouldShowPlanningWorkflowRail(input: {
   inQuestionCardFlow?: boolean;
   hasPreferenceConfirmation?: boolean;
 }): boolean {
+  const message = input.message?.trim() ?? "";
+  if (message && isConversationOnlyMessage(message)) {
+    return false;
+  }
+
   if (input.inQuestionCardFlow || input.hasPreferenceConfirmation) {
     return true;
   }
@@ -98,7 +125,6 @@ export function shouldShowPlanningWorkflowRail(input: {
     }
   }
 
-  const message = input.message?.trim() ?? "";
   if (message) {
     if (isPersonalMemoryRecallIntent(message)) {
       return false;

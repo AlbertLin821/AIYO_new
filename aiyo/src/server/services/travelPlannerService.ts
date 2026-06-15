@@ -459,6 +459,7 @@ function buildTravelChatTimeoutFallbackText(
     memoryContext?: string;
     mem0Memories?: string[];
     tripProfile?: TripProfile | null;
+    context?: ChatContext;
   },
 ): string {
   const normalized = digestText.trim();
@@ -471,6 +472,7 @@ function buildTravelChatTimeoutFallbackText(
       memoryContext: options.memoryContext,
       mem0Memories: options.mem0Memories,
       tripProfile: options.tripProfile,
+      chatContext: options.context,
     });
     if (bundle.hasData) {
       return formatPersonalMemoryDeterministicReply(bundle, options.message);
@@ -485,6 +487,7 @@ async function buildPersonalMemoryRecallResponse(input: {
   memoryContext?: string;
   mem0Memories?: string[];
   tripProfile?: TripProfile;
+  context?: ChatContext;
   progressSessionId?: string;
   travelAgentDecision: TravelAgentDecision;
 }): Promise<ChatResponsePayload> {
@@ -493,6 +496,7 @@ async function buildPersonalMemoryRecallResponse(input: {
     memoryContext: input.memoryContext,
     mem0Memories: input.mem0Memories,
     tripProfile: input.tripProfile,
+    chatContext: input.context,
   });
 
   if (!bundle.hasData) {
@@ -4239,6 +4243,21 @@ function contextWithoutItineraryForGeneralReply(
   return context;
 }
 
+function shouldUseStructuredPlannerForDecision(
+  decision: TravelAgentDecision,
+  hasQuestionAnswers: boolean,
+): boolean {
+  if (hasQuestionAnswers) {
+    return true;
+  }
+  return (
+    decision.mode === "collect_requirements" ||
+    decision.mode === "confirm_preferences" ||
+    decision.mode === "generate_itinerary" ||
+    decision.mode === "modify_itinerary"
+  );
+}
+
 export async function chatWithTravelAssistant(input: {
   message: string;
   messages?: ChatMessage[];
@@ -4292,8 +4311,14 @@ export async function chatWithTravelAssistant(input: {
     return { ...itineraryInquiryResponse, travelAgentDecision };
   }
 
-  const skipNaturalShortcut = Boolean(input.questionAnswers?.length) ||
-    Boolean(input.structuredTravelPlanning && input.tripProfile);
+  const hasQuestionAnswers = Boolean(input.questionAnswers?.length);
+  const shouldUseStructuredPlanner = shouldUseStructuredPlannerForDecision(
+    travelAgentDecision,
+    hasQuestionAnswers,
+  );
+  const skipNaturalShortcut =
+    hasQuestionAnswers ||
+    Boolean(input.structuredTravelPlanning && input.tripProfile && shouldUseStructuredPlanner);
 
   if (
     !skipNaturalShortcut &&
@@ -4322,6 +4347,7 @@ export async function chatWithTravelAssistant(input: {
       memoryContext: input.memoryContext,
       mem0Memories: input.mem0Memories,
       tripProfile: resolvedTripProfile,
+      context,
       progressSessionId: input.progressSessionId,
       travelAgentDecision,
     });
@@ -4367,7 +4393,7 @@ export async function chatWithTravelAssistant(input: {
     };
   }
 
-  if (input.structuredTravelPlanning) {
+  if (input.structuredTravelPlanning && shouldUseStructuredPlanner) {
     const structuredTripResponse = await handleStructuredTripWorkflow({
       message: input.message,
       context,
@@ -4531,6 +4557,7 @@ export async function chatWithTravelAssistant(input: {
       memoryContext: input.memoryContext,
       mem0Memories: input.mem0Memories,
       tripProfile: resolvedTripProfile,
+      context,
     });
     publishProgressStep(input.progressSessionId, {
       phase: "compose",
@@ -4587,7 +4614,10 @@ export async function chatWithTravelAssistant(input: {
     messages: input.messages,
     replyText,
   });
+  const shouldAttachPlanningFollowUp =
+    travelAgentDecision.shouldAskFollowUp || travelAgentDecision.shouldGenerateItinerary;
   const followUpCard =
+    shouldAttachPlanningFollowUp &&
     structured.mode !== "modify_itinerary" &&
     !contextHasItineraryItems(input.context) && !proposedChanges.length && !assistantActions.length
       ? buildQuestionCard(mergedTripProfile, input.context)

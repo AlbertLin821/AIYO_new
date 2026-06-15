@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createError, createSuccess } from "@/lib/api-response";
+import { createSuccess } from "@/lib/api-response";
+import { toApiError } from "@/server/apiErrors";
 import { requireSessionUser } from "@/server/auth";
 import { resolveSessionTrip, saveTripPayload } from "@/server/data/appStateService";
 import type { PersistedTripPayload } from "@/types";
@@ -13,10 +14,7 @@ export async function GET() {
     const trip = await resolveSessionTrip(userId);
     return NextResponse.json(createSuccess({ tripId: trip?.id ?? null }));
   } catch (error) {
-    if (error instanceof Error && error.message === "unauthorized") {
-      return NextResponse.json(createError("unauthorized", "Authentication required."), { status: 401 });
-    }
-    return NextResponse.json(createError("internal_error", "Failed to load trip."), { status: 500 });
+    return toApiError(error, "Failed to load trip.");
   }
 }
 
@@ -27,9 +25,6 @@ export async function PUT(request: Request) {
     const trip = await saveTripPayload(userId, body);
     return NextResponse.json(createSuccess(trip));
   } catch (error) {
-    if (error instanceof Error && error.message === "unauthorized") {
-      return NextResponse.json(createError("unauthorized", "Authentication required."), { status: 401 });
-    }
-    return NextResponse.json(createError("internal_error", "Failed to save trip."), { status: 500 });
+    return toApiError(error, "Failed to save trip.");
   }
 }
