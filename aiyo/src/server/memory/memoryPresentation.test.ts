@@ -92,6 +92,33 @@ test("buildStableMemoryMessages stores self-identification as a stable memory", 
   assert.deepEqual(messages, [{ role: "assistant", content: "使用者稱呼：user4" }]);
 });
 
+test("explicit remember statements preserve exact user facts without a destination", () => {
+  for (const content of [
+    "請記住：我的唯一偏好代碼是 MEM123456789",
+    "幫我記住我旅遊喜歡博物館，討厭夜店，步調要輕鬆",
+    "記得我不吃牛肉",
+  ]) {
+    const messages = buildStableMemoryMessages({ userMessage: content, response: makeResponse() });
+    assert.deepEqual(messages, [{ role: "user", content }]);
+  }
+});
+
+test("empty input, recall questions and forget requests never become explicit memory facts", () => {
+  for (const userMessage of ["", "你好", "你記得我的偏好嗎？", "請記住我喜歡什麼", "請記住這個", "請記住", "記得我嗎", "請忘記我的偏好代碼", "不要記住我的偏好", "請記住：刪除我的舊偏好"]) {
+    assert.deepEqual(buildStableMemoryMessages({ userMessage, response: makeResponse() }), [], userMessage);
+  }
+});
+
+test("explicit user memory coexists with deduplicated assistant trip summaries", () => {
+  const userMessage = "請記住：我的唯一偏好代碼是 MEM987654321";
+  const messages = buildStableMemoryMessages({ userMessage, tripProfile: { ...makeTripProfile(), preferences: ["博物館", "博物館"] }, response: makeResponse() });
+  assert.deepEqual(messages[0], { role: "user", content: userMessage });
+  assert.ok(messages.slice(1).every((message) => message.role === "assistant"));
+  assert.equal(messages.length, 3);
+  assert.match(messages[2].content, /興趣：博物館$/);
+  assert.equal(new Set(messages.map((message) => message.content)).size, messages.length);
+});
+
 test("listDisplayMemoriesForUser shows trip summaries without mem0 records", async () => {
   const originalTripFindMany = prisma.trip.findMany;
   Object.assign(prisma.trip, {

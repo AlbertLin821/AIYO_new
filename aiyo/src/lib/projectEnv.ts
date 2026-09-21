@@ -97,7 +97,9 @@ export function readProjectEnvFile(
     if (!filePath) {
       return {};
     }
-    return parseDotenvContent(fs.readFileSync(filePath, "utf8"));
+    // Project env loading is intentionally runtime-only. The selected file is
+    // deployment configuration, not an asset that belongs in the server trace.
+    return parseDotenvContent(fs.readFileSync(/* turbopackIgnore: true */ filePath, "utf8"));
   } catch {
     return {};
   }

@@ -14,7 +14,7 @@ test("map page shows the map surface without the onboarding modal", async ({ pag
 
   await expect(page.getByTestId("onboarding-modal")).toHaveCount(0);
   await expect(page.getByTestId("map-view")).toBeVisible();
-  await expect(page.locator(".gm-style, .map-mock-shell").first()).toBeVisible();
+  await expect(page.getByTestId("maplibre-map").locator("canvas")).toBeVisible();
   await expect(page.getByText("正在載入 Google 地圖")).toHaveCount(0);
 });
 

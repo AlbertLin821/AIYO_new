@@ -3,7 +3,8 @@ import { createError, createSuccess } from "@/lib/api-response";
 import { buildPersonalizedAIContext, type AIContextBuildResult } from "@/server/ai/aiContextBuilder";
 import { OllamaRequestError } from "@/server/ai/ollamaClient";
 import { completeChatProgress, ensureChatProgressSession } from "@/server/chat/chatProgressStore";
-import { addMemories, formatMemoryContext } from "@/server/memory/mem0Client";
+import { formatMemoryContext } from "@/server/memory/mem0Client";
+import { enqueueMemoryWrite } from "@/server/jobs/memoryJobs";
 import { retrieveRelevantMemoriesForUser } from "@/server/memory/memoryRetrieval";
 import { guardDestructiveChatMessage } from "@/server/ai/destructiveConfirmation";
 import { requireSessionUser } from "@/server/auth";
@@ -120,7 +121,7 @@ export async function POST(request: Request) {
       }
 
       try {
-        await addMemories({
+        await enqueueMemoryWrite({
           userId: persistedUserId,
           messages: [
             { role: "user", content: body.instruction.trim() },

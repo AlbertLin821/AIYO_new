@@ -1,3 +1,4 @@
+import { readModelStream } from "./modelStream";
 import "@/server/bootstrap/videoPipelineBootstrap";
 import { serverConfig } from "@/server/config";
 import { normalizeOllamaResponseContent } from "@/server/ai/ollamaResponseNormalizer";
@@ -8,6 +9,8 @@ export interface OllamaMessage {
 }
 
 interface OllamaChatOptions {
+  onChunk?: (chunk: string) => void;
+  onStreamStart?: () => void;
   messages: OllamaMessage[];
   format?: "json" | Record<string, unknown>;
   model?: string;
@@ -139,12 +142,13 @@ async function chatWithOllamaOnce(
   const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
 
   try {
+    input.onStreamStart?.();
     const response = await fetch(`${normalizedBaseUrl}/api/chat`, {
       method: "POST",
       headers: buildOllamaChatHeaders(useOpenWebUiAuth),
       body: JSON.stringify({
         model: resolveModelForTask(task, model),
-        stream: false,
+        stream: Boolean(input.onChunk),
         keep_alive: serverConfig.ollamaKeepAlive,
         think: shouldUseThinkingForTask(task),
         format,
@@ -174,6 +178,11 @@ async function chatWithOllamaOnce(
       );
     }
 
+    if (input.onChunk && !response.headers.get("content-type")?.includes("application/json")) {
+      const streamed = await readModelStream(response, "ollama", input.onChunk);
+      if (!streamed.trim()) throw new OllamaRequestError("Empty stream", undefined, "empty_response");
+      return normalizeOllamaResponseContent(streamed, format);
+    }
     const payload = (await response.json()) as {
       message?: { content?: string };
     };

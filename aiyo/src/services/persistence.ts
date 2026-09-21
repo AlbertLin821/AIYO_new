@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useSession } from "next-auth/react";
+import { setVideoJobOwner } from "@/services/videoJobsClient";
 import { useChatStore } from "@/stores/useChatStore";
 import { useMapStore } from "@/stores/useMapStore";
 import { EMPTY_TRIP_STATE, useTripStore } from "@/stores/useTripStore";
@@ -387,6 +388,11 @@ export function PersistenceBootstrap() {
   const { data: session, status } = useSession();
   const userKey =
     status === "loading" ? null : (session?.user?.id || session?.user?.email || "guest");
+
+  useEffect(() => {
+    setVideoJobOwner(status === "authenticated" ? session?.user?.id || null : null);
+    return () => setVideoJobOwner(null);
+  }, [status, session?.user?.id]);
 
   useEffect(() => {
     if (status === "unauthenticated") {

@@ -32,6 +32,7 @@ export default defineConfig({
   use: {
     baseURL: e2eBaseURL,
     trace: "on-first-retry",
+    screenshot: "only-on-failure",
   },
   webServer: {
     command: e2eWebServerCommand,

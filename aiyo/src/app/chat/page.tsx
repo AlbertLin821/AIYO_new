@@ -121,7 +121,7 @@ const VideoSummaryDrawer = dynamic(
   () => import("@/components/home/VideoSummaryDrawer"),
   { ssr: false },
 );
-const ChatContextMapView = dynamic(() => import("@/components/map/MapView"), { ssr: false });
+const ChatContextMapView = dynamic(() => import("@/components/map/MapLibreMapView"), { ssr: false });
 const ChatContextItineraryPanel = dynamic(() => import("@/components/map/ItineraryPanel"), {
   ssr: false,
 });
@@ -514,6 +514,7 @@ export default function ChatPage() {
   const [isVoiceInputActive, setIsVoiceInputActive] = useState(false);
   const chatInputRef = useRef<HTMLInputElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const [streamingReply, setStreamingReply] = useState("");
   const statusStreamRef = useRef<EventSource | null>(null);
   const chatAbortControllerRef = useRef<AbortController | null>(null);
   const chatStoppedByUserRef = useRef(false);
@@ -1001,6 +1002,7 @@ export default function ChatPage() {
     stopStatusStream();
     stopAutoVideoSummaryQueue();
     setStreamingStatusSteps([]);
+    setStreamingReply("");
     setWorkflowRail((prev) => ({
       ...prev,
       visible: prev.steps.length > 0 ? prev.visible : false,
@@ -1190,25 +1192,36 @@ export default function ChatPage() {
     statusStreamRef.current?.close();
     statusStreamRef.current = null;
     setStreamingStatusSteps([]);
+    setStreamingReply("");
   }
 
-  async function startStatusStream() {
+  async function startStatusStream(signal: AbortSignal, requestEpoch: number) {
     stopStatusStream();
-    const sessionId = `chat_${Date.now()}`;
+    const sessionId = `chat_${crypto.randomUUID()}`;
     const processId = startFrontendDebugProcess("chat-sse", "監聽聊天進度 SSE", {
       sessionId,
     });
     try {
-      await fetch("/api/chat/stream/register", {
+      const registered = await fetch("/api/chat/stream/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId }),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
       });
+      if (!registered.ok) return { sessionId, processId };
     } catch {
-      /* SSE may fail; chat still works without progress steps */
+      // Optional progress registration must not hold the chat request forever.
+      return { sessionId, processId };
     }
+    if (signal.aborted || requestEpoch !== chatRequestEpochRef.current) return { sessionId, processId };
     const source = new EventSource(`/api/chat/stream/${encodeURIComponent(sessionId)}`);
+    source.addEventListener("text_snapshot", (event) => {
+      if (statusStreamRef.current !== source) return;
+      try { const data = JSON.parse((event as MessageEvent<string>).data); if (typeof data.text === "string") setStreamingReply(data.text); } catch { /* invalid frame */ }
+    });
+    source.addEventListener("done", () => source.close());
     source.addEventListener("status_step", (event) => {
+      if (statusStreamRef.current !== source || signal.aborted) return;
       try {
         const step = JSON.parse((event as MessageEvent<string>).data) as StatusStepPayload;
         updateFrontendDebugProcess(processId, "status-step", {
@@ -1233,14 +1246,8 @@ export default function ChatPage() {
       }
     });
     source.onerror = () => {
-      finishFrontendDebugProcess(processId, {
-        sessionId,
-        reason: "eventsource-closed",
-      });
-      source.close();
-      if (statusStreamRef.current === source) {
-        statusStreamRef.current = null;
-      }
+      // EventSource reconnects and the server replays the latest text snapshot.
+      if (statusStreamRef.current !== source) source.close();
     };
     statusStreamRef.current = source;
     return { sessionId, processId };
@@ -1680,7 +1687,17 @@ export default function ChatPage() {
 
     stopAutoVideoSummaryQueue();
 
-    await ensureExistingItineraryContextLoaded(message);
+    try {
+      await ensureExistingItineraryContextLoaded(message);
+    } catch (error) {
+      chatSendLockRef.current = false;
+      pushToast({
+        variant: "error",
+        title: "無法載入目前行程",
+        description: error instanceof Error ? error.message : "請稍後再試。",
+      });
+      return;
+    }
 
     if (!options?.questionAnswers?.length) {
       applyPlanningUpdateToStores(extractPlanningUpdateFromText(message));
@@ -1722,10 +1739,13 @@ export default function ChatPage() {
       hasQuestionAnswers,
       hasTripProfile: Boolean(options?.tripProfile ?? tripProfile),
     });
-    const { sessionId: progressSessionId, processId: sseProcessId } = await startStatusStream();
     const { requestEpoch, signal } = beginChatGenerationRequest();
+    const { sessionId: progressSessionId, processId: sseProcessId } = await startStatusStream(signal, requestEpoch);
 
     try {
+      if (signal.aborted || requestEpoch !== chatRequestEpochRef.current) {
+        throw new DOMException("Generation cancelled", "AbortError");
+      }
       const activeProfile =
         options?.tripProfile ??
         tripProfile ??
@@ -2101,13 +2121,14 @@ export default function ChatPage() {
         if (superseded || chatStoppedByUserRef.current) {
           useChatStore.getState().removeMessageById(optimisticMessage.id);
         }
-        chatStoppedByUserRef.current = false;
+        if (!superseded) chatStoppedByUserRef.current = false;
         return;
       }
       failFrontendDebugProcess(chatProcessId, error, {
         progressSessionId,
       });
       setStreamingStatusSteps([]);
+    setStreamingReply("");
       setWorkflowRail((prev) => ({
         ...prev,
         steps: [],
@@ -2138,13 +2159,14 @@ export default function ChatPage() {
         progressSessionId,
         reason: "handleSend-finally",
       });
-      chatSendLockRef.current = false;
       if (requestEpoch === chatRequestEpochRef.current) {
+        chatSendLockRef.current = false;
         if (chatAbortControllerRef.current?.signal === signal) {
           chatAbortControllerRef.current = null;
         }
         stopStatusStream();
         setStreamingStatusSteps([]);
+    setStreamingReply("");
         planningWorkflowActiveRef.current = false;
         setPlanningWorkflowActive(false);
         setIsSending(false);
@@ -2184,10 +2206,13 @@ export default function ChatPage() {
       instruction,
       destination: activeProfile.destination,
     });
-    const { sessionId: progressSessionId, processId: sseProcessId } = await startStatusStream();
     const { requestEpoch, signal } = beginChatGenerationRequest();
+    const { sessionId: progressSessionId, processId: sseProcessId } = await startStatusStream(signal, requestEpoch);
 
     try {
+      if (signal.aborted || requestEpoch !== chatRequestEpochRef.current) {
+        throw new DOMException("Generation cancelled", "AbortError");
+      }
       updateFrontendDebugProcess(reviseProcessId, "request-dispatched", {
         progressSessionId,
       });
@@ -2240,6 +2265,7 @@ export default function ChatPage() {
         progressSessionId,
       });
       setStreamingStatusSteps([]);
+    setStreamingReply("");
       setWorkflowRail((prev) => ({
         ...prev,
         steps: [],
@@ -2268,6 +2294,7 @@ export default function ChatPage() {
         }
         stopStatusStream();
         setStreamingStatusSteps([]);
+    setStreamingReply("");
         planningWorkflowActiveRef.current = false;
         setPlanningWorkflowActive(false);
         setIsSending(false);
@@ -2874,6 +2901,7 @@ export default function ChatPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.03 }}
               data-testid={message.role === "user" ? "chat-message-user" : "chat-message-ai"}
+              data-chat-message-id={message.id}
               className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <div
@@ -3062,8 +3090,9 @@ export default function ChatPage() {
                 <div className="chat-assistant-surface rounded-2xl rounded-bl-md px-4 py-3 text-sm text-slate-800">
                   <div className="flex items-center gap-2">
                     <Loader2 className="size-4 animate-spin text-slate-500" aria-hidden />
-                    <span>{t.chat.assistantTyping}</span>
+                    <span>{streamingStatusSteps.at(-1)?.label || t.chat.assistantTyping}</span>
                   </div>
+                  {streamingReply && <p className="mt-2 whitespace-pre-wrap" aria-live="polite">{streamingReply}</p>}
                 </div>
               </div>
             </m.div>

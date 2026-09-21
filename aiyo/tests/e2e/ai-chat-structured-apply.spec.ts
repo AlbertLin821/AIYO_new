@@ -199,6 +199,8 @@ function fulfillChat(route: Route, payload: ChatResponsePayload | ChatApiPayload
 function geocodeBatchResult(query: string) {
   const map: Record<string, { lat: number; lng: number; formattedAddress: string; placeId: string }> = {
     "淺草寺": { lat: 35.7148, lng: 139.7967, formattedAddress: "Tokyo", placeId: "geo-asakusa" },
+    "淺草": { lat: 35.7148, lng: 139.7967, formattedAddress: "Tokyo", placeId: "geo-asakusa" },
+    "秋葉原": { lat: 35.6984, lng: 139.7731, formattedAddress: "Tokyo", placeId: "geo-akihabara" },
     "上野": { lat: 35.7138, lng: 139.7773, formattedAddress: "Tokyo", placeId: "geo-ueno" },
     "上野公園": { lat: 35.7156, lng: 139.7745, formattedAddress: "Tokyo", placeId: "geo-ueno-park" },
     "銀座": { lat: 35.6717, lng: 139.765, formattedAddress: "Tokyo", placeId: "geo-ginza" },
@@ -208,10 +210,18 @@ function geocodeBatchResult(query: string) {
     "明治神宮": { lat: 35.6764, lng: 139.6993, formattedAddress: "Tokyo", placeId: "geo-meiji" },
     "澀谷": { lat: 35.6595, lng: 139.7005, formattedAddress: "Tokyo", placeId: "geo-shibuya" },
   };
-  return map[query.trim()] || null;
+  const name = Object.keys(map).sort((a, b) => b.length - a.length).find(name => query.includes(name));
+  return map[query.trim()] || (name ? map[name] : null);
 }
 
 async function registerStructuredChatMock(page: Page) {
+  if (process.env.E2E_DEBUG_CHAT === "1") {
+    page.on("pageerror", error => console.info("[chat-e2e] pageerror", error.message));
+    page.on("response", response => { if (response.url().includes("/api/ai/chat")) console.info("[chat-e2e] raw response", response.status(), response.request().postData()?.slice(0, 150)); });
+    page.on("request", request => {
+      if (/\/api\/(ai\/chat|chat\/message|trip\/revise|chat\/stream\/register)/.test(request.url())) console.info("[chat-e2e] request", request.url(), request.postData()?.slice(0, 180));
+    });
+  }
   await page.route("**/api/runtime-config", async (route) => {
     await route.fulfill({
       status: 200,
@@ -278,6 +288,7 @@ async function registerStructuredChatMock(page: Page) {
   });
 
   await page.route("**/api/ai/chat", async (route) => {
+    if (process.env.E2E_DEBUG_CHAT === "1") console.info("[chat-e2e] mock intercepted");
     const body = route.request().postDataJSON() as {
       message?: string;
       context?: { itinerary?: TripPlanResult["days"] };

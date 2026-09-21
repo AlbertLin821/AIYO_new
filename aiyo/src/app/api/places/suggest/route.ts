@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
 import { requireSessionUser } from "@/server/auth";
-import { suggestPlacesForQuery } from "@/server/places/geocodePlace";
+import { mapService } from "@/server/maps/service";
+import { mapPoiToSuggestion } from "@/server/maps/adapters";
 import type { PlacesSuggestRequest } from "@/types/geocode";
 
 export const runtime = "nodejs";
@@ -25,31 +26,12 @@ export async function POST(request: Request) {
       return failure("invalid_request", "請提供非空的地點查詢。", 400);
     }
 
-    const resolved = await suggestPlacesForQuery(
-      {
-        query,
-        destinationHint: body.destinationHint,
-        countryHint: body.countryHint,
-      },
-      { maxResults },
-    );
-
-    if (!resolved.ok) {
-      const status =
-        resolved.code === "missing_api_key"
-          ? 503
-          : resolved.code === "invalid_request"
-            ? 400
-            : resolved.code === "not_found"
-              ? 404
-              : 502;
-      return failure(resolved.code, resolved.message, status);
-    }
+    const suggestions = (await mapService.searchPlaces(query, { limit: maxResults, language: "zh-TW" })).map((poi) => mapPoiToSuggestion(poi, query));
 
     return NextResponse.json(
       createSuccess({
-        suggestions: resolved.suggestions,
-        autoResolve: resolved.autoResolve,
+        suggestions,
+        autoResolve: suggestions.length === 1 ? suggestions[0] : null,
       }),
     );
   } catch (error) {

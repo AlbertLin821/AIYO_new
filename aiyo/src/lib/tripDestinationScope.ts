@@ -444,10 +444,23 @@ const VIDEO_METADATA_DESTINATION_RULES: Array<{ label: string; pattern: RegExp }
 ];
 
 /** Infer primary destination country/region from video title + description (not user trip). */
+export function inferVideoTitleDestination(title: string): string | null {
+  const normalized = title.toLowerCase();
+  const matches = catalog.entries.flatMap((entry) => entry.aliases.flatMap((alias) => {
+    if (alias.length < 2) return [];
+    const index = normalized.indexOf(alias.toLowerCase());
+    return index < 0 ? [] : [{ label: entry.canonical, index, length: alias.length }];
+  }));
+  matches.sort((a, b) => a.index - b.index || b.length - a.length);
+  return matches[0]?.label || null;
+}
+
 export function inferTripDestinationLabelFromVideoMetadata(input: {
   title?: string;
   description?: string;
 }): string | null {
+  const titleDestination = inferVideoTitleDestination(input.title || "");
+  if (titleDestination) return titleDestination;
   const haystack = [input.title, input.description].filter(Boolean).join("\n");
   if (!haystack.trim()) {
     return null;

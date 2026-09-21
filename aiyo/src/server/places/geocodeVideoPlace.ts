@@ -71,5 +71,7 @@ export async function geocodeVideoPlaceName(input: {
     }
   }
 
-  return lastResult;
+  return lastResult.ok
+    ? { ok: false, code: "not_found", message: "找不到目的地範圍內符合的地點。" }
+    : lastResult;
 }

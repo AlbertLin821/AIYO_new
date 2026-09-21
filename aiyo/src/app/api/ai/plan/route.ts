@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
 import { OllamaRequestError, resolveModelForTask } from "@/server/ai/ollamaClient";
 import { buildPersonalizedAIContext, type AIContextBuildResult } from "@/server/ai/aiContextBuilder";
-import { addMemories, formatMemoryContext } from "@/server/memory/mem0Client";
+import { formatMemoryContext } from "@/server/memory/mem0Client";
+import { enqueueMemoryWrite } from "@/server/jobs/memoryJobs";
 import { retrieveRelevantMemoriesForUser } from "@/server/memory/memoryRetrieval";
 import { StructuredOutputError } from "@/server/ai/responseParser";
 import { requireSessionUser } from "@/server/auth";
@@ -191,7 +192,7 @@ export async function POST(request: Request) {
     const tripPlanModel = resolveModelForTask("trip-plan");
 
     try {
-      await addMemories({
+      await enqueueMemoryWrite({
         userId,
         messages: [
           {

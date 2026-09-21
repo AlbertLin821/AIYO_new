@@ -15,10 +15,59 @@ import {
   isExistingItineraryInquiry,
   isTripWorkflowMessage,
   needsTravelResearch,
+  profileToTripPlanRequest,
   resolveProposedChangesFromContext,
 } from "@/server/services/travelPlannerService";
 import { sanitizeDynamicQuestionCard } from "@/server/ai/validators/questionCardValidator";
 import type { ChatContext, ChatMessage, ChatSource, TripPlanDay, TripPlanResult, TripProfile } from "@/types";
+
+test("typed preference acceptance applies saved museum interests and avoidances before planning", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => { throw new Error("offline regression fixture"); });
+  const aiContext = makeMemoryAiContext([]);
+  aiContext.structured.preferences = { travelStyle: ["博物館"], avoid: ["Blue Bottle"], mustVisit: ["上野公園"], notes: "入口集合" };
+  aiContext.structuredContext.preferences = { travelStyles: ["博物館"], avoidances: ["Blue Bottle"] };
+  const first = await chatWithTravelAssistant({ message: "安排東京三天行程", aiContext });
+  assert.equal(first.travelAgentDecision?.mode, "confirm_preferences");
+  assert.deepEqual(first.tripProfile?.avoid_places, []);
+  const result = await chatWithTravelAssistant({
+    message: "沿用", aiContext, tripProfile: first.tripProfile,
+    messages: [first.reply],
+  });
+  assert.equal(result.travelAgentDecision?.mode, "generate_itinerary");
+  assert.deepEqual(result.tripProfile?.preferences, ["博物館"]);
+  assert.deepEqual(result.tripProfile?.avoid_places, ["Blue Bottle"]);
+  assert.equal(result.reply.responseType, "travel_plan");
+  // Offline fallback reports an unverified required place, proving it reached the request.
+  assert.match(JSON.stringify(result), /上野公園/);
+});
+
+test("trip request preserves mustVisit and notes even when history contains visited places", () => {
+  const profile = { ...makeStructuredProfile(), preferences: [], visited_before: ["京都"] };
+  const context: ChatContext = { destination: "東京", days: 3, itinerary: [], budget: 0,
+    preferences: { interests: [], pace: "moderate", mustVisit: ["上野公園"], avoid: [], notes: "入口集合" } };
+  const request = profileToTripPlanRequest(profile, context);
+  assert.deepEqual(request.preferences.mustVisit, ["上野公園"]);
+  assert.deepEqual(request.preferences.interests, []);
+  assert.match(request.preferences.notes || "", /入口集合/);
+  assert.deepEqual(profileToTripPlanRequest(profile, { ...context, preferences: { ...context.preferences!, mustVisit: [], notes: "" } }).preferences.mustVisit, []);
+});
+
+test("typed acceptance preserves explicit empty preferences instead of reapplying saved values", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => { throw new Error("offline regression fixture"); });
+  const aiContext = makeMemoryAiContext([]);
+  aiContext.structured.preferences = { travelStyle: ["博物館"], avoid: ["Blue Bottle"], mustVisit: ["上野公園"], notes: "入口集合" };
+  aiContext.structuredContext.preferences = { travelStyles: ["博物館"], avoidances: ["Blue Bottle"] };
+  const result = await chatWithTravelAssistant({ message: "沿用", aiContext,
+    context: { destination: "東京", days: 3, itinerary: [], preferences: {
+      interests: [], pace: "relaxed", transportPreference: "public_transport", avoid: [], mustVisit: [], notes: "",
+    } },
+  });
+  assert.equal(result.travelAgentDecision?.mode, "generate_itinerary");
+  assert.deepEqual(result.tripProfile?.preferences, []);
+  assert.deepEqual(result.tripProfile?.avoid_places, []);
+  assert.deepEqual(result.travelAgentDecision?.preferenceConfirmation?.preferences.mustVisit, []);
+  assert.equal(result.travelAgentDecision?.preferenceConfirmation?.preferences.notes, "");
+});
 
 function makeMemoryAiContext(destinations: string[]): AIContextBuildResult {
   return {
@@ -257,7 +306,7 @@ function makeCurrentTripAiContext(destination: string, days: number): AIContextB
   };
 }
 
-test("東京三天 with stale 台南 context asks for remaining basics before planning", async () => {
+test("東京三天 with stale 台南 context confirms preferences for the new destination", async () => {
   const response = await chatWithTravelAssistant({
     message: "東京三天",
     structuredTravelPlanning: true,
@@ -278,11 +327,34 @@ test("東京三天 with stale 台南 context asks for remaining basics before pl
   });
 
   assert.equal(response.travelAgentDecision?.mode, "confirm_preferences");
-  assert.equal(response.reply.responseType, "question_card");
-  assert.ok(response.reply.questionCard);
-  assert.ok(response.reply.questionCard?.questions.some((question) => question.slot === "travel_dates"));
-  assert.ok(response.reply.questionCard?.questions.some((question) => question.slot === "traveler_count"));
+  assert.equal(response.reply.responseType, "text_message");
+  assert.equal(response.reply.questionCard, undefined);
+  assert.match(response.reply.preferenceConfirmation?.prompt || "", /東京/);
   assert.equal(response.tripProfile?.destination, "東京");
+});
+
+test("natural chat generates a plan without the frontend structured flag or optional answers", async () => {
+  const response = await chatWithTravelAssistant({ message: "幫我安排東京三天行程" });
+  assert.equal(response.travelAgentDecision?.mode, "generate_itinerary");
+  assert.equal(response.reply.responseType, "travel_plan");
+  assert.equal(response.reply.questionCard, undefined);
+  assert.equal(response.tripProfile?.destination, "東京");
+  assert.equal(response.tripProfile?.duration_days, 3);
+});
+
+test("a short destination answer completes the natural multi-turn planning flow", async () => {
+  const first = await chatWithTravelAssistant({ message: "幫我安排三天行程" });
+  assert.equal(first.reply.responseType, "question_card");
+  assert.deepEqual(first.reply.questionCard?.questions.map((question) => question.slot), ["destination"]);
+  const response = await chatWithTravelAssistant({
+    message: "東京",
+    tripProfile: first.tripProfile,
+    messages: [first.reply],
+  });
+  assert.equal(response.travelAgentDecision?.mode, "generate_itinerary");
+  assert.equal(response.reply.responseType, "travel_plan");
+  assert.equal(response.tripProfile?.destination, "東京");
+  assert.equal(response.tripProfile?.duration_days, 3);
 });
 
 test("structured chat generates itinerary when destination, duration, dates, traveler count, and dietary preference are complete", async () => {
@@ -777,7 +849,7 @@ test("question card skips destination when conversation already mentions Kumamot
   );
 });
 
-test("question card asks for dates traveler count and dietary preference before planning when they are missing", () => {
+test("optional dates travelers and diet do not block a draft itinerary", () => {
   const card = buildQuestionCard({
     ...makeStructuredProfile(),
     destination: "熊本",
@@ -789,13 +861,10 @@ test("question card asks for dates traveler count and dietary preference before 
     preferences: [],
     pace: null,
   });
-  assert.ok(card);
-  assert.ok(card?.questions.some((question) => question.slot === "travel_dates"));
-  assert.ok(card?.questions.some((question) => question.slot === "traveler_count"));
-  assert.ok(card?.questions.some((question) => question.slot === "dietary_restrictions"));
+  assert.equal(card, null);
 });
 
-test("question card keeps asking for dietary preference after dates and companions are known", () => {
+test("unknown dietary preferences do not block planning", () => {
   const card = buildQuestionCard({
     ...makeStructuredProfile(),
     destination: "熊本",
@@ -807,10 +876,10 @@ test("question card keeps asking for dietary preference after dates and companio
     preferences: [],
     pace: null,
   });
-  assert.ok(card?.questions.some((question) => question.slot === "dietary_restrictions"));
+  assert.equal(card, null);
 });
 
-test("question card skips traveler_count when party size is already known", () => {
+test("known party size needs no optional questionnaire", () => {
   const card = buildQuestionCard({
     ...makeStructuredProfile(),
     destination: "嘉義",
@@ -822,13 +891,7 @@ test("question card skips traveler_count when party size is already known", () =
     preferences: ["food"],
     pace: "balanced",
   });
-  assert.ok(card);
-  assert.ok(card?.questions.some((question) => question.slot === "travel_dates"));
-  assert.equal(
-    card?.questions.some((question) => question.slot === "traveler_count"),
-    false,
-  );
-  assert.ok(card?.questions.some((question) => question.slot === "dietary_restrictions"));
+  assert.equal(card, null);
 });
 
 test("structured planning flag does not turn self-introduction into a schedule", async () => {
@@ -917,16 +980,16 @@ test("Chiayi 3d2n four travelers then accept preferences skips traveler_count qu
     aiContext: makeChiayiPreferenceAiContext(),
   });
 
-  assert.equal(second.reply.responseType, "question_card");
-  assert.ok(second.reply.questionCard?.questions.some((question) => question.slot === "travel_dates"));
+  assert.equal(second.reply.responseType, "travel_plan");
+  assert.equal(second.reply.questionCard, undefined);
   assert.equal(
-    second.reply.questionCard?.questions.some((question) => question.slot === "traveler_count"),
+    Boolean(second.reply.questionCard?.questions.some((question) => question.slot === "traveler_count")),
     false,
   );
   assert.equal(second.tripProfile?.traveler_count, 4);
 });
 
-test("Kumamoto five-day five-traveler preference accept keeps traveler count and asks dates plus dietary preference", async () => {
+test("Kumamoto preference acceptance generates and retains traveler count", async () => {
   const opening = "我想要去熊本五天四夜 總共五個人去";
   const first = await chatWithTravelAssistant({
     message: opening,
@@ -962,17 +1025,16 @@ test("Kumamoto five-day five-traveler preference accept keeps traveler count and
     aiContext: makeKumamotoPreferenceAiContext(),
   });
 
-  assert.equal(second.reply.responseType, "question_card");
-  assert.ok(second.reply.questionCard?.questions.some((question) => question.slot === "travel_dates"));
-  assert.ok(second.reply.questionCard?.questions.some((question) => question.slot === "dietary_restrictions"));
+  assert.equal(second.reply.responseType, "travel_plan");
+  assert.equal(second.reply.questionCard, undefined);
   assert.equal(
-    second.reply.questionCard?.questions.some((question) => question.slot === "traveler_count"),
+    Boolean(second.reply.questionCard?.questions.some((question) => question.slot === "traveler_count")),
     false,
   );
   assert.equal(second.tripProfile?.traveler_count, 5);
 });
 
-test("forced revision asks only for dietary restriction instead of reconfirming stored preferences", async () => {
+test("forced revision generates without requiring optional dietary answers", async () => {
   const response = await chatWithTravelAssistant({
     message: "我不滿意，幫我重新安排一次",
     structuredTravelPlanning: true,
@@ -1008,13 +1070,9 @@ test("forced revision asks only for dietary restriction instead of reconfirming 
     aiContext: makeKumamotoPreferenceAiContext(),
   });
 
-  assert.equal(response.travelAgentDecision?.mode, "collect_requirements");
-  assert.equal(response.reply.responseType, "question_card");
-  assert.deepEqual(
-    response.reply.questionCard?.questions.map((question) => question.slot),
-    ["dietary_restrictions"],
-  );
-  assert.match(response.reply.content, /飲食偏好|飲食限制|過敏/);
+  assert.equal(response.travelAgentDecision?.mode, "generate_itinerary");
+  assert.equal(response.reply.responseType, "travel_plan");
+  assert.equal(response.reply.questionCard, undefined);
 });
 
 test("forced revision accepts english no for dietary restrictions and continues to travel plan", async () => {

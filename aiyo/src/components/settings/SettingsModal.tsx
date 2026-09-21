@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { createElement, useCallback, useEffect, useState } from "react";
 import {
   Brain,
   Check,
@@ -64,10 +64,10 @@ function SelectedInterestChip({
   onRemove?: () => void;
   readOnly: boolean;
 }) {
-  const Icon = getInterestIcon(value, interestIcons);
+  const icon = getInterestIcon(value, interestIcons);
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-secondary/30 bg-secondary/10 px-3 py-1.5 text-sm font-medium text-secondary">
-      <Icon className="size-3.5 shrink-0" />
+      {createElement(icon, { className: "size-3.5 shrink-0" })}
       {getInterestLabel(value)}
       {!readOnly && onRemove ? (
         <button
@@ -128,7 +128,7 @@ export default function SettingsModal() {
     }
   }, [pushToast]);
 
-  function resetLocalState() {
+  const resetLocalState = useCallback(() => {
     setPace(store.travelPace);
     setPreferences(store.travelPreferences);
     setInterests(store.interests);
@@ -136,7 +136,7 @@ export default function SettingsModal() {
     setTransport(normalizePreferredTransport(store.preferredTransport));
     setInterestPickerOpen(false);
     setSaved(false);
-  }
+  }, [store.interestIcons, store.interests, store.preferredTransport, store.travelPace, store.travelPreferences]);
 
   useEffect(() => {
     if (!open) return;
@@ -144,7 +144,7 @@ export default function SettingsModal() {
     setIsEditing(false);
     resetLocalState();
     void loadMemories();
-  }, [open, store.travelPace, store.travelPreferences, store.interests, store.interestIcons, store.preferredTransport, loadMemories]);
+  }, [open, resetLocalState, loadMemories]);
 
   function handlePageChange(value: string) {
     if (isEditing) {

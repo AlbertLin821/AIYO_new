@@ -288,3 +288,11 @@ test("buildPersonalMemoryBundle accepts mem0 memories without leaking section he
   assert.doesNotMatch(reply, /近期全域聊天摘要/);
   assert.doesNotMatch(reply, /其他記憶片段/);
 });
+
+test("planned destinations are not presented as confirmed visits", () => {
+  const bundle = buildPersonalMemoryBundle({ aiContext: makeAiContextWithTrips(["東京"]) });
+  assert.deepEqual(bundle.visitedDestinations, []);
+  const reply = formatPersonalMemoryDeterministicReply(bundle);
+  assert.match(reply, /不代表已實際到訪/);
+  assert.doesNotMatch(reply, /去過或常提到|去過／排過/);
+});

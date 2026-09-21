@@ -72,6 +72,39 @@ def build_embedder_config(provider: str, model: str, dims: int, base_url: str) -
     }},"""
 
 
+def build_ollama_client_adapter() -> str:
+    """Patch only Mem0's Ollama client binding, leaving the vendored SDK untouched."""
+    return '''
+# Mem0 extraction expects JSON content, not a reasoning-only completion.
+def _install_aiyo_mem0_ollama_client():
+    import mem0.llms.ollama as adapter
+    if getattr(adapter.Client, "_aiyo_mem0_bounded", False):
+        return
+
+    class AiyoMem0OllamaClient(adapter.Client):
+        _aiyo_mem0_bounded = True
+
+        def __init__(self, *args, **kwargs):
+            try:
+                timeout = float(os.environ.get("MEM0_OLLAMA_TIMEOUT_SECONDS", "90"))
+                if not 1 <= timeout <= 120:
+                    timeout = 90
+            except ValueError:
+                timeout = 90
+            kwargs["timeout"] = timeout
+            super().__init__(*args, **kwargs)
+
+        def chat(self, *args, **kwargs):
+            kwargs.setdefault("think", os.environ.get("MEM0_OLLAMA_THINK", "false").strip().lower() in ("1", "true", "yes", "on"))
+            return super().chat(*args, **kwargs)
+
+    adapter.Client = AiyoMem0OllamaClient
+
+_install_aiyo_mem0_ollama_client()
+
+'''
+
+
 def main() -> None:
     path = pathlib.Path("/app/main.py")
     text = path.read_text(encoding="utf-8")
@@ -87,6 +120,10 @@ def main() -> None:
     end = text.find("set_session_factory(SessionLocal)", start)
     if start == -1 or end == -1:
         raise RuntimeError("patch_main_for_providers: could not locate DEFAULT_CONFIG block")
+    # Replace the whole prior generated block on repeated container starts.
+    marker_start = text.find(MARKER)
+    if 0 <= marker_start < start:
+        start = marker_start
 
     block = f"""{MARKER}
 VECTOR_DB_NAME = os.environ.get("APP_DB_NAME", POSTGRES_DB)
@@ -109,6 +146,7 @@ DEFAULT_CONFIG = {{
     "history_db_path": HISTORY_DB_PATH,
 }}
 
+{build_ollama_client_adapter() if llm_provider == "ollama" else ""}
 """
 
     updated = text[:start] + block + text[end:]

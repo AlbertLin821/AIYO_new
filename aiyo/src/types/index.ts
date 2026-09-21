@@ -47,7 +47,7 @@ export interface LocationReference {
   /**
    * 地點如何被採用並對應座標：Google 地理編碼成功，或僅依 LLM／規則抽取並以內部對照補座標。
    */
-  resolvedFrom?: "llm" | "heuristic" | "title-poi" | "google-geocode" | "google-place-details";
+  resolvedFrom?: "llm" | "heuristic" | "title-poi" | "photon" | "overpass" | "user" | "legacy-google" | "google-geocode" | "google-place-details";
   rawQuery?: string;
   normalizedName?: string;
   /** Original transcript / query fragment before normalization. */
@@ -98,7 +98,7 @@ export interface TripPlanItem {
   /** Distance from the previous located item in meters, when backed by a routing provider. */
   transportDistanceMeters?: number;
   /** Provider used to resolve the transport time. */
-  transportDataSource?: "google_routes";
+  transportDataSource?: "osrm" | "google_routes";
   notes?: string;
   location?: LocationReference;
   source?: "manual" | "ai" | "video";
@@ -985,7 +985,7 @@ export interface PublicItineraryItem {
   transport?: string;
   transportDurationMinutes?: number;
   transportDistanceMeters?: number;
-  transportDataSource?: "google_routes";
+  transportDataSource?: "osrm" | "google_routes";
   location?: Pick<
     LocationReference,
     "name" | "lat" | "lng" | "address" | "placeId" | "photoUrl" | "thumbnail" | "googleMapsUrl" | "rating" | "userRatingsTotal"

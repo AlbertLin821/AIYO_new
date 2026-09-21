@@ -204,12 +204,25 @@ function summarizeTripPlanPlaces(plan?: TripPlanResult | null): string[] {
   ).slice(0, MAX_TRIP_MEMORY_ITEMS);
 }
 
+function explicitUserMemoryStatement(message: string): string | undefined {
+  const text = message.trim();
+  // Only an affirmative request containing an actual statement is a memory write.
+  // Recall questions and deletion requests must never become new user facts.
+  if (!text || /[?？]|(?:嗎|吗|呢)[。！!\s]*$|忘記|忘记|刪除|删除|不要記|不要记|不用記|不用记|不必記|不必记/u.test(text)) return undefined;
+  const match = text.match(/^(?:(?:請|请)(?:你)?|(?:請|请)?(?:幫我|帮我))?(?:記住|记住|記得|记得)(?:一下)?[：:\s，,]*(.+)$/u);
+  const statement = match?.[1]?.trim();
+  if (!statement || statement.length < 3 || /^(?:這個|这个|這件事|这件事|以上|這些|这些|我的偏好)[。！!\s]*$/u.test(statement)) return undefined;
+  if (/是否|是不是|什麼|什么|哪(?:裡|里|個|个)|幾(?:個|天)|几个/u.test(statement)) return undefined;
+  return text.slice(0, 2000);
+}
+
 export function buildStableMemoryMessages(input: {
   userMessage: string;
   tripProfile?: TripProfile | null;
   aiContext?: AIContextBuildResult | null;
   response: ChatResponsePayload;
-}): Array<{ role: "assistant"; content: string }> {
+}): Array<{ role: "user" | "assistant"; content: string }> {
+  const explicitStatement = explicitUserMemoryStatement(input.userMessage);
   const stableLines: string[] = [];
   const identityLabel = extractUserIdentityLabel(input.userMessage);
   if (identityLabel) {
@@ -254,8 +267,8 @@ export function buildStableMemoryMessages(input: {
   }
 
   const normalized = dedupeStrings(stableLines);
-  if (!normalized.length) {
-    return [];
-  }
-  return normalized.map((content) => ({ role: "assistant" as const, content }));
+  return [
+    ...(explicitStatement ? [{ role: "user" as const, content: explicitStatement }] : []),
+    ...normalized.filter((content) => content !== explicitStatement).map((content) => ({ role: "assistant" as const, content })),
+  ];
 }

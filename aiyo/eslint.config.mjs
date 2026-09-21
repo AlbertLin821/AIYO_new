@@ -11,6 +11,7 @@ const eslintConfig = defineConfig([
     ".next/**",
     "out/**",
     "build/**",
+    "public/maplibre/**", // Generated, unmodified third-party distribution files.
     "test-results/**",
     "playwright-report/**",
     "next-env.d.ts",

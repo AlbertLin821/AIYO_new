@@ -71,7 +71,7 @@ test.describe("影片摘要套用到地圖與行程", () => {
           ),
         { timeout: 40_000 },
       )
-      .toContain("林聰明砂鍋魚頭");
+      .toEqual(expect.arrayContaining([expect.stringContaining("林聰明砂鍋魚頭")]));
     const mapPins = await page.getByTestId("map-view").getByRole("button").evaluateAll((els) =>
       els.map((el) => el.getAttribute("aria-label") || ""),
     );

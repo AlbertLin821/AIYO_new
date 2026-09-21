@@ -26,6 +26,19 @@ function tokyo3D2NRequest(): TripPlanRequest {
   };
 }
 
+test("fallback warns about omitted requested places even with abundant verified alternatives", () => {
+  const request = tokyo3D2NRequest();
+  request.days = 1;
+  request.preferences.mustVisit = ["明治神宮"];
+  const plan = buildFallbackTripPlan(request, mockTokyoPlaceHits());
+  assert.ok(plan.warnings?.some((warning) => warning.includes("明治神宮")));
+  const scheduled = plan.days[0].items.filter((item) => item.location).map((item) => item.title);
+  assert.equal(plan.days[0].summary, `第 1 天以 ${scheduled.join("、")} 為主。`);
+  for (const item of plan.days[0].items) {
+    if (item.location) assert.equal(item.location.resolvedFrom, "photon");
+  }
+});
+
 function mockTokyoPlaceHits(): PlaceSearchHit[] {
   return [
     {

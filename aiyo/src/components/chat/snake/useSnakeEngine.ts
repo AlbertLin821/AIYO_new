@@ -117,9 +117,10 @@ function stepSimulation(state: SimulationState): { next: SimulationState; gameOv
 }
 
 export function useSnakeEngine() {
-  const simRef = useRef<SimulationState>(createInitialSimulation());
-  const [snake, setSnake] = useState<Point[]>(INITIAL_SNAKE);
-  const [food, setFood] = useState<Point>(() => simRef.current.food);
+  const [initialSimulation] = useState(createInitialSimulation);
+  const simRef = useRef<SimulationState>(initialSimulation);
+  const [snake, setSnake] = useState<Point[]>(initialSimulation.snake);
+  const [food, setFood] = useState<Point>(initialSimulation.food);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(() => getSnakeHighScore());
   const [isGameOver, setIsGameOver] = useState(false);

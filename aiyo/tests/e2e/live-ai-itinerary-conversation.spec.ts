@@ -171,6 +171,10 @@ test.describe("Live AI itinerary smoke", () => {
     const afterTrip = await fetchPersistedTripFromBootstrap(page);
     const updated = afterTrip?.itinerary.find((day) => day.dayNumber === 2)?.items.find((item) => item.id === target?.id);
     expect(`${updated?.title || ""} ${updated?.location?.name || ""}`).toMatch(/新宿/u);
+    // A failed lookup must not leave the replaced venue's old map coordinates.
+    if (updated?.location && target?.location) {
+      expect(updated.location).not.toEqual(target.location);
+    }
 
     recordLiveAiOutcome(testInfo, {
       scenario: "live replace with shinjuku",

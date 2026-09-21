@@ -34,6 +34,8 @@ const VideoSearchBar = forwardRef<HTMLInputElement, VideoSearchBarProps>(functio
   ref,
 ) {
   const [input, setInput] = useState("");
+  const [isReady, setIsReady] = useState(false);
+  useEffect(() => setIsReady(true), []);
   const innerRef = useRef<HTMLInputElement>(null);
   useImperativeHandle(ref, () => innerRef.current as HTMLInputElement, []);
 
@@ -242,6 +244,7 @@ const VideoSearchBar = forwardRef<HTMLInputElement, VideoSearchBarProps>(functio
         <Input
           ref={innerRef}
           type="text"
+          disabled={!isReady}
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onInput={(event) => setInput(event.currentTarget.value)}
@@ -253,7 +256,7 @@ const VideoSearchBar = forwardRef<HTMLInputElement, VideoSearchBarProps>(functio
         <Button
           type="button"
           onClick={() => void handleSearch()}
-          disabled={isBusy || !trimmed}
+          disabled={!isReady || isBusy || !trimmed}
           aria-label={submitAria}
           data-testid="video-search-submit"
           className="size-11 shrink-0 rounded-full border-0 bg-primary-dark p-0 text-white shadow-sm hover:bg-primary-dark/90 disabled:opacity-45"

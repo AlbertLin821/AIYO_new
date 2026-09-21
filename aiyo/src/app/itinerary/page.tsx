@@ -224,7 +224,6 @@ export default function ItineraryPage() {
         });
       });
   }, [pushToast, searchParams, status]);
-  const itemIdCounter = useRef(0);
   const lastCursorSentAt = useRef(0);
 
   const requireAuthenticated = useCallback(
@@ -571,8 +570,7 @@ export default function ItineraryPage() {
       void (async () => {
         setAddActivitySaving(true);
         try {
-          itemIdCounter.current += 1;
-          const itemId = `item_new_${dayNumber}_${itemIdCounter.current}`;
+          const itemId = `item_${crypto.randomUUID()}`;
           const title = addDraft.title.trim();
           const locationText = addDraft.location.trim();
           const geocodeQuery = resolveManualPlaceGeocodeQuery(title, locationText);

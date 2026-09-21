@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { clearTripDestinationScopeCacheForTests } from "@/lib/tripDestinationScope";
 import { clearGeocodeMemoryCacheForTests } from "@/server/places/geocodePlace";
+import { mapMemoryCache } from "@/server/maps/cache";
 import { filterTripPlanByDestinationScope } from "@/server/services/filterTripPlanByDestinationScope";
 import type { TripPlanResult } from "@/types";
 
@@ -11,6 +12,7 @@ const originalKey = process.env.GOOGLE_MAPS_API_KEY;
 afterEach(() => {
   clearTripDestinationScopeCacheForTests();
   clearGeocodeMemoryCacheForTests();
+  mapMemoryCache.clear();
   globalThis.fetch = originalFetch;
   if (originalKey === undefined) {
     delete process.env.GOOGLE_MAPS_API_KEY;
@@ -31,14 +33,12 @@ test("filterTripPlanByDestinationScope removes Golden Gate Bridge for Japan trip
     if (url.includes("Golden")) {
       return new Response(
         JSON.stringify({
-          status: "OK",
-          results: [
+          type: "FeatureCollection",
+          features: [
             {
-              formatted_address: "Golden Gate Bridge, San Francisco, CA, USA",
-              place_id: "ggb",
-              types: ["tourist_attraction"],
-              geometry: { location: { lat: 37.8199, lng: -122.4783 } },
-              address_components: [{ short_name: "US", types: ["country", "political"] }],
+              type: "Feature",
+              geometry: { type: "Point", coordinates: [-122.4783, 37.8199] },
+              properties: { name: "Golden Gate Bridge", osm_type: "W", osm_id: 1, country: "United States", countrycode: "US", city: "San Francisco" },
             },
           ],
         }),
@@ -47,14 +47,12 @@ test("filterTripPlanByDestinationScope removes Golden Gate Bridge for Japan trip
     }
     return new Response(
       JSON.stringify({
-        status: "OK",
-        results: [
+        type: "FeatureCollection",
+        features: [
           {
-            formatted_address: "Kumamoto Castle, Japan",
-            place_id: "kumamoto",
-            types: ["tourist_attraction"],
-            geometry: { location: { lat: 32.8062, lng: 130.7059 } },
-            address_components: [{ short_name: "JP", types: ["country", "political"] }],
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [130.7059, 32.8062] },
+            properties: { name: "熊本城", osm_type: "W", osm_id: 2, country: "Japan", countrycode: "JP", city: "Kumamoto" },
           },
         ],
       }),

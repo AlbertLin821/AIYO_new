@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import {
   clearTripDestinationScopeCacheForTests,
+  inferTripDestinationLabelFromVideoMetadata,
   geocodeResultFailsDestinationScope,
   inferCountryCodeFromCoordinates,
   isExplicitDepartureOrForeignPlace,
@@ -9,6 +10,13 @@ import {
   isTextInTripDestinationScope,
   resolveTripDestinationScope,
 } from "@/lib/tripDestinationScope";
+
+test("video primary title destination wins over comparisons and description promotions", () => {
+  assert.equal(inferTripDestinationLabelFromVideoMetadata({
+    title: "【這真的是台南？！】一秒穿越京都街道 Travel in Tainan - Taiwan",
+    description: "也歡迎觀看沖繩及台中旅遊影片",
+  }), "台南");
+});
 
 afterEach(() => {
   clearTripDestinationScopeCacheForTests();

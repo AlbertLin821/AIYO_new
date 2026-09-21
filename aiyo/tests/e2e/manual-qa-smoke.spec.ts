@@ -165,7 +165,7 @@ test("question_card flow: answers persist after reload", async ({ page }) => {
   await confirmButton.click();
 
   // User display message (metadata) should appear.
-  await expect(page.getByText(/已收到你的需求：/)).toBeVisible({ timeout: 40_000 });
+  await expect(page.getByTestId("chat-message-user").filter({ hasText: /放鬆.*請繼續幫我安排/ })).toBeVisible({ timeout: 40_000 });
 
   // Reload: should persist.
   await page.reload({ waitUntil: "domcontentloaded" });
@@ -173,7 +173,7 @@ test("question_card flow: answers persist after reload", async ({ page }) => {
     await loginAs(page, E2E_OWNER as E2EUser, "/chat");
     await dismissOnboardingIfVisible(page);
   }
-  await expect(page.getByText(/已收到你的需求：/)).toBeVisible({ timeout: 40_000 });
+  await expect(page.getByTestId("chat-message-user").filter({ hasText: /放鬆.*請繼續幫我安排/ })).toBeVisible({ timeout: 40_000 });
 });
 
 test("SSE steps: status rail updates and Sky Dash prompt appears", async ({ page }) => {
@@ -196,6 +196,7 @@ test("SSE steps: status rail updates and Sky Dash prompt appears", async ({ page
     const body = [
       `event: status_step`,
       `data: ${JSON.stringify(stepResearchRunning)}`,
+      ``,
       ``,
     ].join("\n");
 
@@ -235,8 +236,8 @@ test("SSE steps: status rail updates and Sky Dash prompt appears", async ({ page
   await page.getByTestId("chat-send-button").click();
 
   // Typing / workflow UI should be visible while planning is in-flight.
-  await expect(page.getByTestId("chat-typing-indicator")).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByText("AI 正在為你規劃行程").first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("chat-message-ai-thinking")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("chat-message-ai-thinking")).toContainText("搜尋景點與交通");
 
   // Sky Dash prompt (appears after ~5s delay while planning is active).
   await expect(page.getByText("開始玩 Sky Dash")).toBeVisible({ timeout: 70_000 });
@@ -245,4 +246,3 @@ test("SSE steps: status rail updates and Sky Dash prompt appears", async ({ page
   // Game dialog should appear.
   await expect(page.getByRole("dialog", { name: "Sky Dash 小遊戲" })).toBeVisible({ timeout: 20_000 });
 });
-

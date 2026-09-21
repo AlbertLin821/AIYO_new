@@ -1,10 +1,9 @@
 import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
-import { hasUsablePlacePhotoUrl } from "@/lib/placePhotoUrl";
 import { mapGeocodedPlaceResolvedFrom } from "@/lib/places/geocodeUtils";
 import { applyLocationUpdatesToItinerary, collectItineraryItemsMissingLocation, resolveGeocodeQueryForItem } from "@/services/geocodeItineraryItems";
 import { hydrateItineraryTransportFields } from "@/services/itineraryTransport";
 import { reconcileTripMapState } from "@/services/mapSync";
-import { fetchGooglePlaceDetailsByPlaceId } from "@/server/geo/geocodeService";
+import { mapService } from "@/server/maps/service";
 import { geocodePlace, suggestPlacesForQuery } from "@/server/places/geocodePlace";
 import type { LocationReference, PersistedTripPayload } from "@/types";
 import type { GeocodedPlace, PlaceSuggestion } from "@/types/geocode";
@@ -92,35 +91,27 @@ async function enrichLocationDetails(location: LocationReference): Promise<Locat
     return location;
   }
 
-  const needsDetails =
-    !hasUsablePlacePhotoUrl(location.photoUrl, placeId) ||
-    !hasUsablePlacePhotoUrl(location.thumbnail, placeId) ||
-    !location.googleMapsUrl ||
-    !location.address;
+  // Photon cannot supply Google photos/URLs. Missing those fields must not
+  // trigger reverse-geocoding on every read/sync of an already located stop.
+  const needsDetails = !location.address;
   if (!needsDetails) {
     return location;
   }
 
-  const details = await fetchGooglePlaceDetailsByPlaceId(placeId);
-  if (!details || Object.keys(details).length === 0) {
+  if (!hasUsableMapCoordinate(location)) {
     return location;
   }
+  const details = await mapService.reverseGeocode({ lat: location.lat, lng: location.lng }).catch(() => null);
+  if (!details) return location;
 
   return {
     ...location,
-    lat: details.lat ?? location.lat,
-    lng: details.lng ?? location.lng,
     address: details.address ?? location.address,
-    description: details.description ?? location.description,
-    photoUrl: details.photoUrl ?? location.photoUrl,
-    thumbnail: details.thumbnail ?? details.photoUrl ?? location.thumbnail ?? location.photoUrl,
-    openingHours: details.openingHours ?? location.openingHours,
-    phoneNumber: details.phoneNumber ?? location.phoneNumber,
-    website: details.website ?? location.website,
-    googleMapsUrl: details.googleMapsUrl ?? location.googleMapsUrl,
-    rating: details.rating ?? location.rating,
-    userRatingsTotal: details.userRatingsTotal ?? location.userRatingsTotal,
-    verified: details.verified ?? location.verified,
+    description: details.address ?? location.description,
+    openingHours: details.metadata?.openingHours ?? location.openingHours,
+    phoneNumber: details.metadata?.phone ?? location.phoneNumber,
+    website: details.metadata?.website ?? location.website,
+    verified: true,
   };
 }
 

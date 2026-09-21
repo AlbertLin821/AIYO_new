@@ -176,22 +176,17 @@ export function isResolvableMapPickLocation(
 
 async function fetchReverseGeocodeLocation(
   pendingPoi: PendingMapPoi,
-  tripDestination: string,
+  _tripDestination: string,
 ): Promise<LocationReference> {
-  const response = await fetch("/api/map/reverse-geocode", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      lat: pendingPoi.lat,
-      lng: pendingPoi.lng,
-      region: tripDestination,
-    }),
-  });
-  const payload = (await response.json()) as ApiResponse<{ result: GeocodeApiResult }>;
+  void _tripDestination;
+  const response = await fetch(`/api/maps/reverse?lat=${encodeURIComponent(pendingPoi.lat)}&lng=${encodeURIComponent(pendingPoi.lng)}&language=zh-TW`);
+  const payload = (await response.json()) as ApiResponse<{ result: { name: string; address?: string; location: { lat: number; lng: number }; externalId?: string } | null }>;
   if (!payload.success) {
     throw new Error(payload.error.message || "reverse_geocode_failed");
   }
-  const location = locationFromGeocodeResult(payload.data.result);
+  if (!payload.data.result) throw new Error("reverse_geocode_failed");
+  const result = payload.data.result;
+  const location: LocationReference = { name: result.name, lat: result.location.lat, lng: result.location.lng, description: result.address || result.name, address: result.address, placeId: result.externalId, resolvedFrom: "photon", verified: true };
   if (!hasUsableMapCoordinate(location)) {
     throw new Error("invalid_coordinates");
   }

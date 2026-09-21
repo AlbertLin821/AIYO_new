@@ -77,8 +77,8 @@ export function resolveGoogleMapsApiKey(
 export function resolveGoogleMapsClientApiKey(
   env: NodeJS.ProcessEnv = process.env,
 ): string {
-  const { server, client } = resolveMapsKeys(env);
-  return client || server;
+  const { client } = resolveMapsKeys(env);
+  return client;
 }
 
 export function resolveGoogleMapsMapId(

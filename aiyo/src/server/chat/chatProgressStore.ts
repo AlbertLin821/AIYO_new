@@ -1,6 +1,8 @@
 import type { StatusStepPayload } from "@/types";
 
 type ChatProgressSession = {
+  text: string;
+  textListeners: Set<(text: string) => void>;
   events: StatusStepPayload[];
   listeners: Set<(step: StatusStepPayload) => void>;
   done: boolean;
@@ -8,8 +10,14 @@ type ChatProgressSession = {
 };
 
 const SESSION_TTL_MS = 10 * 60 * 1000;
-const progressSessions = new Map<string, ChatProgressSession>();
-const sessionOwners = new Map<string, string>();
+const progressGlobal = globalThis as typeof globalThis & {
+  aiyoChatProgress?: { sessions: Map<string, ChatProgressSession>; owners: Map<string, string> };
+};
+const sharedProgress = progressGlobal.aiyoChatProgress ??= {
+  sessions: new Map<string, ChatProgressSession>(), owners: new Map<string, string>(),
+};
+const progressSessions = sharedProgress.sessions;
+const sessionOwners = sharedProgress.owners;
 
 function pruneSessionOwner(sessionId: string) {
   if (!progressSessions.has(sessionId)) {
@@ -20,7 +28,7 @@ function pruneSessionOwner(sessionId: string) {
 function pruneExpiredSessions() {
   const now = Date.now();
   for (const [sessionId, session] of progressSessions.entries()) {
-    if (session.done && now - session.updatedAt > SESSION_TTL_MS) {
+    if (now - session.updatedAt > SESSION_TTL_MS) {
       progressSessions.delete(sessionId);
       sessionOwners.delete(sessionId);
     }
@@ -35,6 +43,8 @@ function getOrCreateSession(sessionId: string): ChatProgressSession {
     return existing;
   }
   const created: ChatProgressSession = {
+    text: "",
+    textListeners: new Set(),
     events: [],
     listeners: new Set(),
     done: false,
@@ -45,6 +55,8 @@ function getOrCreateSession(sessionId: string): ChatProgressSession {
 }
 
 export function ensureChatProgressSession(sessionId: string, ownerUserId?: string): void {
+  const owner = sessionOwners.get(sessionId);
+  if (owner && ownerUserId && owner !== ownerUserId) throw new Error("forbidden");
   getOrCreateSession(sessionId);
   if (ownerUserId) {
     sessionOwners.set(sessionId, ownerUserId);
@@ -104,4 +116,17 @@ export function subscribeChatProgress(
     session.updatedAt = Date.now();
     pruneSessionOwner(sessionId);
   };
+}
+
+export function publishChatText(sessionId: string, text: string) {
+  const session = getOrCreateSession(sessionId);
+  session.text = text.slice(0, 16000);
+  session.updatedAt = Date.now();
+  for (const listener of session.textListeners) listener(session.text);
+}
+export function getChatText(sessionId: string) { return getOrCreateSession(sessionId).text; }
+export function subscribeChatText(sessionId: string, listener: (text: string) => void) {
+  const session = getOrCreateSession(sessionId);
+  session.textListeners.add(listener);
+  return () => { session.textListeners.delete(listener); };
 }

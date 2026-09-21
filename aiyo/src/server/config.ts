@@ -1,5 +1,3 @@
-import { resolveGoogleMapsApiKey } from "@/lib/googleMapsEnv";
-
 function readString(name: string, fallback = ""): string {
   const value = process.env[name];
   return value && value.trim() ? value.trim() : fallback;
@@ -106,9 +104,11 @@ export const serverConfig = {
   mem0Enabled: readBoolean("MEM0_ENABLED", false),
   mem0TopK: readNumber("MEM0_TOP_K", 5),
   mem0TimeoutMs: readNumber("MEM0_TIMEOUT_MS", 12000),
+  mem0WriteTimeoutMs: readNumber("MEM0_WRITE_TIMEOUT_MS", 120000),
   enableMockVideoProvider: readBoolean("ENABLE_MOCK_VIDEO_PROVIDER", false),
   enableMockMaps: readBoolean("ENABLE_MOCK_MAPS", false),
   youtubeApiKey: readString("YOUTUBE_API_KEY", ""),
+  /** @deprecated Retained only for legacy modules that are no longer used by map runtime paths. */
   googleMapsApiKey: resolveGoogleMapsApiKey(),
   /** Tavily Search API (https://tavily.com) for web research in travel chat and segment hints. */
   tavilyApiKey: readString("TAVILY_API_KEY", ""),
@@ -129,3 +129,4 @@ export const serverConfig = {
   travelResearchProviderTimeoutMs: readNumber("TRAVEL_RESEARCH_PROVIDER_TIMEOUT_MS", 12000),
   travelSearchCacheTtlMs: readNumber("TRAVEL_SEARCH_CACHE_TTL_MS", 300000),
 };
+import { resolveGoogleMapsApiKey } from "@/lib/googleMapsEnv";

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
 import { requireSessionUser } from "@/server/auth";
-import { geocodePlace } from "@/server/places/geocodePlace";
+import { mapService } from "@/server/maps/service";
+import { mapPoiToGeocodedPlace } from "@/server/maps/adapters";
 import { assertGeocodeTripItemScope } from "@/server/places/validateGeocodeTripScope";
 import { requireTripAccess } from "@/server/tripAccess";
 import type { PlacesGeocodeRequest } from "@/types/geocode";
@@ -50,34 +51,19 @@ export async function POST(request: Request) {
       }
     }
 
-    const resolved = await geocodePlace({
-      query,
-      destinationHint: body.destinationHint,
-      countryHint: body.countryHint,
-    });
-
-    if (!resolved.ok) {
-      const status =
-        resolved.code === "missing_api_key"
-          ? 503
-          : resolved.code === "invalid_request"
-            ? 400
-            : resolved.code === "ambiguous"
-              ? 409
-              : resolved.code === "not_found"
-                ? 404
-                : 502;
-      return failure(resolved.code, resolved.message, status);
-    }
+    const candidates = await mapService.searchPlaces([query, body.destinationHint].filter(Boolean).join(" "), { limit: 1, language: "zh-TW" });
+    const first = candidates[0];
+    if (!first) return failure("not_found", "找不到符合的地點。", 404);
+    const place = mapPoiToGeocodedPlace(first, query);
 
     if (purpose === "map_focus") {
       return NextResponse.json(
-        createSuccess({ place: resolved.place }) satisfies { success: true; data: { place: typeof resolved.place } },
+        createSuccess({ place }) satisfies { success: true; data: { place: typeof place } },
       );
     }
 
     return NextResponse.json(
-      createSuccess({ place: resolved.place }) satisfies { success: true; data: { place: typeof resolved.place } },
+      createSuccess({ place }) satisfies { success: true; data: { place: typeof place } },
     );
   } catch (error) {
     if (error instanceof Error && error.message === "unauthorized") {

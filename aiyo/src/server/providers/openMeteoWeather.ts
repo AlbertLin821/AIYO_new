@@ -1,4 +1,4 @@
-import { geocodeWithGoogle } from "@/server/geo/geocodeService";
+import { mapService } from "@/server/maps/service";
 
 const WEATHER_CODES: Record<number, string> = {
   0: "晴朗",
@@ -35,12 +35,13 @@ export async function fetchDestinationWeatherSummary(input: {
     return { ok: false, reason: "destination is empty." };
   }
 
-  const geo = await geocodeWithGoogle(dest);
-  if (!geo.ok) {
-    return { ok: false, reason: geo.reason };
+  const places = await mapService.searchPlaces(dest, { limit: 1 }).catch(() => []);
+  const geo = places[0];
+  if (!geo) {
+    return { ok: false, reason: "Destination geocoding failed." };
   }
 
-  const { lat, lng } = geo.result;
+  const { lat, lng } = geo.location;
   const params = new URLSearchParams({
     latitude: String(lat),
     longitude: String(lng),

@@ -58,12 +58,16 @@ export function buildLocationBackfilledPin(
   };
 }
 
+function isLegacyGooglePlaceId(placeId?: string): placeId is string {
+  return Boolean(placeId && !/^(?:photon:|overpass:|osm:|[NWR]:|(?:node|way|relation)[:/]|noid_)/i.test(placeId));
+}
+
 export function buildRoutePlanningUrl(pin: Pick<MapPinType, "lat" | "lng" | "address" | "placeId">): string {
   const routeParams = new URLSearchParams({
     api: "1",
     destination: `${pin.lat},${pin.lng}`,
   });
-  if (pin.placeId) {
+  if (isLegacyGooglePlaceId(pin.placeId)) {
     routeParams.set("destination_place_id", pin.placeId);
   }
   return `https://www.google.com/maps/dir/?${routeParams.toString()}`;
@@ -79,8 +83,10 @@ export function buildGoogleMapsUrl(pin: Pick<MapPinType, "lat" | "lng" | "placeI
   const params = new URLSearchParams({
     api: "1",
     query: `${pin.lat},${pin.lng}`,
-    query_place_id: pin.placeId,
   });
+  if (isLegacyGooglePlaceId(pin.placeId)) {
+    params.set("query_place_id", pin.placeId);
+  }
   return `https://www.google.com/maps/search/?${params.toString()}`;
 }
 

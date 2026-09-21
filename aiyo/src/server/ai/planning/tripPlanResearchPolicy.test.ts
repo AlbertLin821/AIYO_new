@@ -17,6 +17,19 @@ const tokyo3d2n: TripPlanRequest = {
   },
 };
 
+test("specific must-visit searches survive the three-query research budget", () => {
+  const plan = buildTripPlanResearchPlan({
+    ...tokyo3d2n,
+    destination: "台南",
+    preferences: { ...tokyo3d2n.preferences, mustVisit: ["赤崁樓", "神農街"] },
+  });
+  const queries = plan.toolRequests.filter((item) => item.type === "search_place").map((item) => item.query);
+  assert.equal(queries.length, 3);
+  assert.ok(queries[0].endsWith(" 赤崁樓"));
+  assert.ok(queries[1].endsWith(" 神農街"));
+  assert.ok(queries[2].includes("餐廳"));
+});
+
 test("tokyo 3D2N without dates always researches POI and skips weather", () => {
   const plan = buildTripPlanResearchPlan(tokyo3d2n);
   assert.equal(plan.shouldResearch, true);

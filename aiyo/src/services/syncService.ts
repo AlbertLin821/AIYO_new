@@ -68,6 +68,8 @@ class SyncService {
   private manuallyClosingRealtime = false;
   private isApplyingRemote = false;
   private isSyncing = false;
+  private activeTripSync: Promise<boolean> | null = null;
+  private syncSessionEpoch = 0;
   private lastSyncedPayloadKey: string | null = null;
   private lastLocationHydrationKey: string | null = null;
   private lastPhotoHydrationKey: string | null = null;
@@ -82,6 +84,8 @@ class SyncService {
 
   /** Call when session ends so guests do not reuse a prior authenticated hydrate flag. */
   resetSessionState() {
+    this.syncSessionEpoch += 1;
+    this.activeTripSync = null;
     this.debouncedTripSync.cancel();
     this.hydrated = false;
     this.lastSyncedPayloadKey = null;
@@ -107,7 +111,9 @@ class SyncService {
     this.log("local trip payload marked synced", { tripId: payload.tripId, days: payload.days });
   }
 
-  private log(message: string, payload?: Record<string, unknown>) {
+  private log(_message: string, _payload?: Record<string, unknown>) {
+    void _message;
+    void _payload;
     // if (process.env.NODE_ENV !== "production") {
     //   console.info(`[sync] ${message}`, payload || {});
     // }
@@ -269,6 +275,10 @@ class SyncService {
 
   async hydrateCurrentTripLocationsIfNeeded(options?: { force?: boolean }) {
     const payload = this.buildCurrentTripPayload();
+    const hydrationEpoch = this.syncSessionEpoch;
+    const snapshotKey = this.getPayloadKey(payload);
+    const snapshotIsCurrent = () => hydrationEpoch === this.syncSessionEpoch &&
+      snapshotKey === this.getPayloadKey(this.buildCurrentTripPayload());
     let nextItinerary = useTripStore.getState().itinerary;
     let changed = false;
 
@@ -284,6 +294,7 @@ class SyncService {
             missingItems,
             payload.destination,
           );
+          if (!snapshotIsCurrent()) return false;
           if (updates.length > 0) {
             nextItinerary = applyLocationUpdatesToItinerary(nextItinerary, updates);
             changed = true;
@@ -306,6 +317,7 @@ class SyncService {
         collectItineraryItemsMissingPlacePhotos(nextItinerary),
         payload.destination,
       );
+      if (!snapshotIsCurrent()) return false;
       if (photoUpdates.length > 0) {
         nextItinerary = applyLocationUpdatesToItinerary(nextItinerary, photoUpdates);
         changed = true;
@@ -332,7 +344,7 @@ class SyncService {
       }
     }
 
-    if (!changed) {
+    if (!changed || !snapshotIsCurrent()) {
       return false;
     }
 
@@ -640,27 +652,47 @@ class SyncService {
   }
 
   async syncTripState(source = "manual", options?: { keepalive?: boolean; force?: boolean }) {
+    const epoch = this.syncSessionEpoch;
+    // A force flush also joins the queue: concurrent PUTs can finish out of order.
+    while (this.activeTripSync) {
+      await this.activeTripSync;
+      if (epoch !== this.syncSessionEpoch) return;
+    }
+    const operation = this.persistTripState(source, options, epoch);
+    this.activeTripSync = operation;
+    let changedDuringSave = false;
+    try {
+      changedDuringSave = await operation;
+    } finally {
+      if (this.activeTripSync === operation) this.activeTripSync = null;
+    }
+    if (changedDuringSave && epoch === this.syncSessionEpoch) {
+      await this.syncTripState("edits-during-save", options);
+    }
+  }
+
+  private async persistTripState(
+    source: string,
+    options: { keepalive?: boolean; force?: boolean } | undefined,
+    epoch: number,
+  ): Promise<boolean> {
     const previousTrip = useTripStore.getState();
     const payload = this.buildCurrentTripPayload();
     const payloadKey = this.getPayloadKey(payload);
 
     if ((!this.hydrated && !options?.force) || (this.isApplyingRemote && !options?.force)) {
-      return;
+      return false;
     }
 
     const noTripId = !payload.tripId?.trim();
     if (noTripId && payload.itinerary.length === 0) {
       this.log("skip sync without trip and empty itinerary", { source });
-      return;
+      return false;
     }
 
     if (payloadKey === this.lastSyncedPayloadKey && !options?.force) {
       this.log("skip duplicate trip sync", { source });
-      return;
-    }
-    if (this.isSyncing && !options?.force) {
-      this.log("skip overlapping trip sync", { source });
-      return;
+      return false;
     }
 
     this.isSyncing = true;
@@ -674,23 +706,36 @@ class SyncService {
         ),
       );
 
+      if (epoch !== this.syncSessionEpoch) return false;
+      const current = this.buildCurrentTripPayload();
+      // Switching trips or editing while the request is in flight must not let
+      // an older server acknowledgement replace newer local work.
+      if (current.tripId !== payload.tripId) return false;
+      const changedDuringSave = this.getPayloadKey(current) !== payloadKey;
       this.isApplyingRemote = true;
       try {
-        useTripStore.getState().setRemoteTrip(savedTrip, previousTrip.budget, "server-ack");
-        useMapStore.getState().setPins(savedTrip.pins, "server-ack");
+        if (!changedDuringSave) {
+          useTripStore.getState().setRemoteTrip(savedTrip, previousTrip.budget, "server-ack");
+          useMapStore.getState().setPins(savedTrip.pins, "server-ack");
+        } else if (!payload.tripId && savedTrip.tripId) {
+          withSyncMutationSource("server-ack", () => useTripStore.setState({ tripId: savedTrip.tripId }));
+        }
         this.lastSyncedPayloadKey = this.getPayloadKey(savedTrip);
       } finally {
         this.isApplyingRemote = false;
       }
       persistActiveUserSnapshotNow();
+      return changedDuringSave;
     } catch (error) {
+      if (epoch !== this.syncSessionEpoch) return false;
       useToastStore.getState().pushToast({
         variant: "error",
         title: t.tripSync.failedTitle,
         description: error instanceof Error ? error.message : t.tripSync.failedDesc,
       });
+      return false;
     } finally {
-      this.isSyncing = false;
+      if (epoch === this.syncSessionEpoch) this.isSyncing = false;
     }
   }
 

@@ -1,6 +1,6 @@
 import { locationReferencesIncludeName } from "@/lib/locationNameMatch";
 import { findKnownLocationReference } from "@/server/geo/locationCatalog";
-import { geocodeVideoPlaceName } from "@/server/places/geocodeVideoPlace";
+import { createVideoPlaceResolver, type VideoPlaceResolver } from "./videoPlaceResolver";
 import { mapGeocodedPlaceResolvedFrom } from "@/server/places/geocodePlace";
 import { isTextInTripDestinationScope, type TripDestinationScope } from "@/lib/tripDestinationScope";
 import { canonicalizeSimplePlaceName } from "@/server/video/simpleExtraction/mergeExtractionResults";
@@ -66,17 +66,14 @@ function buildUnverifiedLocationReference(hint: string): LocationReference {
 
 async function resolveHintToLocation(input: {
   hint: string;
+  resolvePlace: VideoPlaceResolver;
   destinationHint?: string;
   destinationScope?: TripDestinationScope | null;
 }): Promise<LocationReference | null> {
   const description = `${input.hint}，影片中提到的地點。`;
 
   if (input.destinationHint?.trim() || input.destinationScope?.countryCodes?.length) {
-    const geocoded = await geocodeVideoPlaceName({
-      query: input.hint,
-      destinationHint: input.destinationHint,
-      destinationScope: input.destinationScope,
-    });
+    const geocoded = await input.resolvePlace(input.hint);
     if (geocoded.ok) {
       return {
         name: input.hint,
@@ -127,6 +124,7 @@ async function resolveHintToLocation(input: {
  */
 export async function syncExtractedLocationsWithSegments(input: {
   segments: VideoSummarySegment[];
+  resolvePlace?: VideoPlaceResolver;
   mapReadyLocations: LocationReference[];
   destinationHint?: string;
   destinationScope?: TripDestinationScope | null;
@@ -134,19 +132,15 @@ export async function syncExtractedLocationsWithSegments(input: {
   const hints = collectUniqueHintsFromSegments(input.segments);
   const locations = [...input.mapReadyLocations];
 
-  for (const hint of hints) {
-    if (locationReferencesIncludeName(locations, hint)) {
-      continue;
-    }
-    const resolved = await resolveHintToLocation({
-      hint,
-      destinationHint: input.destinationHint,
-      destinationScope: input.destinationScope,
-    });
-    if (resolved) {
-      locations.push(resolved);
-    }
-  }
+  const resolvePlace = input.resolvePlace ?? createVideoPlaceResolver(input);
+  const missingHints = hints.filter((hint) => !locationReferencesIncludeName(locations, hint));
+  const results = await Promise.allSettled(missingHints.map((hint) => resolveHintToLocation({
+    hint, resolvePlace, destinationHint: input.destinationHint, destinationScope: input.destinationScope,
+  })));
+  results.forEach((result, index) => {
+    locations.push(result.status === "fulfilled" && result.value
+      ? result.value : buildUnverifiedLocationReference(missingHints[index]));
+  });
 
   const deduped = dedupeLocationsByNormalizedName(locations);
   if (deduped.length <= MAX_EXTRACTED_LOCATIONS) {

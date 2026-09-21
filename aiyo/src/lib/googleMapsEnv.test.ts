@@ -35,6 +35,13 @@ test("resolveGoogleMapsApiKey falls back to client-only key", () => {
   );
 });
 
+test("resolveGoogleMapsClientApiKey never exposes a server-only key", () => {
+  assert.equal(
+    resolveGoogleMapsClientApiKey({ GOOGLE_MAPS_API_KEY: "server-only", NODE_ENV: "development" }),
+    "",
+  );
+});
+
 test("resolveGoogleMapsMapId rejects placeholder values", () => {
   assert.equal(
     resolveGoogleMapsMapId({

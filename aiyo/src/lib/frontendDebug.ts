@@ -22,8 +22,6 @@ declare global {
   }
 }
 
-const PREFIX = "[frontend-debug]";
-
 function isBrowser(): boolean {
   return typeof window !== "undefined";
 }
@@ -65,10 +63,13 @@ function activeProcessSnapshot() {
 }
 
 function emit(
-  level: "info" | "warn" | "error",
-  message: string,
-  payload?: Record<string, unknown>,
+  _level: "info" | "warn" | "error",
+  _message: string,
+  _payload?: Record<string, unknown>,
 ) {
+  void _level;
+  void _message;
+  void _payload;
   if (!isBrowser()) {
     return;
   }

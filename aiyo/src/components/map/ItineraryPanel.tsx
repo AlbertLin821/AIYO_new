@@ -50,7 +50,7 @@ import { syncService } from "@/services/syncService";
 import { useMapStore } from "@/stores/useMapStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
-import type { LocationReference, MapPin as TripMapPin, TripPlanDay, TripPlanItem } from "@/types";
+import type { MapPin as TripMapPin, TripPlanDay, TripPlanItem } from "@/types";
 import type { PlaceSuggestion } from "@/types/geocode";
 
 const typeColors: Record<TripPlanItem["type"], string> = {
@@ -154,6 +154,7 @@ type SortableStopProps = {
   isSelected: boolean;
   canSelectOnMap: boolean;
   incomingRoute: ReturnType<typeof buildItineraryRouteSegments>[number] | undefined;
+  routedMinutes?: number;
   currentTransport: string;
   transportOptions: TransportSelectOption[];
   isEditingTitle: boolean;
@@ -173,6 +174,7 @@ function SortableMapStop({
   isSelected,
   canSelectOnMap,
   incomingRoute,
+  routedMinutes,
   currentTransport,
   transportOptions,
   isEditingTitle,
@@ -204,12 +206,17 @@ function SortableMapStop({
       {...attributes}
       {...listeners}
       aria-label={t.itineraryPanel.dragReorderAria}
+      data-itinerary-item-id={item.id}
     >
       {incomingRoute && (
         <div
           className="rounded-xl border border-border-light bg-surface-elevated/60 px-3 py-2"
           onPointerDown={(event) => event.stopPropagation()}
         >
+          <p className="mb-1 text-xs text-muted">
+            {incomingRoute.fromName} → {incomingRoute.toName}
+            <span className="ml-2">{routedMinutes !== undefined ? `路線約 ${routedMinutes} 分鐘` : `估計 ${incomingRoute.estimatedMinutes} 分鐘`}</span>
+          </p>
           <div className="flex items-center">
             <label className="sr-only" htmlFor={`transport_${incomingRoute.id}`}>
               {t.itineraryPanel.segmentTransport}
@@ -410,6 +417,14 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
   const lastExpandedTripIdRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (!selectedPinId) return;
+    const match = itinerary.flatMap((day) => day.items.map((item) => ({ dayNumber: day.dayNumber, item }))).find(({ item }) => findLinkedPinForItem(item, pins)?.id === selectedPinId);
+    if (!match) return;
+    setExpandedDays((current) => ({ ...current, [match.dayNumber]: true }));
+    window.setTimeout(() => document.querySelector<HTMLElement>(`[data-itinerary-item-id="${globalThis.CSS.escape(match.item.id)}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 50);
+  }, [itinerary, pins, selectedPinId]);
+
+  useEffect(() => {
     const tripChanged = lastExpandedTripIdRef.current !== currentTripId;
     lastExpandedTripIdRef.current = currentTripId;
     setExpandedDays((prev) => {
@@ -453,6 +468,7 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
     linkedPinId: string | null;
   } | null>(null);
   const [editingItem, setEditingItem] = useState<{ dayNumber: number; itemId: string; title: string } | null>(null);
+  const routeMinutes = useMapStore((state) => state.segmentDirectionsMinutes);
   const routeSegments = useMemo(() => buildItineraryRouteSegments(itinerary), [itinerary]);
   const transportOptions = useMemo(() => transportSelectRows(tripDestination), [tripDestination]);
 
@@ -606,7 +622,7 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
         description: message,
       });
     }
-  }, [addItineraryItem, ensureItineraryDayCount, placeSearch, pushToast, setSelectedPinId, tripDestination]);
+  }, [addItineraryItem, placeSearch, pushToast, setSelectedPinId, tripDestination]);
 
   const handlePlacePickSelect = useCallback(
     async (suggestion: PlaceSuggestion) => {
@@ -1064,6 +1080,7 @@ export default function ItineraryPanel({ embedded = false, enablePoiAdd = true }
                                   isSelected={isSelected}
                                   canSelectOnMap={canSelectOnMap}
                                   incomingRoute={incomingRoute}
+                                  routedMinutes={incomingRoute ? routeMinutes[incomingRoute.id] : undefined}
                                   currentTransport={currentTransport}
                                   transportOptions={transportOptions}
                                   isEditingTitle={isEditingTitle}

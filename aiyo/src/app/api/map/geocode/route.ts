@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
 import { requireSessionUser } from "@/server/auth";
-import { serverConfig } from "@/server/config";
-import { fetchGooglePlaceDetailsByPlaceId, geocodeWithGoogle } from "@/server/geo/geocodeService";
+import { mapService } from "@/server/maps/service";
 import type { GeocodeApiResult } from "@/types";
 
 export const runtime = "nodejs";
@@ -11,83 +10,17 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   try {
     await requireSessionUser();
-    if (!serverConfig.googleMapsApiKey) {
-      return NextResponse.json(
-        createError(
-          "maps_key_missing",
-          "未設定 GOOGLE_MAPS_API_KEY，無法使用地理編碼。",
-        ),
-        { status: 400 },
-      );
-    }
-
-    const body = (await request.json()) as {
-      locations?: string[];
-      queries?: string[];
-      region?: string;
-    };
-
-    const rawList = Array.isArray(body.queries)
-      ? body.queries
-      : Array.isArray(body.locations)
-        ? body.locations
-        : [];
-
-    const queries = rawList.map((q) => String(q).trim()).filter(Boolean);
-
-    if (queries.length === 0) {
-      return NextResponse.json(
-        createError("invalid_request", "請提供非空的 queries 或 locations 陣列。"),
-        { status: 400 },
-      );
-    }
-
-    const region = body.region?.trim();
+    const body = (await request.json()) as { locations?: string[]; queries?: string[]; region?: string };
+    const raw = Array.isArray(body.queries) ? body.queries : Array.isArray(body.locations) ? body.locations : [];
+    const queries = raw.map(String).map((value) => value.trim()).filter(Boolean).slice(0, 12);
+    if (!queries.length) return NextResponse.json(createError("invalid_request", "請提供非空的 queries 或 locations 陣列。"), { status: 400 });
+    const settled = await Promise.allSettled(queries.map((query) => mapService.searchPlaces([query, body.region].filter(Boolean).join(" "), { limit: 1, language: "zh" })));
     const results: GeocodeApiResult[] = [];
-    const errors: string[] = [];
-
-    for (const query of queries) {
-      const resolved = await geocodeWithGoogle(query, region);
-      if (!resolved.ok) {
-        console.warn(`[geocode] Failed for "${query}": ${resolved.reason}`);
-        errors.push(`${query}: ${resolved.reason}`);
-        continue;
-      }
-      const details = await fetchGooglePlaceDetailsByPlaceId(resolved.result.placeId);
-      results.push({
-        ...resolved.result,
-        photoUrl: details.photoUrl,
-        thumbnail: details.thumbnail || details.photoUrl,
-        openingHours: details.openingHours,
-        phoneNumber: details.phoneNumber,
-        website: details.website,
-        googleMapsUrl: details.googleMapsUrl,
-        rating: details.rating,
-        userRatingsTotal: details.userRatingsTotal,
-      });
-    }
-
-    if (results.length === 0) {
-      return NextResponse.json(
-        createError(
-          "geocode_failed",
-          "Google 地理編碼未回傳任何符合的地點。",
-          errors.length ? errors : undefined,
-        ),
-        { status: 422 },
-      );
-    }
-
-    return NextResponse.json(
-      createSuccess({ results }, errors.length ? { partialFailures: errors } : undefined),
-    );
+    settled.forEach((entry, index) => { if (entry.status === "fulfilled" && entry.value[0]) { const poi = entry.value[0]; results.push({ query: queries[index]!, name: poi.name, formattedAddress: poi.address || poi.name, lat: poi.location.lat, lng: poi.location.lng, placeId: poi.externalId || poi.id, types: [] }); } });
+    if (!results.length) return NextResponse.json(createError("geocode_failed", "地理編碼未回傳任何符合的地點。"), { status: 422 });
+    return NextResponse.json(createSuccess({ results }));
   } catch (error) {
-    if (error instanceof Error && error.message === "unauthorized") {
-      return NextResponse.json(createError("unauthorized", "請先登入。"), { status: 401 });
-    }
-    return NextResponse.json(
-      createError("internal_error", "地理編碼失敗，請稍後再試。"),
-      { status: 500 },
-    );
+    if (error instanceof Error && error.message === "unauthorized") return NextResponse.json(createError("unauthorized", "請先登入。"), { status: 401 });
+    return NextResponse.json(createError("internal_error", "地理編碼失敗，請稍後再試。"), { status: 500 });
   }
 }

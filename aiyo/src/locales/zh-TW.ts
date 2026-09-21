@@ -109,9 +109,9 @@ export const zhTW = {
     mockDevTitle: "示範地圖模式",
     mockDevDesc: "已啟用 ENABLE_MOCK_MAPS，使用示意地圖而非 Google SDK。",
     keyMissingTitle: "未設定地圖金鑰",
-    keyMissingDesc: "未設定 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY，改為示意地圖。",
+    keyMissingDesc: "開放地圖服務目前無法使用，改為保留行程內容。",
     keyMissingBanner:
-      "目前為示意地圖區（非 Google 街圖）。請於環境變數設定 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY（可參考 .env.example），重新啟動開發伺服器後即會載入正式地圖。",
+      "目前無法載入開放地圖。請確認 OpenFreeMap style endpoint 與網路連線後重新整理。",
     mockForcedBanner:
       "已啟用 NEXT_PUBLIC_ENABLE_MOCK_MAPS，固定使用示意地圖。",
     mockLegend: "示意地圖區",
@@ -185,7 +185,7 @@ export const zhTW = {
       "此 Google Maps 金鑰所屬的 Cloud 專案已刪除（DeletedApiProjectMapError）。請在 aiyo/.env.dev（或 aiyo/.env.prod-live）設定新金鑰，並以 docker compose --env-file ./aiyo/.env.dev up -d --force-recreate aiyo-new-app-dev 重建容器（勿只用 docker start）。",
     advancedMarkerFailTitle: "進階標記無法使用",
     advancedMarkerFailDesc:
-      "已改為傳統標記。請確認 Cloud Console 的 Map ID 與 NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID。",
+      "地圖標記已使用相容模式顯示，請重新整理地圖後再試。",
     poiAddTitle: "加入行程",
     poiAddMapButton: "加入此地點",
     poiAddConfirm: "加入行程",

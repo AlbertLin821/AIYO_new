@@ -1,7 +1,7 @@
 # AIYO_new Docker stack
 # - Dev app:        http://127.0.0.1:3000
 # - Prod-live app:  http://127.0.0.1:3001
-# - Open WebUI:     http://127.0.0.1:8080
+# - Open WebUI:     http://127.0.0.1:18080
 # - Postgres:       127.0.0.1:5432
 # - Redis:          127.0.0.1:6379
 
@@ -51,6 +51,7 @@ services:
 
   aiyo-new-redis:
     image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory-policy noeviction
     container_name: aiyo-new-redis
     ports:
       - "127.0.0.1:6379:6379"
@@ -84,6 +85,8 @@ services:
       MEM0_DEFAULT_LLM_PROVIDER: ${MEM0_LLM_PROVIDER:-ollama}
       MEM0_DEFAULT_LLM_MODEL: ${MEM0_LLM_MODEL:-qwen3.5:9b}
       MEM0_DEFAULT_LLM_BASE_URL: ${MEM0_LLM_BASE_URL:-http://host.docker.internal:11434}
+      MEM0_OLLAMA_THINK: ${MEM0_OLLAMA_THINK:-false}
+      MEM0_OLLAMA_TIMEOUT_SECONDS: ${MEM0_OLLAMA_TIMEOUT_SECONDS:-90}
       MEM0_DEFAULT_EMBEDDER_PROVIDER: ${MEM0_EMBEDDER_PROVIDER:-huggingface}
       MEM0_DEFAULT_EMBEDDER_MODEL: ${MEM0_EMBEDDER_MODEL:-sentence-transformers/multi-qa-MiniLM-L6-cos-v1}
       MEM0_DEFAULT_EMBEDDING_DIMS: ${MEM0_EMBEDDING_DIMS:-384}
@@ -113,7 +116,7 @@ services:
 
   open-webui:
     image: ghcr.io/open-webui/open-webui:v0.9.6
-    container_name: open-webui
+    container_name: aiyo-new-open-webui
     environment:
       ENV: ${OPENWEBUI_ENV:-prod}
       PORT: "8080"
@@ -132,7 +135,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${OPENWEBUI_HOST_PORT:-18080}:8080"
     volumes:
       - open_webui_data:/app/backend/data
     restart: unless-stopped
@@ -153,10 +156,6 @@ services:
     build:
       context: ./aiyo
       dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
-        NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID: ${NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID:-}
-        NEXT_PUBLIC_ENABLE_MOCK_MAPS: ${NEXT_PUBLIC_ENABLE_MOCK_MAPS:-}
     container_name: aiyo-new-app-dev
     env_file:
       - ./aiyo/.env.dev
@@ -193,14 +192,30 @@ services:
     networks:
       - backend
 
+  aiyo-new-worker:
+    build:
+      context: ./aiyo
+      dockerfile: Dockerfile
+    container_name: aiyo-new-worker
+    env_file:
+      - ./aiyo/.env.dev
+    command: sh -c "npm install && npx prisma generate && npm run worker:video"
+    volumes:
+      - ./aiyo:/app
+      - aiyo_new_node_modules_worker:/app/node_modules
+    restart: unless-stopped
+    depends_on:
+      aiyo-new-postgres:
+        condition: service_healthy
+      aiyo-new-redis:
+        condition: service_healthy
+    networks:
+      - backend
+
   aiyo-new-app-prod-live:
     build:
       context: ./aiyo
       dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
-        NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID: ${NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID:-}
-        NEXT_PUBLIC_ENABLE_MOCK_MAPS: ${NEXT_PUBLIC_ENABLE_MOCK_MAPS:-}
     container_name: aiyo-new-app-prod-live
     env_file:
       - ./aiyo/.env.prod-live
@@ -248,3 +263,4 @@ volumes:
   aiyo_new_node_modules_prod_live:
   aiyo_new_next_dev:
   aiyo_new_next_prod_live:
+  aiyo_new_node_modules_worker:

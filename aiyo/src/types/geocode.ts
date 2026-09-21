@@ -1,4 +1,4 @@
-export type GeocodeProvider = "google-places" | "google-geocoding" | "manual" | "none";
+export type GeocodeProvider = "photon" | "overpass" | "google-places" | "google-geocoding" | "manual" | "none";
 
 export type GeocodeStatus =
   | "idle"

@@ -1,15 +1,17 @@
+import { buildGroundedVideoOverview } from "@/server/video/groundedVideoOverview";
+import type { VideoJobProgress } from "@/lib/videoJob";
 import { randomUUID } from "crypto";
 import "@/server/bootstrap/videoPipelineBootstrap";
 import {
   extractYouTubeVideoId,
   fetchYouTubeMetadata,
   fetchYouTubeTranscript,
-  type TranscriptEntry,
+
 } from "@/server/providers/youtubeProvider";
 import { prisma } from "@/lib/prisma";
 import { serverConfig } from "@/server/config";
 import { findKnownLocationReference } from "@/server/geo/locationCatalog";
-import { geocodeVideoPlaceName } from "@/server/places/geocodeVideoPlace";
+import { createVideoPlaceResolver, type VideoPlaceResolver } from "@/server/video/videoPlaceResolver";
 import { mapGeocodedPlaceResolvedFrom } from "@/server/places/geocodePlace";
 import {
   inferTripDestinationLabelFromVideoMetadata,
@@ -17,16 +19,12 @@ import {
   resolveTripDestinationScope,
   type TripDestinationScope,
 } from "@/lib/tripDestinationScope";
-import {
-  buildSegmentsFromVerifiedPlaces,
-  mergeVideoSummarySegmentsByStartSeconds,
-} from "@/server/video/momentSegmentBuilder";
 import { extractFinalVideoPlaces } from "@/server/video/placeExtraction";
 import {
   extractSimpleVideoPlacesAndFoods,
-  type SimpleExtractedFood,
   type SimpleExtractedPlace,
 } from "@/server/video/simpleExtraction";
+import { buildGroundedVideoSegments } from "@/server/video/groundedVideoSegments";
 import { preprocessTranscript } from "@/server/video/transcriptProcessing";
 import { syncExtractedLocationsWithSegments } from "@/server/video/syncExtractedLocationsWithSegments";
 import {
@@ -43,7 +41,7 @@ import type {
 } from "@/types";
 
 export const VIDEO_PIPELINE_VERSION =
-  serverConfig.videoExtractionMode === "simple-ollama" ? "video-simple-ollama-v5" : "video-quality-v9";
+  serverConfig.videoExtractionMode === "simple-ollama" ? "video-simple-ollama-v9" : "video-quality-v13";
 const NO_VERIFIED_PLACES_MESSAGE = "此影片未擷取到足夠明確且可驗證的地點名稱。";
 const NO_SIMPLE_RESULTS_MESSAGE = "此影片未擷取到明確地點或食物名稱。";
 
@@ -162,6 +160,7 @@ type VideoSummaryCacheRow = {
 };
 
 interface VideoSummaryInput {
+  onProgress?: (progress: VideoJobProgress) => Promise<void>;
   url?: string;
   videoId?: string;
   title?: string;
@@ -276,7 +275,11 @@ async function invalidateAllVideoSummaryCachesForVideoId(youtubeVideoId: string)
   }
 }
 
-function isAcceptableVideoSummaryCache(result: VideoSummaryResult): boolean {
+export function isAcceptableVideoSummaryCache(result: VideoSummaryResult): boolean {
+  // Legacy destination keys must not resurrect results from older validation rules.
+  if (result.debug?.pipelineVersion !== VIDEO_PIPELINE_VERSION) {
+    return false;
+  }
   if (result.segments.length === 0) {
     return false;
   }
@@ -377,67 +380,6 @@ async function cacheVideoSummary(cacheKey: string, result: VideoSummaryResult): 
   await writePersistedVideoSummary(cacheKey, result);
 }
 
-function compactSummaryFromSegments(segments: VideoSummarySegment[]): string {
-  const top = segments.slice(0, 2).map((segment) => segment.title || segment.locationHints?.[0]).filter(Boolean) as string[];
-  if (!top.length) {
-    return "此影片整理了旅遊行程重點與景點片段。";
-  }
-  const sentence = `此影片重點包含${top.join("、")}等旅遊片段。`;
-  return sentence.length <= 40 ? sentence : `${sentence.slice(0, 39)}…`;
-}
-
-function parseDurationToSeconds(duration: string): number {
-  const parts = duration.split(":").map((part) => Number(part));
-  if (parts.some((part) => Number.isNaN(part))) {
-    return 0;
-  }
-  if (parts.length === 3) {
-    return parts[0] * 3600 + parts[1] * 60 + parts[2];
-  }
-  if (parts.length === 2) {
-    return parts[0] * 60 + parts[1];
-  }
-  return parts[0] || 0;
-}
-
-function formatTimestampFromSeconds(seconds: number): string {
-  const safe = Math.max(0, Math.floor(seconds));
-  const minutes = Math.floor(safe / 60);
-  const remainingSeconds = safe % 60;
-  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
-}
-
-export function buildDescriptionFallbackTranscriptEntries(input: {
-  title: string;
-  description: string;
-}): TranscriptEntry[] {
-  const chunks = [input.title, ...input.description.split(/\n{2,}/u)]
-    .map((chunk) =>
-      chunk
-        .split(/\n/u)
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .join(" "),
-    )
-    .flatMap((chunk) => chunk.split(/(?<=[。！？!?])\s*|[•●◆◇▪︎✔✅🌟📍]/u))
-    .map((chunk) => chunk.replace(/https?:\/\/\S+/gi, " ").replace(/#[\p{Letter}\p{Number}_-]+/gu, " ").trim())
-    .filter((chunk) => !/(請(記得)?訂閱|別忘了|按讚|分享|小鈴鐺|合作邀約|商業合作|follow|instagram|facebook|music by|音樂)/i.test(chunk))
-    .filter((chunk) => chunk.length >= 4 && chunk.length <= 120)
-    .slice(0, 18);
-
-  return chunks.map((text, index) => {
-    const startSeconds = index * 60;
-    return {
-      timestamp: formatTimestampFromSeconds(startSeconds),
-      startSeconds,
-      durationSeconds: 45,
-      text,
-      timestampSource: "description-fallback",
-      timestampConfidence: "low",
-    };
-  });
-}
-
 function toTimestamps(segments: VideoSummarySegment[]): Timestamp[] {
   return segments.map((segment) => ({
     time: segment.timestamp,
@@ -457,84 +399,19 @@ function deriveMapsProvenance(locations: Array<{ resolvedFrom?: string }>): Vide
   return "catalog-fallback";
 }
 
-function compactSummaryFromSimpleExtraction(input: {
-  places: SimpleExtractedPlace[];
-  foods: SimpleExtractedFood[];
-}): string {
-  const placeNames = input.places.map((place) => place.name).slice(0, 3);
-  const foodNames = input.foods.map((food) => food.name).slice(0, 3);
-
-  if (placeNames.length === 0 && foodNames.length === 0) {
-    return NO_SIMPLE_RESULTS_MESSAGE;
-  }
-  if (placeNames.length > 0 && foodNames.length > 0) {
-    return `影片提到${placeNames.join("、")}等地點，以及${foodNames.join("、")}等食物。`;
-  }
-  if (placeNames.length > 0) {
-    return `影片提到${placeNames.join("、")}等地點。`;
-  }
-  return `影片提到${foodNames.join("、")}等食物。`;
-}
-
-function buildSimpleSegments(input: {
-  places: SimpleExtractedPlace[];
-  foods: SimpleExtractedFood[];
-  transcriptSource: VideoSummaryDebugMeta["transcriptSource"];
-}): VideoSummarySegment[] {
-  const timedPlaces = input.places
-    .filter((place) => typeof place.startSeconds === "number")
-    .sort((left, right) => (left.startSeconds as number) - (right.startSeconds as number))
-    .slice(0, 8);
-
-  return timedPlaces.map((place, index) => {
-    const startSeconds = Math.max(0, Math.floor(place.startSeconds || 0));
-    const relatedFoods = input.foods
-      .filter((food) => typeof food.startSeconds === "number")
-      .filter((food) => Math.abs((food.startSeconds as number) - startSeconds) <= 90)
-      .map((food) => food.name)
-      .slice(0, 4);
-
-    return {
-      id: `simple_segment_${index + 1}`,
-      timestamp: formatTimestampFromSeconds(startSeconds),
-      startLabel: formatTimestampFromSeconds(startSeconds),
-      startSeconds,
-      endSeconds: startSeconds + 30,
-      title: place.name,
-      text: place.evidence || `影片提到 ${place.name}`,
-      summary: place.evidence || `影片提到 ${place.name}`,
-      locationHints: [place.name],
-      foods: relatedFoods,
-      timestampSource:
-        input.transcriptSource === "fallback-description"
-          ? "description-fallback"
-          : "youtube-transcript",
-      timestampConfidence:
-        input.transcriptSource === "fallback-description" ? "low" : "high",
-      extractionSource: "ai-polished",
-    };
-  });
-}
-
 async function buildSimpleMapReadyLocations(input: {
   places: SimpleExtractedPlace[];
+  resolvePlace: VideoPlaceResolver;
   destinationHint?: string;
   destinationScope?: TripDestinationScope | null;
 }): Promise<LocationReference[]> {
-  const out: LocationReference[] = [];
-
-  for (const place of input.places.slice(0, 16)) {
+  const results = await Promise.allSettled(input.places.slice(0, 16).map(async (place): Promise<LocationReference | null> => {
     const description = place.evidence || `${place.name}，影片中提到的地點。`;
     const known = findKnownLocationReference(place.name, description);
 
-    if (serverConfig.googleMapsApiKey) {
-      const geocoded = await geocodeVideoPlaceName({
-        query: place.name,
-        destinationHint: input.destinationHint,
-        destinationScope: input.destinationScope,
-      });
-      if (geocoded.ok) {
-        out.push({
+    const geocoded = await input.resolvePlace(place.name);
+    if (geocoded.ok) {
+      return {
           name: place.name,
           lat: geocoded.place.lat,
           lng: geocoded.place.lng,
@@ -551,16 +428,14 @@ async function buildSimpleMapReadyLocations(input: {
           verified: true,
           resolvedFrom: mapGeocodedPlaceResolvedFrom(geocoded.place.provider),
           extractionSource: "ai-polished",
-        });
-        continue;
-      }
+        };
     }
 
     if (!known || !isCatalogLocationAllowedForVideoScope(known, input.destinationScope)) {
-      continue;
+      return null;
     }
 
-    out.push({
+    return {
       ...known,
       name: place.name,
       description,
@@ -574,10 +449,10 @@ async function buildSimpleMapReadyLocations(input: {
       verified: false,
       resolvedFrom: "llm",
       extractionSource: "ai-polished",
-    });
-  }
-
-  return dedupeLocationsByNormalizedName(out);
+    };
+  }));
+  const locations = results.flatMap((result) => result.status === "fulfilled" && result.value ? [result.value] : []);
+  return dedupeLocationsByNormalizedName(locations);
 }
 
 export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSummaryResult> {
@@ -596,6 +471,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     return inputVideoIdCache;
   }
 
+  await input.onProgress?.({ phase: "metadata", label: "讀取影片資訊", percent: 10 });
   const canonicalUrl = input.url?.trim() || `https://www.youtube.com/watch?v=${videoId}`;
   const metadata = await fetchYouTubeMetadata({
     url: canonicalUrl,
@@ -615,17 +491,12 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     }
   }
   const resolvedCacheKey = buildSummaryCacheKey({ videoId: resolvedVideoId });
+  await input.onProgress?.({ phase: "transcript", label: "取得影片字幕", percent: 25 });
   const transcriptResult = await fetchYouTubeTranscript(resolvedVideoId);
-  const descriptionFallbackEntries = buildDescriptionFallbackTranscriptEntries({
-    title: metadata.title,
-    description: metadata.description,
-  });
-  const transcriptEntries =
-    transcriptResult.entries.length > 0
-      ? [...transcriptResult.entries, ...descriptionFallbackEntries]
-      : descriptionFallbackEntries;
+  // Metadata remains extraction context, never a synthetic timed transcript.
+  const transcriptEntries = transcriptResult.entries;
 
-  if (transcriptEntries.length === 0) {
+  if (transcriptEntries.length === 0 && !metadata.description.trim()) {
     const unavailableReason = "無法取得逐字稿，暫時無法產生精準摘要。";
     const video: VideoRecommendation = {
       id: metadata.id,
@@ -690,6 +561,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
   const preprocessedLines = preprocessTranscript(transcriptEntries, profile, {
     captionLanguage: transcriptResult.captionLanguage,
   });
+  await input.onProgress?.({ phase: "extract", label: "整理字幕與旅遊重點", percent: 45 });
   if (serverConfig.videoExtractionMode === "simple-ollama") {
     const simpleResult = await extractSimpleVideoPlacesAndFoods({
       title: metadata.title,
@@ -699,26 +571,31 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
       transcriptLanguage: transcriptResult.captionLanguage,
     });
     const extractedFoodNames = simpleResult.foods.map((food) => food.name);
-    const resolvedSegments = buildSimpleSegments({
+    const resolvedSegments = buildGroundedVideoSegments({
       places: simpleResult.places,
       foods: simpleResult.foods,
-      transcriptSource,
+      transcriptLines: preprocessedLines,
     });
+    await input.onProgress?.({ phase: "locations", label: "核對地點與地圖位置", percent: 80 });
+    const resolvePlace = createVideoPlaceResolver({ destinationHint, destinationScope });
     const mapReadyLocations = await buildSimpleMapReadyLocations({
+      resolvePlace,
       places: simpleResult.places,
       destinationHint,
       destinationScope,
     });
     const syncedLocations = await syncExtractedLocationsWithSegments({
+      resolvePlace,
       segments: resolvedSegments,
       mapReadyLocations,
       destinationHint,
       destinationScope,
     });
     const extractedLocationNames = syncedLocations.map((place) => place.name);
-    const summary = compactSummaryFromSimpleExtraction({
-      places: simpleResult.places,
-      foods: simpleResult.foods,
+    const summary = buildGroundedVideoOverview({
+      segments: resolvedSegments, places: simpleResult.places.map((place) => place.name),
+      foods: extractedFoodNames, description: metadata.description,
+      transcriptAvailable: transcriptSource === "youtube",
     });
     const summarySource: VideoSummaryDebugMeta["summarySource"] =
       transcriptSource === "fallback-description" ? "ollama-description-fallback" : "ollama-transcript";
@@ -799,7 +676,7 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
     description: metadata.description,
     destinationHint,
     destinationScope,
-    enableGeocode: Boolean(serverConfig.googleMapsApiKey),
+    enableGeocode: true,
     enableSearch:
       serverConfig.aiWebSearchEnabled &&
       Boolean(serverConfig.serperApiKey.trim() || serverConfig.tavilyApiKey.trim()),
@@ -837,19 +714,15 @@ export async function summarizeVideo(input: VideoSummaryInput): Promise<VideoSum
         .map((candidate) => `${candidate.rawText}：${candidate.rejectedReason}`)
     : undefined;
 
-  const deterministicSegments =
-    formalUiPlaces.length === 0
-      ? []
-      : buildSegmentsFromVerifiedPlaces({
-          places: formalUiPlaces,
-          videoDurationSeconds: parseDurationToSeconds(metadata.duration),
-          maxSegments: 8,
-        });
-  const resolvedSegmentLocations = mergeVideoSummarySegmentsByStartSeconds(deterministicSegments).filter(
-    (segment) => (segment.locationHints || []).length > 0,
-  );
-  const summary =
-    formalUiPlaces.length === 0 ? NO_VERIFIED_PLACES_MESSAGE : compactSummaryFromSegments(resolvedSegmentLocations);
+  const resolvedSegmentLocations = buildGroundedVideoSegments({
+    places: formalUiPlaces.map((place) => ({ name: place.name, startSeconds: place.firstMentionStartSeconds })),
+    foods: [],
+    transcriptLines: preprocessedLines,
+  });
+  const summary = buildGroundedVideoOverview({
+    segments: resolvedSegmentLocations, places: extractedLocationNames, foods: [],
+    description: metadata.description, transcriptAvailable: transcriptSource === "youtube",
+  });
   const usedDescriptionFallback = transcriptSource === "fallback-description";
   const summarySource: VideoSummaryDebugMeta["summarySource"] = usedDescriptionFallback
     ? "ollama-description-fallback"

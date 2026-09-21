@@ -99,11 +99,13 @@ test("keyword search updates video cards and hides noisy description text", asyn
   }
 
   await page.getByTestId("video-search-input").fill("嘉義美食");
+  await expect(page.getByTestId("video-search-submit")).toBeEnabled();
   const searchResponse = page.waitForResponse(
     (res) => res.url().includes("/api/videos/recommendations") && res.ok(),
     { timeout: 30_000 },
   );
   await page.getByTestId("video-search-input").press("Enter");
+  if (process.env.E2E_DEBUG_CHAT === "1") console.info("[search-e2e] entered", await page.getByTestId("video-search-input").inputValue(), await page.getByTestId("video-search-submit").isEnabled());
   await searchResponse;
 
   const card = page.getByTestId("video-card").filter({ hasText: "嘉義美食一日遊" });

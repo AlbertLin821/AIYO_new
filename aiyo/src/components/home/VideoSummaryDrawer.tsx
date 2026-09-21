@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { inferVideoTitleDestination } from "@/lib/tripDestinationScope";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -28,6 +29,7 @@ import dynamic from "next/dynamic";
 import type { Video } from "@/types";
 import type { MapPin as TripMapPin } from "@/types";
 import { cn } from "@/lib/utils";
+import { resumePendingVideoJobs } from "@/services/videoJobsClient";
 import { getSegmentSeekSeconds, parseTimestampToSeconds } from "@/lib/videoTimestamp";
 import { buildYoutubeWatchUrl } from "@/lib/youtubeWatchUrl";
 import {
@@ -45,7 +47,7 @@ import { createNewTrip, listTripsForLibrary, setActiveTrip } from "@/services/it
 import { syncService } from "@/services/syncService";
 import { useToastStore } from "@/stores/useToastStore";
 import { useTripStore } from "@/stores/useTripStore";
-import { useVideoStore, type SummaryDiagnostics, type VideoState } from "@/stores/useVideoStore";
+import { useVideoStore, type VideoState } from "@/stores/useVideoStore";
 import YoutubeIframePlayer from "@/components/home/YoutubeIframePlayer";
 import PlanningWaitGame from "@/components/chat/PlanningWaitGame";
 
@@ -55,7 +57,7 @@ type PreviewMapProps = {
   className?: string;
 };
 
-const PreviewMap = dynamic<PreviewMapProps>(() => import("@/components/map/PublicItineraryMap"), {
+const PreviewMap = dynamic<PreviewMapProps>(() => import("@/components/map/PublicMapLibre"), {
   ssr: false,
 });
 
@@ -82,6 +84,8 @@ const PREVIEW_PIN_COLORS = [
 ];
 
 function inferDestinationFromVideoImport(video: Video, names: string[]) {
+  const titleDestination = inferVideoTitleDestination(video.title);
+  if (titleDestination) return titleDestination;
   const fromLocations = video.extractedLocations
     .map((location) => location.address || location.description || "")
     .join(" ");
@@ -103,42 +107,6 @@ function buildImportedTripTitle(video: Video, destination: string, names: string
   return video.title ? `${video.title.slice(0, 24)} 行程` : "影片行程";
 }
 
-function drawerSummarySourceLabel(key: SummaryDiagnostics["summarySource"]): string | null {
-  switch (key) {
-    case "ollama-transcript":
-      return t.drawer.sourceSummaryModel;
-    case "heuristic-transcript-fallback":
-      return t.drawer.sourceSummaryHeuristic;
-    case "ollama-description-fallback":
-      return t.drawer.sourceSummaryDescription;
-    case "ollama-synthetic-fallback":
-      return t.drawer.sourceSummaryHeuristic;
-    case "unavailable":
-      return t.drawer.sourceSummaryUnavailable;
-    default:
-      return null;
-  }
-}
-
-function drawerSegmentSourceLabel(key: SummaryDiagnostics["segmentSource"]): string | null {
-  switch (key) {
-    case "transcript-chunks":
-      return t.drawer.sourceSegmentsTranscript;
-    case "deterministic-mentions":
-      return t.drawer.sourceSegmentsMentions;
-    case "deterministic-mentions-json-polished":
-      return t.drawer.sourceSegmentsMentionsPolished;
-    case "description-fallback":
-      return t.drawer.sourceSegmentsDescription;
-    case "synthetic-fallback":
-      return t.drawer.sourceSegmentsSynthetic;
-    case "unavailable":
-      return t.drawer.sourceSegmentsUnavailable;
-    default:
-      return null;
-  }
-}
-
 function ProcessingRow({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-2 rounded-xl border border-border-light bg-cream/40 px-3 py-3 text-sm text-muted">
@@ -155,10 +123,12 @@ export default function VideoSummaryDrawer({
   onRefreshSummary,
 }: VideoSummaryDrawerProps) {
   const router = useRouter();
-  const { status: sessionStatus } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const summaryDiagnosticsByVideoKey = useVideoStore(
     (state: VideoState) => state.summaryDiagnosticsByVideoKey,
   );
+  const videoJobProgress = useVideoStore((state) => state.videoJobProgress);
+  useEffect(() => { if (sessionStatus === "authenticated" && session?.user?.id) resumePendingVideoJobs(session.user.id); }, [sessionStatus, session?.user?.id]);
   const summaryStatusByVideoKey = useVideoStore(
     (state: VideoState) => state.summaryStatusByVideoKey,
   );
@@ -398,7 +368,7 @@ export default function VideoSummaryDrawer({
   const hasSummarySegments = (activeVideo.summarySegments || []).length > 0;
   const hasExtractedLocationRows = extractedLocationRows.length > 0;
   const hasMapReadyLocations = geocodedLocations.length > 0;
-  const isProcessingVideo = activeVideoSummaryStatus === "queued" || activeVideoSummaryStatus === "running";
+  const isProcessingVideo = activeVideoSummaryStatus === "queued" || activeVideoSummaryStatus === "running" || Boolean(activeVideoKey && videoJobProgress[activeVideoKey]);
   const drawerProcessingWaitKey = isProcessingVideo
     ? `drawer-processing:${activeVideoKey}:${activeVideoSummaryStatus}`
     : null;
@@ -1166,7 +1136,7 @@ export default function VideoSummaryDrawer({
         planningComplete={shouldAnnounceVideoSummaryComplete}
         promptDelayMs={3000}
         promptTitle="影片摘要處理中，先玩個小遊戲吧！"
-        gameDescription="正在整理影片重點與地點資訊，先玩小遊戲打發等待時間。"
+        gameDescription={(activeVideoKey && videoJobProgress[activeVideoKey]) || "正在整理影片重點與地點資訊，先玩小遊戲打發等待時間。"}
         completionTitle={videoSummaryCompletionTitle}
         completionDescription={videoSummaryCompletionDescription}
       />

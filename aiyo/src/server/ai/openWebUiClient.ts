@@ -1,3 +1,4 @@
+import { readModelStream } from "./modelStream";
 import { normalizeOllamaResponseContent } from "@/server/ai/ollamaResponseNormalizer";
 import {
   OllamaRequestError,
@@ -7,6 +8,8 @@ import {
 import { serverConfig } from "@/server/config";
 
 interface OpenWebUiChatOptions {
+  onChunk?: (chunk: string) => void;
+  onStreamStart?: () => void;
   messages: OllamaMessage[];
   format?: "json" | Record<string, unknown>;
   model?: string;
@@ -174,6 +177,7 @@ function normalizeModelIds(payload: unknown): string[] {
 }
 
 export async function chatWithOpenWebUI({
+  onChunk, onStreamStart,
   messages,
   format,
   model,
@@ -192,7 +196,7 @@ export async function chatWithOpenWebUI({
   try {
     const body: Record<string, unknown> = {
       model: resolveModelForTask(task, model),
-      stream: false,
+      stream: Boolean(onChunk),
       messages: [
         {
           role: "system",
@@ -220,6 +224,7 @@ export async function chatWithOpenWebUI({
       body.response_format = responseFormat;
     }
 
+    onStreamStart?.();
     const response = await fetch(buildGatewayUrl("/api/chat/completions"), {
       method: "POST",
       headers: buildGatewayHeaders(),
@@ -237,6 +242,11 @@ export async function chatWithOpenWebUI({
       );
     }
 
+    if (onChunk && response.headers.get("content-type")?.includes("text/event-stream")) {
+      const streamed = await readModelStream(response, "openai", onChunk);
+      if (!streamed.trim()) throw new OllamaRequestError("Empty stream", undefined, "empty_response");
+      return normalizeOllamaResponseContent(streamed, format);
+    }
     const payload = await response.json();
     const content = extractGatewayContent(payload);
     if (!content) {

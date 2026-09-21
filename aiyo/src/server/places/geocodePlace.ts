@@ -8,7 +8,7 @@ import {
   evaluateGeocodeConfidenceGate,
   type GeocodeResult,
 } from "@/server/geo/geocodeService";
-import { searchPlacesByText, type PlaceSearchHit } from "@/server/geo/placesSearchService";
+import { searchPlacesByText, type PlaceSearchHit } from "@/server/geo/osmPlacesSearchService";
 import type { GeocodeProvider, GeocodedPlace, PlaceSuggestion } from "@/types/geocode";
 
 export type GeocodePlaceInput = {
@@ -325,7 +325,7 @@ function pickBestCandidate(
           placeId: top.candidate.placeId ?? null,
           lat: top.candidate.lat,
           lng: top.candidate.lng,
-          provider: "google-geocoding",
+          provider: "photon",
           confidence: top.score,
           sourceQuery: query,
           countryCode: top.candidate.countryCode ?? null,
@@ -342,7 +342,7 @@ function pickBestCandidate(
     return { ok: false, code: "ambiguous", message: "找到多個可能地點，無法自動選擇。" };
   }
 
-  const provider: GeocodeProvider = top.candidate.placeId ? "google-geocoding" : "google-geocoding";
+  const provider: GeocodeProvider = "photon";
   return {
     ok: true,
     place: {
@@ -367,6 +367,7 @@ function placeSearchHitToGeocodeResult(query: string, hit: PlaceSearchHit): Geoc
     lng: hit.lng,
     placeId: hit.placeId.startsWith("noid_") ? undefined : hit.placeId,
     types: hit.types,
+    countryCode: hit.countryCode,
   };
 }
 
@@ -376,7 +377,14 @@ function pickBestPlaceSearchHit(
   destinationHint: string | undefined,
   scope: TripDestinationScope | null,
 ): GeocodePlaceResult | null {
-  const candidates = hits.map((hit) => placeSearchHitToGeocodeResult(query, hit));
+  const normalizeName = (value: string) => value.toLowerCase().replace(/臺/g, "台").replace(/[\s,，、·・]/gu, "");
+  const sought = normalizeName(destinationHint ? query.replace(destinationHint, "") : query);
+  const candidates = hits
+    .filter((hit) => sought.length >= 2 && normalizeName(hit.name).includes(sought))
+    .map((hit) => placeSearchHitToGeocodeResult(query, {
+      ...hit,
+      formattedAddress: [hit.name, hit.formattedAddress].filter(Boolean).join(", "),
+    }));
   const inScope = candidates.filter((candidate) => candidatePassesDestinationScope(candidate, scope));
   if (!inScope.length) {
     return null;
@@ -390,17 +398,8 @@ function pickBestPlaceSearchHit(
     }))
     .sort((a, b) => b.score - a.score);
 
-  let chosen = ranked.find((entry) => entry.gate.accepted);
-  if (!chosen) {
-    chosen = ranked.find((entry) => canAcceptCrossLocale(query, entry.candidate, scope));
-  }
-  if (!chosen) {
-    const fallback = ranked[0];
-    if (!fallback?.candidate.placeId || !scope?.countryCodes.length) {
-      return null;
-    }
-    chosen = { ...fallback, score: 0.55 };
-  }
+  const chosen = ranked.find((entry) => entry.gate.accepted);
+  if (!chosen) return null;
 
   const top = chosen.candidate;
   return {
@@ -411,7 +410,7 @@ function pickBestPlaceSearchHit(
       placeId: top.placeId ?? null,
       lat: top.lat,
       lng: top.lng,
-      provider: "google-places",
+      provider: "photon",
       confidence: chosen.score,
       sourceQuery: query,
       countryCode: top.countryCode ?? null,
@@ -430,10 +429,13 @@ async function geocodePlaceViaTextSearch(
     scope?.canonicalLabel?.trim() ||
     undefined;
   const search = await searchPlacesByText(query, locationHint, { maxResults: 6 });
-  if (!search.ok || !search.places.length) {
+  if (!search.ok) {
     return null;
   }
-  return pickBestPlaceSearchHit(query, search.places, locationHint, scope);
+  const matched = pickBestPlaceSearchHit(query, search.places, locationHint, scope);
+  if (matched || !locationHint) return matched;
+  const unbiased = await searchPlacesByText(query, undefined, { maxResults: 6 });
+  return unbiased.ok ? pickBestPlaceSearchHit(query, unbiased.places, locationHint, scope) : null;
 }
 
 export function clearGeocodeMemoryCacheForTests() {
@@ -453,43 +455,13 @@ export async function geocodePlace(input: GeocodePlaceInput): Promise<GeocodePla
   }
 
   const scope = resolveScope(input);
-  const regionBias = buildRegionBias(input);
-  const language = geocodeLanguageForScope(scope);
-  const countryCode = primaryCountryCode(scope) || input.countryHint?.trim().toUpperCase();
-
-  const fetched = await fetchGeocodeCandidates(query, regionBias, {
-    countryCode,
-    language,
-  });
-
-  if (!fetched.ok && fetched.code === "missing_api_key") {
-    return { ok: false, code: fetched.code, message: fetched.message };
-  }
-
-  if (fetched.ok) {
-    const picked = pickBestCandidate(
-      query,
-      fetched.candidates,
-      input.destinationHint,
-      scope,
-    );
-    if (picked.ok) {
-      memoryCache.set(key, picked.place);
-      return picked;
-    }
-  }
-
   const textSearch = await geocodePlaceViaTextSearch(input, query, scope);
   if (textSearch?.ok) {
     memoryCache.set(key, textSearch.place);
     return textSearch;
   }
 
-  if (!fetched.ok) {
-    return { ok: false, code: fetched.code, message: fetched.message };
-  }
-
-  return pickBestCandidate(query, fetched.candidates, input.destinationHint, scope);
+  return { ok: false, code: "not_found", message: "找不到符合的地點。" };
 }
 
 export type SuggestPlacesResult =
@@ -512,7 +484,7 @@ function candidateToSuggestion(
     placeId: candidate.placeId ?? null,
     lat: candidate.lat,
     lng: candidate.lng,
-    provider: "google-geocoding",
+    provider: "photon",
     confidence: score,
     sourceQuery: query,
     countryCode: candidate.countryCode ?? null,
@@ -526,7 +498,7 @@ function hitToSuggestion(query: string, hit: PlaceSearchHit, score: number): Pla
     placeId: hit.placeId.startsWith("noid_") ? null : hit.placeId,
     lat: hit.lat,
     lng: hit.lng,
-    provider: "google-places",
+    provider: "photon",
     confidence: score,
     sourceQuery: query,
     rating: hit.rating,
@@ -710,9 +682,6 @@ export async function suggestPlacesForQuery(
 
   const maxResults = Math.min(8, Math.max(1, options?.maxResults ?? 5));
   const scope = resolveScope(input);
-  const regionBias = buildRegionBias(input);
-  const language = geocodeLanguageForScope(scope);
-  const countryCode = primaryCountryCode(scope) || input.countryHint?.trim().toUpperCase();
   const locationHint =
     input.destinationHint?.trim() ||
     input.countryHint?.trim() ||
@@ -722,24 +691,6 @@ export async function suggestPlacesForQuery(
 
   const strictSuggestions: PlaceSuggestion[] = [];
   const relaxedSuggestions: PlaceSuggestion[] = [];
-  const fetched = await fetchGeocodeCandidates(query, regionBias, {
-    countryCode,
-    language,
-  });
-
-  if (!fetched.ok && fetched.code === "missing_api_key") {
-    return { ok: false, code: fetched.code, message: fetched.message };
-  }
-
-  if (fetched.ok) {
-    strictSuggestions.push(
-      ...rankCandidatesForSuggestions(query, fetched.candidates, destinationHint, scope),
-    );
-    relaxedSuggestions.push(
-      ...rankCandidatesForSuggestionsRelaxed(query, fetched.candidates, destinationHint),
-    );
-  }
-
   const search = await searchPlacesByText(query, locationHint, { maxResults: 6 });
   if (search.ok && search.places.length) {
     strictSuggestions.push(
@@ -761,14 +712,6 @@ export async function suggestPlacesForQuery(
     const countryScope = countryOnlyScope(scope);
     const countryStrict: PlaceSuggestion[] = [];
     const countryRelaxed: PlaceSuggestion[] = [];
-    if (fetched.ok) {
-      countryStrict.push(
-        ...rankCandidatesForSuggestions(query, fetched.candidates, destinationHint, countryScope),
-      );
-      countryRelaxed.push(
-        ...rankCandidatesForSuggestionsRelaxed(query, fetched.candidates, destinationHint),
-      );
-    }
     if (search.ok && search.places.length) {
       countryStrict.push(
         ...rankHitsForSuggestions(query, search.places, locationHint, countryScope),
@@ -798,9 +741,6 @@ export async function suggestPlacesForQuery(
   }
 
   if (!merged.length) {
-    if (!fetched.ok) {
-      return { ok: false, code: fetched.code, message: fetched.message };
-    }
     return { ok: false, code: "not_found", message: "找不到符合的地點。" };
   }
 

@@ -1,12 +1,21 @@
 import { NextResponse } from "next/server";
 import { createSuccess } from "@/lib/api-response";
-import { runGoogleMapsSetupCheck } from "@/server/geo/googleMapsSetupCheck";
+import { mapServiceConfig } from "@/server/maps/config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Dev-friendly probe: which Google APIs accept the configured key (no secrets returned). */
+/** Backward-compatible setup endpoint for the keyless OSM map stack. */
 export async function GET() {
-  const result = await runGoogleMapsSetupCheck();
-  return NextResponse.json(createSuccess(result));
+  return NextResponse.json(
+    createSuccess({
+      provider: "osm",
+      configured: true,
+      services: {
+        photon: mapServiceConfig.photonBaseUrl,
+        overpass: mapServiceConfig.overpassBaseUrl,
+        osrm: mapServiceConfig.osrmBaseUrl,
+      },
+    }),
+  );
 }

@@ -21,6 +21,7 @@ export type PersonalMemoryTripRecord = {
 
 export type PersonalMemoryBundle = {
   destinations: string[];
+  visitedDestinations?: string[];
   identityFacts?: string[];
   snippets: string[];
   recentTrips: PersonalMemoryTripRecord[];
@@ -179,7 +180,6 @@ export function buildPersonalMemoryBundle(input: {
     currentTrip?.destination || "",
     ...(structured?.recentTrips.map((trip) => trip.destination || "").filter(Boolean) || []),
     ...(structured?.preferences.destinationPreferences || []),
-    ...(input.tripProfile?.visited_before || []),
   ]);
 
   const snippets = collectMem0Snippets(input);
@@ -215,10 +215,12 @@ export function buildPersonalMemoryBundle(input: {
 
   return {
     destinations,
+    visitedDestinations: dedupeStrings(input.tripProfile?.visited_before || []),
     identityFacts,
     snippets,
     recentTrips,
     hasData:
+      (input.tripProfile?.visited_before?.length || 0) > 0 ||
       destinations.length > 0 ||
       identityFacts.length > 0 ||
       tripsWithDestination.length > 0 ||
@@ -230,7 +232,11 @@ export function formatPersonalMemoryBundleForPrompt(bundle: PersonalMemoryBundle
   const sections: string[] = [];
 
   if (bundle.destinations.length) {
-    sections.push(`已知去過或常去的目的地：${bundle.destinations.join("、")}`);
+    sections.push(`已規劃或偏好的目的地（不代表實際到訪）：${bundle.destinations.join("、")}`);
+  }
+
+  if (bundle.visitedDestinations?.length) {
+    sections.push(`使用者明確表示去過：${bundle.visitedDestinations.join("、")}`);
   }
 
   if (bundle.identityFacts?.length) {
@@ -286,7 +292,9 @@ export function formatPersonalMemoryDeterministicReply(bundle: PersonalMemoryBun
     return "我這邊目前還沒有記錄到你去過的目的地。你可以直接告訴我過去去過哪裡，或開始規劃新行程，我會把偏好記下來。";
   }
 
-  const lines: string[] = ["根據我目前記錄到的旅行資料，你去過或常提到的地方包括："];
+  const lines: string[] = ["根據目前保存的旅行規劃與偏好資料："];
+  if (bundle.visitedDestinations?.length) lines.push(`- 你明確提過已到訪：${bundle.visitedDestinations.join("、")}`);
+  if (bundle.destinations.length) lines.push("以下規劃紀錄不代表已實際到訪。");
 
   if (bundle.destinations.length) {
     lines.push(`- 目的地：${bundle.destinations.join("、")}`);
@@ -309,7 +317,7 @@ export function formatPersonalMemoryDeterministicReply(bundle: PersonalMemoryBun
         .join("，");
       lines.push(`  - ${label}${detail ? `（${detail}）` : ""}`);
       if (trip.representativeItems?.length) {
-        lines.push(`    去過／排過：${trip.representativeItems.slice(0, 6).join("、")}`);
+        lines.push(`    規劃項目：${trip.representativeItems.slice(0, 6).join("、")}`);
       }
     }
   }

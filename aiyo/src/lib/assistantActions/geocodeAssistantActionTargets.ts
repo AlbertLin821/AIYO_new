@@ -16,7 +16,7 @@ function locationFromGeocoded(place: GeocodedPlace): LocationReference {
     description: place.formattedAddress || place.placeName,
     address: place.formattedAddress || undefined,
     placeId: place.placeId || undefined,
-    resolvedFrom: "google-geocode",
+    resolvedFrom: place.provider === "photon" ? "photon" : place.provider === "overpass" ? "overpass" : "legacy-google",
     verified: true,
     confidence: place.confidence,
   };

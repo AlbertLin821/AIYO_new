@@ -1,3 +1,4 @@
+import { submitVideoJob } from "@/server/jobs/videoJobs";
 import "@/server/bootstrap/videoPipelineBootstrap";
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
@@ -50,6 +51,18 @@ export async function POST(request: Request) {
       }
     }
 
+    const resolvedVideoId = body.videoId?.trim() || extractYouTubeVideoId(body.url || "");
+    if (!resolvedVideoId || !/^[a-zA-Z0-9_-]{11}$/.test(resolvedVideoId)) {
+      return NextResponse.json(createError("invalid_request", "影片識別碼格式不正確。"), { status: 400 });
+    }
+    if (request.headers.get("Prefer")?.includes("respond-async")) {
+      try {
+        const job = await submitVideoJob(userId, { videoId: resolvedVideoId, title: body.title?.slice(0, 300), destination: body.destination?.slice(0, 200), refresh: body.refresh === true });
+        return NextResponse.json(createSuccess(job), { status: 202 });
+      } catch {
+        return NextResponse.json(createError("queue_unavailable", "分析服務暫時無法使用，請稍後重試。"), { status: 503 });
+      }
+    }
     try {
       const result = await summarizeVideoForApi(body);
       await recordVideoInteraction(userId, {

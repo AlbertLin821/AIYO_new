@@ -48,6 +48,8 @@ export type VideoRecommendationRequest = {
 };
 
 export interface VideoState {
+  videoJobProgress: Record<string, string | undefined>;
+  setVideoJobProgress: (id: string, label: string | null) => void;
   videos: VideoRecommendation[];
   selectedVideo: VideoRecommendation | null;
   searchQuery: string;
@@ -109,6 +111,8 @@ export interface VideoState {
 }
 
 export const useVideoStore = create<VideoState>((set, get) => ({
+  videoJobProgress: {},
+  setVideoJobProgress: (id, label) => set((state) => ({ videoJobProgress: { ...state.videoJobProgress, [id]: label ?? undefined } })),
   videos: [],
   selectedVideo: null,
   searchQuery: "",

@@ -51,6 +51,8 @@ export function preprocessTranscript(
   const useSimplifiedToTraditional = captionLang === "zh-cn" || captionLang === "zh-hans";
 
   for (const entry of entries) {
+    if (!Number.isFinite(entry.startSeconds) || entry.startSeconds < 0 ||
+        !Number.isFinite(entry.durationSeconds) || entry.durationSeconds <= 0) continue;
     const originalRaw = normalizeWhitespace(entry.text || "");
     let working = originalRaw;
     if (useSimplifiedToTraditional && working) {
@@ -69,7 +71,7 @@ export function preprocessTranscript(
 
     const stripped = stripKnownPrefix(working, profile);
     const text = normalizeWhitespace(stripped || working);
-    const endSeconds = Math.max(entry.startSeconds + Math.max(1, entry.durationSeconds), entry.startSeconds + 1);
+    const endSeconds = entry.startSeconds + entry.durationSeconds;
     out.push({
       id: `line_${++index}`,
       startSeconds: entry.startSeconds,
@@ -85,9 +87,11 @@ export function preprocessTranscript(
   for (const line of out) {
     const last = merged[merged.length - 1];
     const isShort = line.text.length <= 10;
-    const isNear = last && line.startSeconds - last.endSeconds <= 2;
+    const isNear = last && line.startSeconds >= last.startSeconds && line.startSeconds - last.endSeconds <= 2
+      && line.timestampSource === last.timestampSource && line.timestampConfidence === last.timestampConfidence;
     if (last && isShort && isNear) {
       last.text = normalizeWhitespace(`${last.text} ${line.text}`);
+      last.rawText = normalizeWhitespace(`${last.rawText} ${line.rawText}`);
       last.endSeconds = Math.max(last.endSeconds, line.endSeconds);
       continue;
     }

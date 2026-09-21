@@ -89,9 +89,9 @@ test.describe("地圖 marker info card", () => {
 
     const mockMarkers = page.getByTestId("map-pin-marker");
     await expect(mockMarkers.first()).toBeVisible({ timeout: 40_000 });
-    await mockMarkers.first().click();
-
     const infoPanel = page.getByTestId("map-pin-info-panel");
+    // A persisted itinerary selection may already have opened this marker.
+    if (!(await infoPanel.isVisible())) await mockMarkers.first().click();
     await expect(infoPanel).toBeVisible({ timeout: 15_000 });
 
     await mockMarkers.first().click();

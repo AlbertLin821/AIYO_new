@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { resolvePlacePhotoUrl } from "@/lib/placePhotoUrl";
 import { cn } from "@/lib/utils";
 
@@ -21,9 +21,28 @@ export default function PlaceThumbnail({
   className,
   imageClassName,
 }: PlaceThumbnailProps) {
+  const resolved = resolvePlacePhotoUrl(src, placeId);
+  return (
+    <ResolvedPlaceThumbnail
+      key={resolved ?? "no-photo"}
+      resolved={resolved}
+      alt={alt}
+      placeholder={placeholder}
+      className={className}
+      imageClassName={imageClassName}
+    />
+  );
+}
+
+function ResolvedPlaceThumbnail({
+  resolved,
+  alt,
+  placeholder,
+  className,
+  imageClassName,
+}: Omit<PlaceThumbnailProps, "src" | "placeId"> & { resolved?: string }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState(0);
-  const resolved = resolvePlacePhotoUrl(src, placeId);
   const displaySrc = useMemo(() => {
     if (!resolved) {
       return undefined;
@@ -46,11 +65,6 @@ export default function PlaceThumbnail({
     }
   }, [resolved, retryToken]);
   const showImage = Boolean(displaySrc) && failedSrc !== resolved;
-
-  useEffect(() => {
-    setFailedSrc(null);
-    setRetryToken(0);
-  }, [resolved]);
 
   return (
     <div

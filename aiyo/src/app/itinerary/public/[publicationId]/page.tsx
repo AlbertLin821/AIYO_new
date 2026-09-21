@@ -17,7 +17,7 @@ import { useToastStore } from "@/stores/useToastStore";
 import type { PublicItineraryDetail } from "@/types";
 import { zhTW as t } from "@/locales/zh-TW";
 
-const PublicItineraryMap = dynamic(() => import("@/components/map/PublicItineraryMap"), {
+const PublicItineraryMap = dynamic(() => import("@/components/map/PublicMapLibre"), {
   ssr: false,
 });
 

@@ -9,10 +9,20 @@ test.afterAll(async () => {
 });
 
 test("unauthenticated users see login CTA on recommended itineraries panel", async ({ page }) => {
+  const hydrationErrors: string[] = [];
+  page.on("pageerror", (error) => {
+    if (/hydration|hydrating|Minified React error #(?:418|423|425)/i.test(error.message)) {
+      hydrationErrors.push(error.message);
+    }
+  });
   await page.goto("/");
-  await page.getByTestId("home-recommend-tab-itineraries").click();
+  const itinerariesTab = page.getByTestId("home-recommend-tab-itineraries");
+  // Wait for reconciliation; never hide persistent duplicate controls with first().
+  await expect(itinerariesTab).toHaveCount(1, { timeout: 15_000 });
+  await itinerariesTab.click();
   await expect(page.getByTestId("public-itinerary-login-cta")).toBeVisible();
   await expect(page.getByText("登入後查看社群推薦行程")).toBeVisible();
+  expect(hydrationErrors, "首頁不應發生 hydration 錯誤").toEqual([]);
 });
 
 test("publish → home list → detail → copy flow", async ({ page }) => {
@@ -51,7 +61,7 @@ test("publish → home list → detail → copy flow", async ({ page }) => {
   await page.getByRole("button", { name: "去看地圖" }).click();
   await expect(page).toHaveURL(/\/trip\//, { timeout: 20_000 });
   await expect(
-    page.getByTestId("map-view").getByRole("button", { name: "赤崁樓", exact: true }),
+    page.getByTestId("map-view").getByRole("button", { name: /赤崁樓$/ }),
   ).toBeVisible({ timeout: 20_000 });
   await page.getByRole("link", { name: "行程規劃" }).click();
   await expect(page).toHaveURL(/\/itinerary/, { timeout: 20_000 });

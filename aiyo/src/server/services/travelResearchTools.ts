@@ -1,10 +1,11 @@
+import { rankPlaceCandidates } from "@/server/personalization/placePreferenceRanking";
 import { enrichChatContextWithDestinationScope } from "@/lib/tripDestinationScope";
 import type { ChatContext, ChatSource, TripPlanRequest } from "@/types";
 import { serverConfig } from "@/server/config";
 import {
   searchPlacesByText,
   type PlaceSearchHit,
-} from "@/server/geo/placesSearchService";
+} from "@/server/geo/osmPlacesSearchService";
 import {
   fetchDestinationWeatherSummary,
   formatWeatherForPrompt,
@@ -225,8 +226,8 @@ async function executeSingleTravelToolRequest(
           status: "completed",
         });
         return {
-          placeHits: res.places,
-          section: `### 地點搜尋（${req.query}）\n${formatPlacesForPrompt(res.places)}`,
+          placeHits: rankPlaceCandidates(res.places, context?.preferences),
+          section: `### 地點搜尋（${req.query}）\n${formatPlacesForPrompt(rankPlaceCandidates(res.places, context?.preferences))}`,
           sources: {},
         };
       }
@@ -499,7 +500,7 @@ export async function executeTravelToolRequests(
 
   return {
     text: sections.join("\n\n").slice(0, 24_000),
-    placeHits: dedupePlaces(placeHits),
+    placeHits: rankPlaceCandidates(dedupePlaces(placeHits), context?.preferences),
     sources,
   };
 }

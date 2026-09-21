@@ -85,8 +85,17 @@ export class ChatNetworkMonitor {
 
 export function captureConsoleErrors(page: Page): ConsoleCapture {
   const errors: ConsoleCapture["errors"] = [];
+  let abortedSessionAt = 0;
+  const onRequestFailed = (request: import("@playwright/test").Request) => {
+    if (new URL(request.url()).pathname === "/api/auth/session" && request.failure()?.errorText === "net::ERR_ABORTED") {
+      abortedSessionAt = Date.now();
+    }
+  };
   const onConsole = (msg: import("@playwright/test").ConsoleMessage) => {
     if (msg.type() === "error") {
+      // NextAuth reports browser-cancelled session fetches during navigation as
+      // errors. Ignore only a confirmed cancellation, never an HTTP/auth failure.
+      if (Date.now() - abortedSessionAt < 1000 && msg.text().includes("[next-auth][error][CLIENT_FETCH_ERROR]") && msg.text().includes("Failed to fetch")) return;
       errors.push({ type: "console", text: msg.text() });
     }
   };
@@ -94,11 +103,13 @@ export function captureConsoleErrors(page: Page): ConsoleCapture {
     errors.push({ type: "pageerror", text: error.message });
   };
   page.on("console", onConsole);
+  page.on("requestfailed", onRequestFailed);
   page.on("pageerror", onPageError);
   return {
     errors,
     detach: () => {
       page.off("console", onConsole);
+      page.off("requestfailed", onRequestFailed);
       page.off("pageerror", onPageError);
     },
   };
@@ -209,13 +220,11 @@ function tripPutResponseMatchesDayOrder(
 function createTripPutWaiter(
   page: Page,
   options: SendChatMessageOptions | undefined,
-  isChatCompleted: () => boolean,
 ): Promise<Response> | undefined {
   if (options?.waitForTripPutDayOrder) {
     const { dayNumber, orderedTitlePatterns, timeoutMs = 90_000 } = options.waitForTripPutDayOrder;
     return page.waitForResponse(
       (response) =>
-        isChatCompleted() &&
         tripPutResponseMatchesDayOrder(response, dayNumber, orderedTitlePatterns),
       { timeout: timeoutMs },
     );
@@ -223,7 +232,6 @@ function createTripPutWaiter(
   if (options?.waitForTripSync) {
     return page.waitForResponse(
       (res) =>
-        isChatCompleted() &&
         res.url().includes("/api/trips/current") &&
         res.request().method() === "PUT" &&
         res.ok(),
@@ -313,6 +321,7 @@ async function sendChatMessageOnce(
   }
 
   await chatInput.fill(message);
+  if (process.env.E2E_DEBUG_CHAT === "1") console.info("[chat-e2e] send", message);
   await expect(page.getByTestId("chat-send-button")).toBeEnabled({ timeout: 20_000 });
 
   const [assistantCountBeforeSend, travelPlanCountBeforeSend] = await Promise.all([
@@ -336,17 +345,21 @@ async function sendChatMessageOnce(
       { timeout: 2_000 },
     )
     .catch(() => undefined);
-  let chatCompleted = false;
-  const tripPutResponse = createTripPutWaiter(page, options, () => chatCompleted);
+  // Register before sending: a fast mocked reply can trigger persistence before
+  // this test's response continuation runs. Callers still assert saved content.
+  const tripPutResponse = createTripPutWaiter(page, options);
 
   await chatInput.focus();
   await chatInput.press("Enter").catch(() => undefined);
   const requestStarted = await chatRequest;
+  if (process.env.E2E_DEBUG_CHAT === "1") console.info("[chat-e2e] entered", { requestStarted: Boolean(requestStarted), input: await chatInput.inputValue(), stopVisible: await stopButton.isVisible() });
   if (!requestStarted) {
-    await page.getByTestId("chat-send-button").click();
+    // SSE registration can precede the POST by more than two seconds on a cold
+    // dev server. Do not wait for a send button that has become the stop button.
+    if (!(await stopButton.isVisible())) await page.getByTestId("chat-send-button").click();
   }
   const chatRes = await chatResponse;
-  chatCompleted = true;
+  if (process.env.E2E_DEBUG_CHAT === "1") console.info("[chat-e2e] response", chatRes.status(), message);
 
   let payload: ChatApiPayload | undefined;
   try {
@@ -364,10 +377,21 @@ async function sendChatMessageOnce(
     });
   }
 
-  await waitForAssistantRender(page, 60_000, {
-    assistantCount: assistantCountBeforeSend,
-    travelPlanCount: travelPlanCountBeforeSend,
-  });
+  const replyId = payload?.data?.reply?.id;
+  if (replyId) {
+    // Bootstrap/realtime reconciliation can remove duplicate historical bubbles.
+    // Assert this response is rendered instead of assuming the total only grows.
+    const reply = page.getByTestId("chat-message-ai").and(
+      page.locator(`[data-chat-message-id=${JSON.stringify(replyId)}]`),
+    );
+    await expect(reply).toBeVisible({ timeout: 60_000 });
+    await expect(reply).not.toHaveText("");
+  } else {
+    await waitForAssistantRender(page, 60_000, {
+      assistantCount: assistantCountBeforeSend,
+      travelPlanCount: travelPlanCountBeforeSend,
+    });
+  }
 
   if (tripPutResponse) {
     await tripPutResponse;

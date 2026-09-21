@@ -153,6 +153,10 @@ test.describe("Phase 7 travel agent browser flow", () => {
     });
     const lastUpdate = monitor.lastChatPayload() || updatePayload;
     expect(lastUpdate?.data?.assistantActions?.some((action) => action.type === "itinerary.update_item")).toBeTruthy();
+    await test.info().attach("itinerary-after-assistant-update", {
+      body: JSON.stringify(await fetchTripItineraryFromBootstrap(page), null, 2),
+      contentType: "application/json",
+    });
     await expectItineraryActivity(page, "東京晴空塔");
     await expectItineraryActivity(page, "秋葉原", false);
 

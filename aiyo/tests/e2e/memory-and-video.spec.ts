@@ -10,7 +10,7 @@ test.afterAll(async () => {
 });
 
 test("authenticated user can review, edit, and delete AI memory", async ({ page }) => {
-  test.setTimeout(120000);
+  test.setTimeout(300000);
 
   const { owner } = await seedAuthUsers();
   await seedTripForUser(owner.id, "E2E Memory Trip");
@@ -49,9 +49,14 @@ test("authenticated user can review, edit, and delete AI memory", async ({ page 
     !initialMemories.success || !Array.isArray(initialMemories.data),
     "Mem0 memory service is not available in this environment.",
   );
-  const initialRows = initialMemories.data as Array<{ id: string; memory: string }>;
-  const targetMemory = initialRows.find((row) => row.memory.includes(token));
-  test.skip(!targetMemory, "Mem0 did not persist the test memory in this environment.");
+  let targetMemory: { id: string; memory: string } | undefined;
+  await expect.poll(async () => {
+    const response = await page.request.get("/api/memories");
+    const payload = await response.json();
+    targetMemory = (payload.data as Array<{ id: string; memory: string }> | undefined)?.find(row => row.memory.includes(token));
+    return Boolean(targetMemory);
+  }, { timeout: 180000, intervals: [1000, 2000, 5000], message: "background memory worker must persist the requested memory" }).toBe(true);
+  await page.getByTestId("memory-refresh-button").click();
   expect(targetMemory).toBeTruthy();
 
   const memoryCard = page.getByTestId("memory-item").filter({ hasText: targetMemory!.memory }).first();
@@ -100,13 +105,13 @@ test("AI planning, video indexing, and map pins workflow works end to end", asyn
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        destination: "台南",
+        destination: "嘉義",
         days: 2,
         preferences: {
           interests: ["food", "history"],
           pace: "moderate",
           transportPreference: "Train",
-          mustVisit: ["神農街", "安平老街"],
+          mustVisit: ["文化路夜市", "檜意森活村"],
           notes: "把古蹟和小吃排進行程",
         },
       }),
@@ -147,13 +152,12 @@ test("AI planning, video indexing, and map pins workflow works end to end", asyn
   const plannedActivityCount = await page.getByTestId("activity-card").count();
 
   await page.goto("/");
-  await page.getByTestId("video-search-input").fill("https://www.youtube.com/watch?v=I2kIaEGUiY0");
+  // Use the same live Chiayi video verified by the worker integration scenario.
+  await page.getByTestId("video-search-input").fill("https://www.youtube.com/watch?v=BAyQ10iPK4M");
   await page.getByTestId("video-search-submit").click();
 
   const drawer = page.getByTestId("video-summary-drawer");
-  const drawerVisible = await drawer.isVisible({ timeout: 180000 }).catch(() => false);
-  test.skip(!drawerVisible, "Live video search/summary pipeline did not open a summary drawer in this environment.");
-  await expect(drawer).toBeVisible();
+  await expect(drawer).toBeVisible({ timeout: 180000 });
   await expect(page.getByTestId("video-location-item").first()).toBeVisible({ timeout: 30000 });
 
   await page.getByTestId("video-add-to-itinerary-button").click();

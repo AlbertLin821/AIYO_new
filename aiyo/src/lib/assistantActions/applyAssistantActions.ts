@@ -242,11 +242,16 @@ export async function applyAssistantActions(
 
     if (action.type === "itinerary.update_item") {
       const patch: Partial<TripPlanItem> = {};
+      const currentItem = useTripStore.getState().itinerary
+        .find((candidate) => candidate.dayNumber === dayNumber)?.items
+        .find((item) => item.id === action.payload.itemId);
+      const placeTitleChanged = action.payload.patch.title !== undefined &&
+        action.payload.patch.title.trim() !== currentItem?.title.trim();
       if (action.payload.patch.title !== undefined) patch.title = action.payload.patch.title;
       if (action.payload.patch.startTime !== undefined) patch.time = action.payload.patch.startTime || "";
       if (action.payload.patch.notes !== undefined) patch.notes = action.payload.patch.notes || undefined;
       if (action.payload.patch.transport !== undefined) patch.transport = action.payload.patch.transport || undefined;
-      if (action.payload.patch.location !== undefined || action.payload.patch.lat !== undefined || action.payload.patch.lng !== undefined) {
+      if (placeTitleChanged || action.payload.patch.location !== undefined || action.payload.patch.lat !== undefined || action.payload.patch.lng !== undefined) {
         patch.location = locationFromInput(action.payload.patch);
         if (!patch.location) {
           useMapStore.getState().setPins(

@@ -4,6 +4,36 @@ import test from "node:test";
 import type { AIContextBuildResult } from "@/server/ai/aiContextBuilder";
 import { decideTravelAgentMode } from "@/server/ai/travelAgentOrchestrator";
 
+test("normalized default avoid array does not erase reusable avoidances, but explicit context empty does", () => {
+  const base = {
+    message: "沿用先前偏好，東京三天", aiContext: makeAiContext({ travelStyle: ["博物館"], avoid: ["Blue Bottle"] }),
+    tripProfile: { destination: "東京", duration_days: 3, avoid_places: [], preferences: [] } as import("@/types").TripProfile,
+  };
+  assert.deepEqual(decideTravelAgentMode(base).preferenceConfirmation?.preferences.avoid, ["Blue Bottle"]);
+  const cleared = decideTravelAgentMode({ ...base, context: { destination: "東京", days: 3, itinerary: [], budget: 0,
+    preferences: { interests: [], pace: "relaxed", avoid: [], notes: "" } } });
+  assert.deepEqual(cleared.preferenceConfirmation?.preferences.avoid, []);
+  assert.deepEqual(cleared.preferenceConfirmation?.preferences.travelStyle, []);
+});
+
+test("current profile preferences and pace win saved and older context preferences", () => {
+  const decision = decideTravelAgentMode({ message: "沿用，這次步調放慢", aiContext: makeAiContext({ travelStyle: ["博物館"], pace: "intensive" }),
+    tripProfile: { destination: "東京", duration_days: 3, preferences: ["food"], pace: "relaxed", avoid_places: [] } as import("@/types").TripProfile,
+    context: { destination: "東京", days: 3, itinerary: [], budget: 0, preferences: { interests: ["shopping"], pace: "intensive" } },
+  });
+  assert.deepEqual(decision.preferenceConfirmation?.preferences.travelStyle, ["food"]);
+  assert.equal(decision.preferenceConfirmation?.preferences.pace, "relaxed");
+});
+
+test("general advice with an explicit no-planning request does not collect requirements", () => {
+  const decision = decideTravelAgentMode({
+    message: "請用繁體中文簡短介紹台北適合哪類旅客，不用安排詳細行程。",
+  });
+  assert.equal(decision.mode, "answer_trip_question");
+  assert.equal(decision.shouldGenerateItinerary, false);
+  assert.equal(decision.shouldSearch, false);
+});
+
 function makeAiContext(preferences: NonNullable<AIContextBuildResult["structured"]["preferences"]>): AIContextBuildResult {
   return {
     text: "[使用者偏好摘要]\n預算：中等預算\n旅遊風格：美食、購物",
@@ -69,36 +99,14 @@ test("self-identification stays casual instead of starting itinerary planning", 
   assert.match(decision.debugReason, /self-identification/);
 });
 
-test("Tokyo three-day request asks for dates traveler count and dietary preference before generating", () => {
-  const decision = decideTravelAgentMode({ message: "我想去東京玩三天" });
-
-  assert.equal(decision.mode, "collect_requirements");
-  assert.equal(decision.shouldSearch, false);
-  assert.equal(decision.shouldGenerateItinerary, false);
-  assert.ok(decision.missingRequirements.includes("出發日期"));
-  assert.ok(decision.missingRequirements.includes("旅客人數"));
-  assert.ok(decision.missingRequirements.includes("飲食偏好"));
-});
-
-test("Osaka planning request with basics asks only for required missing fields", () => {
-  const decision = decideTravelAgentMode({
-    message: "我想要去大阪五天四夜總共4個人去玩幫我規劃一下行程",
+for (const message of ["我想去東京玩三天", "我想要去大阪五天四夜總共4個人去玩幫我規劃一下行程", "幫我完整規劃東京三天行程"]) {
+  test(`trip basics suffice without optional questionnaire: ${message}`, () => {
+    const decision = decideTravelAgentMode({ message });
+    assert.equal(decision.mode, "generate_itinerary");
+    assert.equal(decision.shouldGenerateItinerary, true);
+    assert.deepEqual(decision.missingRequirements, []);
   });
-
-  assert.equal(decision.mode, "collect_requirements");
-  assert.equal(decision.shouldGenerateItinerary, false);
-  assert.deepEqual(decision.missingRequirements, ["出發日期", "飲食偏好"]);
-  assert.match(decision.userFacingGuidance || "", /出發日期/);
-});
-
-test("explicit complete planning request still asks for missing required basics", () => {
-  const decision = decideTravelAgentMode({ message: "幫我完整規劃東京三天行程" });
-
-  assert.equal(decision.mode, "collect_requirements");
-  assert.equal(decision.shouldSearch, false);
-  assert.equal(decision.shouldGenerateItinerary, false);
-  assert.ok(decision.missingRequirements.includes("出發日期"));
-});
+}
 
 test("known mid-budget food preferences trigger preference confirmation", () => {
   const decision = decideTravelAgentMode({
@@ -192,9 +200,10 @@ test("reuse preference follow-up can generate with relaxed pace", () => {
   assert.equal(decision.preferenceConfirmation?.preferences.pace, "relaxed");
 });
 
-test("positive acknowledgement can continue into itinerary generation", () => {
+test("positive acknowledgement with pending preference confirmation continues planning", () => {
   const decision = decideTravelAgentMode({
     message: "讚喔可以",
+    messages: [{ id: "confirm", role: "assistant", content: "沿用嗎？", timestamp: "12:00", preferenceConfirmation: { summary: "美食", preferences: { travelStyle: ["美食"] }, prompt: "沿用嗎？" } }],
     context: { destination: "韓國", days: 5 },
   });
 
@@ -235,7 +244,7 @@ test("complete planning request with dates travelers and dietary preferences can
   assert.equal(decision.shouldGenerateItinerary, true);
 });
 
-test("forced revision with existing itinerary skips preference confirmation and asks only missing revision fields", () => {
+test("forced revision with trip basics skips optional questions and preference reconfirmation", () => {
   const decision = decideTravelAgentMode({
     message: "我不滿意，幫我重新安排一次",
     forceStructuredRevision: true,
@@ -280,8 +289,8 @@ test("forced revision with existing itinerary skips preference confirmation and 
     }),
   });
 
-  assert.equal(decision.mode, "collect_requirements");
-  assert.equal(decision.missingRequirements.includes("飲食偏好"), true);
+  assert.equal(decision.mode, "generate_itinerary");
+  assert.deepEqual(decision.missingRequirements, []);
   assert.equal(decision.missingRequirements.includes("旅客人數"), false);
   assert.equal(decision.mode === "confirm_preferences", false);
   assert.match(decision.userFacingGuidance || "", /重新安排/);
@@ -383,4 +392,40 @@ test("events and route questions get specific search needs", () => {
   assert.equal(route.shouldSearch, true);
   assert.equal(route.searchDecision?.searchNeed, "transportation");
   assert.deepEqual(route.requiredSearchProviders, ["serper", "tavily"]);
+});
+
+test("acknowledgement without a pending planning turn does not generate", () => {
+  for (const context of [undefined, { destination: "東京", days: 3 }]) {
+    const decision = decideTravelAgentMode({ message: "好", context });
+    assert.equal(decision.shouldGenerateItinerary, false);
+  }
+});
+
+test("preference acceptance still requires a destination and duration", () => {
+  const decision = decideTravelAgentMode({ message: "沿用" });
+  assert.equal(decision.mode, "collect_requirements");
+  assert.deepEqual(decision.missingRequirements, ["目的地", "天數"]);
+});
+
+test("destination answer continues the pending requirements flow", () => {
+  const decision = decideTravelAgentMode({
+    message: "東京", context: { days: 3 },
+    messages: [{ id: "q", role: "assistant", content: "想去哪？", timestamp: "12:00", responseType: "question_card" }],
+  });
+  assert.equal(decision.mode, "generate_itinerary");
+});
+
+test("planning with fresh research needs stays in the itinerary pipeline", () => {
+  const decision = decideTravelAgentMode({ message: "幫我安排東京三天行程，也確認今天的營業時間" });
+  assert.equal(decision.mode, "generate_itinerary");
+  assert.equal(decision.searchDecision?.shouldSearch, true);
+});
+
+test("duration in an advice question is not permission to generate a trip", () => {
+  for (const message of ["東京三天會不會太趕？", "東京三天適合帶小孩嗎", "東京三天，不用安排行程，只想聽建議"]) {
+    const decision = decideTravelAgentMode({ message });
+    assert.equal(decision.shouldGenerateItinerary, false, message);
+    assert.equal(decision.shouldAskFollowUp, false, message);
+  }
+  assert.equal(decideTravelAgentMode({ message: "不用排詳細行程，但請安排一天的簡單路線", context: { destination: "東京" } }).mode, "generate_itinerary");
 });

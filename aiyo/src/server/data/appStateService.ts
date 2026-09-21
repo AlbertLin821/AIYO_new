@@ -360,7 +360,7 @@ export function serializeTrip(trip: {
       transport: item.transportMode || undefined,
       transportDurationMinutes: item.transportDurationMinutes ?? undefined,
       transportDistanceMeters: item.transportDistanceMeters ?? undefined,
-      transportDataSource: item.transportDataSource === "google_routes" ? "google_routes" : undefined,
+      transportDataSource: item.transportDataSource === "osrm" || item.transportDataSource === "google_routes" ? item.transportDataSource : undefined,
       notes: item.description || undefined,
       location: resolveSerializedItemLocation(item, serializedPins),
       source: (item.source || "manual") as PersistedTripPayload["itinerary"][number]["items"][number]["source"],
@@ -890,7 +890,7 @@ export async function saveTripPayload(
     await requireTripAccess(userId, input.tripId, "edit");
   }
 
-  const payload = input.tripId ? input : assignFreshIdsForNewTripPayload(input);
+  let payload = input.tripId ? input : assignFreshIdsForNewTripPayload(input);
 
   const coverPatch =
     payload.coverImageUrl !== undefined
@@ -904,9 +904,19 @@ export async function saveTripPayload(
 
   const resolvedTitle = normalizeTripStorageTitle(payload.title, payload.destination);
 
-  const normalizedDays = payload.itinerary;
-
   const freshTrip = await prisma.$transaction(async (tx) => {
+    if (payload.tripId) {
+      const [foreignItem, foreignPin] = await Promise.all([
+        tx.tripItem.findFirst({ where: { id: { in: payload.itinerary.flatMap(day => day.items.map(item => item.id)) }, tripId: { not: payload.tripId } }, select: { id: true } }),
+        tx.mapPin.findFirst({ where: { id: { in: payload.pins.map(pin => pin.id) }, tripId: { not: payload.tripId } }, select: { id: true } }),
+      ]);
+      if (foreignItem || foreignPin) {
+        // Model/imported IDs can belong to another trip. Rekey links together,
+        // never silently drop the user's activities through skipDuplicates.
+        payload = { ...assignFreshIdsForNewTripPayload(payload), tripId: payload.tripId };
+      }
+    }
+    const normalizedDays = payload.itinerary;
     const trip = payload.tripId
       ? await tx.trip.upsert({
           where: { id: payload.tripId },
@@ -992,7 +1002,6 @@ export async function saveTripPayload(
     if (items.length > 0) {
       await tx.tripItem.createMany({
         data: items,
-        skipDuplicates: true,
       });
     }
     throwInjectedSaveFailure(testFailureInjection, "create_items");
@@ -1024,7 +1033,6 @@ export async function saveTripPayload(
           linkedTripItemId: pin.linkedTripItemId || null,
           dayNumber: pin.dayNumber || null,
         })),
-        skipDuplicates: true,
       });
     }
 

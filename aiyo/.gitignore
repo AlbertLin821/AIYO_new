@@ -18,6 +18,7 @@
 /manual-qa-*.log
 
 # next.js
+/public/maplibre/
 /.next/
 /out/
 

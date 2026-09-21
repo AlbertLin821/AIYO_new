@@ -1,12 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { VideoSummaryResult } from "@/types";
 import { resolveTripDestinationScope } from "@/lib/tripDestinationScope";
 import {
   buildSummaryCacheKey,
+  isAcceptableVideoSummaryCache,
   isCatalogLocationAllowedForVideoScope,
   resolveVideoSummaryDestinationContext,
   VIDEO_PIPELINE_VERSION,
 } from "@/server/services/videoSummaryService";
+
+test("summary cache rejects obsolete validation versions even with usable segments", () => {
+  const result = {
+    segments: [{}],
+    debug: { pipelineVersion: VIDEO_PIPELINE_VERSION, failedChunkCount: 0 },
+  } as VideoSummaryResult;
+  assert.equal(isAcceptableVideoSummaryCache(result), true);
+  assert.equal(isAcceptableVideoSummaryCache({
+    ...result,
+    debug: { ...result.debug!, pipelineVersion: "obsolete-validation" },
+  }), false);
+  assert.equal(isAcceptableVideoSummaryCache({ ...result, debug: undefined }), false);
+});
 
 test("buildSummaryCacheKey is video-intrinsic (no user destination)", () => {
   const key = buildSummaryCacheKey({ videoId: "BAyQ10iPK4M", language: "zh-Hant" });
@@ -24,7 +39,7 @@ test("resolveVideoSummaryDestinationContext prefers New Zealand scope over user 
   });
 
   assert.equal(context.profile.id, "new-zealand");
-  assert.equal(context.destinationHint, "New Zealand");
+  assert.equal(context.destinationHint, "紐西蘭");
   assert.deepEqual(context.destinationScope?.countryCodes, ["NZ"]);
 });
 
@@ -36,7 +51,7 @@ test("resolveVideoSummaryDestinationContext infers Japan scope from Hokkaido vid
   });
 
   assert.equal(context.profile.id, "japan");
-  assert.equal(context.destinationHint, "Japan");
+  assert.equal(context.destinationHint, "北海道");
   assert.deepEqual(context.destinationScope?.countryCodes, ["JP"]);
 });
 
@@ -49,7 +64,7 @@ test("resolveVideoSummaryDestinationContext prefers video Japan scope over confl
   });
 
   assert.equal(context.profile.id, "japan");
-  assert.equal(context.destinationHint, "Japan");
+  assert.equal(context.destinationHint, "北海道");
   assert.deepEqual(context.destinationScope?.countryCodes, ["JP"]);
 });
 

@@ -4,7 +4,7 @@ import {
   scopeFromGeocodeResult,
   type TripDestinationScope,
 } from "@/lib/tripDestinationScope";
-import { geocodeWithGoogle } from "@/server/geo/geocodeService";
+import { mapService } from "@/server/maps/service";
 
 export async function resolveTripDestinationScopeWithGeocode(
   destination?: string | null,
@@ -19,17 +19,18 @@ export async function resolveTripDestinationScopeWithGeocode(
     return fromCatalog;
   }
 
-  const geocoded = await geocodeWithGoogle(trimmed);
-  if (!geocoded.ok) {
+  const geocoded = await mapService.searchPlaces(trimmed, { limit: 1 }).catch(() => []);
+  const place = geocoded[0];
+  if (!place) {
     return fromCatalog;
   }
 
   const fromGeo = scopeFromGeocodeResult({
     query: trimmed,
-    countryCode: geocoded.result.countryCode,
-    lat: geocoded.result.lat,
-    lng: geocoded.result.lng,
-    formattedAddress: geocoded.result.formattedAddress,
+    countryCode: place.metadata?.countryCode,
+    lat: place.location.lat,
+    lng: place.location.lng,
+    formattedAddress: place.address,
   });
 
   if (!fromGeo) {

@@ -66,7 +66,7 @@ export function encodeMapPinDataUrl(fill: string, selected: boolean, stopLabel?:
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
-/** DOM node for {@link google.maps.marker.AdvancedMarkerElement} `content`. */
+/** DOM node used as a provider-independent map marker. */
 export function createMapPinElement(fill: string, selected: boolean, stopLabel?: number): HTMLElement {
   const wrap = document.createElement("div");
   const baseW = selected ? 40 : 34;

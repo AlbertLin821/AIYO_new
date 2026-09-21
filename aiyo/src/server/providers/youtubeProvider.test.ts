@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   cleanYouTubeDescription,
   parseTranscriptVtt,
+  parseTranscriptXml,
 } from "@/server/providers/youtubeProvider";
 
 test("cleanYouTubeDescription keeps useful travel text and removes CTA noise", () => {
@@ -43,3 +44,19 @@ test("parseTranscriptVtt keeps timed cues and strips inline tags", () => {
   assert.equal(entries[1]?.durationSeconds, 2);
 });
 
+
+test("XML units follow caption format even for early and long cues", () => {
+  const srv3 = parseTranscriptXml('<timedtext><body><p t="5000" d="3000"><s>Tokyo</s><s> station</s></p></body></timedtext>');
+  assert.equal(srv3[0].startSeconds, 5);
+  assert.equal(srv3[0].durationSeconds, 3);
+  assert.equal(srv3[0].text, "Tokyo station");
+  const legacy = parseTranscriptXml('<text dur="3.5" start="12000">Tokyo &amp; Kyoto</text>');
+  assert.equal(legacy[0].startSeconds, 12000);
+  assert.equal(legacy[0].durationSeconds, 3.5);
+  assert.equal(legacy[0].text, "Tokyo & Kyoto");
+});
+
+test("XML rejects missing, negative and nonfinite timing instead of fabricating cues", () => {
+  assert.deepEqual(parseTranscriptXml('<p t="-1" d="3000">A</p><p t="NaN" d="5">B</p><text start="0" dur="Infinity">C</text><p d="5">D</p><text start="0" dur="0">E</text>'), []);
+  assert.equal(parseTranscriptXml('<p t="0" d="250">Opening</p>')[0].durationSeconds, 0.25);
+});

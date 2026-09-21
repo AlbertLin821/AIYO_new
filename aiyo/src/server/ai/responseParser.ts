@@ -392,7 +392,7 @@ function parseTripPlanJson(
             typeof record.transportDistanceMeters === "number" && record.transportDistanceMeters > 0
               ? Math.round(record.transportDistanceMeters)
               : undefined,
-          transportDataSource: record.transportDataSource === "google_routes" ? "google_routes" as const : undefined,
+          transportDataSource: record.transportDataSource === "osrm" ? "osrm" as const : record.transportDataSource === "google_routes" ? "google_routes" as const : undefined,
           notes: String(record.notes || record.desc || record.description || "").trim() || undefined,
           location: normalizeLocation(
             locationInput,

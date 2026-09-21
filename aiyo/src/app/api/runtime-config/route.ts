@@ -1,4 +1,3 @@
-import { resolveGoogleMapsClientApiKey, resolveGoogleMapsMapId } from "@/lib/googleMapsEnv";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -14,8 +13,8 @@ function readBoolean(...names: string[]): boolean {
 
 export async function GET() {
   return NextResponse.json({
-    googleMapsApiKey: resolveGoogleMapsClientApiKey(),
-    googleMapsMapId: resolveGoogleMapsMapId(),
+    mapProvider: "osm",
+    mapStyleUrl: process.env.NEXT_PUBLIC_MAP_STYLE_URL || "https://tiles.openfreemap.org/styles/liberty",
     enableMockMaps: readBoolean("NEXT_PUBLIC_ENABLE_MOCK_MAPS", "ENABLE_MOCK_MAPS"),
     googleAuthEnabled: Boolean(readString("GOOGLE_CLIENT_ID") && readString("GOOGLE_CLIENT_SECRET")),
   });

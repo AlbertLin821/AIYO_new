@@ -8,7 +8,7 @@ import { zhTW as t } from "@/locales/zh-TW";
 import { syncService } from "@/services/syncService";
 import { useMapStore } from "@/stores/useMapStore";
 
-const MapView = dynamic(() => import("@/components/map/MapView"), {
+const MapView = dynamic(() => import("@/components/map/MapLibreMapView"), {
   ssr: false,
   loading: () => <div className="min-h-0 flex-1 rounded-2xl border-2 border-border bg-surface" />,
 });

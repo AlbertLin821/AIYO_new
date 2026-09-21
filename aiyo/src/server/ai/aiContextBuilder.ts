@@ -406,7 +406,6 @@ export async function buildPersonalizedAIContext(input: {
   const foodPreferences = cleanStringArray(profileRecord.foodPreferences || (prefs as Record<string, unknown>).foodPreferences);
   const destinationPreferences = [
     prefs.destination,
-    ...recentTrips.map((trip) => trip.destination),
   ].filter((value): value is string => Boolean(value?.trim()));
   const preferences: PersonalizedAIContext["preferences"] = {
     destinationPreferences: Array.from(new Set(destinationPreferences)).slice(0, 8),
@@ -532,6 +531,7 @@ export async function buildPersonalizedAIContext(input: {
     pace: preferences.pace,
     avoid: preferences.avoidances,
     avoidances: preferences.avoidances,
+    mustVisit: prefs.mustVisit,
     foodPreferences: preferences.foodPreferences,
     confidence: preferences.confidence,
     source: preferences.source,

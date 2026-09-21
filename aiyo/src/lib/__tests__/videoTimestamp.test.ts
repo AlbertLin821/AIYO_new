@@ -15,7 +15,7 @@ test("parseTimestampToSeconds rejects invalid minute or second ranges", () => {
   assert.equal(parseTimestampToSeconds("01:02:99"), 0);
 });
 
-test("getSegmentSeekSeconds prefers numeric startSeconds", () => {
+test("getSegmentSeekSeconds rejects untrusted numeric startSeconds", () => {
   assert.equal(
     getSegmentSeekSeconds({
       startSeconds: 125,
@@ -23,7 +23,7 @@ test("getSegmentSeekSeconds prefers numeric startSeconds", () => {
       startLabel: undefined,
       timestampConfidence: "low",
     }),
-    125,
+    null,
   );
 });
 

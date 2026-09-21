@@ -96,8 +96,8 @@ async function loadBundlesFromDisk(options?: { productionOnly?: boolean }): Prom
     const index = JSON.parse(indexRaw) as PreloadedIndex;
     const bundles: PreloadedDestinationBundle[] = [];
     for (const entry of index.destinations) {
-      const filePath = path.join(dataDir, entry.file);
-      const raw = await readFile(filePath, "utf8");
+      const filePath = path.join(/* turbopackIgnore: true */ dataDir, entry.file);
+      const raw = await readFile(/* turbopackIgnore: true */ filePath, "utf8");
       const bundle = JSON.parse(raw) as PreloadedDestinationBundle;
       if (bundle.videos.length === 0) {
         continue;

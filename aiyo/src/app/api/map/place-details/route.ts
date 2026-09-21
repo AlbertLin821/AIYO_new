@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
-import { serverConfig } from "@/server/config";
-import { fetchGooglePlaceDetailsByPlaceId } from "@/server/geo/geocodeService";
-import { searchPlacesByText, type PlaceSearchHit } from "@/server/geo/placesSearchService";
+import { searchPlacesByText, type PlaceSearchHit } from "@/server/geo/osmPlacesSearchService";
 import type { LocationReference } from "@/types";
 
 export const runtime = "nodejs";
@@ -53,17 +51,6 @@ async function resolvePlaceDetails(
   item: PlaceDetailsRequestItem,
   region?: string,
 ): Promise<Partial<LocationReference>> {
-  if (item.placeId) {
-    const details = await fetchGooglePlaceDetailsByPlaceId(item.placeId);
-    if (Object.values(details).some((value) => value !== undefined)) {
-      return {
-        ...details,
-        placeId: item.placeId,
-        verified: true,
-      };
-    }
-  }
-
   const name = item.name?.trim();
   if (!name) {
     return {};
@@ -84,13 +71,6 @@ async function resolvePlaceDetails(
 
 export async function POST(request: Request) {
   try {
-    if (!serverConfig.googleMapsApiKey) {
-      return NextResponse.json(
-        createError("maps_key_missing", "未設定 GOOGLE_MAPS_API_KEY，無法取得地點詳細資料。"),
-        { status: 400 },
-      );
-    }
-
     const body = (await request.json()) as {
       places?: PlaceDetailsRequestItem[];
       region?: string;

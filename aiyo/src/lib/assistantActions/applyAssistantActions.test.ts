@@ -72,6 +72,24 @@ test("updates item title and clears stale coordinates when location lacks lat ln
   assert.equal(useMapStore.getState().pins.some((pin) => pin.linkedTripItemId === "a"), false);
 });
 
+test("title-only replacement removes the previous place when geocoding is unavailable", async () => {
+  await applyAssistantActions([
+    { type: "itinerary.update_item", payload: { dayId: "day-1", itemId: "a", patch: { title: "新宿" } } },
+  ], { persist: false, geocode: false });
+  const item = useTripStore.getState().itinerary[0]?.items[0];
+  assert.equal(item?.title, "新宿");
+  assert.equal(item?.location, undefined);
+  assert.equal(useMapStore.getState().pins.some((pin) => pin.linkedTripItemId === "a"), false);
+});
+
+test("time-only updates preserve the verified place and marker", async () => {
+  await applyAssistantActions([
+    { type: "itinerary.update_item", payload: { dayId: "day-1", itemId: "a", patch: { startTime: "10:00" } } },
+  ], { persist: false, geocode: false });
+  assert.equal(useTripStore.getState().itinerary[0]?.items[0]?.location?.name, "秋葉原");
+  assert.equal(useMapStore.getState().pins.some((pin) => pin.linkedTripItemId === "a"), true);
+});
+
 test("removes item and linked marker", async () => {
   await applyAssistantActions([
     { type: "itinerary.remove_item", payload: { dayId: "day-1", itemId: "a" } },

@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Plus, MousePointer2 } from "lucide-react";
 import {
   closestCenter,
@@ -85,7 +85,10 @@ function ItineraryEditorSection({
   onReorderWithinDay,
   onMoveItemBetweenDays,
 }: Props) {
-  const [expandedDays, setExpandedDays] = useState<Record<number, boolean>>({});
+  const [expandedState, setExpandedState] = useState<{
+    tripId: string | null;
+    days: Record<number, boolean>;
+  }>({ tripId, days: {} });
   const [activeDragItem, setActiveDragItem] = useState<TripPlanItem | null>(null);
 
   const sensors = useSensors(
@@ -97,31 +100,37 @@ function ItineraryEditorSection({
     }),
   );
 
-  useEffect(() => {
+  const expandedDays = useMemo(() => {
     const firstDay = itinerary[0]?.dayNumber;
     if (!firstDay) {
-      setExpandedDays({});
-      return;
+      return {};
     }
-    setExpandedDays((prev) => {
-      const next: Record<number, boolean> = {};
-      for (const day of itinerary) {
-        next[day.dayNumber] = prev[day.dayNumber] ?? day.dayNumber === firstDay;
-      }
-      return next;
-    });
-  }, [tripId, itinerary]);
+    const stored = expandedState.tripId === tripId ? expandedState.days : {};
+    return Object.fromEntries(
+      itinerary.map((day) => [day.dayNumber, stored[day.dayNumber] ?? day.dayNumber === firstDay]),
+    );
+  }, [expandedState, itinerary, tripId]);
+
+  const updateExpandedDays = useCallback(
+    (update: (current: Record<number, boolean>) => Record<number, boolean>) => {
+      setExpandedState((current) => ({
+        tripId,
+        days: update(current.tripId === tripId ? current.days : {}),
+      }));
+    },
+    [tripId],
+  );
 
   const toggleDayExpanded = useCallback((dayNumber: number) => {
-    setExpandedDays((prev) => ({ ...prev, [dayNumber]: !prev[dayNumber] }));
-  }, []);
+    updateExpandedDays((prev) => ({ ...prev, [dayNumber]: !(prev[dayNumber] ?? expandedDays[dayNumber]) }));
+  }, [expandedDays, updateExpandedDays]);
 
   const handleStartAddActivity = useCallback(
     (dayNumber: number) => {
-      setExpandedDays((prev) => ({ ...prev, [dayNumber]: true }));
+      updateExpandedDays((prev) => ({ ...prev, [dayNumber]: true }));
       onStartAddActivity(dayNumber);
     },
-    [onStartAddActivity],
+    [onStartAddActivity, updateExpandedDays],
   );
 
   const handleDragOver = useCallback(
@@ -134,9 +143,9 @@ function ItineraryEditorSection({
       if (!target) {
         return;
       }
-      setExpandedDays((prev) => ({ ...prev, [target.dayNumber]: true }));
+      updateExpandedDays((prev) => ({ ...prev, [target.dayNumber]: true }));
     },
-    [canEdit, itinerary],
+    [canEdit, itinerary, updateExpandedDays],
   );
 
   const handleDragStart = useCallback(

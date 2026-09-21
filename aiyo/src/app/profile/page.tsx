@@ -109,12 +109,15 @@ export default function ProfilePage() {
   }
 
   async function handleSave() {
-    if (!hasChanges) return;
+    if (isSaving || isUploadingAvatar) return;
+    if (!hasChanges) {
+      setEditingField(null);
+      return;
+    }
 
     const nextProfile = { name, email };
 
     setIsSaving(true);
-    store.updateProfile(nextProfile);
 
     try {
       const persistedProfile = await syncService.saveProfile(nextProfile);
@@ -196,7 +199,7 @@ export default function ProfilePage() {
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       event.preventDefault();
-                      setEditingField(null);
+                      void handleSave();
                     }
                     if (event.key === "Escape") {
                       setName(store.name);
@@ -226,7 +229,7 @@ export default function ProfilePage() {
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       event.preventDefault();
-                      setEditingField(null);
+                      void handleSave();
                     }
                     if (event.key === "Escape") {
                       setEmail(store.email);

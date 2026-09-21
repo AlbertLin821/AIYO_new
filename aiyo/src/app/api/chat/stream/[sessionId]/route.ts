@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createError } from "@/lib/api-response";
 import { requireSessionUser } from "@/server/auth";
 import {
+  getChatText, subscribeChatText,
   canAccessChatProgressSession,
   ensureChatProgressSession,
   isChatProgressDone,
@@ -30,6 +31,7 @@ export async function GET(
       start(controller) {
         let closed = false;
         let unsubscribe = () => {};
+        let unsubscribeText = () => {};
         handleAbort = () => {
           closeStream();
         };
@@ -56,9 +58,13 @@ export async function GET(
           if (closed) {
             return;
           }
+          if (isChatProgressDone(sessionId)) {
+            try { controller.enqueue(encoder.encode("event: done\ndata: {}\n\n")); } catch { /* disconnected */ }
+          }
           closed = true;
           clearInterval(closeWatcher);
           unsubscribe();
+          unsubscribeText();
           request.signal.removeEventListener("abort", handleAbort);
           try {
             controller.close();
@@ -67,6 +73,11 @@ export async function GET(
           }
         };
 
+        const sendText = (text: string) => {
+          if (!closed) try { controller.enqueue(encoder.encode(`event: text_snapshot\ndata: ${JSON.stringify({ text })}\n\n`)); } catch { closeStream(); }
+        };
+        sendText(getChatText(sessionId));
+        unsubscribeText = subscribeChatText(sessionId, sendText);
         request.signal.addEventListener("abort", handleAbort);
 
         for (const step of listChatProgressEvents(sessionId)) {

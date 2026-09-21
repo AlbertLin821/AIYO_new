@@ -228,7 +228,10 @@ test.describe("嘉義兩天一夜完整旅人流程", () => {
     const markerCount = await markers.count();
     const clicks = Math.min(markerCount, 3);
     for (let i = 0; i < clicks; i += 1) {
-      await markers.nth(i).click();
+      const marker = markers.nth(i);
+      if (!(await marker.evaluate((element) => element.hasAttribute("data-selected")))) {
+        await marker.click();
+      }
       await expect(page.getByTestId("map-pin-info-panel")).toBeVisible({
         timeout: 15_000,
       });
@@ -291,14 +294,15 @@ test.describe("嘉義兩天一夜完整旅人流程", () => {
       (res) => {
         const url = res.url();
         return (
-          (url.includes("/api/chat/message") || url.includes("/api/trip/revise")) &&
+          (url.includes("/api/ai/chat") || url.includes("/api/chat/message") || url.includes("/api/trip/revise")) &&
           res.request().method() === "POST"
         );
       },
       { timeout: 180_000 },
     );
     await chatSendButton.click();
-    const chatHttp = await chatRespWait.catch(() => null);
+    const chatHttp = await chatRespWait;
+    expect(chatHttp.ok()).toBe(true);
 
     await expect(page.locator('[data-testid="chat-message-ai"]').last()).toBeVisible({
       timeout: 60_000,
@@ -308,6 +312,7 @@ test.describe("嘉義兩天一夜完整旅人流程", () => {
       .locator('[data-testid="chat-message-ai"]')
       .last()
       .innerText();
+    expect(lastAiText).not.toMatch(/阿里山\s*2\s*天/);
 
     writeArtifactJson("ai-chat-response.json", {
       chatPrompt: CHAT_PROMPT,
@@ -337,6 +342,7 @@ test.describe("嘉義兩天一夜完整旅人流程", () => {
       "itinerary-state.json",
       itineraryState ?? { error: "no_bootstrap_snapshot" },
     );
+    expect(itineraryState?.destination).toMatch(/嘉義/);
 
     writeArtifactJson(
       "console-messages.json",

@@ -1,7 +1,7 @@
 import { resolveModelForTask } from "@/server/ai/ollamaClient";
 import { serverConfig } from "@/server/config";
 
-const WARMUP_PROMPT = ".";
+const WARMUP_PROMPT = ""; // Ollama load-only request; do not generate unrelated text.
 const WARMUP_REQUEST_TIMEOUT_MS = 120_000;
 
 let warmupInFlight: Promise<void> | null = null;
@@ -43,9 +43,17 @@ export async function warmOllamaModel(model: string): Promise<boolean> {
   const timeout = setTimeout(() => controller.abort(), WARMUP_REQUEST_TIMEOUT_MS);
 
   try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (
+      serverConfig.openwebuiApiKey.trim() &&
+      serverConfig.openwebuiBaseUrl &&
+      new URL(serverConfig.ollamaBaseUrl).origin === new URL(serverConfig.openwebuiBaseUrl).origin
+    ) {
+      headers.Authorization = `Bearer ${serverConfig.openwebuiApiKey}`;
+    }
     const response = await fetch(`${serverConfig.ollamaBaseUrl}/api/generate`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         model: trimmed,
         prompt: WARMUP_PROMPT,

@@ -10,6 +10,7 @@ import { extractUserIdentityLabel } from "@/lib/chat/userIdentity";
 import { extractDestinationFromPlanningText } from "@/lib/tripPlanningSignals";
 import type {
   ChatContext,
+  ChatMessage,
   ConversationMode,
   TravelAgentDecision,
   TravelAgentKnownPreferences,
@@ -19,6 +20,7 @@ import type {
 
 type TravelAgentOrchestratorInput = {
   message: string;
+  messages?: ChatMessage[];
   context?: ChatContext;
   tripProfile?: TripProfile;
   aiContext?: AIContextBuildResult | null;
@@ -149,17 +151,18 @@ function mergeKnownPreferences(input: TravelAgentOrchestratorInput): TravelAgent
     destination: input.context?.destination || input.tripProfile?.destination || mergedAiPreferences.destination,
     days: input.context?.days || input.tripProfile?.duration_days || mergedAiPreferences.days,
     budget: input.context?.budget || contextPreferences?.budget || mergedAiPreferences.budget,
-    budgetLevel: mergedAiPreferences.budgetLevel || profileBudgetLevel,
-    travelStyle: contextPreferences?.interests?.length
-      ? contextPreferences.interests
+    budgetLevel: profileBudgetLevel || mergedAiPreferences.budgetLevel,
+    travelStyle: contextPreferences?.interests?.length === 0
+      ? []
       : input.tripProfile?.preferences?.length
         ? input.tripProfile.preferences
-        : mergedAiPreferences.travelStyle || mergedAiPreferences.travelStyles,
-    pace: contextPreferences?.pace || (input.tripProfile?.pace as TravelPace | null) || mergedAiPreferences.pace,
-    transportPreference: contextPreferences?.transportPreference || input.tripProfile?.transportation || mergedAiPreferences.transportPreference,
+        : contextPreferences?.interests ?? mergedAiPreferences.travelStyle ?? mergedAiPreferences.travelStyles,
+    pace: (input.tripProfile?.pace as TravelPace | null) || contextPreferences?.pace || mergedAiPreferences.pace,
+    transportPreference: input.tripProfile?.transportation || contextPreferences?.transportPreference || mergedAiPreferences.transportPreference,
     mustVisit: contextPreferences?.mustVisit || mergedAiPreferences.mustVisit,
-    avoid: contextPreferences?.avoid || input.tripProfile?.avoid_places || mergedAiPreferences.avoid || mergedAiPreferences.avoidances,
-    notes: contextPreferences?.notes || mergedAiPreferences.notes,
+    avoid: contextPreferences?.avoid?.length === 0 ? [] : input.tripProfile?.avoid_places?.length
+      ? input.tripProfile.avoid_places : contextPreferences?.avoid ?? mergedAiPreferences.avoid ?? mergedAiPreferences.avoidances,
+    notes: contextPreferences?.notes ?? mergedAiPreferences.notes,
   };
   if (!input.forceStructuredRevision) {
     return merged;
@@ -240,6 +243,14 @@ function isMapFocusIntent(message: string): boolean {
 }
 
 function isTripPlanningIntent(message: string): boolean {
+  // Negated planning requests are not requests to collect trip requirements.
+  // Keep other clauses so "不用排詳細行程，但請安排一天的簡單路線" still plans.
+  const originalMessage = message;
+  message = message.replace(/(?:不用|不需要|不要|不必|無需)(?:幫我)?(?:規劃|安排|排)(?:詳細|完整|具體)?(?:的)?行程/gu, "");
+  const explicitPlanning = /(?:幫我|請|想要|需要|麻煩).{0,24}(?:規劃|安排|排)|^(?:規劃|安排|排)/u.test(message);
+  if (!explicitPlanning && (message !== originalMessage || /適合|夠不夠|會不會|值得|建議|推薦|怎麼|如何|比較|嗎|？|\?/u.test(message))) {
+    return false;
+  }
   return /(?:想去|我要去|我想去|幫我|請|可以|能不能|想要|需要).{0,24}(?:規劃|安排|排|行程|自由行|旅遊|旅行|玩[\d一二兩两三四五六七八九十]+\s*(?:天|日))|(?:規劃|安排|排).{0,16}(?:行程|旅行|旅遊|自由行)|[\d一二兩两三四五六七八九十]+\s*(?:天|日).{0,10}(?:行程|旅行|旅遊|自由行)?/u.test(message);
 }
 
@@ -247,35 +258,8 @@ function isGeneralTravelQuestion(message: string): boolean {
   return /適合|推薦|建議|怎麼看|好玩嗎|第一次|自由行|親子|蜜月|美食|購物|景點|地點|有哪些|查看|目前行程|交通/u.test(message);
 }
 
-function hasKnownTravelDates(input: TravelAgentOrchestratorInput): boolean {
-  return Boolean(
-    input.tripProfile?.travel_dates?.start?.trim() ||
-      input.tripProfile?.travel_dates?.end?.trim() ||
-      input.context?.tripStartDate?.trim() ||
-      input.context?.tripEndDate?.trim(),
-  );
-}
-
-function hasKnownTravelerCount(input: TravelAgentOrchestratorInput): boolean {
-  return Boolean(
-    (typeof input.tripProfile?.traveler_count === "number" && input.tripProfile.traveler_count > 0) ||
-      input.tripProfile?.companions,
-  );
-}
-
-function hasKnownDietaryPreferences(
-  input: TravelAgentOrchestratorInput,
-  knownPreferences: TravelAgentKnownPreferences,
-): boolean {
-  return Boolean(
-    input.tripProfile?.dietary_restrictions?.length ||
-      knownPreferences.foodPreferences?.length ||
-      /\b(?:無特殊飲食限制|沒有飲食限制|都可以吃)\b/u.test(knownPreferences.notes || ""),
-  );
-}
-
 function collectMissingRequirements(
-  input: TravelAgentOrchestratorInput,
+  _input: TravelAgentOrchestratorInput,
   hints: TripRequestHints,
   knownPreferences: TravelAgentKnownPreferences,
 ): string[] {
@@ -283,17 +267,8 @@ function collectMissingRequirements(
   if (!hints.destination && !knownPreferences.destination) {
     missing.push("目的地");
   }
-  if (!hints.days && !knownPreferences.days) {
+  if (!Number.isInteger(hints.days ?? knownPreferences.days) || (hints.days ?? knownPreferences.days ?? 0) <= 0) {
     missing.push("天數");
-  }
-  if (!hasKnownTravelDates(input)) {
-    missing.push("出發日期");
-  }
-  if (!hasKnownTravelerCount(input) && !hints.travelerCount) {
-    missing.push("旅客人數");
-  }
-  if (!hasKnownDietaryPreferences(input, knownPreferences)) {
-    missing.push("飲食偏好");
   }
   return missing;
 }
@@ -422,24 +397,29 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
     });
   }
 
-  if (isModifyIntent(message, input.context)) {
+  if (!forcedRevision && isModifyIntent(message, input.context)) {
     return buildDecision("modify_itinerary", {
       searchDecision,
       debugReason: "matched current itinerary mutation intent",
     });
   }
 
-  if (searchDecision.shouldSearch) {
-    return buildDecision("search_travel_info", {
-      shouldSearch: true,
-      searchReason: searchDecision.reason,
-      requiredSearchProviders: searchDecision.providers,
-      searchDecision,
-      debugReason: `matched search intent: ${searchDecision.searchNeed}`,
-    });
-  }
+  const lastAssistant = input.messages?.filter((entry) => entry.role === "assistant" || entry.role === "ai").at(-1);
+  const awaitingPreferences = Boolean(lastAssistant?.preferenceConfirmation);
+  const awaitingRequirements = lastAssistant?.responseType === "question_card";
+  const explicitAcceptance = /沿用|照之前|照舊|用之前|開始規劃/u.test(message);
+  const acceptingPlanning = isPreferenceAcceptance(message) &&
+    (awaitingPreferences || awaitingRequirements || explicitAcceptance || forcedRevision);
 
-  if (isPreferenceAcceptance(message)) {
+  if (acceptingPlanning) {
+    const missing = collectMissingRequirements(input, hints, mergedPreferences);
+    if (missing.length) {
+      return buildDecision("collect_requirements", {
+        missingRequirements: missing,
+        userFacingGuidance: buildFollowUpGuidance(hints, missing),
+        debugReason: "planning confirmation still needs trip basics",
+      });
+    }
     if (forcedRevision) {
       const missingRequirements = collectMissingRequirements(input, hints, knownPreferences);
       if (missingRequirements.length) {
@@ -466,7 +446,8 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
     });
   }
 
-  if (isTripPlanningIntent(message)) {
+  if (isTripPlanningIntent(message) ||
+    (awaitingRequirements && Boolean(hints.destination || hints.days))) {
     const missingRequirements = collectMissingRequirements(input, hints, knownPreferences);
     if (forcedRevision) {
       if (missingRequirements.length) {
@@ -532,6 +513,16 @@ export function decideTravelAgentMode(input: TravelAgentOrchestratorInput): Trav
         prompt: "需求已足夠，可以進入行程生成。",
       },
       debugReason: "planning intent has enough requirements",
+    });
+  }
+
+  if (searchDecision.shouldSearch) {
+    return buildDecision("search_travel_info", {
+      shouldSearch: true,
+      searchReason: searchDecision.reason,
+      requiredSearchProviders: searchDecision.providers,
+      searchDecision,
+      debugReason: `matched search intent: ${searchDecision.searchNeed}`,
     });
   }
 

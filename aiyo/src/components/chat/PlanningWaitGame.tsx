@@ -64,10 +64,6 @@ function isWaitGamePhase(step: WorkflowStepView | null): boolean {
   return Boolean(step && WAIT_GAME_PHASES.has(step.key) && step.status === "running");
 }
 
-function getHighScore(gameId: WaitGameId): number {
-  return gameId === "sky-dash" ? getSkyDashHighScore() : getSnakeHighScore();
-}
-
 function saveHighScore(gameId: WaitGameId, score: number): number {
   return gameId === "sky-dash" ? saveSkyDashHighScore(score) : saveSnakeHighScore(score);
 }

@@ -33,7 +33,7 @@
 |------|------|------|------|
 | Dev app | `aiyo-new-app-dev` | 開發用前端/後端 | `http://127.0.0.1:3000` |
 | Prod-live app | `aiyo-new-app-prod-live` | 模擬正式環境 | `http://127.0.0.1:3001` |
-| Open WebUI | `open-webui` | AI gateway 與模型 API | `http://127.0.0.1:8080` |
+| Open WebUI | `aiyo-new-open-webui` | AI gateway 與模型 API | `http://127.0.0.1:8080` |
 | Main Postgres | `aiyo-new-postgres` | AIYO 主資料庫 | `127.0.0.1:5432` |
 | Redis | `aiyo-new-redis` | 快取/即時狀態 | `127.0.0.1:6379` |
 | mem0 API | `aiyo-new-mem0` | 記憶服務 API | `http://127.0.0.1:8890` |

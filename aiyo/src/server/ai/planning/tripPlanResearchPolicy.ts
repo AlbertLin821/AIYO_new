@@ -72,7 +72,13 @@ function collectPlaceQueries(request: TripPlanRequest, scopeLabel: string): stri
 
   const ordered = [...queries];
   const restaurant = ordered.find((query) => query.includes("餐廳"));
-  const nonRestaurant = ordered.filter((query) => query !== restaurant);
+  // Preserve exact requested POI queries before applying the provider-call budget.
+  // Broad interests previously consumed both slots and dropped every must-visit query.
+  const explicitQueries = mustVisit.slice(0, 4).map((place) =>
+    `${scopeLabel} ${place}`.replace(/\s+/g, " ").trim().slice(0, 120),
+  );
+  const nonRestaurant = [...new Set([...explicitQueries.filter((query) => queries.has(query)), ...ordered])]
+    .filter((query) => query !== restaurant);
   return [...nonRestaurant.slice(0, restaurant ? 2 : 3), ...(restaurant ? [restaurant] : [])];
 }
 

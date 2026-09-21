@@ -33,9 +33,9 @@ export class Mem0RequestError extends Error {
   }
 }
 
-async function mem0Fetch<T>(path: string, init?: RequestInit): Promise<T> {
+async function mem0Fetch<T>(path: string, init?: RequestInit, timeoutMs = serverConfig.mem0TimeoutMs): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), serverConfig.mem0TimeoutMs);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const headers = new Headers(init?.headers);
@@ -108,7 +108,7 @@ export async function addMemories(input: {
       messages: input.messages,
       metadata: input.metadata,
     }),
-  });
+  }, serverConfig.mem0WriteTimeoutMs);
 }
 
 export async function listMemories(userId: string): Promise<Mem0MemoryRecord[]> {

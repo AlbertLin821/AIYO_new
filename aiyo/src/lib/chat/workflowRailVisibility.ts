@@ -14,8 +14,18 @@ const ITINERARY_MUTATION_PATTERN =
 const FULL_ITINERARY_REVISION_PATTERN =
   /重新規劃|重排|整份|整個|全部|從頭|完整(?:安排|規劃)|(?:規劃|安排).{0,8}(?:新|完整|整份|全部)行程/u;
 
-const DESTRUCTIVE_ITINERARY_PATTERN =
-  /(?:第?\s*[\d一二兩两三四五六七八九十]+\s*天|day\s*\d+).{0,12}(?:全部|整天|整日)?(?:清空|刪除|刪掉|移除|取消|去掉)|(?:清空|刪除|刪掉|移除|取消|去掉).{0,12}(?:第?\s*[\d一二兩两三四五六七八九十]+\s*天|day\s*\d+)|(?:刪除|刪掉|清空).{0,12}(?:整份|整個|全部|東京|行程)|(?:整份|整個|全部).{0,12}(?:刪除|刪掉|清空|取代|替換)/iu;
+const DESTRUCTIVE_DAY = String.raw`(?:第?\s*[\d一二兩两三四五六七八九十]+\s*天|day\s*\d+)`;
+const DESTRUCTIVE_VERB = "(?:清空|刪除|刪掉|移除|取消|去掉)";
+const WHOLE_DAY_CONTENT = String.raw`(?:\s*(?:的|全部|所有|整天|整日|行程|安排|內容|活動))*`;
+const COMMAND_END = String.raw`(?=\s*(?:[，,。！!？?]|$))`;
+// A day reference scopes a named-place edit; it does not make it a whole-day deletion.
+const DESTRUCTIVE_ITINERARY_PATTERN = new RegExp(
+  `${DESTRUCTIVE_DAY}${WHOLE_DAY_CONTENT}\\s*${DESTRUCTIVE_VERB}${COMMAND_END}` +
+  `|${DESTRUCTIVE_VERB}\\s*${DESTRUCTIVE_DAY}${WHOLE_DAY_CONTENT}${COMMAND_END}` +
+  `|${DESTRUCTIVE_VERB}.{0,12}(?:行程|全部安排|所有安排)${COMMAND_END}` +
+  `|(?:整份|整個|全部).{0,12}(?:刪除|刪掉|清空|取代|替換)${COMMAND_END}`,
+  "iu",
+);
 
 const LIKELY_TRIP_WORKFLOW_PATTERN =
   /(?:幫我|請|可以|能不能|想要|我要|我想|需要).{0,12}(?:規劃|安排|建立|創建|產生|生成|做一份|排|新增|加入|加上|修改|調整|重排|重新規劃)|(?:規劃|安排|建立|產生|生成|新增|加入|修改|調整|重排|重新規劃).{0,12}(?:行程|旅行|旅遊|景點|活動|餐廳|美食)|(?:想去|我要去|我想去).{0,30}(?:旅遊|旅行|自由行|[一二兩三四五六七八九十\d]+\s*天)|(?:玩|排)[一二兩三四五六七八九十\d]+\s*天|[一二兩三四五六七八九十\d]+\s*天[一二兩三四五六七八九十\d]*\s*夜(?:行程|旅行|旅遊|自由行)?/u;

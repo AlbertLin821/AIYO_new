@@ -18,6 +18,14 @@ const context: ChatContext = {
   ],
 };
 
+test("named place removal does not become whole-day or whole-trip deletion", () => {
+  for (const message of ["刪掉第二天的晴空塔", "第二天的晴空塔刪掉", "刪除東京晴空塔", "把第二天明治神宮移除"]) {
+    assert.equal(guardDestructiveChatMessage({
+      userId: `specific-${message}`, tripId: "specific-trip", message, context,
+    }).kind, "continue", message);
+  }
+});
+
 test("destructive day clear asks confirmation and emits no mutation first", () => {
   const guarded = guardDestructiveChatMessage({
     userId: "user-a",

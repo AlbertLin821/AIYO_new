@@ -1,3 +1,5 @@
+import { waitForVideoJob } from "./videoJobsClient";
+import type { VideoJobStatus } from "@/lib/videoJob";
 import { isApiError } from "@/lib/api-response";
 import {
   failFrontendDebugProcess,
@@ -185,6 +187,7 @@ export async function summarizeVideo(input: {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      Prefer: "respond-async",
       ...(input.refresh ? { "Cache-Control": "no-store" } : {}),
     },
     cache: input.refresh ? "no-store" : "default",
@@ -197,6 +200,14 @@ export async function summarizeVideo(input: {
     });
   }
 
+  if (response.status === 202) {
+    const accepted = await parseJson<ApiResponse<VideoJobStatus>>(response);
+    if (isApiError(accepted)) throw new Error(accepted.error.message);
+    if (!accepted.data.ownerId) throw new Error("無法確認影片工作的登入帳號，請重新登入後再試。");
+    const result = await waitForVideoJob({ jobId: accepted.data.jobId, ownerId: accepted.data.ownerId, videoId: input.videoId || input.url || "" });
+    if (processId) finishFrontendDebugProcess(processId, { videoId: result.video.videoId });
+    return result;
+  }
   const payload = await parseJson<ApiResponse<VideoSummaryResult>>(response);
 
   if (!response.ok || isApiError(payload)) {

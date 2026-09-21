@@ -6,7 +6,6 @@ import {
   fuzzyDedupePlaceMentions,
   shouldExcludeAsPoiTitle,
 } from "@/server/video/placeMentionNormalizer";
-import { buildDescriptionFallbackTranscriptEntries } from "@/server/services/videoSummaryService";
 import { extractTimestampAwarePlaceMentions } from "@/server/video/placeMentionExtractor";
 import { preprocessTranscript } from "@/server/video/transcriptProcessing";
 import {
@@ -55,17 +54,6 @@ test("extractTimestampAwarePlaceMentions keeps store names but drops generic fra
   assert.ok(names.includes("北門驛"));
   assert.ok(!names.includes("走路就能逛夜市"));
   assert.ok(!names.includes("等晚上回飯店"));
-});
-
-test("description fallback entries are sentence-split and low-confidence", () => {
-  const entries = buildDescriptionFallbackTranscriptEntries({
-    title: "嘉義兩天一夜",
-    description: "📍文化路夜市攻略。📍郭家火雞肉飯必吃。\n\n請記得訂閱我的頻道",
-  });
-  assert.ok(entries.length >= 2);
-  assert.ok(entries.every((entry) => entry.timestampSource === "description-fallback"));
-  assert.ok(entries.every((entry) => entry.timestampConfidence === "low"));
-  assert.ok(entries.every((entry) => !entry.text.includes("請記得訂閱")));
 });
 
 test("cleanPlaceMentionName rejects extremely long subtitle-like fragments", () => {

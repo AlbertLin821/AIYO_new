@@ -1,9 +1,11 @@
+import { enqueueMemoryWrite } from "@/server/jobs/memoryJobs";
+import { publishChatProgress } from "@/server/chat/chatProgressStore";
 import { NextResponse } from "next/server";
 import { createError, createSuccess } from "@/lib/api-response";
 import { formatOllamaErrorMessage, OllamaRequestError } from "@/server/ai/ollamaClient";
 import { buildPersonalizedAIContext, type AIContextBuildResult } from "@/server/ai/aiContextBuilder";
 import { completeChatProgress, ensureChatProgressSession } from "@/server/chat/chatProgressStore";
-import { addMemories, formatMemoryContext } from "@/server/memory/mem0Client";
+import { formatMemoryContext } from "@/server/memory/mem0Client";
 import { buildStableMemoryMessages } from "@/server/memory/memoryPresentation";
 import { isPersonalMemoryRecallIntent } from "@/server/memory/personalMemoryRecall";
 import { retrieveRelevantMemoriesForUser } from "@/server/memory/memoryRetrieval";
@@ -34,6 +36,8 @@ function logChatRouteFailure(messagePreview: string, error: unknown) {
 }
 
 async function handleChatPost(request: Request) {
+  const startedAt = Date.now();
+  const logStage = (stage: string) => console.info("[chat-stage]", { stage, elapsedMs: Date.now() - startedAt });
   let progressSessionId: string | undefined;
   let normalizedMessage = "";
   try {
@@ -49,6 +53,7 @@ async function handleChatPost(request: Request) {
     };
 
     normalizedMessage = body.message?.trim() || "";
+    logStage("request-parsed");
     const displayMessage = body.displayMessage?.trim() || "";
     const hasQuestionAnswers = Boolean(body.questionAnswers?.length);
     const userPersistContent = normalizedMessage || displayMessage;
@@ -59,7 +64,7 @@ async function handleChatPost(request: Request) {
       });
     }
 
-    progressSessionId = body.progressSessionId?.trim() || undefined;
+    const requestedProgressSessionId = body.progressSessionId?.trim() || undefined;
     let persistedUserId: string | null = null;
     let persistedTripId: string | undefined;
     let memoryContext: string | undefined;
@@ -68,11 +73,17 @@ async function handleChatPost(request: Request) {
 
     try {
       const { userId } = await requireSessionUser();
-      const trip = await resolveSessionTrip(userId);
+      // Only retain a session ID after ownership validation. Error cleanup must
+      // never publish into, or complete, another user's progress session.
+      if (requestedProgressSessionId) {
+        ensureChatProgressSession(requestedProgressSessionId, userId);
+        progressSessionId = requestedProgressSessionId;
+      }
       persistedUserId = userId;
+      const trip = await resolveSessionTrip(userId);
       persistedTripId = trip?.id;
       if (progressSessionId) {
-        ensureChatProgressSession(progressSessionId, userId);
+        publishChatProgress(progressSessionId, { type: "status_step", phase: "understand", label: "讀取偏好與行程紀錄", status: "running" });
       }
       if (userPersistContent) {
         await saveChatMessage(userId, "user", userPersistContent, persistedTripId);
@@ -92,6 +103,7 @@ async function handleChatPost(request: Request) {
           }
         }
         const longTermMemory = formatMemoryContext(memories);
+        logStage("memory-retrieved");
         try {
           personalizedContext = await buildPersonalizedAIContext({
             userId,
@@ -118,11 +130,12 @@ async function handleChatPost(request: Request) {
             .filter(Boolean);
         }
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message === "forbidden") return NextResponse.json(createError("forbidden", "無法使用此對話進度。"), { status: 403 });
       // Chat remains functional even if the user is not authenticated.
     }
 
-    if (progressSessionId && !persistedUserId) {
+    if (requestedProgressSessionId && !progressSessionId) {
       return NextResponse.json(createError("unauthorized", "請先登入以使用行程規劃進度。"), {
         status: 401,
       });
@@ -151,6 +164,7 @@ async function handleChatPost(request: Request) {
       return NextResponse.json(createSuccess(destructiveGuard.response));
     }
 
+    logStage("assistant-start");
     const response = await chatWithTravelAssistant({
       message: effectiveMessage,
       messages: body.messages,
@@ -163,6 +177,7 @@ async function handleChatPost(request: Request) {
       mem0Memories,
       aiContext: personalizedContext,
     });
+    logStage("assistant-complete");
 
     if (persistedUserId) {
       try {
@@ -184,7 +199,7 @@ async function handleChatPost(request: Request) {
           aiContext: personalizedContext,
           response,
         });
-        await addMemories({
+        await enqueueMemoryWrite({
           userId: persistedUserId,
           messages: memoryMessages,
           metadata: {
@@ -193,7 +208,7 @@ async function handleChatPost(request: Request) {
           },
         });
       } catch {
-        // Memory persistence should not block the response.
+        console.warn("[api/ai/chat] Memory enqueue failed; chat message remains saved.");
       }
     }
 

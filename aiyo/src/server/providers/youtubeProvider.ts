@@ -842,25 +842,24 @@ function readCaptionTrackName(track: CaptionTrack): string {
     .trim();
 }
 
-function parseTranscriptXml(xml: string): TranscriptEntry[] {
+export function parseTranscriptXml(xml: string): TranscriptEntry[] {
   const entries: TranscriptEntry[] = [];
-  const regex = /<text start="([^"]+)" dur="([^"]+)"[^>]*>([\s\S]*?)<\/text>/g;
-  let match: RegExpExecArray | null = regex.exec(xml);
-  while (match) {
-    const startSeconds = Number(match[1] || 0);
-    const durationSeconds = Number(match[2] || 0);
-    const text = decodeTranscriptText(match[3] || "");
-    if (text) {
-      entries.push({
-        timestamp: formatSeconds(startSeconds),
-        startSeconds,
-        durationSeconds,
-        text,
-      });
-    }
-    match = regex.exec(xml);
+  // Legacy <text> uses seconds; srv3 <p> uses milliseconds, including short cues.
+  for (const match of xml.matchAll(/<(text|p)\b([^>]*)>([\s\S]*?)<\/\1>/g)) {
+    const attributes = new Map(Array.from(match[2].matchAll(/([\w]+)=["']([^"']*)["']/g), (m) => [m[1], m[2]]));
+    const milliseconds = match[1] === "p";
+    const start = attributes.get(milliseconds ? "t" : "start");
+    const duration = attributes.get(milliseconds ? "d" : "dur");
+    if (!start?.trim() || !duration?.trim()) continue;
+    const startSeconds = Number(start) / (milliseconds ? 1000 : 1);
+    const durationSeconds = Number(duration) / (milliseconds ? 1000 : 1);
+    const text = decodeTranscriptText(match[3].replace(/<[^>]*>/g, ""));
+    if (!text || !Number.isFinite(startSeconds) || startSeconds < 0 ||
+        !Number.isFinite(durationSeconds) || durationSeconds <= 0) continue;
+    entries.push({ timestamp: formatSeconds(startSeconds), startSeconds, durationSeconds, text,
+      timestampSource: "youtube-transcript", timestampConfidence: "high" });
   }
-  return entries;
+  return entries.sort((a, b) => a.startSeconds - b.startSeconds);
 }
 
 function parseTimestampToSeconds(input: string): number | null {
@@ -1077,7 +1076,7 @@ async function tryFetchTimedTextXml(
       attempted.add(url);
       try {
         const text = await fetchText(url);
-        if (text && text.includes("<text")) {
+        if (text && parseTranscriptXml(text).length > 0) {
           return {
             xml: text,
             language,
@@ -1105,7 +1104,7 @@ async function tryFetchTimedTextXml(
       attempted.add(url);
       try {
         const text = await fetchText(url);
-        if (text && text.includes("<text")) {
+        if (text && parseTranscriptXml(text).length > 0) {
           return {
             xml: text,
             language,
@@ -1211,11 +1210,11 @@ async function tryFetchTranscriptViaYtDlp(
 
 export async function fetchYouTubeTranscript(videoId: string): Promise<TranscriptFetchResult> {
   try {
-    const html = await fetchText(`https://www.youtube.com/watch?v=${videoId}&hl=zh-TW`);
+    const html = await fetchText(`https://www.youtube.com/watch?v=${videoId}&hl=zh-TW`).catch(() => "");
     const tracks = extractCaptionTracks(html);
     const selectedTrack = selectCaptionTrack(tracks);
     if (selectedTrack?.baseUrl) {
-      const transcriptXml = await fetchText(selectedTrack.baseUrl);
+      const transcriptXml = await fetchText(selectedTrack.baseUrl).catch(() => "");
       const entries = parseTranscriptXml(transcriptXml);
       if (entries.length > 0) {
         return {
@@ -1242,59 +1241,7 @@ export async function fetchYouTubeTranscript(videoId: string): Promise<Transcrip
       }
     }
 
-    try {
-      const { YoutubeTranscript } = await import("youtube-transcript");
-      const packageEntries = await YoutubeTranscript.fetchTranscript(videoId);
-      let entries = packageEntries
-        .map((entry) => ({
-          timestamp: formatSeconds(entry.offset > 10_000 ? entry.offset / 1000 : entry.offset),
-          startSeconds: entry.offset > 10_000 ? entry.offset / 1000 : entry.offset,
-          durationSeconds: entry.duration > 10_000 ? entry.duration / 1000 : entry.duration,
-          text: decodeTranscriptText(entry.text),
-        }))
-        .filter((entry) => entry.text);
-      if (
-        entries.length > 1 &&
-        entries.every((entry) => entry.startSeconds === 0) &&
-        packageEntries.some((e) => e.offset > 500)
-      ) {
-        entries = packageEntries.map((entry) => {
-          const startSeconds = entry.offset / 1000;
-          return {
-            timestamp: formatSeconds(startSeconds),
-            startSeconds,
-            durationSeconds: entry.duration > 10_000 ? entry.duration / 1000 : Math.max(0.5, entry.duration / 1000),
-            text: decodeTranscriptText(entry.text),
-          };
-        }).filter((entry) => entry.text);
-      }
-      if (entries.length > 1 && entries.every((entry) => entry.startSeconds === 0)) {
-        let acc = 0;
-        entries = entries.map((entry, index) => {
-          const dur = Math.max(2, Math.min(12, entry.durationSeconds || 4));
-          const startSeconds = index === 0 ? 0 : acc;
-          acc += dur;
-          return {
-            ...entry,
-            startSeconds,
-            timestamp: formatSeconds(startSeconds),
-            durationSeconds: dur,
-          };
-        });
-      }
-      if (entries.length > 0) {
-        return {
-          entries,
-          source: "youtube",
-          captionSource: "youtube-transcript-package",
-          captionLanguage: packageEntries.find((entry) => entry.lang)?.lang,
-          captionKind: "manual",
-        };
-      }
-    } catch {
-      // Keep the explicit no-transcript response below.
-    }
-
+    // Package offsets have no unit metadata; use the explicit XML/VTT adapters only.
     const ytDlpResult = await tryFetchTranscriptViaYtDlp(videoId);
     if (ytDlpResult.entries.length > 0) {
       return {
@@ -1324,29 +1271,4 @@ export async function fetchYouTubeTranscript(videoId: string): Promise<Transcrip
       fallbackReason: error instanceof Error ? error.message : "Transcript request failed.",
     };
   }
-}
-
-export function buildGeneratedTranscript(input: {
-  metadata: Pick<YouTubeMetadata, "title" | "description">;
-  destination?: string;
-}): TranscriptEntry[] {
-  const descriptionSentences = input.metadata.description
-    .split(/(?<=[.!?])\s+/)
-    .map((sentence) => sentence.trim())
-    .filter(Boolean);
-
-  const seedSentences = descriptionSentences.length
-    ? descriptionSentences
-    : [
-        `${input.metadata.title} introduces the overall trip route and sets expectations for the destination.`,
-        `The video highlights popular stops in ${input.destination || "the city"} and explains why they fit together.`,
-        `The host shares practical food, transit, and pacing advice to help viewers build a usable itinerary.`,
-      ];
-
-  return seedSentences.slice(0, 6).map((sentence, index) => ({
-    timestamp: formatSeconds(index * 120),
-    startSeconds: index * 120,
-    durationSeconds: 90,
-    text: sentence,
-  }));
 }

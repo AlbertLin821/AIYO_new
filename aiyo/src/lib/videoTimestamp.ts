@@ -43,14 +43,12 @@ type SegmentSeekInput = Pick<
 
 /** 回傳可安全 seek 的秒數；無法從片段推導時回傳 null（按鈕應停用）。 */
 export function getSegmentSeekSeconds(segment: SegmentSeekInput): number | null {
+  if (segment.timestampConfidence === "low") return null;
   if (typeof segment.startSeconds === "number" && Number.isFinite(segment.startSeconds) && segment.startSeconds >= 0) {
     return Math.floor(segment.startSeconds);
   }
   const label = segment.startLabel || segment.timestamp;
   if (!label?.trim()) {
-    return null;
-  }
-  if (segment.timestampConfidence === "low" && !/^\d{1,2}:\d{2}(:\d{2})?$/.test(label.trim())) {
     return null;
   }
   const parsed = parseTimestampToSeconds(label);

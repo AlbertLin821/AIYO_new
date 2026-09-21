@@ -1,3 +1,6 @@
+import { createReplyTextDecoder } from "@/server/ai/replyTextDecoder";
+import { publishChatText } from "@/server/chat/chatProgressStore";
+import { rankPlaceCandidates } from "@/server/personalization/placePreferenceRanking";
 import { isPreferenceOverrideMessage } from "@/lib/personalization/preferenceDisplay";
 import { filterProposedChangesByVerifiedPlaces } from "@/server/ai/placeNameMatch";
 import { normalizeConversationHistory } from "@/server/services/travelPlanner/chatConversation";
@@ -37,7 +40,7 @@ import { mergeChatSources, normalizeWebSearchSources, pickCitationIdsForText } f
 import { registerChatSources } from "@/server/chat/sourcePreviewStore";
 import { publishChatProgress } from "@/server/chat/chatProgressStore";
 import { applyRevisionInstructionToProfile } from "@/server/chat/tripRevision";
-import { enrichTripPlanWithRouteTravelTimes } from "@/server/geo/routeTravelTimeService";
+import { enrichTripPlanWithRouteTravelTimes } from "@/server/geo/osmRouteTravelTimeService";
 import { runStructuredTripWorkflow } from "@/server/services/travelPlanningWorkflowService";
 import {
   INSUFFICIENT_RESEARCH_WARNING,
@@ -241,6 +244,7 @@ function buildGuidedTravelAgentResponse(
       }),
       responseType: "question_card",
       questionCard: followUpCard,
+      preferenceConfirmation: decision.preferenceConfirmation,
       tripProfile: mergedProfile,
       proposedChanges: [],
     },
@@ -443,6 +447,7 @@ function publishProgressStep(
     return;
   }
   const timestamp = new Date().toISOString();
+  console.info("[chat-phase]", { phase: step.phase, status: step.status });
   publishChatProgress(progressSessionId, {
     type: "status_step",
     ...step,
@@ -823,10 +828,6 @@ function uniqueStrings(values: string[]): string[] {
 
 const DIETARY_NO_RESTRICTION_LABEL = "無特殊飲食限制";
 
-function hasAnsweredDietaryRestrictions(values?: string[] | null): boolean {
-  return Boolean(values?.some((value) => value.trim()));
-}
-
 function parseDietaryRestrictionsInput(value: string): string[] {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -1107,9 +1108,9 @@ function updateTripProfileFromText(profile: TripProfile, message: string): TripP
   }
 
   const destination =
+    extractDestinationFromPlanningText(message) ||
     message.match(/(?:想去|我要去|我想去|要去|去|到)\s*([^，。,\s]+?)(?:了|玩|旅遊|旅行|自由行|行程|[一二兩三四五六七八九十\d]+\s*天|$)/u)?.[1] ||
-    message.match(/^([^，。,\s]{2,12})(?:旅遊|旅行|自由行|行程)/u)?.[1] ||
-    extractDestinationFromPlanningText(message);
+    message.match(/^([^，。,\s]{2,12})(?:旅遊|旅行|自由行|行程)/u)?.[1];
   if (
     destination &&
     !/哪裡|哪邊|幾天|多久/u.test(destination) &&
@@ -1386,6 +1387,9 @@ function isPlausibleDestinationLabel(label: string): boolean {
   if (/[？?：:（）()]/.test(trimmed)) {
     return false;
   }
+  if (/幫我|請|規劃|安排|行程|這趟|[一二兩三四五六七八九十\d]+\s*天/u.test(trimmed)) {
+    return false;
+  }
   if (/^(兩人|一人|三人|四人|五人|伴侶|朋友|家人|情侶)/u.test(trimmed)) {
     return false;
   }
@@ -1480,42 +1484,6 @@ export function buildQuestionCard(profile: TripProfile, context?: ChatContext): 
         { label: "6 天以上", value: "7" },
       ],
       helperText: "選最接近的選項即可，之後還能再調整。",
-    });
-  }
-
-  if (!merged.travel_dates) {
-    questions.push({
-      slot: "travel_dates",
-      question: merged.destination ? `${destination}預計哪幾天出發？` : "你預計哪幾天出發？",
-      type: "date_range",
-      startLabel: "出發日期",
-      endLabel: "回程日期",
-      helperText: "如果日期還沒完全確定，也可以先選一個大概區間。",
-    });
-  }
-
-  if (!merged.traveler_count && !merged.companions) {
-    questions.push({
-      slot: "traveler_count",
-      question: "這次大概幾個人同行？",
-      type: "single_choice",
-      options: [
-        { label: "1 人", value: "1" },
-        { label: "2 人", value: "2", recommended: true },
-        { label: "3–4 人", value: "4" },
-        { label: "5 人以上", value: "5" },
-      ],
-      helperText: "我會依人數調整交通、用餐和節奏建議。",
-    });
-  }
-
-  if (!hasAnsweredDietaryRestrictions(merged.dietary_restrictions)) {
-    questions.push({
-      slot: "dietary_restrictions",
-      question: "有沒有需要先避開的飲食限制或過敏？",
-      type: "text",
-      placeholder: "例如：素食、不吃牛、海鮮過敏；留白視為無",
-      helperText: "這會直接影響餐廳與用餐安排。留白時會視為無飲食限制。",
     });
   }
 
@@ -3121,7 +3089,7 @@ function toUserFacingPlanWarnings(warnings?: string[]): string[] {
   );
 }
 
-function profileToTripPlanRequest(profile: TripProfile, context?: ChatContext): TripPlanRequest {
+export function profileToTripPlanRequest(profile: TripProfile, context?: ChatContext): TripPlanRequest {
   const pace = profile.pace === "relaxed" || profile.pace === "intensive" ? profile.pace : "moderate";
   const dietaryRestrictions = profile.dietary_restrictions.filter(Boolean);
   const transportPreference = resolvePlanningTransportPreference(
@@ -3135,11 +3103,12 @@ function profileToTripPlanRequest(profile: TripProfile, context?: ChatContext): 
     tripStartDate: profile.travel_dates?.start || context?.tripStartDate || undefined,
     tripEndDate: profile.travel_dates?.end || profile.travel_dates?.start || context?.tripEndDate || context?.tripStartDate || undefined,
     preferences: {
-      interests: profile.preferences.length ? profile.preferences : ["景點", "美食"],
+      interests: profile.preferences.length ? profile.preferences : context?.preferences?.interests ?? ["景點", "美食"],
       pace,
       transportPreference,
       budget: budgetToNumber(profile.budget),
       notes: [
+        context?.preferences?.notes,
         profile.departure_location ? `出發地：${profile.departure_location}` : "",
         profile.companions ? `同行者：${profile.companions}` : "",
         profile.plan_integration === "direct_merge" ? "新行程將直接併入既有規劃。" : "",
@@ -3150,7 +3119,7 @@ function profileToTripPlanRequest(profile: TripProfile, context?: ChatContext): 
         dietaryRestrictions.length ? `飲食限制：${dietaryRestrictions.join("、")}` : "",
       ].filter(Boolean).join("；"),
       avoid: profile.avoid_places,
-      mustVisit: profile.visited_before.length ? undefined : [],
+      mustVisit: context?.preferences?.mustVisit ?? [],
     },
     itineraryDraft: context?.itinerary,
   };
@@ -3322,7 +3291,8 @@ async function handleStructuredTripWorkflow(input: {
 }): Promise<ChatResponsePayload | null> {
   return runStructuredTripWorkflow(input, {
     shouldHandle: (workflowInput) =>
-      Boolean(workflowInput.forceStructuredRevision) || isTripWorkflowMessage(workflowInput),
+      Boolean(workflowInput.forceStructuredRevision) || isTripWorkflowMessage(workflowInput) ||
+      Boolean(workflowInput.tripProfile?.destination && workflowInput.tripProfile?.duration_days),
     publishProgress: publishProgressStep,
     mergeTripProfile,
     updateTripProfileFromText,
@@ -3654,7 +3624,7 @@ function placeHitToLocation(place: PlaceSearchHit, description: string) {
     thumbnail: place.photoUrl,
     rating: place.rating,
     userRatingsTotal: place.userRatingsTotal,
-    resolvedFrom: "google-geocode" as const,
+    resolvedFrom: "photon" as const,
     verified: true,
   };
 }
@@ -3886,7 +3856,7 @@ export function buildFallbackTripPlan(request: TripPlanRequest, placeHits: Place
       items.push(buildMealItem(dayNumber, "dinner", anchor || dayPois[1], itemCursor));
     }
 
-    const themeNames = dayPois.map((place) => place.name).filter(Boolean);
+    const themeNames = items.filter((item) => item.location).map((item) => item.title);
     const dayTheme = chinese
       ? cleanDayThemeLabel(themeNames[0] || `${destLabel} 當日行程`, true)
       : cleanDayThemeLabel(themeNames[0] || `${destLabel} daily plan`, false);
@@ -3908,6 +3878,13 @@ export function buildFallbackTripPlan(request: TripPlanRequest, placeHits: Place
   const warnings = researchInsufficient
     ? [INSUFFICIENT_RESEARCH_TRAVEL_PLAN_WARNING, INSUFFICIENT_RESEARCH_WARNING]
     : [];
+  const scheduledNames = new Set(days.flatMap((day) => day.items.map((item) => normalizePlaceLookupText(item.title))));
+  const missingMustVisit = mustVisit.filter((name) => !scheduledNames.has(normalizePlaceLookupText(name)));
+  if (missingMustVisit.length) {
+    warnings.push(chinese
+      ? `指定地點尚未排入：${missingMustVisit.join("、")}。目前資料不足以完成指定路線，請確認地點後再調整；以下為替代基礎行程。`
+      : `Requested places not scheduled: ${missingMustVisit.join(", ")}. The available data is insufficient for the requested route; this is an alternative starter itinerary.`);
+  }
 
   return {
     summary,
@@ -4010,6 +3987,8 @@ export async function generateTripPlan(
     status: "completed",
   });
 
+  researchPlaceHits = rankPlaceCandidates(researchPlaceHits, request.preferences);
+  if (researchPlaceHits.length) externalResearch += `\n\n偏好排序後的可驗證候選（優先使用且遵守排除條件）：${researchPlaceHits.map((place) => place.name).join("、")}`;
   const researchChars = (externalResearch + (webSearch.digest || "")).length;
   const composeNumCtx = researchChars > 12_000 ? 32_768 : 16_384;
 
@@ -4294,6 +4273,7 @@ export async function chatWithTravelAssistant(input: {
 
   const travelAgentDecision = decideTravelAgentMode({
     message: input.message,
+    messages: input.messages,
     context,
     tripProfile: resolvedTripProfile,
     aiContext: input.aiContext,
@@ -4319,6 +4299,22 @@ export async function chatWithTravelAssistant(input: {
   const skipNaturalShortcut =
     hasQuestionAnswers ||
     Boolean(input.structuredTravelPlanning && input.tripProfile && shouldUseStructuredPlanner);
+
+  // Requirement collection and preference confirmation are deterministic workflow
+  // boundaries. They must complete before any model-backed compose path, including
+  // callers that explicitly opt into structured planning.
+  if (
+    !hasQuestionAnswers &&
+    (travelAgentDecision.mode === "collect_requirements" ||
+      travelAgentDecision.mode === "confirm_preferences")
+  ) {
+    return buildGuidedTravelAgentResponse(travelAgentDecision, {
+      tripProfile: resolvedTripProfile,
+      context,
+      message: input.message,
+      messages: input.messages,
+    });
+  }
 
   if (
     !skipNaturalShortcut &&
@@ -4379,25 +4375,37 @@ export async function chatWithTravelAssistant(input: {
     };
   }
 
-  if (
-    !skipNaturalShortcut &&
-    isPreferenceOverrideMessage(input.message) &&
-    travelAgentDecision.mode === "generate_itinerary" &&
-    travelAgentDecision.userFacingGuidance &&
-    !input.structuredTravelPlanning &&
-    !input.tripProfile
-  ) {
-    return {
-      ...buildNaturalTravelAgentResponse(travelAgentDecision),
-      tripProfile: resolvedTripProfile,
-    };
-  }
-
-  if (input.structuredTravelPlanning && shouldUseStructuredPlanner) {
+  if ((input.structuredTravelPlanning || travelAgentDecision.shouldGenerateItinerary) && shouldUseStructuredPlanner) {
+    // A text confirmation must apply the same accepted settings as the UI button.
+    // Only the generate decision has passed the reuse confirmation boundary.
+    const accepted = travelAgentDecision.shouldGenerateItinerary
+      ? travelAgentDecision.preferenceConfirmation?.preferences
+      : undefined;
+    const planningProfile = accepted ? normalizeTripProfile({
+      ...resolvedTripProfile,
+      preferences: accepted.travelStyle ?? accepted.travelStyles ?? resolvedTripProfile.preferences,
+      avoid_places: accepted.avoid ?? accepted.avoidances ?? resolvedTripProfile.avoid_places,
+      pace: accepted.pace ?? resolvedTripProfile.pace,
+      transportation: accepted.transportPreference ?? resolvedTripProfile.transportation,
+      budget: resolvedTripProfile.budget ?? (accepted.budget ? String(accepted.budget) :
+        accepted.budgetLevel === "high" ? "high_end" : accepted.budgetLevel === "medium" ? "mid_range" : accepted.budgetLevel === "low" ? "budget" : null),
+    }) : resolvedTripProfile;
+    const planningContext: ChatContext | undefined = accepted ? {
+      ...context,
+      preferences: {
+        ...context?.preferences,
+        interests: accepted.travelStyle ?? accepted.travelStyles ?? planningProfile.preferences,
+        pace: planningProfile.pace === "relaxed" || planningProfile.pace === "intensive" ? planningProfile.pace : "moderate",
+        transportPreference: accepted.transportPreference ?? context?.preferences?.transportPreference ?? "public_transport",
+        mustVisit: accepted.mustVisit ?? context?.preferences?.mustVisit,
+        avoid: accepted.avoid ?? accepted.avoidances ?? context?.preferences?.avoid,
+        notes: accepted.notes ?? context?.preferences?.notes,
+      },
+    } : context;
     const structuredTripResponse = await handleStructuredTripWorkflow({
       message: input.message,
-      context,
-      tripProfile: resolvedTripProfile,
+      context: planningContext,
+      tripProfile: planningProfile,
       questionAnswers: input.questionAnswers,
       progressSessionId: input.progressSessionId,
       memoryContext: input.memoryContext,
@@ -4513,7 +4521,19 @@ export async function chatWithTravelAssistant(input: {
     ...normalizeConversationHistory(input.messages),
     { role: "user", content: prompt.user },
   ];
+  let replyDecoder = createReplyTextDecoder();
+  let replySnapshot = "";
   const composeOllamaBase = {
+    ...(input.progressSessionId ? {
+      onStreamStart: () => {
+        replyDecoder = createReplyTextDecoder(); replySnapshot = "";
+        publishChatText(input.progressSessionId!, "");
+      },
+      onChunk: (chunk: string) => {
+        const delta = replyDecoder.push(chunk);
+        if (delta) { replySnapshot += delta; publishChatText(input.progressSessionId!, replySnapshot); }
+      },
+    } : {}),
     task: "travel-chat" as const,
     timeoutMs: perRoundTimeout,
     options: { temperature: 0, top_p: 0.9, num_ctx: 12_288 },
