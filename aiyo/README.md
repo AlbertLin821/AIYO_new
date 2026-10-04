@@ -1,130 +1,61 @@
-# AIYO App
+# AIYO 應用程式開發
 
-這個目錄是 `AIYO_new` 的主應用程式。若你要看完整部署流程、Docker 服務拓樸、Open WebUI、mem0、Google OAuth 與 `.env` 設定，請先讀 repo root 的 [README.md](../README.md)。
+本目錄是 AIYO 的 Next.js 應用，包含瀏覽器介面、API、規劃服務、資料模型與測試。專案動機、功能與成果見[根目錄 README](../README.md)；完整啟動方式以[部署指南](../docs/setup.md)為準。
 
-這份 README 只補充 app 開發者最常用的內容。
+## 開發入口
 
-## 你大多數時候會在哪裡工作
+| 路徑 | 責任 |
+| --- | --- |
+| [src/app](src/app) | App Router 頁面與 API |
+| [src/components](src/components) | 聊天、行程、地圖與影片元件 |
+| [src/stores](src/stores) | Zustand 互動狀態 |
+| [src/services](src/services) | 前端 API client、同步、影片匯入 |
+| [src/server](src/server) | 規劃、搜尋、記憶、地理與工作佇列 |
+| [src/types/index.ts](src/types/index.ts) | 共用資料契約 |
+| [prisma/schema.prisma](prisma/schema.prisma) | 主資料庫 schema |
+| [prisma/migrations](prisma/migrations) | 已提交 migration |
+| [tests](tests) | 整合與 Playwright 測試 |
+| [scripts](scripts) | 啟動 helper、worker、資料準備與驗證 |
 
-| 路徑 | 用途 |
-|------|------|
-| [src/](./src) | 前後端主程式 |
-| [prisma/](./prisma) | Prisma schema 與 migration |
-| [package.json](./package.json) | npm scripts |
-| [docs/](./docs) | app 內部測試與設計文件 |
-| [AGENTS.md](./AGENTS.md) | 進入 `aiyo/` 開發前要遵守的規則 |
+修改前閱讀 [AGENTS.md](AGENTS.md)。目前使用 Next.js 16、React 19；修改框架行為時應參考本機安裝版本的文件。
 
-## 環境變數
+## 常用命令
 
-app 實際使用的是：
-
-- [aiyo/.env.dev](./.env.dev)
-- [aiyo/.env.prod-live](./.env.prod-live)
-
-範例檔：
-
-- [aiyo/.env.dev.example](./.env.dev.example)
-- [aiyo/.env.prod-live.example](./.env.prod-live.example)
-
-如果你改了以下任一組設定，請記得通常需要同時更新兩份：
-
-- `NEXTAUTH_*`
-- `OPENWEBUI_*`
-- `MEM0_*`
-- `OLLAMA_*`
-- `GOOGLE_*`
-- `NEXT_PUBLIC_GOOGLE_MAPS_*`
-
-## 啟動方式
-
-日常不要在 `aiyo/` 目錄直接手動組整套 Docker 指令，請回 repo root 用腳本：
+從本目錄執行，先依部署指南備妥環境檔及相依服務：
 
 ```powershell
-cd ..
-.\dev-up.ps1
-```
-
-或：
-
-```powershell
-cd ..
-.\prod-live-up.ps1
-```
-
-或：
-
-```powershell
-cd ..
-.\all-up.ps1
-```
-
-如果你只想重建 app containers：
-
-```powershell
-cd ..
-.\frontend-up.ps1
-```
-
-## 本地 app 指令
-
-在這個目錄執行：
-
-```powershell
-npm install
+npm ci
 npm run prisma:generate
+node scripts/copy-maplibre-worker.mjs
+npx tsx scripts/start-local-stack.ts migrate
+npx tsx scripts/start-local-stack.ts app
+```
+
+另一個終端：
+
+```powershell
+npx tsx scripts/start-local-stack.ts worker
+```
+
+worker 同時處理影片分析與記憶寫入。直接執行 `npm run worker:video` 不會進行容器 hostname 的宿主機轉換，適用於位址已正確配置的環境。
+
+```powershell
 npm test
+npm run lint
 npm run build
+npx tsc --noEmit
 ```
 
-常用 E2E：
+單元測試不包含所有 DB 整合或瀏覽器測試；規劃、影片與 live 模型驗證見[測試與評估](../docs/evaluation.md)。不可在真實使用者資料庫執行測試資料重置。
 
-```powershell
-npm run test:e2e:phase7
-npm run test:e2e:phase8
-```
+## 環境與工作目錄
 
-Live AI 驗證：
+本機設定使用未提交的 `.env.dev`／`.env.prod-live`；可提交範本為 [.env.dev.example](.env.dev.example) 與 [.env.prod-live.example](.env.prod-live.example)。不連結不存在於 GitHub 的私人環境檔，也不要把真實內容貼到 issue。
 
-```powershell
-$env:E2E_LIVE_AI="1"
-npm run test:e2e:live-ai:itinerary
-```
+`src/lib/projectEnv.ts` 控制專案設定來源，`src/server/config.ts` 決定模型與供應者設定。宿主機 helper、Compose、Playwright 各自有啟動前提，不能假設任何 npm 命令都會自動轉換網路位址。
 
-## 開發時最常遇到的幾件事
+## 功能修改的檢查點
 
-### 1. Google 登入顯示未設定
+對話修改需一併檢查意圖、schema、執行結果與持久化；地點替換需處理舊座標；背景補全需檢查版本；新增 provider 要有逾時、缺值與失敗降級。新增 UI 狀態時確認重新整理、切換行程與切換帳號後的行為。
 
-請確認：
-
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
-
-### 2. NextAuth 警告 `NEXTAUTH_URL is missing`
-
-請確認：
-
-- dev 用 `http://127.0.0.1:3000`
-- prod-live 用 `http://127.0.0.1:3001`
-
-### 3. AI 回應很慢或失敗
-
-先檢查：
-
-- `OPENWEBUI_API_KEY`
-- `OPENWEBUI_MODEL`
-- Open WebUI 是否能看到 Ollama 模型
-
-### 4. 記憶功能看起來沒作用
-
-先檢查：
-
-- `MEM0_ENABLED=true`
-- `MEM0_BASE_URL=http://aiyo-new-mem0:8890`
-- `MEM0_API_KEY` 有值
-
-## 參考文件
-
-- [README.md](../README.md)
-- [docs/README.md](../docs/README.md)
-- [docs/architecture.md](../docs/architecture.md)
-- [aiyo/docs/README.md](./docs/README.md)
+更多說明：[系統架構](../docs/architecture.md)、[資料與 API](../docs/data-and-api.md)、[工程決策](../docs/engineering-decisions.md)、[貢獻指南](../CONTRIBUTING.md)。

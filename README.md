@@ -1,510 +1,141 @@
-# AIYO_new
+# AIYO — 結合影片內容與個人偏好的對話式旅遊規劃系統
 
-`AIYO_new` 是目前使用中的 AIYO 旅遊規劃專案。主應用程式在 [aiyo/](./aiyo)，repo root 則負責 Docker、啟動腳本、環境變數範本與跨服務部署流程。
+AIYO 將旅遊影片中的地點資訊、使用者偏好與地圖資料整合到同一個行程編輯流程。使用者可以用自然語言提出旅行需求，從 YouTube 影片擷取候選景點，檢視有來源依據的摘要與時間片段，再把地點加入可編輯、可儲存的每日行程。
 
-這份 README 的目標是讓你可以從零開始把整套環境部署起來，包含：
+本專案著重生成式 AI 的應用整合：模型負責理解需求、整理內容與提出行程；程式負責驗證結構、查核地點、限制操作範圍，以及維持行程、地圖與資料庫的一致性。開發重點包括多輪對話、影片證據對齊、非同步工作、個人化資料使用及錯誤恢復。
 
-- `aiyo-new-app-dev` 開發站
-- `aiyo-new-app-prod-live` 模擬正式站
-- `Postgres`
-- `Redis`
-- `mem0`
-- `mem0` 專用 Postgres
-- `Open WebUI`
-- 宿主機上的 `Ollama`
+目前定位為可在本機部署與驗證的系統原型。已有實際模型、影片、記憶與資料庫的流程驗證，但尚未完成多人負載測試、影片標註集的品質評估或正式環境服務水準驗收。
 
-如果你只想看 app 內部開發說明，可以再看 [aiyo/README.md](./aiyo/README.md)。
+> 文件核對日期：2026-10-04。功能基準為 `7cb2d2b`；最近一份完整實作驗證紀錄為 2026-09-21。本次文件整理不代表重新完成線上或效能測試。
 
-## 架構總覽
+## 閱讀導覽
 
-目前本機部署拓樸如下：
+| 閱讀目的 | 文件 |
+| --- | --- |
+| 理解模組責任、資料流與系統邊界 | [系統架構](docs/architecture.md) |
+| 從原始碼啟動網站與背景工作 | [部署與操作](docs/setup.md) |
+| 理解資料表、API 與權限邊界 | [資料模型與介面](docs/data-and-api.md) |
+| 查看問題、修正與技術取捨 | [工程決策與演進](docs/engineering-decisions.md) |
+| 判讀測試成果與尚未驗證的部分 | [測試與評估](docs/evaluation.md) |
+| 修改程式或提交變更 | [應用程式開發](aiyo/README.md)、[貢獻指南](CONTRIBUTING.md) |
+| 追查各階段原始報告 | [專案文件索引](docs/README.md)、[應用文件索引](aiyo/docs/README.md) |
 
-1. 使用者透過瀏覽器進入 AIYO 前端。
-2. AIYO 後端讀取 `aiyo/.env.dev` 或 `aiyo/.env.prod-live`。
-3. 主要聊天與規劃模型呼叫走 `Open WebUI API`。
-4. `Open WebUI` 再去連宿主機上的 `Ollama`。
-5. AIYO 主資料存在 `aiyo-new-postgres`。
-6. 快取與部分即時狀態使用 `aiyo-new-redis`。
-7. 記憶功能使用 `aiyo-new-mem0`，其向量/記憶資料存在 `aiyo-new-mem0-postgres`。
+## 問題背景與設計目標
 
-## 服務與連接埠
+旅遊規劃通常需要在影片、搜尋結果、地圖與筆記之間反覆切換。影片中的景點可能只有口語名稱，沒有地址；同名店家或分店可能位於不同城市；一份讀起來合理的行程，也可能缺少移動時間、餐食或返程緩衝。加入語言模型後，還需要處理格式不穩定、無來源內容與修改意圖誤判等問題。
 
-| 服務 | 容器名稱 | 用途 | 本機位址 |
-|------|------|------|------|
-| Dev app | `aiyo-new-app-dev` | 開發用前端/後端 | `http://127.0.0.1:3000` |
-| Prod-live app | `aiyo-new-app-prod-live` | 模擬正式環境 | `http://127.0.0.1:3001` |
-| Open WebUI | `aiyo-new-open-webui` | AI gateway 與模型 API | `http://127.0.0.1:8080` |
-| Main Postgres | `aiyo-new-postgres` | AIYO 主資料庫 | `127.0.0.1:5432` |
-| Redis | `aiyo-new-redis` | 快取/即時狀態 | `127.0.0.1:6379` |
-| mem0 API | `aiyo-new-mem0` | 記憶服務 API | `http://127.0.0.1:8890` |
-| mem0 Postgres | `aiyo-new-mem0-postgres` | mem0 專用資料庫 | 僅 Docker network 內使用 |
+AIYO 以三個目標組織實作：
 
-## 目錄重點
+1. **保留資料依據。** 影片時間應來自字幕或其他可定位來源；景點應有可搜尋名稱與地理證據。資料不足時顯示限制，不補造座標或影片時間。
+2. **讓對話能落實為可控操作。** 區分問答、建立行程與局部修改；結構化動作經過驗證才套用，整天清空等操作需要確認。
+3. **維持操作後的資料一致。** 行程編輯、地圖標記、背景補資料與持久化必須相互對應，重新整理後仍能還原使用者確認的內容。
 
-| 路徑 | 說明 |
-|------|------|
-| [aiyo/](./aiyo) | 主應用程式 |
-| [docker-compose.yml](./docker-compose.yml) | 所有服務的 Compose 定義 |
-| [all-up.ps1](./all-up.ps1) | 一次重建 shared services + dev + prod-live |
-| [dev-up.ps1](./dev-up.ps1) | 啟動 dev stack |
-| [prod-live-up.ps1](./prod-live-up.ps1) | 啟動 prod-live stack |
-| [frontend-up.ps1](./frontend-up.ps1) | 只重建前端 app containers |
-| [scripts/import-compose-dotenv.ps1](./scripts/import-compose-dotenv.ps1) | 將 `aiyo/.env.*` 載入 PowerShell 環境，供 Compose 變數替換使用 |
-| [aiyo/.env.dev.example](./aiyo/.env.dev.example) | dev 範例環境變數 |
-| [aiyo/.env.prod-live.example](./aiyo/.env.prod-live.example) | prod-live 範例環境變數 |
+## 主要功能與實作範圍
 
-## 先決條件
+| 功能 | 目前實作 | 邊界 |
+| --- | --- | --- |
+| 對話式規劃 | 跨輪補充目的地、天數與偏好；建立及增刪改排行程；串流文字與處理進度 | 意圖判斷含規則與模型流程，尚未量測廣泛語句的成功率 |
+| 影片分析 | YouTube 字幕取得、分段地點抽取、有來源的摘要、時間片段與地點匯入 | 無字幕或來源受限時可能只有描述摘要；未完成完整視覺理解與 ASR 備援 |
+| 地圖與行程 | MapLibre 地圖、天數篩選、選點定位、地點搜尋、可用路段的時間與距離 | 示意線不等於導航；沒有全球即時公共運輸班次能力 |
+| 偏好與記憶 | 已確認偏好沿用、Mem0 記憶讀寫、候選地點的興趣排序與排除 | 排序依名稱及場所類別；不能由缺少的資料推斷過敏原、價格或無障礙條件 |
+| 編輯與保存 | 手動排序、交易式儲存、活動與標記連結、儲存競態防護 | 尚未提供多端同時編輯的 CRDT／OT 合併機制 |
+| 分享與協作 | 行程資料夾、協作者、留言與在線狀態、公開快照與複製 | 公開內容由快照欄位篩選產生，不直接開放私人行程資料 |
+| 背景處理 | BullMQ／Redis 影片與記憶佇列、重試、影片進度恢復與結果擁有者檢查 | 需要獨立 worker；聊天 SSE 進度仍在單一 Node 程序內 |
 
-部署前請先確認：
+## 系統概觀
 
-1. Windows + PowerShell 可執行 `*.ps1`。
-2. 已安裝 Docker Desktop，且 Docker Engine 正常運作。
-3. 已安裝 Node.js 20+。
-4. 宿主機已安裝並啟動 Ollama。
-5. 若要使用 Google 登入、YouTube、Google Maps、網路搜尋，需準備對應 API 金鑰。
-
-建議先確認：
-
-```powershell
-docker version
-docker compose version
-node -v
-ollama --version
+```mermaid
+flowchart LR
+    User[使用者] --> UI[Next.js / React]
+    UI --> API[API Routes]
+    API --> Planner[對話協調與行程驗證]
+    Planner --> Model[Open WebUI / Ollama]
+    Planner --> Research[地點與網路搜尋]
+    API --> DB[(PostgreSQL)]
+    API --> Queue[(Redis / BullMQ)]
+    Queue --> Worker[影片與記憶 Worker]
+    Worker --> Video[YouTube 字幕與地點解析]
+    Worker --> Model
+    Worker --> DB
+    Worker --> Memory[Mem0]
+    API --> Memory
+    Memory --> MemoryDB[(記憶資料庫 / pgvector)]
+    Memory --> Model
+    UI --> Map[MapLibre 地圖]
 ```
 
-## 第一次部署前要做的事
+前端顯示進度與可編輯資料，後端控制模型、搜尋、驗證及儲存。影片和記憶寫入由背景程序處理，避免每次操作都等待完整模型工作。地圖顯示、地點查詢與路線計算分別由不同元件及供應者負責，不能把其中一項成功視為整條流程正確。
 
-### 1. 建立環境變數檔
+## 技術組成
 
-如果檔案還不存在，先複製兩份範例：
+以下版本依儲存庫宣告；npm 的精確解析版本以 [package-lock.json](aiyo/package-lock.json) 為準。
+
+| 層次 | 技術 | 用途 |
+| --- | --- | --- |
+| Web 應用 | Next.js 16、React 19、TypeScript | App Router 頁面、API Routes 與前後端型別 |
+| 介面與狀態 | Tailwind CSS 4、Zustand、dnd-kit | 樣式、行程／聊天狀態與拖曳排序 |
+| 主資料 | PostgreSQL 16、Prisma 6 | 使用者、行程、影片互動、公開快照及交易式寫入 |
+| 背景工作 | Redis 7、BullMQ 5、ioredis | 影片分析、記憶寫入、重試與工作狀態 |
+| 模型服務 | Ollama、Open WebUI | 本機模型推論、gateway、任務模型設定與串流 |
+| 長期記憶 | Mem0、pgvector、Hugging Face embedder | 偏好記憶擷取與檢索；獨立資料庫 |
+| 地理資訊 | MapLibre GL、Photon、Overpass、OSRM | 地圖呈現、地點搜尋、附近資料與道路路線 |
+| 影片來源 | YouTube Data API、youtube-transcript、yt-dlp | 影片搜尋、中繼資料及字幕取得路徑 |
+| 搜尋補充 | Serper／Tavily | 需要外部資料時的旅遊搜尋 |
+| 身分驗證 | NextAuth 4、bcryptjs | Google OAuth、Email／Password、JWT session |
+| 驗證 | Node test runner／tsx、Playwright、ESLint | 單元、整合、瀏覽器流程與靜態檢查 |
+
+## 本機執行
+
+主要開發環境為 Windows／PowerShell、Docker Desktop 與宿主機 Ollama。完整設定請依 [部署文件](docs/setup.md) 操作；單純執行 `npm run dev` 不會啟動資料庫、模型或 worker。
 
 ```powershell
+git clone https://github.com/AlbertLin821/AIYO_new.git
+cd AIYO_new
 Copy-Item aiyo/.env.dev.example aiyo/.env.dev
-Copy-Item aiyo/.env.prod-live.example aiyo/.env.prod-live
+# 先依部署文件填入自有設定與密鑰，再啟動相依服務。
 ```
 
-如果你直接執行 `dev-up.ps1`、`prod-live-up.ps1` 或 `all-up.ps1`，腳本也會在缺檔時自動從 example 複製。
+相依服務就緒後，在 `aiyo/` 安裝依賴、產生 Prisma client、套用 migration，並分別執行網站與 worker。部署文件提供宿主機與容器兩種方式，也說明 Open WebUI 的宿主機 `18080` 與容器內 `8080` 的差異。
 
-### 2. 修改至少這些必要欄位
+## 驗證結果與限制
 
-#### 驗證與登入
+2026-10-04 文件核對時重新執行：668 項單元測試、正式建置及型別檢查通過；全專案 lint 為 0 errors、6 項既有 warnings。本次未重跑線上模型與瀏覽器流程，詳見[本次檢查紀錄](docs/documentation-review-2026-10-04.md)。
 
-| 變數 | 說明 |
-|------|------|
-| `NEXTAUTH_URL` | Dev 預設應為 `http://127.0.0.1:3000`，prod-live 預設應為 `http://127.0.0.1:3001` |
-| `NEXTAUTH_SECRET` | NextAuth 用的長隨機字串，dev/prod-live 請分開設定 |
-| `GOOGLE_CLIENT_ID` | Google OAuth Client ID，可留空代表不啟用 Google 登入 |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth Client Secret |
+2026-09-21 的[實作驗證報告](aiyo/docs/optimization-verification-2026-09-21.md)記錄：
 
-#### AI gateway / 模型
+- 668 項單元測試通過，正式建置及 TypeScript 檢查通過。
+- 真實影片分析完成，產生 8 個片段與 13 個地點；這是單一案例，不是整體正確率。
+- 真實記憶新增、查看、修改、刪除，以及行程保存後重新載入取得通過證據。
+- 真實 AI 生成、問答、替換、新增與刪除分批取得通過證據；不是同一次五項全過。
+- 初次完整網站回歸為 45 通過、4 失敗、3 未執行，之後修正並定向複測；不能寫成單次 52/52 通過。
 
-| 變數 | 說明 |
-|------|------|
-| `OPENWEBUI_BASE_URL` | Docker 內應維持 `http://open-webui:8080` |
-| `OPENWEBUI_API_KEY` | 你在 Open WebUI 內建立的 API key |
-| `OPENWEBUI_MODEL` | 主要聊天/規劃模型名稱，例如 `granite4.1:8b` |
-| `OPENWEBUI_SECRET_KEY` | Open WebUI 的應用密鑰 |
-| `OPENWEBUI_ADMIN_EMAIL` | Open WebUI 初始管理員帳號 |
-| `OPENWEBUI_ADMIN_PASSWORD` | Open WebUI 初始管理員密碼 |
+效能仍是待改善項目：當次一般聊天約 39.6 秒，東京三天行程初次生成整段案例約 4.3 分鐘。背景佇列和串流改善等待與恢復，但不會消除模型推論、外部搜尋及冷啟動時間。上述數字不是正式環境 P95，也不是今天的重測結果。
 
-#### mem0
+後續評估重點為影片地點與時間的標註集、偏好衝突及跨輪對話成功率、冷熱啟動延遲，以及多人使用時的服務可靠性。詳細定義見[測試與評估](docs/evaluation.md)。
 
-| 變數 | 說明 |
-|------|------|
-| `MEM0_ENABLED` | 是否啟用記憶功能，通常維持 `true` |
-| `MEM0_BASE_URL` | Docker 內應維持 `http://aiyo-new-mem0:8890` |
-| `MEM0_API_KEY` | AIYO 呼叫 mem0 時使用的 API key，請換成自己的值 |
-| `MEM0_COLLECTION_NAME` | 向量資料表集合名，預設 `aiyo_memories` |
-| `MEM0_LLM_PROVIDER` | mem0 內部使用的 LLM provider，預設 `ollama` |
-| `MEM0_LLM_MODEL` | mem0 內部使用的模型 |
-| `MEM0_LLM_BASE_URL` | mem0 要連去的 Ollama 位址，預設 `http://host.docker.internal:11434` |
-
-#### 主資料庫與快取
-
-| 變數 | 說明 |
-|------|------|
-| `DATABASE_URL` | AIYO 主資料庫連線字串 |
-| `POSTGRES_PASSWORD` | `aiyo-new-postgres` 的密碼 |
-| `POSTGRES_DB` | AIYO 主資料庫名稱 |
-| `REDIS_URL` | Redis 連線字串 |
-
-#### 外部 API
-
-| 變數 | 說明 |
-|------|------|
-| `YOUTUBE_API_KEY` | YouTube 影片推薦與摘要來源 |
-| `GOOGLE_MAPS_API_KEY` | 後端 Google Maps / Places 使用 |
-| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | 前端地圖使用 |
-| `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID` | Google Maps Map ID |
-| `TAVILY_API_KEY` / `SERPER_API_KEY` | 網路搜尋 provider |
-
-### 3. 建議先拉模型
-
-目前 `.env` 範例預設會用到這些模型：
-
-```powershell
-ollama pull qwen3.5:9b
-ollama pull granite4.1:3b
-ollama pull granite4.1:8b
-ollama pull mistral-small:24b
-```
-
-如果你換模型，請同步修改：
-
-- `OPENWEBUI_MODEL`
-- `OLLAMA_MODEL`
-- `OLLAMA_TRAVEL_CHAT_MODEL`
-- `OLLAMA_TRIP_PLAN_MODEL`
-- `OLLAMA_VIDEO_SUMMARY_MODEL`
-- `MEM0_LLM_MODEL`
-
-### 4. 啟動 Ollama
-
-請確認宿主機的 Ollama 可回應：
-
-```powershell
-curl http://127.0.0.1:11434/api/tags
-```
-
-如果這一步失敗，Open WebUI 與 mem0 雖然可能會啟動，但 AI 回答與記憶功能會失效。
-
-## Google OAuth 設定
-
-如果要啟用 Google 登入，Google Cloud Console 至少要配置：
-
-### Authorized JavaScript origins
+## 儲存庫結構
 
 ```text
-http://127.0.0.1:3000
-http://localhost:3000
-http://127.0.0.1:3001
-http://localhost:3001
+aiyo/                    主應用程式、測試、Prisma schema 與 migration
+  src/app/               頁面與 HTTP API
+  src/components/        對話、行程、地圖與影片介面
+  src/server/            規劃、搜尋、地理資訊、記憶與工作佇列
+  src/services/          前端 API client、同步與匯入
+  src/stores/            Zustand 狀態
+  tests/                 整合與瀏覽器測試
+  scripts/               本機啟動、worker、驗證與資料準備
+docs/                    架構、部署、評估與工程決策
+docker/                  Mem0 映像及相容性修正
+scripts/                 跨服務部署、備份與維護工具
+archive/legacy/          歷史資產；其中 Mem0 原始碼仍供映像建置使用
+.github/workflows/       GitHub Actions
+docker-compose.yml       本機多服務拓樸
 ```
 
-### Authorized redirect URIs
+## 開發、資料與授權
 
-```text
-http://127.0.0.1:3000/api/auth/callback/google
-http://localhost:3000/api/auth/callback/google
-http://127.0.0.1:3001/api/auth/callback/google
-http://localhost:3001/api/auth/callback/google
-```
+修改前請閱讀 [AGENTS.md](AGENTS.md)、[應用規則](aiyo/AGENTS.md)及[貢獻指南](CONTRIBUTING.md)。測試資料、故障注入與正式規劃邏輯應明確區分；不能以刪除斷言或補入假地點掩蓋正式流程的問題。
 
-注意：
+使用者對話、偏好、影片互動與行程可能包含個人資料。金鑰、資料庫備份和含個資的測試產物不應提交到儲存庫。安全回報及部署邊界見 [SECURITY.md](SECURITY.md)。
 
-1. `NEXTAUTH_URL` 必須和你實際開瀏覽器使用的網址一致。
-2. 如果你用 `127.0.0.1:3000` 登入，就不要只配 `localhost:3000`。
-3. dev 與 prod-live 是兩個不同入口，因此 `3000` 與 `3001` 都要加。
-
-## Open WebUI 初始設定
-
-第一次跑起來之後，請打開：
-
-- [http://127.0.0.1:8080](http://127.0.0.1:8080)
-
-然後依序做：
-
-1. 用 `.env` 裡的 `OPENWEBUI_ADMIN_EMAIL` / `OPENWEBUI_ADMIN_PASSWORD` 登入。
-2. 確認 Open WebUI 能看到宿主機 Ollama 模型。
-3. 到 `Settings -> Account` 建立 API key。
-4. 把這組 key 填回：
-   - `aiyo/.env.dev` 的 `OPENWEBUI_API_KEY`
-   - `aiyo/.env.prod-live` 的 `OPENWEBUI_API_KEY`
-5. 重新啟動 app containers。
-
-若 Open WebUI 資料卷是全新的，管理員帳號會依 `.env` 自動建立；若你沿用舊 volume，則會保留既有帳號資料。
-
-## 啟動方式
-
-### 只啟動 dev
-
-```powershell
-.\dev-up.ps1
-```
-
-此腳本會：
-
-1. 確認 `aiyo/.env.dev` 存在。
-2. 將 `aiyo/.env.dev` 載入目前 PowerShell session，供 Compose 做 `${VAR}` 替換。
-3. 建立或重建以下服務：
-   - `aiyo-new-postgres`
-   - `aiyo-new-mem0-postgres`
-   - `aiyo-new-redis`
-   - `aiyo-new-mem0`
-   - `open-webui`
-   - `aiyo-new-app-dev`
-
-啟動完成後，入口如下：
-
-- App: [http://127.0.0.1:3000](http://127.0.0.1:3000)
-- Open WebUI: [http://127.0.0.1:8080](http://127.0.0.1:8080)
-- Health: [http://127.0.0.1:3000/api/health](http://127.0.0.1:3000/api/health)
-
-### 只啟動 prod-live
-
-```powershell
-.\prod-live-up.ps1
-```
-
-此腳本會使用 `aiyo/.env.prod-live`，並啟動：
-
-- `aiyo-new-postgres`
-- `aiyo-new-mem0-postgres`
-- `aiyo-new-redis`
-- `aiyo-new-mem0`
-- `open-webui`
-- `aiyo-new-app-prod-live`
-
-啟動完成後，入口如下：
-
-- App: [http://127.0.0.1:3001](http://127.0.0.1:3001)
-- Open WebUI: [http://127.0.0.1:8080](http://127.0.0.1:8080)
-- Health: [http://127.0.0.1:3001/api/health](http://127.0.0.1:3001/api/health)
-
-### 同時啟動 dev + prod-live
-
-```powershell
-.\all-up.ps1
-```
-
-此腳本會分兩段執行：
-
-1. 用 `aiyo/.env.dev` 重建 shared services 與 `aiyo-new-app-dev`
-2. 再用 `aiyo/.env.prod-live` 重建 `aiyo-new-app-prod-live`
-
-適合以下情況：
-
-- 同時比對 dev 與 prod-live 行為
-- 你改了共享基礎設施，例如 Postgres、Redis、mem0、Open WebUI
-- 你要驗證兩套 `.env` 都能正常啟動
-
-### 只重建前端 app containers
-
-```powershell
-.\frontend-up.ps1
-```
-
-這支腳本不會重建 Postgres、Redis、mem0 或 Open WebUI，只會重建：
-
-- `aiyo-new-app-dev`
-- `aiyo-new-app-prod-live`
-
-適合單純修改 app 程式碼或 `.env` 中 app 專用參數後快速重啟。
-
-## 等待時間與首次啟動時間
-
-第一次啟動或大改版後，等待較久通常是正常的，主要時間會花在：
-
-1. Docker image build
-2. `npm install`
-3. `npx prisma generate`
-4. `npx prisma migrate deploy`
-5. `npm run build`，尤其是 `aiyo-new-app-prod-live`
-6. Open WebUI 啟動與初始化
-7. mem0 容器啟動、補 migration、健康檢查
-
-經驗上：
-
-- `dev-up.ps1` 通常比 `all-up.ps1` 快
-- `prod-live-up.ps1` 會因為 `npm run build` 而明顯較慢
-- `all-up.ps1` 最慢，因為要連續處理兩套 app
-
-如果只是改前端邏輯，優先用 `frontend-up.ps1`。
-
-## 如何確認服務真的健康
-
-### Compose 狀態
-
-```powershell
-docker compose ps
-```
-
-你應該看到至少這些服務為 `healthy` 或 `up`：
-
-- `aiyo-new-app-dev`
-- `aiyo-new-app-prod-live`
-- `aiyo-new-mem0`
-- `aiyo-new-mem0-postgres`
-- `aiyo-new-postgres`
-- `aiyo-new-redis`
-- `open-webui`
-
-### HTTP health check
-
-```powershell
-curl http://127.0.0.1:8080/health
-curl http://127.0.0.1:3000/api/health
-curl http://127.0.0.1:3001/api/health
-curl http://127.0.0.1:8890/docs
-```
-
-### 查看 logs
-
-```powershell
-docker compose logs -f aiyo-new-app-dev
-docker compose logs -f aiyo-new-app-prod-live
-docker compose logs -f aiyo-new-mem0
-docker compose logs -f open-webui
-```
-
-## mem0 驗證方式
-
-如果你要確認 AI 記憶功能真的有接到 mem0，可以做三層驗證：
-
-### 1. 看環境變數
-
-```powershell
-docker exec aiyo-new-app-dev node -e "console.log(process.env.MEM0_BASE_URL, process.env.MEM0_ENABLED)"
-```
-
-預期會看到類似：
-
-```text
-http://aiyo-new-mem0:8890 true
-```
-
-### 2. 看 mem0 API 是否可達
-
-```powershell
-docker exec aiyo-new-app-dev node -e "fetch('http://aiyo-new-mem0:8890/docs').then(r=>console.log(r.status)).catch(err=>console.error(err))"
-```
-
-### 3. 看資料庫內是否有記憶資料
-
-```powershell
-docker exec aiyo-new-mem0-postgres psql -U postgres -d mem0_app -c "select count(*) from aiyo_memories;"
-```
-
-如果你在聊天中要求 AI 記住偏好，這個數字應該會逐步增加。
-
-## 常用 Docker 指令
-
-### 停止但保留 volumes
-
-```powershell
-docker compose down
-```
-
-### 重新 build 並啟動單一服務
-
-```powershell
-docker compose --env-file ./aiyo/.env.dev up -d --build --force-recreate aiyo-new-app-dev
-```
-
-### 查看單一服務狀態
-
-```powershell
-docker inspect --format "{{json .State.Health }}" aiyo-new-mem0
-```
-
-## App 層測試
-
-請在 [aiyo/](./aiyo) 目錄執行：
-
-```powershell
-cd aiyo
-npm install
-npm test
-npm run build
-```
-
-規劃相關 E2E：
-
-```powershell
-npm run test:e2e:phase7
-npm run test:e2e:phase8
-```
-
-Live AI 驗證，需先確保：
-
-- Open WebUI 正常
-- `OPENWEBUI_API_KEY` 已填入
-- 需要的模型可由 Open WebUI 呼叫
-
-```powershell
-$env:E2E_LIVE_AI="1"
-npm run test:e2e:live-ai:itinerary
-```
-
-## 目前 `.env` 內模型相關預設
-
-範例檔目前預設：
-
-- `OPENWEBUI_MODEL=granite4.1:8b`
-- `OLLAMA_MODEL=qwen3.5:9b`
-- `OLLAMA_TRAVEL_CHAT_MODEL=qwen3.5:9b`
-- `OLLAMA_TRIP_PLAN_MODEL=granite4.1:3b`
-- `OLLAMA_VIDEO_SUMMARY_MODEL=granite4.1:8b`
-- `OLLAMA_VIDEO_SUMMARY_FAST_MODEL=mistral-small:24b`
-- `OLLAMA_VIDEO_SUMMARY_FINAL_MODEL=granite4.1:8b`
-- `OLLAMA_LOCATION_MODEL=granite4.1:8b`
-- `MEM0_LLM_MODEL=qwen3.5:9b`
-
-如果你調整模型，請確認：
-
-1. Ollama 已實際 pull 該模型
-2. Open WebUI 可看到該模型
-3. `.env.dev` 與 `.env.prod-live` 兩份都有同步更新
-
-## 疑難排解
-
-### 1. `NEXTAUTH_URL is missing`
-
-代表 `aiyo/.env.dev` 或 `aiyo/.env.prod-live` 沒有正確設定 `NEXTAUTH_URL`。
-
-### 2. Google 登入按鈕出現但登入失敗
-
-通常是以下其中一項：
-
-1. `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` 未填
-2. Google Console 沒有加對 redirect URI
-3. `NEXTAUTH_URL` 與實際瀏覽器網址不一致
-
-### 3. Open WebUI 正常開，但 AIYO 無法回答
-
-請檢查：
-
-1. `OPENWEBUI_API_KEY` 是否已填
-2. Open WebUI 是否真的能存取 Ollama
-3. `OPENWEBUI_MODEL` 是否存在
-
-### 4. mem0 啟動但記憶不生效
-
-請檢查：
-
-1. `MEM0_ENABLED=true`
-2. `MEM0_API_KEY` 是否與 mem0 容器設定一致
-3. `MEM0_BASE_URL` 是否為 `http://aiyo-new-mem0:8890`
-4. `aiyo-new-mem0` 是否 healthy
-
-### 5. 啟動很慢
-
-優先看：
-
-```powershell
-docker compose logs -f aiyo-new-app-prod-live
-docker compose logs -f open-webui
-docker compose logs -f aiyo-new-mem0
-```
-
-通常不是卡死，而是還在：
-
-- build image
-- install node modules
-- 跑 Prisma migration
-- build Next.js production bundle
-
-## 補充文件
-
-- [aiyo/README.md](./aiyo/README.md)
-- [docs/README.md](./docs/README.md)
-- [docs/architecture.md](./docs/architecture.md)
-- [docs/docker-rollback.md](./docs/docker-rollback.md)
-- [docs/docker_dev_migration.md](./docs/docker_dev_migration.md)
-
-## 不建議直接做的事
-
-1. 不要只改 `aiyo/.env.dev` 忘記同步 `aiyo/.env.prod-live`
-2. 不要把 `localhost` 與 `127.0.0.1` 當成完全等價，Google OAuth 與 NextAuth 會受影響
-3. 不要只重建 app container 就期待 Open WebUI 的 API key 自動更新；改完 key 後要重啟 app
-4. 不要把 `README` 內舊的「mem0 不在 active stack」當成現況，現在 mem0 已是正式啟用的一部分
+本儲存庫尚未指定自有程式碼的統一開源授權。第三方原始碼、模型與服務各有其授權或使用條件，不能因儲存庫公開就視為可任意再散布。依賴與第三方來源見 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

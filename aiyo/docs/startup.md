@@ -1,9 +1,7 @@
-# 本機啟動（精簡說明）
+# 啟動文件入口
 
-完整前置需求、Docker Compose、`app`／`app-dev`、環境變數與 Prisma 注意事項，請以儲存庫根目錄說明為準：
+完整步驟集中於[部署與操作](../../docs/setup.md)，包含環境範本、Open WebUI 18080／8080 的差異、資料庫 migration、網站與背景 worker。
 
-**[../../README.md](../../README.md)**
+主應用程式開發命令見 [aiyo/README.md](../README.md)，測試環境與 Playwright 設定見[測試與評估](../../docs/evaluation.md)。
 
-本檔僅保留捷徑，避免與根目錄 `docker-compose.yml` 及 `README.md` 內容重複維護。
-
-若需讓影片摘要寫入資料庫快取（`video_summary_caches`），請在 `aiyo` 目錄執行 `npx prisma migrate deploy`（或開發用 `migrate dev`），與根目錄 README 的資料庫步驟一致。
+請勿單獨執行缺少專案環境設定的 migration，也不要把 dev server 啟動成功視為影片 worker、模型與 Mem0 已可使用。

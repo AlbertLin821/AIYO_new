@@ -1,5 +1,7 @@
 # Ollama 模型與 Prompt 說明
 
+> 歷史呼叫鏈筆記：目前另有 Open WebUI client、影片抽取與串流路徑，下文「唯一出口」等描述不再代表完整現況。請參考[現況架構](../../docs/architecture.md)及對應原始碼。
+
 本文整理 **AIYO**（`aiyo/`）內會進入 **Ollama `/api/chat`** 的訊息，以及與其直接相關的 prompt 組裝程式。**以下以「檔案」為單位**逐段說明每則文字／函式的用途。
 
 ---

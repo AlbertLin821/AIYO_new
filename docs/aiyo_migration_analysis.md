@@ -1,5 +1,7 @@
 # AIYO -> AIYO_new Migration Analysis
 
+> 歷史紀錄：本文保留當時的研究、遷移或實作內容，並非現行部署規格。2026-10-04 已另行核對[系統架構](architecture.md)與[部署指南](setup.md)；執行舊命令前請先對照現況。
+
 ## Scope
 
 - Legacy reference: `AIYO/`

@@ -1,5 +1,7 @@
 # AIYO_new x Onyx Architecture Gap Report
 
+> 歷史紀錄：本文保留當時的研究、遷移或實作內容，並非現行部署規格。2026-10-04 已另行核對[系統架構](architecture.md)與[部署指南](setup.md)；執行舊命令前請先對照現況。
+
 > 產出日期：2026-05-17  
 > AIYO_new 掃描根目錄：`AIYO_new/aiyo`（主要應用）  
 > Onyx 參考路徑：`F:\Projects\Githubs\onyx`（僅 read-only 掃描，未修改）  

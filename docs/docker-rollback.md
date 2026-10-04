@@ -1,5 +1,7 @@
 # Docker Rollback
 
+> 歷史紀錄：本文保留當時的研究、遷移或實作內容，並非現行部署規格。2026-10-04 已另行核對[系統架構](architecture.md)與[部署指南](setup.md)；執行舊命令前請先對照現況。
+
 Use this guide to return from the five-service stack to the pre-migration state without deleting data prematurely.
 
 ## Backup artifacts to keep

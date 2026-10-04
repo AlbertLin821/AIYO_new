@@ -1,5 +1,7 @@
 # AIYO_new omen 分支 Docker 改造研究報告
 
+> 歷史紀錄：本文保留當時的研究、遷移或實作內容，並非現行部署規格。2026-10-04 已另行核對[系統架構](architecture.md)與[部署指南](setup.md)；執行舊命令前請先對照現況。
+
 ## 執行摘要
 
 本報告的結論很明確：對 `AIYO_new` 的 Docker 佈署，最穩定、最容易維護、也最符合你目前需求的做法，是把堆疊收斂為 **六個主要服務**：`aiyo-new-app-dev`、`aiyo-new-app-prod-live`、`aiyo-new-postgres-dev`、`aiyo-new-postgres-prod`、`aiyo-new-redis`、`open-webui`，並讓 **Ollama 繼續跑在宿主機**，由 `open-webui` 透過 `host.docker.internal:11434` 連線。這樣做能把 AI Gateway、應用程式、資料層清楚分離，並且避免再維護 `searxng`、`mem0`、`pgadmin` 這些目前不屬於最小可用路徑的額外容器。Open WebUI 官方文件明確支援 Docker 佈署、以 `host.docker.internal` 連接宿主機上的 Ollama、以 Bearer Token 提供 `/api/chat/completions` 與 `/api/models`，並提供 `/health` 做健康檢查；Docker Compose 官方也支援 `depends_on` 搭配 `service_healthy`、`env_file`、`extra_hosts`、單一 bridge network 服務發現等能力。citeturn18search8turn7view0turn7view1turn11view0turn1view4turn12search12turn14search3
