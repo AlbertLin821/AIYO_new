@@ -1,6 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
+import Link from "next/link";
 import type { MapPin as MapPinType } from "@/types";
 import { zhTW as t } from "@/locales/zh-TW";
 import { cn } from "@/lib/utils";
@@ -8,6 +9,7 @@ import PlaceThumbnail from "@/components/map/PlaceThumbnail";
 import {
   buildGoogleMapsUrl,
   buildLocationBackfilledPin,
+  buildOsmSourceUrl,
   buildRoutePlanningUrl,
   normalizeOpeningHours,
   pinSourceLabel,
@@ -25,6 +27,7 @@ export default function MapPinInfoPanel({ pin, linkedItem, onClose, className }:
   const resolvedPin = buildLocationBackfilledPin(pin, linkedItem);
   const routeUrl = buildRoutePlanningUrl(resolvedPin);
   const googleMapsUrl = buildGoogleMapsUrl(resolvedPin);
+  const osmUrl = buildOsmSourceUrl(resolvedPin);
   const empty = t.map.notProvided;
   const openingHoursRows = normalizeOpeningHours(resolvedPin.openingHours);
 
@@ -48,7 +51,7 @@ export default function MapPinInfoPanel({ pin, linkedItem, onClose, className }:
             type="button"
             aria-label={t.common.closeDialog}
             onClick={onClose}
-            className="absolute right-2 top-2 flex size-8 cursor-pointer items-center justify-center rounded-full border border-border bg-surface/95 text-muted shadow-soft transition-colors hover:text-foreground"
+            className="absolute right-2 top-2 flex size-11 cursor-pointer items-center justify-center rounded-full border border-border bg-surface/95 text-muted shadow-soft transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           >
             <X className="size-4" />
           </button>
@@ -90,7 +93,7 @@ export default function MapPinInfoPanel({ pin, linkedItem, onClose, className }:
                 ))}
               </ul>
             ) : (
-              empty
+              "待確認"
             )}
           </dd>
           <dt className="text-muted">{t.map.infoPhone}</dt>
@@ -99,8 +102,17 @@ export default function MapPinInfoPanel({ pin, linkedItem, onClose, className }:
           <dd>
             {pinSourceLabel(resolvedPin.source)}
             {resolvedPin.dayNumber ? ` · D${resolvedPin.dayNumber}` : ""}
+            {resolvedPin.placeProvider ? ` · ${resolvedPin.placeProvider === "photon" ? "Photon" : resolvedPin.placeProvider === "overpass" ? "Overpass / OSM" : resolvedPin.placeProvider}` : ""}
+            {resolvedPin.placeCheckedAt ? ` · 查核 ${resolvedPin.placeCheckedAt.slice(0, 10)}` : ""}
           </dd>
         </dl>
+
+        <Link
+          href={`/chat?draft=${encodeURIComponent(linkedItem ? `請調整目前行程中的${resolvedPin.name}，` : `請把${resolvedPin.name}加入目前行程`)}`}
+          className="mt-3 flex min-h-11 items-center justify-center rounded-[10px] border border-primary/40 px-3 py-2.5 text-xs font-bold text-primary no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          用 AI 安排行程
+        </Link>
 
         <a
           href={routeUrl}
@@ -118,6 +130,11 @@ export default function MapPinInfoPanel({ pin, linkedItem, onClose, className }:
             className="mt-2 flex items-center justify-center rounded-[10px] border border-border px-3 py-2.5 text-xs font-bold text-foreground no-underline"
           >
             {t.map.infoGoogleMaps}
+          </a>
+        )}
+        {osmUrl && (
+          <a href={osmUrl} target="_blank" rel="noopener noreferrer" className="mt-2 flex min-h-11 items-center justify-center rounded-[10px] border border-border px-3 py-2.5 text-xs font-bold text-foreground no-underline">
+            查看 OpenStreetMap 來源
           </a>
         )}
       </div>

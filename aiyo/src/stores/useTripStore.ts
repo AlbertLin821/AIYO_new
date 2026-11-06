@@ -6,8 +6,10 @@ import type { PersistedTripPayload, TripPlanDay, TripPlanItem, TripPlanResult } 
 
 export const EMPTY_TRIP_STATE = {
   tripId: null,
+  revision: 0,
   title: "",
   destination: "",
+  startDate: null as string | null,
   days: 0,
   budget: 0,
   coverImageUrl: null as string | null,
@@ -18,8 +20,10 @@ export const EMPTY_TRIP_STATE = {
 
 interface TripState {
   tripId: string | null;
+  revision: number;
   title: string;
   destination: string;
+  startDate: string | null;
   days: number;
   budget: number;
   coverImageUrl: string | null;
@@ -27,6 +31,7 @@ interface TripState {
   planSummary: string;
   lastUpdatedAt: string | null;
   setDestination: (destination: string) => void;
+  setStartDate: (startDate: string | null) => void;
   setDays: (days: number) => void;
   setBudget: (budget: number) => void;
   resizeItineraryToDayCount: (targetDayCount: number) => void;
@@ -59,6 +64,10 @@ export const useTripStore = create<TripState>((set) => ({
   setDestination: (destination) =>
     withSyncMutationSource("local-user-edit", () => {
       set({ destination });
+    }),
+  setStartDate: (startDate) =>
+    withSyncMutationSource("local-user-edit", () => {
+      set({ startDate, lastUpdatedAt: new Date().toISOString() });
     }),
   setDays: (days) =>
     withSyncMutationSource("local-user-edit", () => {
@@ -125,8 +134,10 @@ export const useTripStore = create<TripState>((set) => ({
     withSyncMutationSource(source, () => {
       set({
         tripId: trip.tripId,
+        revision: trip.revision ?? 0,
         title: trip.title,
         destination: trip.destination,
+        startDate: trip.startDate ?? null,
         days: Math.max(1, trip.days || trip.itinerary.length || 1),
         budget: budget ?? 0,
         coverImageUrl:

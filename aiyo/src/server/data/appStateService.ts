@@ -4,6 +4,7 @@ import { applyChatMessageMetadata, extractChatMessageMetadata } from "@/lib/chat
 import { prisma } from "@/lib/prisma";
 import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
 import { findLinkedPinForItem } from "@/lib/mapPinItineraryLink";
+import { parseTripStartDate } from "@/lib/tripDate";
 import { reconcileTripMapState } from "@/services/mapSync";
 import { repairTripHydration } from "@/server/services/repairTripHydration";
 import { getTripAccess, requireTripAccess } from "@/server/tripAccess";
@@ -133,6 +134,9 @@ function buildSerializedPins(
     userRatingsTotal: number | null;
     color: string | null;
     source: string | null;
+    placeProvider: string | null;
+    placeCheckedAt: Date | null;
+    placeCategory: string | null;
     confidence: number | null;
     verified: boolean | null;
     linkedTripItemId: string | null;
@@ -159,6 +163,9 @@ function buildSerializedPins(
     linkedTripItemId: pin.linkedTripItemId || undefined,
     dayNumber: pin.dayNumber || undefined,
     source: (pin.source || "itinerary") as MapPin["source"],
+    placeProvider: (pin.placeProvider || undefined) as MapPin["placeProvider"],
+    placeCheckedAt: pin.placeCheckedAt?.toISOString(),
+    placeCategory: pin.placeCategory || undefined,
     confidence: pin.confidence ?? undefined,
     verified: pin.verified ?? undefined,
   }));
@@ -178,6 +185,9 @@ function resolveSerializedItemLocation(
     longitude: number | null;
     locationDesc: string | null;
     locationAddress: string | null;
+    placeProvider: string | null;
+    placeCheckedAt: Date | null;
+    placeCategory: string | null;
     placeId: string | null;
     photoUrl: string | null;
     thumbnail: string | null;
@@ -204,6 +214,9 @@ function resolveSerializedItemLocation(
       lng: item.longitude,
       description: item.locationDesc || item.description || `${item.location} stop`,
       address: item.locationAddress || item.location,
+      resolvedFrom: (item.placeProvider || undefined) as NonNullable<TripPlanItem["location"]>["resolvedFrom"],
+      checkedAt: item.placeCheckedAt?.toISOString(),
+      category: item.placeCategory || undefined,
       placeId: item.placeId || undefined,
       photoUrl: item.photoUrl || undefined,
       thumbnail: item.thumbnail || undefined,
@@ -244,6 +257,9 @@ function resolveSerializedItemLocation(
     lng: linkedPin.lng,
     description: item.description || linkedPin.description || linkedPin.name,
     address: linkedPin.address || item.locationAddress || item.location || undefined,
+    resolvedFrom: linkedPin.placeProvider,
+    checkedAt: linkedPin.placeCheckedAt,
+    category: linkedPin.placeCategory,
     placeId: linkedPin.placeId || item.placeId || undefined,
     photoUrl: linkedPin.photoUrl || item.photoUrl || undefined,
     thumbnail: linkedPin.thumbnail || item.thumbnail || undefined,
@@ -260,9 +276,11 @@ function resolveSerializedItemLocation(
 
 export function serializeTrip(trip: {
   id: string;
+  revision?: number;
   title: string;
   coverImageUrl: string | null;
   destination: string | null;
+  startDate?: Date | null;
   days: number;
   updatedAt: Date;
   itineraryDays: Array<{
@@ -289,6 +307,9 @@ export function serializeTrip(trip: {
     longitude: number | null;
     locationDesc: string | null;
     locationAddress: string | null;
+    placeProvider: string | null;
+    placeCheckedAt: Date | null;
+    placeCategory: string | null;
     placeId: string | null;
     photoUrl: string | null;
     thumbnail: string | null;
@@ -309,6 +330,9 @@ export function serializeTrip(trip: {
     lng: number;
     description: string | null;
     address: string | null;
+    placeProvider: string | null;
+    placeCheckedAt: Date | null;
+    placeCategory: string | null;
     placeId: string | null;
     photoUrl: string | null;
     thumbnail: string | null;
@@ -372,8 +396,10 @@ export function serializeTrip(trip: {
 
   return {
     tripId: trip.id,
+    revision: trip.revision ?? 0,
     title: trip.title,
     destination: trip.destination?.trim() || "",
+    startDate: trip.startDate?.toISOString().slice(0, 10) ?? null,
     days: trip.days,
     coverImageUrl: trip.coverImageUrl ?? null,
     itinerary: reconciled.itinerary,
@@ -451,6 +477,7 @@ export async function clearActiveTripIfMatches(userId: string, tripId: string) {
 
 export type TripLibraryListRow = {
   id: string;
+  revision: number;
   title: string;
   destination: string;
   days: number;
@@ -542,6 +569,7 @@ export async function listTripsForLibrary(
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,
+      revision: true,
       title: true,
       coverImageUrl: true,
       destination: true,
@@ -556,6 +584,7 @@ export async function listTripsForLibrary(
 
   return trips.map((trip) => ({
     id: trip.id,
+    revision: trip.revision,
     title: trip.title?.trim() || (trip.destination?.trim() ? `${trip.destination} 行程` : ""),
     destination: trip.destination?.trim() || "尚未設定",
     days: trip.days,
@@ -569,6 +598,13 @@ export async function listTripsForLibrary(
 }
 
 const tripIncludeFull = { itineraryDays: true, items: true, pins: true } as const;
+
+async function hasCurrentAgentMutation(tripId: string, revision: number) {
+  return Boolean(await prisma.tripMutation.findFirst({
+    where: { tripId, resultRevision: revision, source: { in: ["agent", "agent_undo", "agent_redo"] } },
+    select: { id: true },
+  }));
+}
 
 /**
  * 解析目前工作階段應載入的行程：preferences.activeTripId、本人最近行程、協作行程；
@@ -677,13 +713,20 @@ export async function getBootstrapPayload(userId: string): Promise<BootstrapPayl
     : null;
   if (tripPayload?.tripId) {
     const repaired = await repairTripHydration(tripPayload, { preferredTransport });
-    if (repaired.changed) {
-      await saveTripPayload(userId, {
-        ...repaired.trip,
-        updatedAt: new Date().toISOString(),
-      });
+    if (repaired.changed && !(await hasCurrentAgentMutation(tripPayload.tripId, tripPayload.revision ?? 0))) {
+      try {
+        tripPayload = await saveTripPayload(userId, {
+          ...repaired.trip,
+          updatedAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        if (!(error instanceof Error) || error.message !== "version_conflict") throw error;
+        const current = await prisma.trip.findUniqueOrThrow({ where: { id: tripPayload.tripId }, include: tripIncludeFull });
+        tripPayload = serializeTrip(current);
+      }
+    } else {
+      tripPayload = repaired.trip;
     }
-    tripPayload = repaired.trip;
   }
 
   const prefs = parseProfilePreferencesRecord(user.profile?.preferences);
@@ -758,14 +801,21 @@ export async function getTripSwitchPayload(userId: string, tripId: string) {
           : null,
     },
   );
-  if (repaired.changed) {
-    await saveTripPayload(userId, {
-      ...repaired.trip,
-      updatedAt: new Date().toISOString(),
-    });
+  let trip = repaired.trip;
+  if (repaired.changed && !(await hasCurrentAgentMutation(tripId, repaired.trip.revision ?? 0))) {
+    try {
+      trip = await saveTripPayload(userId, {
+        ...repaired.trip,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== "version_conflict") throw error;
+      const current = await prisma.trip.findUniqueOrThrow({ where: { id: tripId }, include: tripIncludeFull });
+      trip = serializeTrip(current);
+    }
   }
   return {
-    trip: repaired.trip,
+    trip,
     chatMessages: serializeChatMessages(messages),
     collaboration: serializeCollaboration(room),
   };
@@ -888,6 +938,15 @@ export async function saveTripPayload(
 ) {
   if (input.tripId) {
     await requireTripAccess(userId, input.tripId, "edit");
+    if (input.mutationSource === "hydration") {
+      const pending = await prisma.agentPreview.findFirst({ where: {
+        tripId: input.tripId, status: "pending", expiresAt: { gt: new Date() },
+      }, select: { id: true } });
+      if (pending) {
+        const current = await prisma.trip.findUniqueOrThrow({ where: { id: input.tripId }, include: tripIncludeFull });
+        return { ...serializeTrip(current), mutationId: undefined };
+      }
+    }
   }
 
   let payload = input.tripId ? input : assignFreshIdsForNewTripPayload(input);
@@ -903,8 +962,12 @@ export async function saveTripPayload(
       : undefined;
 
   const resolvedTitle = normalizeTripStorageTitle(payload.title, payload.destination);
+  const startDatePatch = payload.startDate === undefined ? {} : { startDate: parseTripStartDate(payload.startDate) };
 
-  const freshTrip = await prisma.$transaction(async (tx) => {
+  const saved = await prisma.$transaction(async (tx) => {
+    if (payload.tripId && payload.mutationSource === "hydration") {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${payload.tripId}))::text`;
+    }
     if (payload.tripId) {
       const [foreignItem, foreignPin] = await Promise.all([
         tx.tripItem.findFirst({ where: { id: { in: payload.itinerary.flatMap(day => day.items.map(item => item.id)) }, tripId: { not: payload.tripId } }, select: { id: true } }),
@@ -917,48 +980,61 @@ export async function saveTripPayload(
       }
     }
     const normalizedDays = payload.itinerary;
+    const before = payload.tripId ? await tx.trip.findUnique({ where: { id: payload.tripId }, include: tripIncludeFull }) : null;
+    if (payload.tripId && !before) throw new Error("not_found");
+    if (before && payload.mutationSource === "hydration") {
+      const pending = await tx.agentPreview.findFirst({ where: { tripId: before.id, status: "pending", expiresAt: { gt: new Date() } }, select: { id: true } });
+      if (pending) return { trip: before, mutationId: undefined };
+    }
+    if (before && payload.revision !== undefined && payload.revision !== before.revision) throw new Error("version_conflict");
     const trip = payload.tripId
-      ? await tx.trip.upsert({
-          where: { id: payload.tripId },
-          update: {
+      ? await (async () => {
+          const updated = await tx.trip.updateMany({
+            where: { id: payload.tripId, revision: before!.revision },
+            data: {
             title: resolvedTitle,
             destination: payload.destination,
+            ...startDatePatch,
             days: Math.max(0, payload.itinerary.length || payload.days),
             ...(coverPatch ?? {}),
+            revision: { increment: 1 },
           },
-          create: {
-            userId,
-            title: resolvedTitle,
-            destination: payload.destination,
-            days: Math.max(0, payload.itinerary.length || payload.days),
-            ...(coverPatch ?? {}),
-          },
-        })
+          });
+          if (!updated.count) throw new Error("version_conflict");
+          return tx.trip.findUniqueOrThrow({ where: { id: payload.tripId } });
+        })()
       : await tx.trip.create({
           data: {
             userId,
             title: resolvedTitle,
             destination: payload.destination,
+            ...startDatePatch,
             days: Math.max(0, payload.itinerary.length || payload.days),
             ...(coverPatch ?? {}),
           },
         });
 
-    await tx.tripDay.deleteMany({ where: { tripId: trip.id } });
-    await tx.tripItem.deleteMany({ where: { tripId: trip.id } });
-    await tx.mapPin.deleteMany({ where: { tripId: trip.id } });
+    const validPins = payload.pins.filter((pin) => hasUsableMapCoordinate(pin));
+    const nextDayNumbers = new Set(normalizedDays.map((day) => day.dayNumber));
+    const nextItemIds = new Set(normalizedDays.flatMap((day) => day.items.map((item) => item.id)));
+    const nextPinIds = new Set(validPins.map((pin) => pin.id));
+    if (nextDayNumbers.size !== normalizedDays.length ||
+      nextItemIds.size !== normalizedDays.reduce((count, day) => count + day.items.length, 0) ||
+      nextPinIds.size !== validPins.length) throw new Error("validation_error");
+    const removedDayIds = before?.itineraryDays.filter((day) => !nextDayNumbers.has(day.dayNumber)).map((day) => day.id) ?? [];
+    const removedItemIds = before?.items.filter((item) => !nextItemIds.has(item.id)).map((item) => item.id) ?? [];
+    const removedPinIds = before?.pins.filter((pin) => !nextPinIds.has(pin.id)).map((pin) => pin.id) ?? [];
+    if (removedDayIds.length) await tx.tripDay.deleteMany({ where: { tripId: trip.id, id: { in: removedDayIds } } });
+    if (removedItemIds.length) await tx.tripItem.deleteMany({ where: { tripId: trip.id, id: { in: removedItemIds } } });
+    if (removedPinIds.length) await tx.mapPin.deleteMany({ where: { tripId: trip.id, id: { in: removedPinIds } } });
     throwInjectedSaveFailure(testFailureInjection, "delete_existing_days");
 
-    if (normalizedDays.length > 0) {
-      await tx.tripDay.createMany({
-        data: normalizedDays.map((day, index) => ({
-          tripId: trip.id,
-          dayNumber: day.dayNumber,
-          theme: day.theme || null,
-          summary: day.summary || null,
-          sortOrder: index,
-        })),
-      });
+    const existingDays = new Map(before?.itineraryDays.map((day) => [day.dayNumber, day]) ?? []);
+    for (const [index, day] of normalizedDays.entries()) {
+      const data = { theme: day.theme || null, summary: day.summary || null, sortOrder: index };
+      const existing = existingDays.get(day.dayNumber);
+      if (existing) await tx.tripDay.update({ where: { id: existing.id }, data });
+      else await tx.tripDay.create({ data: { tripId: trip.id, dayNumber: day.dayNumber, ...data } });
     }
     throwInjectedSaveFailure(testFailureInjection, "create_days");
 
@@ -983,6 +1059,9 @@ export async function saveTripPayload(
           longitude: location?.lng ?? null,
           locationDesc: location?.description || null,
           locationAddress: location?.address || null,
+          placeProvider: location?.resolvedFrom || null,
+          placeCheckedAt: location?.checkedAt && !Number.isNaN(Date.parse(location.checkedAt)) ? new Date(location.checkedAt) : null,
+          placeCategory: location?.category || null,
           placeId: location?.placeId || null,
           photoUrl: location?.photoUrl || null,
           thumbnail: location?.thumbnail || null,
@@ -999,51 +1078,67 @@ export async function saveTripPayload(
       }),
     );
 
-    if (items.length > 0) {
-      await tx.tripItem.createMany({
-        data: items,
-      });
+    const existingItemIds = new Set(before?.items.map((item) => item.id) ?? []);
+    for (const item of items) {
+      const { id, tripId, ...data } = item;
+      if (existingItemIds.has(id)) await tx.tripItem.update({ where: { id, tripId }, data });
+      else await tx.tripItem.create({ data: item });
     }
     throwInjectedSaveFailure(testFailureInjection, "create_items");
 
-    const validPins = payload.pins.filter((pin) => hasUsableMapCoordinate(pin));
-    if (validPins.length > 0) {
-      await tx.mapPin.createMany({
-        data: validPins.map((pin) => ({
-          id: pin.id,
-          tripId: trip.id,
-          label: pin.name,
-          lat: pin.lat,
-          lng: pin.lng,
-          description: pin.description,
-          address: pin.address || null,
-          placeId: pin.placeId || null,
-          photoUrl: pin.photoUrl || null,
-          thumbnail: pin.thumbnail || null,
-          openingHours: pin.openingHours || null,
-          phoneNumber: pin.phoneNumber || null,
-          website: pin.website || null,
-          googleMapsUrl: pin.googleMapsUrl || null,
-          rating: pin.rating ?? null,
-          userRatingsTotal: pin.userRatingsTotal ?? null,
-          color: pin.color || null,
-          source: pin.source || "manual",
-          confidence: pin.confidence ?? null,
-          verified: pin.verified ?? null,
-          linkedTripItemId: pin.linkedTripItemId || null,
-          dayNumber: pin.dayNumber || null,
-        })),
-      });
+    const pins = validPins.map((pin) => ({
+      id: pin.id,
+      tripId: trip.id,
+      label: pin.name,
+      lat: pin.lat,
+      lng: pin.lng,
+      description: pin.description,
+      address: pin.address || null,
+      placeProvider: pin.placeProvider || null,
+      placeCheckedAt: pin.placeCheckedAt && !Number.isNaN(Date.parse(pin.placeCheckedAt)) ? new Date(pin.placeCheckedAt) : null,
+      placeCategory: pin.placeCategory || null,
+      placeId: pin.placeId || null,
+      photoUrl: pin.photoUrl || null,
+      thumbnail: pin.thumbnail || null,
+      openingHours: pin.openingHours || null,
+      phoneNumber: pin.phoneNumber || null,
+      website: pin.website || null,
+      googleMapsUrl: pin.googleMapsUrl || null,
+      rating: pin.rating ?? null,
+      userRatingsTotal: pin.userRatingsTotal ?? null,
+      color: pin.color || null,
+      source: pin.source || "manual",
+      confidence: pin.confidence ?? null,
+      verified: pin.verified ?? null,
+      linkedTripItemId: pin.linkedTripItemId || null,
+      dayNumber: pin.dayNumber || null,
+    }));
+    const existingPinIds = new Set(before?.pins.map((pin) => pin.id) ?? []);
+    for (const pin of pins) {
+      const { id, tripId, ...data } = pin;
+      if (existingPinIds.has(id)) await tx.mapPin.update({ where: { id, tripId }, data });
+      else await tx.mapPin.create({ data: pin });
     }
 
-    return tx.trip.findUniqueOrThrow({
+    const finalTrip = await tx.trip.findUniqueOrThrow({
       where: { id: trip.id },
       include: { itineraryDays: true, items: true, pins: true },
     });
+    const mutation = before && payload.mutationSource === "ai"
+      ? await tx.tripMutation.create({ data: {
+          tripId: trip.id,
+          actorId: userId,
+          baseRevision: before.revision,
+          resultRevision: finalTrip.revision,
+          beforeSnapshot: JSON.parse(JSON.stringify(serializeTrip(before))),
+          source: "ai",
+        } })
+      : null;
+    return { trip: finalTrip, mutationId: mutation?.id };
   });
 
-  await ensureCollaborationRoom(freshTrip.id);
-  return serializeTrip(freshTrip);
+  await ensureCollaborationRoom(saved.trip.id);
+  return { ...serializeTrip(saved.trip), mutationId: saved.mutationId };
 }
 
 function escapeRegExp(value: string): string {

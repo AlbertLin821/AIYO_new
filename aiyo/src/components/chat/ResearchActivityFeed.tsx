@@ -5,7 +5,10 @@ import { cn } from "@/lib/utils";
 import type { StatusStepPayload } from "@/types";
 
 const PROVIDER_LABELS: Record<NonNullable<StatusStepPayload["provider"]>, string> = {
+  searxng: "本地搜尋",
   google_places: "Google Places",
+  photon: "地點搜尋",
+  overpass: "附近地點",
   open_meteo: "Open-Meteo",
   tavily: "Tavily",
   youtube: "YouTube",

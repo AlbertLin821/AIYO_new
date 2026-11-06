@@ -9,6 +9,21 @@ import {
 import type { ChatMessage } from "@/types";
 
 describe("mergeRemoteWithLocalChatMessagesForTest", () => {
+  it("keeps a plain assistant reply until the server snapshot contains it", () => {
+    const local: ChatMessage[] = [
+      { id: "user_1", role: "user", content: "你好", timestamp: "10:00" },
+      { id: "assistant_1", role: "assistant", content: "你好，我可以幫你規劃行程。", timestamp: "10:00" },
+    ];
+    const stale = mergeRemoteWithLocalChatMessagesForTest([{ id: "db_user", role: "user", content: "你好", timestamp: "10:00" }], local);
+    assert.equal(stale.filter((message) => message.role === "assistant").length, 1);
+    const fresh = mergeRemoteWithLocalChatMessagesForTest([
+      { id: "db_user", role: "user", content: "你好", timestamp: "10:00" },
+      { id: "db_assistant", role: "assistant", content: "你好，我可以幫你規劃行程。", timestamp: "10:00" },
+    ], stale);
+    assert.equal(fresh.filter((message) => message.role === "assistant").length, 1);
+    assert.equal(fresh.find((message) => message.role === "assistant")?.id, "db_assistant");
+  });
+
   it("dedupes duplicate local assistant replies with the same content", () => {
     const content = "可以，東京 3 天我先記下來。這趟幾個人一起去？";
     const remote: ChatMessage[] = [

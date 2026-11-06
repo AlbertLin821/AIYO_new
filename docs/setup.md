@@ -43,6 +43,8 @@ Copy-Item aiyo/.env.prod-live.example aiyo/.env.prod-live
 | `NEXT_PUBLIC_MAP_STYLE_URL` | 瀏覽器可存取的地圖樣式；變更正式建置設定後需重建 |
 | `AIYO_JOB_PREFIX` | 選填；網站與 worker 必須一致，隔離環境時使用不同值 |
 
+本機 `prod-live` 若要驗證自架地圖，須在 `.env.prod-live` 明確設定 `MAP_PHOTON_BASE_URL`、台日韓的 `MAP_OVERPASS_*_URL` 與 `MAP_OSRM_*_URL`，並重建／重建容器；它不會自動沿用 `.env.dev`。`prod-live` 是本機驗證入口，正式供應端切換仍依[本地地圖導入門檻](../aiyo/docs/local-map-rollout.md)執行。
+
 Compose 的 `--env-file` 控制 YAML 變數插值，服務的 `env_file` 則將設定傳入容器，兩者用途不同。不要將含密鑰的 `docker compose config` 完整輸出貼到公開 issue。
 
 ### 模型設定
@@ -68,6 +70,10 @@ Compose 的 `--env-file` 控制 YAML 變數插值，服務的 `env_file` 則將�
 ```powershell
 Invoke-RestMethod http://127.0.0.1:11434/api/tags
 ```
+
+若連線被拒絕，先在宿主機啟動 Ollama；Docker 內的 worker 與 Open WebUI 都會透過 `host.docker.internal:11434` 連線。Windows 本機可在 PowerShell 設定 `$env:OLLAMA_HOST='0.0.0.0:11434'` 後執行 `ollama serve`，再從容器確認 `/api/tags` 可回應。只啟動網站、Redis 和 Open WebUI 不足以完成影片辨識。
+
+Compose 的網站服務現在會一併啟動 `aiyo-new-worker`。影片分析送出後若一直顯示等待，先執行 `docker compose ps aiyo-new-worker` 和 `docker logs --tail 80 aiyo-new-worker`；worker 必須持續運行，且其 `OLLAMA_BASE_URL` 必須能連到已啟動的 Ollama。
 
 從儲存庫根目錄載入已填妥的設定並啟動：
 

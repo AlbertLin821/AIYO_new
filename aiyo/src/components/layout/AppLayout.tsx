@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import MotionProvider from "@/components/motion/MotionProvider";
 import { Toaster } from "@/components/ui/sonner";
 import MobileBottomNav from "@/components/layout/MobileBottomNav";
+import TripRevisionConflictNotice from "@/components/layout/TripRevisionConflictNotice";
 import Sidebar, { EXPANDED_W, COLLAPSED_W } from "@/components/layout/Sidebar";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/useUIStore";
@@ -43,7 +44,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <MotionProvider>
       <div className="min-h-screen bg-background">
         <CursorSparkle />
-        <Toaster />
+        <Toaster position={pathname === "/map" ? "bottom-left" : "top-right"} />
         <Sidebar />
         <MobileBottomNav />
         <LoginModal />
@@ -59,6 +60,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               "pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] lg:pb-0",
           )}
         >
+          {!isLogin && <TripRevisionConflictNotice />}
           {children}
         </m.main>
       </div>

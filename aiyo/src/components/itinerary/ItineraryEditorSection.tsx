@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, MousePointer2 } from "lucide-react";
 import {
   closestCenter,
@@ -17,6 +17,8 @@ import {
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { zhTW as t } from "@/locales/zh-TW";
 import type { EditingPresence, TripPlanDay, TripPlanItem } from "@/types";
+import { checkItineraryReorder, type ReorderAdvice } from "@/lib/itineraryReorderAdvice";
+import { useTripStore } from "@/stores/useTripStore";
 import ActivityDragPreview, { ITINERARY_DRAG_DROP_ANIMATION } from "./ActivityDragPreview";
 import ItineraryCollaborationSidebar from "./ItineraryCollaborationSidebar";
 import ItineraryDayCard from "./ItineraryDayCard";
@@ -90,6 +92,34 @@ function ItineraryEditorSection({
     days: Record<number, boolean>;
   }>({ tripId, days: {} });
   const [activeDragItem, setActiveDragItem] = useState<TripPlanItem | null>(null);
+  const [reorderAdvice, setReorderAdvice] = useState<{ tripId: string; result: ReorderAdvice | null } | null>(null);
+  const adviceRequest = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => adviceRequest.current?.abort();
+  }, [tripId]);
+
+  const inspectReorder = useCallback((dayNumbers: number[]) => {
+    const snapshot = useTripStore.getState();
+    if (!tripId || snapshot.tripId !== tripId) return;
+    adviceRequest.current?.abort();
+    const controller = new AbortController();
+    adviceRequest.current = controller;
+    setReorderAdvice({ tripId, result: null });
+    const timeout = window.setTimeout(() => controller.abort(), 10_000);
+    void checkItineraryReorder(snapshot.itinerary, dayNumbers, snapshot.startDate, controller.signal)
+      .then((result) => {
+        if (!controller.signal.aborted && adviceRequest.current === controller && useTripStore.getState().tripId === tripId) {
+          setReorderAdvice({ tripId, result });
+        }
+      })
+      .catch(() => {
+        if (adviceRequest.current === controller && useTripStore.getState().tripId === tripId) {
+          setReorderAdvice({ tripId, result: { days: dayNumbers, messages: ["路程檢查暫時無法完成，請稍後以地圖核對。"], checkedRoutes: 0, uncheckedRoutes: 0 } });
+        }
+      })
+      .finally(() => window.clearTimeout(timeout));
+  }, [tripId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -198,13 +228,15 @@ function ItineraryEditorSection({
         }
         if (oldIndex !== newIndex) {
           onReorderWithinDay(fromDayNumber, oldIndex, newIndex);
+          inspectReorder([fromDayNumber]);
         }
         return;
       }
 
       onMoveItemBetweenDays(fromDayNumber, target.dayNumber, activeId, target.index);
+      inspectReorder([fromDayNumber, target.dayNumber]);
     },
-    [canEdit, itinerary, onMoveItemBetweenDays, onReorderWithinDay],
+    [canEdit, inspectReorder, itinerary, onMoveItemBetweenDays, onReorderWithinDay],
   );
 
   return (
@@ -265,6 +297,23 @@ function ItineraryEditorSection({
             </button>
           )}
         </div>
+
+        {reorderAdvice?.tripId === tripId && (
+          <section data-testid="reorder-advice" role="status" aria-live="polite" className="rounded-2xl border border-border-light bg-surface px-4 py-4 shadow-soft sm:px-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">拖曳後行程檢查</h3>
+                <p className="mt-1 text-sm text-muted">已保留你排好的順序，抵達時間已依順序重算。{reorderAdvice.result ? `已檢查第 ${reorderAdvice.result.days.join("、")} 天。` : "正在核對交通與營業時間…"}</p>
+              </div>
+              <button type="button" onClick={() => { adviceRequest.current?.abort(); adviceRequest.current = null; setReorderAdvice(null); }} className="min-h-11 shrink-0 rounded-lg px-3 text-sm text-primary hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" aria-label="關閉拖曳後行程檢查">關閉</button>
+            </div>
+            {reorderAdvice.result && (reorderAdvice.result.messages.length > 0 ? (
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-foreground">
+                {reorderAdvice.result.messages.map((message) => <li key={message}>{message}</li>)}
+              </ul>
+            ) : <p className="mt-3 text-sm text-foreground">目前沒有發現需要調整的時段。</p>)}
+          </section>
+        )}
 
         <DndContext
           sensors={sensors}

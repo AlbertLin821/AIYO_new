@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { tripDayDate } from "@/lib/tripDate";
 import { getTravelPreferenceSuggestion } from "@/server/personalization/personalizationService";
 import type {
   ChatContext,
@@ -156,6 +157,7 @@ function buildCurrentTrip(input: {
     id: string;
     title: string;
     destination: string | null;
+    startDate?: Date | null;
     days: number;
     itineraryDays: Array<{ id: string; dayNumber: number; summary: string | null }>;
     items: Array<{
@@ -176,7 +178,7 @@ function buildCurrentTrip(input: {
     .map((day) => ({
       id: day.id,
       dayNumber: day.dayNumber,
-      date: null,
+      date: tripDayDate(input.trip.startDate?.toISOString().slice(0, 10), day.dayNumber),
       items: input.trip.items
         .filter((item) => item.day === day.dayNumber)
         .sort((a, b) => a.order - b.order)
@@ -195,8 +197,8 @@ function buildCurrentTrip(input: {
     id: input.trip.id,
     title: input.trip.title,
     destination: input.trip.destination || input.chatContext?.destination,
-    startDate: input.chatContext?.tripStartDate || null,
-    endDate: input.chatContext?.tripEndDate || null,
+    startDate: input.trip.startDate?.toISOString().slice(0, 10) || input.chatContext?.tripStartDate || null,
+    endDate: input.trip.startDate ? tripDayDate(input.trip.startDate.toISOString().slice(0, 10), input.trip.days) : input.chatContext?.tripEndDate || null,
     days,
   };
 }
@@ -314,7 +316,7 @@ export async function buildPersonalizedAIContext(input: {
   const requestedTripId = input.tripId?.trim() || undefined;
   const currentTrip = requestedTripId
     ? await prisma.trip.findFirst({
-        where: { id: requestedTripId, userId: input.userId },
+        where: { id: requestedTripId, OR: [{ userId: input.userId }, { collaborators: { some: { userId: input.userId } } }] },
         include: {
           itineraryDays: { orderBy: { sortOrder: "asc" } },
           items: { orderBy: [{ day: "asc" }, { order: "asc" }] },

@@ -1,4 +1,3 @@
-import { isUsableMapCoordinate } from "@/lib/geoCoordinates";
 import {
   geocodeResultFailsDestinationScope,
   resolveTripDestinationScope,
@@ -9,7 +8,7 @@ import {
   type GeocodeResult,
 } from "@/server/geo/geocodeService";
 import { searchPlacesByText, type PlaceSearchHit } from "@/server/geo/osmPlacesSearchService";
-import type { GeocodeProvider, GeocodedPlace, PlaceSuggestion } from "@/types/geocode";
+import type { GeocodedPlace, PlaceSuggestion } from "@/types/geocode";
 
 export type GeocodePlaceInput = {
   query: string;
@@ -86,13 +85,6 @@ function candidatePassesDestinationScope(
       scope,
     ) === null
   );
-}
-
-function buildRegionBias(input: GeocodePlaceInput): string | undefined {
-  const parts = [input.destinationHint, input.countryHint]
-    .map((value) => value?.trim())
-    .filter(Boolean) as string[];
-  return parts.length ? parts.join(", ") : undefined;
 }
 
 function primaryCountryCode(scope: TripDestinationScope | null): string | undefined {
@@ -195,170 +187,6 @@ function canAcceptCrossLocale(
   return true;
 }
 
-type GoogleGeocodeResponse = {
-  status: string;
-  error_message?: string;
-  results?: Array<{
-    formatted_address?: string;
-    geometry?: { location?: { lat: number; lng: number } };
-    place_id?: string;
-    types?: string[];
-    address_components?: Array<{ short_name: string; types: string[] }>;
-  }>;
-};
-
-function toGeocodeResult(query: string, row: NonNullable<GoogleGeocodeResponse["results"]>[number]): GeocodeResult | null {
-  const loc = row.geometry?.location;
-  if (!loc || !isUsableMapCoordinate(loc.lat, loc.lng)) {
-    return null;
-  }
-  return {
-    query,
-    formattedAddress: row.formatted_address || query,
-    lat: loc.lat,
-    lng: loc.lng,
-    placeId: row.place_id,
-    types: row.types || [],
-    countryCode: row.address_components?.find((c) => c.types.includes("country"))?.short_name,
-  };
-}
-
-function readGoogleMapsApiKey(): string {
-  const fromEnv = process.env.GOOGLE_MAPS_API_KEY?.trim();
-  return fromEnv || "";
-}
-
-async function fetchGeocodeCandidates(
-  query: string,
-  regionBias: string | undefined,
-  options: { countryCode?: string; language: string },
-): Promise<
-  | { ok: true; candidates: GeocodeResult[] }
-  | { ok: false; code: GeocodePlaceFailure["code"]; message: string }
-> {
-  const key = readGoogleMapsApiKey();
-  if (!key) {
-    return { ok: false, code: "missing_api_key", message: "未設定 GOOGLE_MAPS_API_KEY。" };
-  }
-
-  const address = regionBias?.trim() ? `${query}, ${regionBias.trim()}` : query;
-  const params = new URLSearchParams({ address, key, language: options.language });
-  if (options.countryCode) {
-    params.set("components", `country:${options.countryCode}`);
-  }
-  const url = `https://maps.googleapis.com/maps/api/geocode/json?${params.toString()}`;
-
-  let response: Response;
-  try {
-    response = await fetch(url, { cache: "no-store" });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Geocoding request failed.";
-    return { ok: false, code: "provider_error", message };
-  }
-
-  const payload = (await response.json()) as GoogleGeocodeResponse;
-  if (!response.ok) {
-    return {
-      ok: false,
-      code: "provider_error",
-      message: payload.error_message || `Geocoding HTTP ${response.status}.`,
-    };
-  }
-
-  if (payload.status === "ZERO_RESULTS") {
-    return { ok: false, code: "not_found", message: "找不到符合的地點。" };
-  }
-
-  if (payload.status !== "OK" || !payload.results?.length) {
-    return {
-      ok: false,
-      code: "provider_error",
-      message: payload.error_message || `Geocoding failed with status ${payload.status}.`,
-    };
-  }
-
-  const candidates = payload.results
-    .map((row) => toGeocodeResult(query, row))
-    .filter((row): row is GeocodeResult => Boolean(row))
-    .slice(0, 5);
-
-  if (!candidates.length) {
-    return { ok: false, code: "not_found", message: "地理編碼結果缺少可用座標。" };
-  }
-
-  return { ok: true, candidates };
-}
-
-function pickBestCandidate(
-  query: string,
-  candidates: GeocodeResult[],
-  destinationHint?: string | null,
-  destinationScope?: TripDestinationScope | null,
-): GeocodePlaceResult {
-  const scope = destinationScope ?? (destinationHint ? resolveTripDestinationScope(destinationHint) : null);
-  const ranked = candidates
-    .map((candidate) => ({
-      candidate,
-      score: scoreCandidate(query, candidate, destinationHint || undefined),
-      gate: gateForCandidate(query, candidate),
-    }))
-    .filter((entry) => entry.gate.accepted && candidatePassesDestinationScope(entry.candidate, scope))
-    .sort((a, b) => b.score - a.score);
-
-  if (!ranked.length) {
-    const crossLocale = candidates
-      .filter((candidate) => canAcceptCrossLocale(query, candidate, scope))
-      .map((candidate) => ({
-        candidate,
-        score: 0.58,
-        gate: gateForCandidate(query, candidate),
-      }))
-      .sort((a, b) => b.score - a.score);
-
-    if (crossLocale.length) {
-      const top = crossLocale[0]!;
-      return {
-        ok: true,
-        place: {
-          placeName: query,
-          formattedAddress: top.candidate.formattedAddress,
-          placeId: top.candidate.placeId ?? null,
-          lat: top.candidate.lat,
-          lng: top.candidate.lng,
-          provider: "photon",
-          confidence: top.score,
-          sourceQuery: query,
-          countryCode: top.candidate.countryCode ?? null,
-        },
-      };
-    }
-
-    return { ok: false, code: "not_found", message: "沒有通過信心門檻的地理編碼結果。" };
-  }
-
-  const top = ranked[0]!;
-  const runnerUp = ranked[1];
-  if (runnerUp && top.score - runnerUp.score < 0.06 && top.score < 0.82) {
-    return { ok: false, code: "ambiguous", message: "找到多個可能地點，無法自動選擇。" };
-  }
-
-  const provider: GeocodeProvider = "photon";
-  return {
-    ok: true,
-    place: {
-      placeName: query,
-      formattedAddress: top.candidate.formattedAddress,
-      placeId: top.candidate.placeId ?? null,
-      lat: top.candidate.lat,
-      lng: top.candidate.lng,
-      provider,
-      confidence: top.score,
-      sourceQuery: query,
-      countryCode: top.candidate.countryCode ?? null,
-    },
-  };
-}
-
 function placeSearchHitToGeocodeResult(query: string, hit: PlaceSearchHit): GeocodeResult {
   return {
     query,
@@ -381,17 +209,18 @@ function pickBestPlaceSearchHit(
   const sought = normalizeName(destinationHint ? query.replace(destinationHint, "") : query);
   const candidates = hits
     .filter((hit) => sought.length >= 2 && normalizeName(hit.name).includes(sought))
-    .map((hit) => placeSearchHitToGeocodeResult(query, {
+    .map((hit) => ({ hit, candidate: placeSearchHitToGeocodeResult(query, {
       ...hit,
       formattedAddress: [hit.name, hit.formattedAddress].filter(Boolean).join(", "),
-    }));
-  const inScope = candidates.filter((candidate) => candidatePassesDestinationScope(candidate, scope));
+    }) }));
+  const inScope = candidates.filter(({ candidate }) => candidatePassesDestinationScope(candidate, scope));
   if (!inScope.length) {
     return null;
   }
 
   const ranked = inScope
-    .map((candidate) => ({
+    .map(({ hit, candidate }) => ({
+      hit,
       candidate,
       score: scoreCandidate(query, candidate, destinationHint),
       gate: gateForCandidate(query, candidate),
@@ -410,10 +239,13 @@ function pickBestPlaceSearchHit(
       placeId: top.placeId ?? null,
       lat: top.lat,
       lng: top.lng,
-      provider: "photon",
+      provider: chosen.hit.source === "overpass" ? "overpass" : "photon",
       confidence: chosen.score,
       sourceQuery: query,
       countryCode: top.countryCode ?? null,
+      openingHours: chosen.hit.openingHours,
+      phoneNumber: chosen.hit.phoneNumber,
+      website: chosen.hit.website,
     },
   };
 }
@@ -433,9 +265,7 @@ async function geocodePlaceViaTextSearch(
     return null;
   }
   const matched = pickBestPlaceSearchHit(query, search.places, locationHint, scope);
-  if (matched || !locationHint) return matched;
-  const unbiased = await searchPlacesByText(query, undefined, { maxResults: 6 });
-  return unbiased.ok ? pickBestPlaceSearchHit(query, unbiased.places, locationHint, scope) : null;
+  return matched;
 }
 
 export function clearGeocodeMemoryCacheForTests() {
@@ -498,7 +328,7 @@ function hitToSuggestion(query: string, hit: PlaceSearchHit, score: number): Pla
     placeId: hit.placeId.startsWith("noid_") ? null : hit.placeId,
     lat: hit.lat,
     lng: hit.lng,
-    provider: "photon",
+    provider: hit.source === "overpass" ? "overpass" : "photon",
     confidence: score,
     sourceQuery: query,
     rating: hit.rating,

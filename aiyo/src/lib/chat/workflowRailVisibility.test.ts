@@ -6,11 +6,19 @@ import {
   isApplyPreviousItineraryCommand,
   isConversationOnlyMessage,
   isFullItineraryRevisionCommand,
+  isItineraryMutationCommand,
   isPersonalMemoryRecallIntent,
   shouldAttachDecisionPreferenceConfirmation,
   shouldRenderInlinePreferenceReusePanel,
   shouldShowPlanningWorkflowRail,
 } from "@/lib/chat/workflowRailVisibility";
+
+test("new trip planning does not become an edit preview for the current trip", () => {
+  assert.equal(isItineraryMutationCommand("我想要去嘉義三天兩夜總共四個人去玩幫我規劃一個行程"), false);
+  assert.equal(isItineraryMutationCommand("我想要去嘉義三天兩夜總共四個人去玩幫我規劃一下行程"), false);
+  assert.equal(isItineraryMutationCommand("幫我把目前行程第二天改成室內景點"), true);
+  assert.equal(isItineraryMutationCommand("第二天下午幫我加一個晴空塔，安排在逛街後面。"), true);
+});
 
 test("shouldShowPlanningWorkflowRail hides rail for personal memory recall questions", () => {
   assert.equal(

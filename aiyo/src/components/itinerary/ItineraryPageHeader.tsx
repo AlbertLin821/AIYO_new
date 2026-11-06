@@ -10,6 +10,7 @@ import { normalizeTripBudget, normalizeTripDayCount } from "@/lib/tripMetaEdit";
 type Props = {
   title: string;
   destination: string;
+  startDate: string | null;
   days: number;
   budget: number;
   coverImageUrl: string | null;
@@ -21,6 +22,7 @@ type Props = {
   onShare: () => void;
   onOpenMap: () => void;
   onDaysCommit?: (days: number) => void | Promise<void>;
+  onStartDateCommit?: (startDate: string | null) => void | Promise<void>;
   onBudgetCommit?: (budget: number) => void | Promise<void>;
   onPublish?: () => void;
   isPublished?: boolean;
@@ -36,6 +38,7 @@ function formatBudgetLabel(budget: number): string {
 function ItineraryPageHeader({
   title,
   destination,
+  startDate,
   days,
   budget,
   coverImageUrl,
@@ -46,6 +49,7 @@ function ItineraryPageHeader({
   onShare,
   onOpenMap,
   onDaysCommit,
+  onStartDateCommit,
   onBudgetCommit,
   onPublish,
   isPublished = false,
@@ -56,6 +60,7 @@ function ItineraryPageHeader({
   const [editingDays, setEditingDays] = useState(false);
   const [editingBudget, setEditingBudget] = useState(false);
   const [daysDraft, setDaysDraft] = useState(String(days));
+  const [startDateDraft, setStartDateDraft] = useState(startDate ?? "");
   const [budgetDraft, setBudgetDraft] = useState(budget > 0 ? String(budget) : "");
   const daysInputRef = useRef<HTMLInputElement>(null);
   const budgetInputRef = useRef<HTMLInputElement>(null);
@@ -64,6 +69,8 @@ function ItineraryPageHeader({
   const displayDestination = destination.trim() || t.common.notSet;
   const canEditDays = metaEditable && Boolean(onDaysCommit);
   const canEditBudget = metaEditable && Boolean(onBudgetCommit);
+
+  useEffect(() => { setStartDateDraft(startDate ?? ""); }, [startDate]);
 
   const startEditingDays = useCallback(() => {
     setDaysDraft(String(days));
@@ -191,10 +198,36 @@ function ItineraryPageHeader({
           </div>
 
           {showTripSummaryRow && (
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-xl bg-cream/45 px-3 py-2">
                 <p className="text-[11px] text-muted">目的地</p>
                 <p className="truncate text-sm font-semibold text-foreground">{displayDestination}</p>
+              </div>
+              <div className="rounded-xl bg-cream/45 px-3 py-2">
+                <label htmlFor="itinerary-start-date" className="text-[11px] text-muted">出發日期</label>
+                {metaEditable && onStartDateCommit ? (
+                  <input
+                    id="itinerary-start-date"
+                    data-testid="itinerary-start-date"
+                    type="date"
+                    value={startDateDraft}
+                    onChange={(event) => setStartDateDraft(event.target.value)}
+                    onBlur={(event) => {
+                      if (event.target.value !== (startDate ?? "")) {
+                        void Promise.resolve(onStartDateCommit(event.target.value || null)).catch(() => setStartDateDraft(startDate ?? ""));
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") {
+                        setStartDateDraft(startDate ?? "");
+                        event.currentTarget.blur();
+                      }
+                    }}
+                    className="mt-0.5 min-h-11 w-full rounded-lg border border-border bg-surface px-2 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  />
+                ) : (
+                  <p className="text-sm font-semibold text-foreground">{startDate || t.common.notSet}</p>
+                )}
               </div>
               <div className="rounded-xl bg-cream/45 px-3 py-2">
                 <p className="text-[11px] text-muted">{t.itineraryPage.metaDays}</p>

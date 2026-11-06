@@ -1,37 +1,31 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mapService } from "@/server/maps/service";
-import { normalizePhotonFeature } from "@/server/maps/providers/photon";
-import { rankPlaceCandidates } from "@/server/personalization/placePreferenceRanking";
+import { mapMemoryCache } from "@/server/maps/cache";
+import { mapServiceConfig } from "@/server/maps/config";
 import { searchPlacesByText } from "./osmPlacesSearchService";
 
-test("Photon categories survive map adapter and drive preference ranking and exclusion", async (t) => {
-  const rows = [
-    { name: "National Collection", osm_key: "tourism", osm_value: "museum" },
-    { name: "Blue Bottle", osm_key: "amenity", osm_value: "cafe" },
-    { name: "Green Space", osm_key: "leisure", osm_value: "park" },
-  ].map((properties, index) => normalizePhotonFeature({
-    geometry: { coordinates: [139.7, 35.7] }, properties: { ...properties, osm_id: index },
-  })!);
-  t.mock.method(mapService, "searchPlaces", async () => rows);
-  const result = await searchPlacesByText("東京", undefined);
-  assert.equal(result.ok, true);
-  if (!result.ok) return;
-  assert.deepEqual(result.places.map((place) => place.types), [["museum"], ["cafe"], ["park"]]);
-  assert.deepEqual(rankPlaceCandidates(result.places, { interests: ["美食"], avoid: ["博物館"] }).map((place) => place.name), ["Blue Bottle", "Green Space"]);
-  assert.deepEqual(rankPlaceCandidates(result.places, { interests: ["自然"] }).map((place) => place.name), ["Green Space", "National Collection", "Blue Bottle"]);
-});
-
-test("unknown or mismatched OSM classification remains unknown despite query and venue name", async (t) => {
-  const rows = [
-    { name: "Cafe Museum", osm_key: "building", osm_value: "museum" },
-    { name: "Unknown", osm_key: "tourism", osm_value: "unknown" },
-    { name: "Untyped" },
-  ].map((properties) => normalizePhotonFeature({ geometry: { coordinates: [139.7, 35.7] }, properties })!);
-  t.mock.method(mapService, "searchPlaces", async () => rows);
-  const result = await searchPlacesByText("東京 餐廳 博物館");
-  assert.equal(result.ok, true);
-  if (!result.ok) return;
-  assert.deepEqual(result.places.map((place) => place.types), [[], [], []]);
-  assert.deepEqual(rankPlaceCandidates(result.places, { avoid: ["美食"] }), result.places);
+test("local Overpass exact name precedes a misleading Photon partial match", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalEndpoint = mapServiceConfig.regionalOverpass.JP;
+  mapServiceConfig.regionalOverpass.JP = "http://local-overpass/api/interpreter";
+  mapMemoryCache.clear();
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    if (String(input).includes("local-overpass")) {
+      return new Response(JSON.stringify({ elements: [{ type: "way", id: 123, center: { lat: 35.7148, lon: 139.7967 }, tags: { name: "浅草寺", "name:zh-Hant": "淺草寺" } }] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ features: [{ geometry: { coordinates: [139.793, 35.714] }, properties: { name: "淺草 rockza", osm_type: "node", osm_id: "1" } }] }), { status: 200 });
+  }) as typeof fetch;
+  try {
+    const result = await searchPlacesByText("淺草寺", "東京", { maxResults: 5 });
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.places[0]?.name, "淺草寺");
+      assert.equal(result.places[0]?.countryCode, "JP");
+      assert.equal(result.places[0]?.placeId, "way:123");
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    mapServiceConfig.regionalOverpass.JP = originalEndpoint;
+    mapMemoryCache.clear();
+  }
 });

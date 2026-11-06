@@ -53,6 +53,7 @@ import { resolvePlanningTransportPreference } from "@/lib/transportPreference";
 import { validateItineraryQuality } from "@/server/ai/planning/itineraryQualityValidator";
 import { buildTripPlanResearchPlan } from "@/server/ai/planning/tripPlanResearchPolicy";
 import {
+  buildNearbyTravelToolRequest,
   buildDefaultTravelToolRequests,
   executeTravelToolRequests,
   parseTravelToolRequestsFromModel,
@@ -2867,7 +2868,7 @@ export function needsTravelResearch(input: {
   if (isVideoInspirationRequest(message)) {
     return true;
   }
-  return /推薦|景點|美食|餐廳|咖啡|晚上|夜景|夜市|適合|附近|天氣|降雨|氣溫|營業時間|開到幾點|門票|交通|怎麼去|封路|活動|市集|祭典|今年|近期|最新|規劃|自由行|攻略|行程|動線|路線|蜜月|親子(?:遊)?|哪裡好玩|去哪/u.test(
+  return /推薦|景點|美食|餐廳|咖啡|晚上|夜景|夜市|適合|附近|周圍|周邊|周遭|天氣|降雨|氣溫|營業時間|開到幾點|門票|交通|怎麼去|封路|活動|市集|祭典|今年|近期|最新|規劃|自由行|攻略|行程|動線|路線|蜜月|親子(?:遊)?|哪裡好玩|去哪/u.test(
     message,
   );
 }
@@ -3328,6 +3329,8 @@ async function handleStructuredTripWorkflow(input: {
 
 function webSearchBackendToProgressProvider(backend: WebSearchBackend): StatusStepProvider {
   switch (backend) {
+    case "searxng":
+      return "searxng";
     case "serper":
       return "serper";
     case "tavily":
@@ -4437,7 +4440,8 @@ export async function chatWithTravelAssistant(input: {
 
   const perRoundTimeout = resolveOllamaRoundTimeoutMs();
 
-  const shouldResearch = travelAgentDecision.shouldSearch;
+  const requiredNearby = buildNearbyTravelToolRequest(input.message, generalReplyContext);
+  const shouldResearch = travelAgentDecision.shouldSearch || Boolean(requiredNearby);
   let digest: { text: string; placeHits: PlaceSearchHit[]; sources: Record<string, ChatSource> } = {
     text: "",
     placeHits: [],
@@ -4446,14 +4450,15 @@ export async function chatWithTravelAssistant(input: {
   let webSearch: WebSearchBundle = { results: [], digest: "" };
   if (shouldResearch) {
     let rawResearch = "";
+    const researchLabel = requiredNearby && !travelAgentDecision.shouldSearch ? "查詢附近地點" : "查詢外部資訊";
     publishProgressStep(input.progressSessionId, {
       phase: "research",
-      label: "查詢外部資訊",
-      detail: "正在規劃並執行外部資料查詢。",
+      label: researchLabel,
+      detail: requiredNearby && !travelAgentDecision.shouldSearch ? "正在查詢附近地點。" : "正在規劃並執行外部資料查詢。",
       status: "running",
     });
     try {
-      rawResearch = await chatWithOllama({
+      if (travelAgentDecision.shouldSearch) rawResearch = await chatWithOllama({
         task: "travel-chat",
         format: travelResearchToolRequestJsonSchema,
         timeoutMs: perRoundTimeout,
@@ -4472,33 +4477,51 @@ export async function chatWithTravelAssistant(input: {
     let toolRequests = parseTravelToolRequestsFromModel(
       extractJsonObject(rawResearch)?.toolRequests,
     );
+    if (/這份行程|目前行程|我的行程|第.{0,3}天|附近|周圍|周邊|周遭/u.test(input.message) && input.aiContext?.structuredContext.currentTrip) {
+      toolRequests = [{ type: "get_current_trip" }, ...toolRequests.filter((request) => request.type !== "get_current_trip")];
+    }
+    if (/之前|過去|歷史行程|上次去/u.test(input.message)) {
+      toolRequests = [{ type: "search_past_trips" }, ...toolRequests.filter((request) => request.type !== "search_past_trips")];
+    }
+    if (requiredNearby) {
+      toolRequests = [requiredNearby, ...toolRequests.filter((request) => request.type !== "search_nearby_places")];
+    }
     if (!toolRequests.length) {
       toolRequests = buildDefaultTravelToolRequests(input.message, generalReplyContext);
     }
 
-    digest = await executeTravelToolRequests(toolRequests, generalReplyContext, input.progressSessionId);
-    const interestText = generalReplyContext?.preferences?.interests?.filter(Boolean).join(" ") || "";
-    const webSearchQuery = [generalReplyContext?.destination || "", interestText, input.message]
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-    webSearch = await runWebSearch(webSearchQuery, serverConfig.aiWebSearchMaxResults, input.progressSessionId, {
-      decision: travelAgentDecision.searchDecision,
-    });
+    digest = await executeTravelToolRequests(toolRequests, generalReplyContext, input.progressSessionId, input.aiContext?.structuredContext);
+    if (travelAgentDecision.searchDecision?.shouldSearch) {
+      const interestText = generalReplyContext?.preferences?.interests?.filter(Boolean).join(" ") || "";
+      const webSearchQuery = [generalReplyContext?.destination || "", interestText, input.message]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+      webSearch = await runWebSearch(webSearchQuery, serverConfig.aiWebSearchMaxResults, input.progressSessionId, {
+        decision: travelAgentDecision.searchDecision,
+      });
+    }
     publishProgressStep(input.progressSessionId, {
       phase: "research",
-      label: "查詢外部資訊",
-      detail: "外部資料查詢完成。",
+      label: researchLabel,
+      detail: requiredNearby && !travelAgentDecision.shouldSearch ? "附近地點查詢完成。" : "外部資料查詢完成。",
       status: "completed",
     });
   }
+  if (!shouldResearch && /這份行程|目前行程|我的行程|第.{0,3}天|之前|過去|歷史行程/u.test(input.message)) {
+    const trustedRequests = [
+      ...(/這份行程|目前行程|我的行程|第.{0,3}天/u.test(input.message) ? [{ type: "get_current_trip" as const }] : []),
+      ...(/之前|過去|歷史行程/u.test(input.message) ? [{ type: "search_past_trips" as const }] : []),
+    ];
+    digest = await executeTravelToolRequests(trustedRequests, generalReplyContext, undefined, input.aiContext?.structuredContext);
+  }
   const digestText =
-    shouldResearch
-      ? digest.text.trim() ||
+    digest.text.trim() || (shouldResearch
+      ?
         (webSearch.warning
           ? "我目前無法取得最新資料，但可以先根據既有資訊提供規劃方向。"
           : "我目前先根據已取得的資料整理建議，建議出發前再確認營業時間與交通資訊。")
-      : "";
+      : "");
 
   const prompt = buildChatPrompt(
     input.message,

@@ -39,6 +39,7 @@ export type TravelPreferenceSuggestion = {
 export async function sendChatMessage(
   input: {
     message: string;
+    tripId?: string;
     displayMessage?: string;
     messages?: ChatMessage[];
     context?: ChatContext;
@@ -74,6 +75,7 @@ export async function sendChatMessage(
 export async function reviseTripPlan(
   input: {
     instruction: string;
+    tripId?: string;
     tripProfile: TripProfile;
     context?: ChatContext;
     progressSessionId?: string;

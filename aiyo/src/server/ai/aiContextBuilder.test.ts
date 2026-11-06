@@ -30,6 +30,7 @@ function mockBasePrisma(options?: {
         userId: "user_1",
         title: "東京三天",
         destination: "東京",
+        startDate: new Date("2026-11-06T00:00:00.000Z"),
         days: 3,
         itineraryDays: [
           { id: "day_1", dayNumber: 1, summary: null, sortOrder: 0 },
@@ -84,9 +85,10 @@ function mockBasePrisma(options?: {
   Object.assign(prisma.trip, {
     findFirst: async (args: unknown) => {
       calls.tripFindFirstArgs.push(args);
-      const where = (args as { where?: { id?: string; userId?: string } }).where;
+      const where = (args as { where?: { id?: string; OR?: Array<{ userId?: string; collaborators?: { some?: { userId?: string } } }> } }).where;
       if (where?.id) {
-        return where.id === "trip_1" && where.userId === "user_1" ? currentTrip : null;
+        const allowed = where.OR?.some((part) => part.userId === "user_1" || part.collaborators?.some?.userId === "user_1");
+        return where.id === "trip_1" && allowed ? currentTrip : null;
       }
       return options?.empty
         ? null
@@ -199,6 +201,8 @@ test("AIContextBuilder includes only an owned current trip with days and items",
   const context = await buildPersonalizedAIContext({ userId: "user_1", tripId: "trip_1" });
 
   assert.equal(context.structuredContext.currentTrip?.id, "trip_1");
+  assert.equal(context.structuredContext.currentTrip?.startDate, "2026-11-06");
+  assert.equal(context.structuredContext.currentTrip?.days[1]?.date, "2026-11-07");
   assert.equal(context.structuredContext.currentTrip?.days[0]?.items[0]?.title, "淺草寺");
   assert.ok(context.debug.includedSources.includes("current_trip_context"));
   mocks.restore();
@@ -212,8 +216,8 @@ test("AIContextBuilder excludes a trip that is not owned by current user", async
   assert.equal(context.structuredContext.currentTrip, undefined);
   assert.ok(context.structuredContext.contextWarnings.some((warning) => warning.includes("tripId")));
   assert.deepEqual(
-    (calls.tripFindFirstArgs[1] as { where: { id: string; userId: string } }).where,
-    { id: "other_trip", userId: "user_1" },
+    (calls.tripFindFirstArgs[1] as { where: unknown }).where,
+    { id: "other_trip", OR: [{ userId: "user_1" }, { collaborators: { some: { userId: "user_1" } } }] },
   );
   calls.restore();
 });

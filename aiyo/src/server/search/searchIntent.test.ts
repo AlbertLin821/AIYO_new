@@ -25,6 +25,9 @@ test("search decision keeps planning and general advice offline", () => {
   assert.equal(decideSearchIntent({ message: "我想去東京玩三天" }).shouldSearch, false);
   assert.equal(decideSearchIntent({ message: "你覺得東京適合第一次自由行嗎" }).shouldSearch, false);
   assert.equal(decideSearchIntent({ message: "大阪適合第一次自由行嗎？" }).shouldSearch, false);
+  assert.equal(decideSearchIntent({ message: "淺草寺附近有什麼餐廳？" }).shouldSearch, false);
+  assert.equal(decideSearchIntent({ message: "淺草寺周邊有哪些店家？" }).shouldSearch, false);
+  assert.equal(decideSearchIntent({ message: "淺草寺附近餐廳今天營業到幾點？" }).searchNeed, "opening_hours");
 });
 
 test("search decision classifies fresh travel needs", () => {

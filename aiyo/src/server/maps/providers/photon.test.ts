@@ -23,3 +23,20 @@ test("unsupported Photon locale retries search and reverse with server default",
     globalThis.fetch = originalFetch;
   }
 });
+
+test("Photon retries a transient provider failure once", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return calls === 1
+      ? Response.json({ error: "unavailable" }, { status: 503 })
+      : Response.json({ features: [{ geometry: { coordinates: [121.5, 25] }, properties: { name: "台北", osm_type: "N", osm_id: 1 } }] });
+  };
+  try {
+    assert.equal((await photonSearch("https://retry.example.test", "台北"))[0]?.name, "台北");
+    assert.equal(calls, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

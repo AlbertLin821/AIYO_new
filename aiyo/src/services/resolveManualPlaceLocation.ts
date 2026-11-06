@@ -1,4 +1,4 @@
-import { fetchPlaceDetailsPatch } from "@/lib/pendingPoiLocation";
+import { fetchPlaceDetailsPatch, isOsmPlaceId } from "@/lib/pendingPoiLocation";
 import { fetchPlaceSuggestions } from "@/lib/places/geocodeClient";
 import { mapGeocodedPlaceResolvedFrom } from "@/lib/places/geocodeUtils";
 import { resolvePlacePhotoUrl } from "@/lib/placePhotoUrl";
@@ -96,7 +96,7 @@ export function buildItineraryFieldsFromResolvedLocation(
 }
 
 function locationNeedsPhotoEnrichment(location: LocationReference): boolean {
-  return Boolean(location.placeId?.trim()) && !location.photoUrl && !location.thumbnail;
+  return Boolean(location.placeId?.trim()) && !isOsmPlaceId(location.placeId) && location.resolvedFrom !== "photon" && location.resolvedFrom !== "overpass" && !location.photoUrl && !location.thumbnail;
 }
 
 export async function finalizeManualPlaceLocation(

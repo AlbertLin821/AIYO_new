@@ -1,4 +1,4 @@
-import { fetchPlaceDetailsPatch } from "@/lib/pendingPoiLocation";
+import { fetchPlaceDetailsPatch, isOsmPlaceId } from "@/lib/pendingPoiLocation";
 import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
 import { fetchGeocodedPlace, fetchPlaceSuggestions } from "@/lib/places/geocodeClient";
 import { mapGeocodedPlaceResolvedFrom } from "@/lib/places/geocodeUtils";
@@ -248,7 +248,7 @@ function mergeLocationDetails(
 
 function locationNeedsPhotoEnrichment(location: LocationReference): boolean {
   const placeId = location.placeId?.trim();
-  if (!placeId || !hasUsableMapCoordinate(location)) {
+  if (!placeId || isOsmPlaceId(placeId) || location.resolvedFrom === "photon" || location.resolvedFrom === "overpass" || !hasUsableMapCoordinate(location)) {
     return false;
   }
 
@@ -261,7 +261,7 @@ async function enrichGeocodedLocationPhotos(
   region?: string,
 ): Promise<LocationReference> {
   const placeId = location.placeId?.trim();
-  if (!placeId || !hasUsableMapCoordinate(location)) {
+  if (!placeId || isOsmPlaceId(placeId) || location.resolvedFrom === "photon" || location.resolvedFrom === "overpass" || !hasUsableMapCoordinate(location)) {
     return location;
   }
 

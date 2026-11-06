@@ -1,6 +1,7 @@
 import { createSuccess } from "@/lib/api-response";
 import { requireSessionUser } from "@/server/auth";
 import { cleanupStalePresence, getBootstrapPayload } from "@/server/data/appStateService";
+import { getRoomTripRevision } from "@/server/realtime/revisionEnvelope";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,11 +13,14 @@ export async function GET(request: Request) {
     const { userId } = await requireSessionUser();
     const { searchParams } = new URL(request.url);
     const roomId = searchParams.get("roomId") || undefined;
+    const roomTrip = roomId ? await getRoomTripRevision(userId, roomId) : null;
 
     let tickHandle: ReturnType<typeof setTimeout> | null = null;
     let lifetimeHandle: ReturnType<typeof setTimeout> | null = null;
     let closed = false;
     let lastSnapshotKey: string | null = null;
+    let lastRevision: number | null = null;
+    let tickCount = 0;
     let pumpInFlight = false;
 
     const stream = new ReadableStream({
@@ -60,11 +64,29 @@ export async function GET(request: Request) {
           }
           pumpInFlight = true;
           try {
+            tickCount += 1;
+            if (roomId && tickCount > 1) {
+              const current = await getRoomTripRevision(userId, roomId);
+              const revisionChanged = lastRevision !== current.revision;
+              if (revisionChanged) {
+                lastRevision = current.revision;
+                send("revision", current);
+              }
+              if (tickCount % 4 !== 0) {
+                if (!revisionChanged) send("ping", { ok: true });
+                return;
+              }
+            }
             const snapshot = await getBootstrapPayload(userId);
+            if (roomTrip && snapshot.trip?.tripId !== roomTrip.tripId) {
+              send("ping", { ok: true });
+              return;
+            }
             if (roomId) {
               await cleanupStalePresence(roomId);
             }
             const snapshotPayload = createSuccess(snapshot);
+            if (snapshot.trip) lastRevision = snapshot.trip.revision ?? 0;
             const nextKey = JSON.stringify(snapshotPayload.data);
             if (nextKey !== lastSnapshotKey) {
               lastSnapshotKey = nextKey;
@@ -74,7 +96,7 @@ export async function GET(request: Request) {
             send("ping", { ok: true });
           } catch (err) {
             const message = err instanceof Error ? err.message : "unknown_error";
-            if (message === "missing_user" || message === "unauthorized") {
+            if (["missing_user", "unauthorized", "forbidden", "not_found"].includes(message)) {
               send("error", {
                 ok: false,
                 code: message,
@@ -134,9 +156,10 @@ export async function GET(request: Request) {
         "X-Accel-Buffering": "no",
       },
     });
-  } catch {
-    return new Response("event: error\ndata: {\"message\":\"unauthorized\"}\n\n", {
-      status: 401,
+  } catch (error) {
+    const code = error instanceof Error && error.message === "forbidden" ? "forbidden" : "unauthorized";
+    return new Response(`event: error\ndata: {"message":"${code}"}\n\n`, {
+      status: code === "forbidden" ? 403 : 401,
       headers: {
         "Content-Type": "text/event-stream",
       },

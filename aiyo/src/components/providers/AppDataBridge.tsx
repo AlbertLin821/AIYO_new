@@ -30,6 +30,7 @@ export default function AppDataBridge() {
   const { data: session, status } = useSession();
   const collabRoomId = useCollabStore((state) => state.roomId);
   const pushToast = useToastStore((state) => state.pushToast);
+  const dismissToast = useToastStore((state) => state.dismissToast);
   const initializedRef = useRef(false);
   const userKey =
     status === "authenticated"
@@ -37,11 +38,12 @@ export default function AppDataBridge() {
       : null;
 
   useEffect(() => {
-    if (status !== "authenticated" || !userKey || ollamaStatusWarnedUserKeys.has(userKey)) {
+    if (pathname !== "/chat" || status !== "authenticated" || !userKey || ollamaStatusWarnedUserKeys.has(userKey)) {
       return;
     }
 
     let mounted = true;
+    let warningToastId: string | null = null;
 
     void apiGet<OllamaStatusPayload>("/api/ai/ollama-status")
       .then((payload) => {
@@ -50,7 +52,7 @@ export default function AppDataBridge() {
         }
         if (!payload.ollamaReachable || payload.ollamaStatus === "unreachable") {
           ollamaStatusWarnedUserKeys.add(userKey);
-          pushToast({
+          warningToastId = pushToast({
             variant: "warning",
             title: t.ollama.offlineTitle,
             description: t.ollama.offlineDesc,
@@ -68,8 +70,9 @@ export default function AppDataBridge() {
 
     return () => {
       mounted = false;
+      if (warningToastId) dismissToast(warningToastId);
     };
-  }, [pushToast, status, userKey]);
+  }, [dismissToast, pathname, pushToast, status, userKey]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -109,14 +112,14 @@ export default function AppDataBridge() {
                 )
               : null;
           if (repairedItinerary) {
-            withSyncMutationSource("local-user-edit", () => {
+            withSyncMutationSource("bootstrap", () => {
               useTripStore.setState({
                 itinerary: repairedItinerary,
                 lastUpdatedAt: new Date().toISOString(),
               });
             });
             await syncService.hydrateCurrentTripLocationsIfNeeded({ force: true });
-            await syncService.flushTripSyncNow({ force: true });
+            await syncService.flushTripSyncNow({ force: true, mutationSource: "hydration" });
           }
         }
       })

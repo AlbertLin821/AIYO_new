@@ -123,6 +123,7 @@ export const serverConfig = {
   aiWebSearchRequireCitations: readBoolean("AI_WEB_SEARCH_REQUIRE_CITATIONS", true),
   /** AI 對話與行程生成：`auto` | `serper` | `tavily`；`auto` = Serper (if key) → Tavily → none. */
   webSearchProvider: readString("WEB_SEARCH_PROVIDER", "auto").toLowerCase(),
+  searxngBaseUrl: readString("SEARXNG_BASE_URL", ""),
   serperApiKey: readString("SERPER_API_KEY", ""),
   /** When no live provider is usable, return deterministic mock rows (dev/demo only). */
   aiWebSearchMock: readBoolean("AIYO_WEB_SEARCH_MOCK", false),

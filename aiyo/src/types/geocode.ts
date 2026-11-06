@@ -18,6 +18,9 @@ export type GeocodedPlace = {
   confidence?: number;
   sourceQuery?: string;
   countryCode?: string | null;
+  openingHours?: string;
+  phoneNumber?: string;
+  website?: string;
 };
 
 export type PendingGeocodeTarget = {

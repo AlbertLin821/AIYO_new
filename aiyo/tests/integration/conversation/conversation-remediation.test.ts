@@ -137,3 +137,33 @@ test("saveTripPayload commits all days items pins together when no failure occur
   assert.equal(saved.itinerary[1]?.items.some((item) => item.title === "淺草寺"), true);
   assert.equal(saved.pins.some((pin) => pin.linkedTripItemId === "transaction-added-asakusa"), true);
 });
+
+test("manual save keeps existing day records and item links", async () => {
+  const before = await resolveSessionTrip(seed.userA.id);
+  assert.ok(before);
+  const dayIds = new Map(before.itineraryDays.map((day) => [day.dayNumber, day.id]));
+  const payload = serializeTrip(before);
+  const retainedItemId = payload.itinerary[0]?.items[0]?.id;
+  assert.ok(retainedItemId);
+  payload.itinerary[0]!.items[0]!.notes = "保留項目識別碼";
+  const saved = await saveTripPayload(seed.userA.id, payload);
+  const after = await resolveSessionTrip(seed.userA.id);
+  assert.ok(after);
+  for (const day of after.itineraryDays) assert.equal(day.id, dayIds.get(day.dayNumber));
+  assert.equal(saved.itinerary[0]?.items[0]?.id, retainedItemId);
+  assert.equal(after.items.some((item) => item.id === retainedItemId), true);
+  assert.equal(after.pins.every((pin) => !pin.linkedTripItemId || after.items.some((item) => item.id === pin.linkedTripItemId)), true);
+});
+
+test("manual save rejects duplicate item IDs rather than silently dropping one", async () => {
+  const before = await resolveSessionTrip(seed.userA.id);
+  assert.ok(before);
+  const payload = serializeTrip(before);
+  const first = payload.itinerary[0]?.items[0];
+  assert.ok(first);
+  payload.itinerary[0]!.items.push({ ...first, title: "另一個景點" });
+  await assert.rejects(() => saveTripPayload(seed.userA.id, payload), /validation_error/);
+  const after = await resolveSessionTrip(seed.userA.id);
+  assert.ok(after);
+  assert.equal(after.revision, before.revision);
+});

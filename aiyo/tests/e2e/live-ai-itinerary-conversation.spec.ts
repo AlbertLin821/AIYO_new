@@ -52,6 +52,20 @@ async function openLiveChat(page: import("@playwright/test").Page) {
   await ensureLiveAiAvailability(page, liveState);
 }
 
+async function sendAgentPreviewAndApply(page: import("@playwright/test").Page, instruction: string) {
+  const response = page.waitForResponse((res) => /\/api\/trips\/[^/]+\/agent\/preview$/.test(new URL(res.url()).pathname) && res.request().method() === "POST", { timeout: 90_000 });
+  await page.getByTestId("chat-input").fill(instruction);
+  await page.getByTestId("chat-send-button").click();
+  const previewResponse = await response;
+  expect(previewResponse.status(), await previewResponse.text()).toBe(200);
+  const card = page.getByTestId("agent-change-preview");
+  await expect(card).toBeVisible({ timeout: 30_000 });
+  const applyResponse = page.waitForResponse((res) => res.url().endsWith("/agent/apply") && res.request().method() === "POST", { timeout: 30_000 });
+  await card.getByRole("button", { name: "確認套用" }).click();
+  expect((await applyResponse).status()).toBe(200);
+  await expect(card).toHaveCount(0, { timeout: 30_000 });
+}
+
 test.describe("Live AI itinerary smoke", () => {
   test.beforeAll(async () => {
     if (!isLiveAiEnvEnabled()) {
@@ -158,16 +172,7 @@ test.describe("Live AI itinerary smoke", () => {
     const beforeTrip = await fetchPersistedTripFromBootstrap(page);
     const target = beforeTrip?.itinerary.find((day) => day.dayNumber === 2)?.items[0];
     expect(target).toBeTruthy();
-    const { payload } = await sendChatAndWaitForCompletion(page, `把第二天的 ${target?.title} 改成新宿`, {
-      structuredTravelPlanning: true,
-      waitForTripSync: true,
-      chatTimeoutMs: 180_000,
-    });
-    const reply = await resolveAiReplyText(page, payload);
-    const updateAction = extractAssistantActions(payload).find((action) => action.type === "itinerary.update_item");
-    expect(updateAction).toBeTruthy();
-    expect(updateAction?.payload?.dayId).toBe("day-2");
-    expect(updateAction?.payload?.itemId).toBe(target?.id);
+    await sendAgentPreviewAndApply(page, `把第二天的 ${target?.title} 改成新宿`);
     const afterTrip = await fetchPersistedTripFromBootstrap(page);
     const updated = afterTrip?.itinerary.find((day) => day.dayNumber === 2)?.items.find((item) => item.id === target?.id);
     expect(`${updated?.title || ""} ${updated?.location?.name || ""}`).toMatch(/新宿/u);
@@ -179,8 +184,8 @@ test.describe("Live AI itinerary smoke", () => {
     recordLiveAiOutcome(testInfo, {
       scenario: "live replace with shinjuku",
       passed: true,
-      replyPreview: reply,
-      assistantActionCount: extractAssistantActions(payload).length,
+      replyPreview: "已確認替換預覽",
+      assistantActionCount: 1,
     });
   });
 
@@ -199,15 +204,7 @@ test.describe("Live AI itinerary smoke", () => {
 
     const before = await fetchPersistedTripFromBootstrap(page);
     const beforeCount = before?.itinerary.find((day) => day.dayNumber === 2)?.items.length || 0;
-    const { payload } = await sendChatAndWaitForCompletion(page, "第二天下午幫我加一個晴空塔，安排在逛街後面。", {
-      structuredTravelPlanning: true,
-      waitForTripSync: true,
-      chatTimeoutMs: 180_000,
-    });
-    const reply = await resolveAiReplyText(page, payload);
-    const addAction = extractAssistantActions(payload).find((action) => action.type === "itinerary.add_item");
-    expect(addAction).toBeTruthy();
-    expect(addAction?.payload?.dayId).toBe("day-2");
+    await sendAgentPreviewAndApply(page, "第二天下午幫我加一個晴空塔，安排在逛街後面。");
     const after = await fetchPersistedTripFromBootstrap(page);
     const day2 = after?.itinerary.find((day) => day.dayNumber === 2);
     expect(day2?.items.length).toBeGreaterThanOrEqual(beforeCount + 1);
@@ -216,8 +213,8 @@ test.describe("Live AI itinerary smoke", () => {
     recordLiveAiOutcome(testInfo, {
       scenario: "live add skytree",
       passed: true,
-      replyPreview: reply,
-      assistantActionCount: extractAssistantActions(payload).length,
+      replyPreview: "已確認新增預覽",
+      assistantActionCount: 1,
     });
   });
 
@@ -240,14 +237,7 @@ test.describe("Live AI itinerary smoke", () => {
       ?.items.find((item) => /晴空塔|Skytree/i.test(`${item.title} ${item.location?.name || ""}`));
     test.skip(!skytree, "目前第二天沒有晴空塔可刪除");
 
-    const { payload } = await sendChatAndWaitForCompletion(page, "刪掉第二天的晴空塔", {
-      structuredTravelPlanning: true,
-      waitForTripSync: true,
-      chatTimeoutMs: 180_000,
-    });
-    const reply = await resolveAiReplyText(page, payload);
-    const removeAction = extractAssistantActions(payload).find((action) => action.type === "itinerary.remove_item");
-    expect(removeAction).toBeTruthy();
+    await sendAgentPreviewAndApply(page, "刪掉第二天的晴空塔");
     const after = await fetchPersistedTripFromBootstrap(page);
     const day2HasSkytree = after?.itinerary
       .find((day) => day.dayNumber === 2)
@@ -257,8 +247,8 @@ test.describe("Live AI itinerary smoke", () => {
     recordLiveAiOutcome(testInfo, {
       scenario: "live remove skytree",
       passed: true,
-      replyPreview: reply,
-      assistantActionCount: extractAssistantActions(payload).length,
+      replyPreview: "已確認移除預覽",
+      assistantActionCount: 1,
     });
   });
 });

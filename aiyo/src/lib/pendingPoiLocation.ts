@@ -5,7 +5,16 @@ export type PendingMapPoi = {
   placeId?: string;
   lat: number;
   lng: number;
+  name?: string;
+  address?: string;
+  resolvedFrom?: "photon" | "overpass";
+  checkedAt?: string;
+  category?: string;
 };
+
+export function isOsmPlaceId(placeId: string | undefined): boolean {
+  return /^(?:photon:|overpass:|[NWR]:\d+$|(?:node|way|relation):\d+$)/i.test(placeId?.trim() || "");
+}
 
 export type PlaceDetailsRow = {
   id?: string;
@@ -197,6 +206,20 @@ export async function fetchPendingPoiLocation(
   pendingPoi: PendingMapPoi,
   tripDestination: string,
 ): Promise<LocationReference> {
+  if (pendingPoi.resolvedFrom && pendingPoi.name?.trim() && hasUsableMapCoordinate(pendingPoi)) {
+    return {
+      name: pendingPoi.name.trim(),
+      lat: pendingPoi.lat,
+      lng: pendingPoi.lng,
+      description: pendingPoi.address || pendingPoi.name.trim(),
+      address: pendingPoi.address,
+      placeId: pendingPoi.placeId,
+      resolvedFrom: pendingPoi.resolvedFrom,
+      checkedAt: pendingPoi.checkedAt,
+      category: pendingPoi.category,
+      verified: true,
+    };
+  }
   if (pendingPoi.placeId) {
     const response = await fetch("/api/map/place-details", {
       method: "POST",

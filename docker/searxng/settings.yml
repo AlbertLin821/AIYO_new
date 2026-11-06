@@ -1,0 +1,10 @@
+use_default_settings: true
+general:
+  instance_name: AIYO local search
+search:
+  formats:
+    - html
+    - json
+server:
+  limiter: false
+  public_instance: false

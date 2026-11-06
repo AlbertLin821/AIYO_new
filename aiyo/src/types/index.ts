@@ -48,6 +48,8 @@ export interface LocationReference {
    * 地點如何被採用並對應座標：Google 地理編碼成功，或僅依 LLM／規則抽取並以內部對照補座標。
    */
   resolvedFrom?: "llm" | "heuristic" | "title-poi" | "photon" | "overpass" | "user" | "legacy-google" | "google-geocode" | "google-place-details";
+  checkedAt?: string;
+  category?: string;
   rawQuery?: string;
   normalizedName?: string;
   /** Original transcript / query fragment before normalization. */
@@ -140,6 +142,9 @@ export interface MapPin {
   description: string;
   address?: string;
   placeId?: string;
+  placeProvider?: LocationReference["resolvedFrom"];
+  placeCheckedAt?: string;
+  placeCategory?: string;
   photoUrl?: string;
   thumbnail?: string;
   openingHours?: string;
@@ -408,7 +413,10 @@ export type StatusStepStatus =
   | "failed";
 
 export type StatusStepProvider =
+  | "searxng"
   | "google_places"
+  | "photon"
+  | "overpass"
   | "open_meteo"
   | "tavily"
   | "youtube"
@@ -525,6 +533,8 @@ export type TravelPlanResponse = {
 };
 
 export interface ChatContext {
+  selectedPlaceId?: string;
+  selectedPlace?: { id: string; name: string; lat: number; lng: number };
   destination?: string;
   days?: number;
   budget?: number;
@@ -965,8 +975,12 @@ export interface GeocodeResponse {
 
 export interface PersistedTripPayload {
   tripId: string;
+  revision?: number;
+    mutationSource?: "ai" | "hydration";
+  mutationId?: string;
   title: string;
   destination: string;
+  startDate?: string | null;
   days: number;
   budget?: number;
   /** 封面圖（資料網址或 https URL），由前端壓縮後寫入 */

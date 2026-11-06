@@ -3,12 +3,9 @@ import type { SyncMutationSource } from "@/stores/syncMutationSource";
 import { withSyncMutationSource } from "@/stores/syncMutationSource";
 import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
 import type { MapPin } from "@/types";
+import type { PendingMapPoi } from "@/lib/pendingPoiLocation";
 
-export type PendingMapPoi = {
-  placeId?: string;
-  lat: number;
-  lng: number;
-};
+export type { PendingMapPoi } from "@/lib/pendingPoiLocation";
 
 export type MapFocusLocation = {
   placeName: string;
@@ -17,10 +14,21 @@ export type MapFocusLocation = {
   zoom?: number;
 } | null;
 
+export type MapPreviewPoi = {
+  id: string;
+  name: string;
+  location: { lat: number; lng: number };
+  address?: string;
+  source?: "photon" | "overpass";
+  category?: string;
+  checkedAt?: string;
+};
+
 interface MapState {
   pins: MapPin[];
   selectedPinId: string | null;
   pendingPoi: PendingMapPoi | null;
+  previewPoi: MapPreviewPoi | null;
   focusLocation: MapFocusLocation;
   preferredPoiDay: number;
   panelOpen: boolean;
@@ -34,6 +42,7 @@ interface MapState {
   removePin: (id: string) => void;
   setSelectedPinId: (id: string | null) => void;
   setPendingPoi: (poi: PendingMapPoi | null) => void;
+  setPreviewPoi: (poi: MapPreviewPoi | null) => void;
   setFocusLocation: (focus: MapFocusLocation) => void;
   setPreferredPoiDay: (dayNumber: number) => void;
   setPanelOpen: (open: boolean) => void;
@@ -54,6 +63,7 @@ export const useMapStore = create<MapState>((set) => ({
   pins: [],
   selectedPinId: null,
   pendingPoi: null,
+  previewPoi: null,
   focusLocation: null,
   preferredPoiDay: 1,
   panelOpen: true,
@@ -99,6 +109,7 @@ export const useMapStore = create<MapState>((set) => ({
   setSelectedPinId: (selectedPinId) =>
     withSyncMutationSource("local-user-edit", () => set({ selectedPinId })),
   setPendingPoi: (pendingPoi) => set({ pendingPoi }),
+  setPreviewPoi: (previewPoi) => set({ previewPoi }),
   setFocusLocation: (focusLocation) => set({ focusLocation }),
   setPreferredPoiDay: (preferredPoiDay) => set({ preferredPoiDay }),
   setPanelOpen: (panelOpen) => set({ panelOpen }),
@@ -122,6 +133,7 @@ export const useMapStore = create<MapState>((set) => ({
         pins: [],
         selectedPinId: null,
         pendingPoi: null,
+        previewPoi: null,
         focusLocation: null,
         visibleRouteDayNumbers: [],
         lastSyncedAt: null,

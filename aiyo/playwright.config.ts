@@ -3,6 +3,20 @@ import { loadProjectEnvIntoProcess } from "./src/lib/projectEnv";
 
 process.env.AIYO_ENV_FILE ||= process.env.PLAYWRIGHT_ENV_FILE || ".env.dev";
 process.env.AIYO_ENV_MODE ||= "dev";
+process.env.AIYO_DEV_BUILD_CONTEXT ||= "host-e2e";
+if (process.env.PLAYWRIGHT_HOST_LOCAL_MAPS === "1") {
+  const hostMapEndpoints: Record<string, string> = {
+    MAP_PHOTON_BASE_URL: "http://127.0.0.1:2322",
+    MAP_OVERPASS_TW_URL: "http://127.0.0.1:12345/api/interpreter",
+    MAP_OVERPASS_JP_URL: "http://127.0.0.1:12346/api/interpreter",
+    MAP_OVERPASS_KR_URL: "http://127.0.0.1:12347/api/interpreter",
+    MAP_OSRM_TW_URL: "http://127.0.0.1:5001",
+    MAP_OSRM_JP_URL: "http://127.0.0.1:5002",
+    MAP_OSRM_KR_URL: "http://127.0.0.1:5003",
+    MAP_ALLOW_PUBLIC_FALLBACK: "false",
+  };
+  for (const [name, endpoint] of Object.entries(hostMapEndpoints)) process.env[name] ||= endpoint;
+}
 process.env.DATABASE_URL ||=
   process.env.PLAYWRIGHT_DATABASE_URL ||
   "postgresql://aiyo:aiyo_password_change_me@127.0.0.1:5432/aiyo_new_db?schema=public";

@@ -127,6 +127,7 @@ export default function ItineraryPage() {
     tripId,
     title,
     destination,
+    startDate,
     days,
     budget,
     coverImageUrl,
@@ -353,6 +354,23 @@ export default function ItineraryPage() {
     },
     [days, itinerary, requireAuthenticated],
   );
+
+  const handleStartDateCommit = useCallback(async (nextDate: string | null) => {
+    if (!requireAuthenticated("/itinerary")) return;
+    const current = useTripStore.getState();
+    if (!current.tripId || current.startDate === nextDate) return;
+    try {
+      const saved = await patchTripDetails(current.tripId, { startDate: nextDate, revision: current.revision });
+      if (useTripStore.getState().tripId === current.tripId) {
+        withSyncMutationSource("server-ack", () => {
+          useTripStore.setState({ startDate: saved.startDate, revision: saved.revision });
+        });
+      }
+    } catch (error) {
+      pushToast({ variant: "error", title: "出發日期儲存失敗", description: error instanceof Error ? error.message : "請重新載入行程後再試。" });
+      throw error;
+    }
+  }, [pushToast, requireAuthenticated]);
 
   const handleConfirmShrinkDays = useCallback(async () => {
     if (shrinkDaysTarget === null) {
@@ -1117,14 +1135,15 @@ export default function ItineraryPage() {
     setLibraryError(null);
     setRenameSaving(true);
     try {
-      const { title: savedTitle, coverImageUrl: savedCover } = await patchTripDetails(renameTarget.id, {
+      const { title: savedTitle, coverImageUrl: savedCover, revision: savedRevision } = await patchTripDetails(renameTarget.id, {
         title: renameDraft,
         coverImageUrl: renameCoverUrl,
+        revision: renameTarget.revision ?? useTripStore.getState().revision,
       });
       const nextTitle = savedTitle.trim();
       if (useTripStore.getState().tripId === renameTarget.id) {
         withSyncMutationSource("bootstrap", () => {
-          useTripStore.setState({ title: nextTitle, coverImageUrl: savedCover });
+          useTripStore.setState({ title: nextTitle, coverImageUrl: savedCover, revision: savedRevision });
         });
       }
       setRenameTarget(null);
@@ -1663,6 +1682,7 @@ export default function ItineraryPage() {
                   <ItineraryPageHeader
                     title={title}
                     destination={destination}
+                    startDate={startDate}
                     days={days}
                     budget={budget}
                     coverImageUrl={coverImageUrl}
@@ -1671,6 +1691,7 @@ export default function ItineraryPage() {
                     metaEditable={isInteractive && canEdit}
                     showTripSummaryRow={showTripSummaryRow}
                     onDaysCommit={handleDaysCommit}
+                    onStartDateCommit={handleStartDateCommit}
                     onBudgetCommit={handleBudgetCommit}
                     onShare={() => setShareOpen(true)}
                     onOpenMap={() => router.push("/map")}

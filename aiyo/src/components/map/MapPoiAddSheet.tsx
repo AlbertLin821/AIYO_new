@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { AnimatePresence, m } from "@/lib/motion";
 import MapPoiAddCard from "@/components/map/MapPoiAddCard";
 import { useMapStore } from "@/stores/useMapStore";
@@ -16,12 +17,21 @@ export default function MapPoiAddSheet({
   onAdded,
 }: MapPoiAddSheetProps) {
   const pendingPoi = useMapStore((state) => state.pendingPoi);
+  const sheetRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (pendingPoi) sheetRef.current?.focus();
+  }, [pendingPoi]);
 
   return (
     <AnimatePresence>
       {pendingPoi ? (
         <m.div
+          ref={sheetRef}
           key="map-poi-add-sheet"
+          role="region"
+          aria-label="加入行程"
+          tabIndex={-1}
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 16 }}

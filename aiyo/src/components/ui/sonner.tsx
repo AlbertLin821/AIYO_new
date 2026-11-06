@@ -34,6 +34,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         classNames: {
           toast: "rounded-2xl border border-border-light shadow-soft-lg",
+          success: "pointer-events-none",
         },
       }}
       {...props}

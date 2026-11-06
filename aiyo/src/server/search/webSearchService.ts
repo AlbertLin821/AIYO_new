@@ -1,9 +1,10 @@
 import { serverConfig } from "@/server/config";
 import { tavilySearch } from "@/server/providers/tavilySearch";
 import { searchSerper } from "@/server/search/serperClient";
+import { searchSearxng } from "@/server/search/searxngClient";
 import type { WebSearchOptions, WebSearchResult } from "@/server/search/webSearchTypes";
 
-export type WebSearchBackend = "serper" | "tavily" | "none";
+export type WebSearchBackend = "searxng" | "serper" | "tavily" | "none";
 
 export type UnifiedWebSearchResult = {
   results: WebSearchResult[];
@@ -88,6 +89,10 @@ export async function runUnifiedWebSearch(
   }
 
   const configured = resolveConfiguredProvider();
+  if (serverConfig.searxngBaseUrl.trim() && configured === "auto") {
+    const local = await searchSearxng(options);
+    if (local.length) return { results: local, backend: "searxng" };
+  }
   const allowedProviders = sanitizeAiSearchProviders(options.providers);
   const tryOrder: WebSearchBackend[] =
     configured === "auto"

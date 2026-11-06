@@ -7,8 +7,7 @@ type PhotonFeature = {
 };
 type PhotonResponse = { features?: PhotonFeature[] };
 
-let consecutiveFailures = 0;
-let circuitOpenUntil = 0;
+const circuitByOrigin = new Map<string, { failures: number; openUntil: number }>();
 
 function text(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
@@ -67,38 +66,48 @@ export function normalizePhotonFeature(feature: PhotonFeature): MapPoi | null {
 }
 
 async function photonJson(url: URL, timeoutMs = 5000): Promise<PhotonResponse> {
-  if (Date.now() < circuitOpenUntil) {
+  const origin = url.origin;
+  const circuit = circuitByOrigin.get(origin) || { failures: 0, openUntil: 0 };
+  if (Date.now() < circuit.openUntil) {
     throw new MapServiceError(
       "MAP_SEARCH_FAILED",
       "地點搜尋服務暫時無法使用。",
     );
   }
   try {
-    const requestOptions = {
-      headers: {
-        Accept: "application/geo+json, application/json",
-        "User-Agent": "AIYO/1.0",
-      },
-      signal: AbortSignal.timeout(timeoutMs),
+    const request = async (target: URL): Promise<Response> => {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const response = await fetch(target, {
+            headers: { Accept: "application/geo+json, application/json", "User-Agent": "AIYO/1.0" },
+            signal: AbortSignal.timeout(timeoutMs),
+          });
+          if (response.status >= 500 && attempt === 0) continue;
+          return response;
+        } catch (error) {
+          if (attempt === 1) throw error;
+        }
+      }
+      throw new Error("photon_retry_exhausted");
     };
-    let response = await fetch(url, requestOptions);
+    let response = await request(url);
     if (response.status === 400 && url.searchParams.has("lang")) {
       const error = await response.clone().json().catch(() => null);
       if (Array.isArray(error?.lang) && error.lang.some((item: { message?: string }) =>
         item.message?.includes("Language is not supported"))) {
         const fallbackUrl = new URL(url);
         fallbackUrl.searchParams.delete("lang");
-        response = await fetch(fallbackUrl, requestOptions);
+        response = await request(fallbackUrl);
       }
     }
     if (!response.ok) throw new Error(String(response.status));
     const payload = (await response.json()) as PhotonResponse;
-    consecutiveFailures = 0;
-    circuitOpenUntil = 0;
+    circuitByOrigin.delete(origin);
     return payload;
   } catch {
-    consecutiveFailures += 1;
-    if (consecutiveFailures >= 3) circuitOpenUntil = Date.now() + 30_000;
+    circuit.failures += 1;
+    if (circuit.failures >= 3) circuit.openUntil = Date.now() + 30_000;
+    circuitByOrigin.set(origin, circuit);
     throw new MapServiceError(
       "MAP_SEARCH_FAILED",
       "地點搜尋服務暫時無法使用。",

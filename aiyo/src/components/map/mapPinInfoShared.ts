@@ -1,6 +1,7 @@
 import type { LocationReference, MapPin as MapPinType } from "@/types";
 import { isPlacePhotoProxyUrl, resolvePlacePhotoUrl } from "@/lib/placePhotoUrl";
 import { zhTW as t } from "@/locales/zh-TW";
+import { osmSourceUrl } from "@/lib/osmSourceUrl";
 
 export type LinkedItineraryItem = {
   time: string;
@@ -63,6 +64,9 @@ function isLegacyGooglePlaceId(placeId?: string): placeId is string {
 }
 
 export function buildRoutePlanningUrl(pin: Pick<MapPinType, "lat" | "lng" | "address" | "placeId">): string {
+  if (!isLegacyGooglePlaceId(pin.placeId)) {
+    return `https://www.openstreetmap.org/directions?${new URLSearchParams({ to: `${pin.lat},${pin.lng}` })}`;
+  }
   const routeParams = new URLSearchParams({
     api: "1",
     destination: `${pin.lat},${pin.lng}`,
@@ -77,7 +81,7 @@ export function buildGoogleMapsUrl(pin: Pick<MapPinType, "lat" | "lng" | "placeI
   if (pin.googleMapsUrl) {
     return pin.googleMapsUrl;
   }
-  if (!pin.placeId) {
+  if (!isLegacyGooglePlaceId(pin.placeId)) {
     return null;
   }
   const params = new URLSearchParams({
@@ -88,6 +92,10 @@ export function buildGoogleMapsUrl(pin: Pick<MapPinType, "lat" | "lng" | "placeI
     params.set("query_place_id", pin.placeId);
   }
   return `https://www.google.com/maps/search/?${params.toString()}`;
+}
+
+export function buildOsmSourceUrl(pin: Pick<MapPinType, "placeId">): string | null {
+  return osmSourceUrl(pin.placeId);
 }
 
 const WEEKDAY_ORDER = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"] as const;

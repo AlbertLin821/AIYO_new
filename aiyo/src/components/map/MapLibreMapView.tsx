@@ -12,14 +12,38 @@ import { buildPinStopOrderByPinId } from "@/lib/mapPinItineraryLink";
 import { loadMapRoute } from "@/lib/mapRoutePresentation";
 import { buildItineraryRouteSegments, filterRouteSegmentsByDayNumbers } from "@/lib/routeSegments";
 import { hasUsableMapCoordinate } from "@/lib/geoCoordinates";
+import { osmSourceUrl } from "@/lib/osmSourceUrl";
 import MapPinInfoPanel from "@/components/map/MapPinInfoPanel";
 import MapPoiAddSheet from "@/components/map/MapPoiAddSheet";
-import { useMapStore } from "@/stores/useMapStore";
+import { useMapStore, type MapPreviewPoi } from "@/stores/useMapStore";
 import { useTripStore } from "@/stores/useTripStore";
 
-const STYLE =
+const DEFAULT_STYLE =
   process.env.NEXT_PUBLIC_MAP_STYLE_URL ||
   "https://tiles.openfreemap.org/styles/liberty";
+const CATEGORY_LABELS: Record<string, string> = { restaurant: "餐廳", cafe: "咖啡館", hotel: "住宿", attraction: "景點", museum: "博物館", park: "公園", convenience: "便利商店", parking: "停車場", station: "車站" };
+
+function distanceLabel(from: { lat: number; lng: number }, to: { lat: number; lng: number }): string {
+  const radians = Math.PI / 180;
+  const latitude = (to.lat - from.lat) * radians;
+  const longitude = (to.lng - from.lng) * radians;
+  const arc = Math.sin(latitude / 2) ** 2 + Math.cos(from.lat * radians) * Math.cos(to.lat * radians) * Math.sin(longitude / 2) ** 2;
+  const meters = 6371000 * 2 * Math.asin(Math.sqrt(arc));
+  return meters < 1000 ? `約 ${Math.round(meters / 10) * 10} 公尺` : `約 ${(meters / 1000).toFixed(1)} 公里`;
+}
+
+function styleForDestination(destination: string): string {
+  if (process.env.NEXT_PUBLIC_USE_LOCAL_MAP_STYLES !== "true") return DEFAULT_STYLE;
+  const name = destination.toLowerCase();
+  const matches = [
+    [/台灣|臺灣|taiwan|台北|臺北|高雄|台中|臺中|嘉義|阿里山|花蓮|宜蘭|台南|臺南|新北|桃園/, "tw"],
+    [/日本|japan|東京|大阪|京都|福岡|沖繩|北海道|名古屋|神戶|浅草|淺草/, "jp"],
+    [/韓國|南韓|korea|首爾|서울|釜山|부산|濟州|제주/, "kr"],
+  ] as const;
+  const regions = matches.filter(([pattern]) => pattern.test(name));
+  const region = regions.length === 1 ? regions[0][1] : null;
+  return region ? `/local-map-styles/${region}.json` : DEFAULT_STYLE;
+}
 
 export default function MapLibreMapView({
   allowPoiAdd = false,
@@ -30,7 +54,10 @@ export default function MapLibreMapView({
   readOnly?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const previewCloseRef = useRef<HTMLButtonElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  const previewMarker = useRef<Marker | null>(null);
   const markers = useRef(new Map<string, Marker>());
   const fittedPins = useRef("");
   const [ready, setReady] = useState(false);
@@ -39,26 +66,43 @@ export default function MapLibreMapView({
   const [nearbyLoading, setNearbyLoading] = useState(false);
   const [nearbyError, setNearbyError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<
-    Array<{
-      id: string;
-      name: string;
-      location: { lat: number; lng: number };
-      address?: string;
-    }>
-  >([]);
+  const [searchStatus, setSearchStatus] = useState<"idle" | "searching" | "empty" | "failed">("idle");
+  const [searchResults, setSearchResults] = useState<MapPreviewPoi[]>([]);
+  const [nearbyResults, setNearbyResults] = useState<typeof searchResults>([]);
+  const [nearbyCenter, setNearbyCenter] = useState<{ lat: number; lng: number } | null>(null);
+  const previewPoi = useMapStore((s) => s.previewPoi);
+  const setPreviewPoi = useMapStore((s) => s.setPreviewPoi);
+  useEffect(() => {
+    if (previewPoi) previewCloseRef.current?.focus();
+  }, [previewPoi]);
+  useEffect(() => {
+    previewMarker.current?.remove();
+    previewMarker.current = null;
+    if (!ready || !previewPoi || !mapRef.current) return;
+    const marker = new maplibregl.Marker({ color: "#315f85" })
+      .setLngLat([previewPoi.location.lng, previewPoi.location.lat])
+      .addTo(mapRef.current);
+    marker.getElement().dataset.testid = "map-preview-marker";
+    marker.getElement().setAttribute("aria-label", `預覽地點：${previewPoi.name}`);
+    previewMarker.current = marker;
+    return () => {
+      marker.remove();
+      if (previewMarker.current === marker) previewMarker.current = null;
+    };
+  }, [ready, previewPoi]);
   const storedPins = useMapStore((s) => s.pins);
   const pins = useMemo(() => storedPins.filter(hasUsableMapCoordinate), [storedPins]);
   const focusLocation = useMapStore((s) => s.focusLocation);
   const selectedId = useMapStore((s) => s.selectedPinId);
   const setSelected = useMapStore((s) => s.setSelectedPinId);
   const setPending = useMapStore((s) => s.setPendingPoi);
-  const addPins = useMapStore((s) => s.addPins);
   const visibleDays = useMapStore((s) => s.visibleRouteDayNumbers);
   const preferredDay = useMapStore((s) => s.preferredPoiDay);
   const setDurations = useMapStore((s) => s.setItinerarySegmentDurations);
   const itinerary = useTripStore((s) => s.itinerary);
+  const tripId = useTripStore((s) => s.tripId);
   const destination = useTripStore((s) => s.destination);
+  const styleUrl = styleForDestination(destination);
   const order = useMemo(
     () => buildPinStopOrderByPinId(itinerary, pins),
     [itinerary, pins],
@@ -79,12 +123,37 @@ export default function MapLibreMapView({
   }, [ready, focusLocation]);
 
   useEffect(() => {
+    const map = mapRef.current;
+    const query = destination.trim();
+    if (!map || !ready || !tripId || !query || pins.length || focusLocation || previewPoi) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 8000);
+    let moved = false;
+    const markMoved = () => { moved = true; };
+    map.on("movestart", markMoved);
+    void fetch(`/api/maps/search?q=${encodeURIComponent(query)}&limit=3`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const payload = await response.json();
+        const match = payload.data?.results?.find((place: { location?: { lat: number; lng: number } }) =>
+          place.location && hasUsableMapCoordinate(place.location));
+        if (!match || moved || useTripStore.getState().tripId !== tripId || useMapStore.getState().pins.some(hasUsableMapCoordinate) || useMapStore.getState().focusLocation || useMapStore.getState().previewPoi) return;
+        const isCountry = /^(?:台灣|臺灣|Taiwan|日本|Japan|韓國|南韓|Korea)$/i.test(query);
+        map.easeTo({ center: [match.location.lng, match.location.lat], zoom: isCountry ? 6 : 11, duration: 500 });
+      })
+      .catch(() => {})
+      .finally(() => { window.clearTimeout(timer); map.off("movestart", markMoved); });
+    return () => { controller.abort(); window.clearTimeout(timer); map.off("movestart", markMoved); };
+  }, [ready, tripId, destination, pins.length, focusLocation, previewPoi]);
+
+  useEffect(() => {
     if (!host.current || mapRef.current) return;
+    setReady(false);
     const markerMap = markers.current;
     maplibregl.setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
     const map = new maplibregl.Map({
       container: host.current,
-      style: STYLE,
+      style: styleUrl,
       center: [121, 23.7],
       zoom: 6,
       attributionControl: false,
@@ -93,7 +162,7 @@ export default function MapLibreMapView({
     map.addControl(
       new maplibregl.AttributionControl({
         compact: true,
-        customAttribution: "OpenFreeMap",
+        customAttribution: styleUrl.startsWith("/local-map-styles/") ? undefined : "OpenFreeMap",
       }),
     );
     const markReady = () => {
@@ -109,7 +178,13 @@ export default function MapLibreMapView({
       map.on("click", (e: MapMouseEvent) =>
         setPending({ lat: e.lngLat.lat, lng: e.lngLat.lng }),
       );
-    const ro = new ResizeObserver(() => map.resize());
+    const ro = new ResizeObserver(() => {
+      map.resize();
+      const currentPreview = useMapStore.getState().previewPoi;
+      if (currentPreview) {
+        map.jumpTo({ center: [currentPreview.location.lng, currentPreview.location.lat] });
+      }
+    });
     ro.observe(host.current);
     mapRef.current = map;
     return () => {
@@ -119,13 +194,15 @@ export default function MapLibreMapView({
       map.remove();
       mapRef.current = null;
     };
-  }, [allowPoiAdd, readOnly, setPending]);
+  }, [allowPoiAdd, readOnly, setPending, styleUrl]);
 
   useEffect(() => {
     if (!allowPoiAdd || readOnly || searchQuery.trim().length < 2) {
       setSearchResults([]);
+      setSearchStatus("idle");
       return;
     }
+    setSearchStatus("searching");
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       void fetch(
@@ -134,9 +211,12 @@ export default function MapLibreMapView({
       )
         .then(async (response) => {
           const payload = await response.json();
-          if (response.ok) setSearchResults(payload.data?.results || []);
+          if (!response.ok) throw new Error("search_failed");
+          const results = payload.data?.results || [];
+          setSearchResults(results);
+          setSearchStatus(results.length ? "idle" : "empty");
         })
-        .catch(() => undefined);
+        .catch((error) => { if (error?.name !== "AbortError") setSearchStatus("failed"); });
     }, 300);
     return () => {
       window.clearTimeout(timer);
@@ -228,28 +308,42 @@ export default function MapLibreMapView({
       setRouteFailed(features.some((feature) => feature.properties.schematic));
       setDurations(durations);
       const data: GeoJSON.FeatureCollection<GeoJSON.LineString> = { type: "FeatureCollection", features };
-      const source = map.getSource("routes") as GeoJSONSource | undefined;
-      if (source) source.setData(data);
-      else {
-        map.addSource("routes", { type: "geojson", data });
-        map.addLayer({
-          id: "routes-line", type: "line", source: "routes",
-          filter: ["==", ["get", "schematic"], false],
-          paint: { "line-color": ["get", "color"], "line-width": 5, "line-opacity": 0.82 },
-        });
-        map.addLayer({
-          id: "routes-schematic", type: "line", source: "routes",
-          filter: ["==", ["get", "schematic"], true],
-          paint: { "line-color": ["get", "color"], "line-width": 3, "line-dasharray": [2, 2], "line-opacity": 0.65 },
-        });
-      }
+      const syncRoute = () => {
+        if (controller.signal.aborted || mapRef.current !== map || !map.isStyleLoaded()) return;
+        const source = map.getSource("routes") as GeoJSONSource | undefined;
+        if (source) source.setData(data);
+        else {
+          map.addSource("routes", { type: "geojson", data });
+          map.addLayer({
+            id: "routes-line", type: "line", source: "routes",
+            filter: ["==", ["get", "schematic"], false],
+            paint: { "line-color": ["get", "color"], "line-width": 5, "line-opacity": 0.82 },
+          });
+          map.addLayer({
+            id: "routes-schematic", type: "line", source: "routes",
+            filter: ["==", ["get", "schematic"], true],
+            paint: { "line-color": ["get", "color"], "line-width": 3, "line-dasharray": [2, 2], "line-opacity": 0.65 },
+          });
+        }
+        map.off("styledata", syncRoute);
+        map.off("idle", syncRoute);
+      };
+      map.on("styledata", syncRoute);
+      map.on("idle", syncRoute);
+      syncRoute();
+      controller.signal.addEventListener("abort", () => {
+        map.off("styledata", syncRoute);
+        map.off("idle", syncRoute);
+      }, { once: true });
     })();
     return () => controller.abort();
   }, [ready, segments, setDurations]);
 
   async function loadNearby() {
-    const center = selected
-      ? { lat: selected.lat, lng: selected.lng }
+    const center = previewPoi
+      ? previewPoi.location
+      : selected
+        ? { lat: selected.lat, lng: selected.lng }
       : mapRef.current
         ? {
             lat: mapRef.current.getCenter().lat,
@@ -265,26 +359,10 @@ export default function MapLibreMapView({
       );
       const payload = await response.json();
       if (!response.ok) throw new Error("附近餐廳搜尋暫時無法使用，請稍後重試。");
-      if (!payload.data?.results?.length) setNearbyError("此範圍內未找到餐廳。");
-      if (response.ok)
-        addPins(
-          (payload.data?.results || []).map(
-            (poi: {
-              id: string;
-              name: string;
-              location: { lat: number; lng: number };
-              address?: string;
-            }) => ({
-              id: poi.id,
-              name: poi.name,
-              lat: poi.location.lat,
-              lng: poi.location.lng,
-              description: poi.address || poi.name,
-              address: poi.address,
-              source: "manual" as const,
-            }),
-          ),
-        );
+      const results = (payload.data?.results || []) as typeof searchResults;
+      if (!results.length) setNearbyError("此範圍內未找到餐廳。");
+      setNearbyCenter(center);
+      setNearbyResults(results);
     } catch {
       setNearbyError("附近餐廳搜尋暫時無法使用，請稍後重試。");
     } finally {
@@ -292,24 +370,8 @@ export default function MapLibreMapView({
     }
   }
 
-  function addSearchResult(poi: {
-    id: string;
-    name: string;
-    location: { lat: number; lng: number };
-    address?: string;
-  }) {
-    addPins([
-      {
-        id: poi.id,
-        name: poi.name,
-        lat: poi.location.lat,
-        lng: poi.location.lng,
-        description: poi.address || poi.name,
-        address: poi.address,
-        source: "manual" as const,
-      },
-    ]);
-    setSelected(poi.id);
+  function previewSearchResult(poi: MapPreviewPoi) {
+    setPreviewPoi(poi);
     setSearchQuery("");
     setSearchResults([]);
     mapRef.current?.easeTo({
@@ -342,32 +404,37 @@ export default function MapLibreMapView({
       )}
       {nearbyError && <p role="status" className="absolute bottom-16 left-3 z-10 rounded bg-white px-3 py-2 text-sm">{nearbyError}</p>}
       {allowPoiAdd && !readOnly && ready && (
-        <div className="absolute left-3 top-3 z-10 w-72 space-y-2">
+        <div className="absolute left-3 right-3 top-3 z-10 space-y-2 md:right-auto md:w-72">
           <div className="flex gap-2">
             <input
+              ref={searchInputRef}
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="搜尋景點或地址"
               aria-label="搜尋景點或地址"
-              className="min-w-0 flex-1 rounded-lg border bg-white px-3 py-2 text-sm shadow"
+              className="min-h-11 min-w-0 flex-1 rounded-lg border bg-white px-3 py-2 text-sm shadow focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             />
             <button
               type="button"
               onClick={() => void loadNearby()}
               disabled={nearbyLoading}
-              className="rounded-lg bg-white px-3 py-2 text-sm font-medium shadow"
+              className="min-h-11 rounded-lg bg-white px-3 py-2 text-sm font-medium shadow focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               {nearbyLoading ? "搜尋中…" : "附近餐廳"}
             </button>
           </div>
-          {searchResults.length > 0 && (
-            <ul className="overflow-hidden rounded-lg bg-white shadow">
-              {searchResults.map((poi) => (
+          {(searchResults.length > 0 || nearbyResults.length > 0) && (
+            <div className="relative overflow-hidden rounded-lg bg-white shadow" role="region" aria-label={searchResults.length ? "地點搜尋結果" : "附近餐廳結果"}>
+              <div className="border-b px-3 py-4 pr-14 text-xs font-medium text-slate-600">
+                <span>{searchResults.length ? `地點搜尋結果 · ${searchResults.length} 處` : `附近餐廳 · ${nearbyResults.length} 處`}</span>
+              </div>
+              <ul className="max-h-[min(40vh,18rem)] overflow-y-auto overscroll-contain">
+              {(searchResults.length > 0 ? searchResults : nearbyResults).map((poi) => (
                 <li key={poi.id}>
                   <button
                     type="button"
-                    onClick={() => addSearchResult(poi)}
-                    className="block w-full border-b px-3 py-2 text-left text-sm hover:bg-slate-50"
+                    onClick={() => { previewSearchResult(poi); setNearbyResults([]); }}
+                    className="block min-h-11 w-full border-b px-3 py-2 text-left text-sm hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                   >
                     <span className="block font-medium">{poi.name}</span>
                     {poi.address && (
@@ -375,14 +442,33 @@ export default function MapLibreMapView({
                         {poi.address}
                       </span>
                     )}
+                    {!searchResults.length && nearbyCenter && (
+                      <span className="block text-xs text-slate-500">{distanceLabel(nearbyCenter, poi.location)} · OpenStreetMap</span>
+                    )}
                   </button>
                 </li>
               ))}
-            </ul>
+              </ul>
+              <button type="button" onClick={() => { setSearchResults([]); setNearbyResults([]); searchInputRef.current?.focus(); }} aria-label="關閉地點結果" className="absolute right-0 top-0 min-h-11 min-w-11 rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">×</button>
+            </div>
           )}
+          {searchStatus === "searching" && <p role="status" className="rounded-lg bg-white px-3 py-2 text-xs shadow">搜尋中…</p>}
+          {searchStatus === "empty" && <p role="status" className="rounded-lg bg-white px-3 py-2 text-xs shadow">找不到可確認的地點，請輸入更精確的名稱。</p>}
+          {searchStatus === "failed" && <p role="alert" className="rounded-lg bg-white px-3 py-2 text-xs shadow">地點搜尋暫時失敗，請稍後重試。</p>}
         </div>
       )}
-      {!readOnly && selected && (
+      {!readOnly && previewPoi && (
+        <div role="region" aria-label="地點預覽" className="absolute bottom-4 left-4 z-20 w-[min(340px,calc(100vw-2rem))] rounded-2xl border border-border bg-white p-4 shadow-soft-lg">
+          <div className="flex items-start justify-between gap-3">
+            <div><h3 className="font-semibold">{previewPoi.name}</h3><p className="mt-1 text-xs text-muted">{previewPoi.address || "地址待確認"}</p></div>
+            <button type="button" ref={previewCloseRef} onClick={() => { setPreviewPoi(null); searchInputRef.current?.focus(); }} aria-label="關閉地點預覽" className="min-h-11 min-w-11 rounded-lg border border-border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">×</button>
+          </div>
+          <p className="mt-2 text-xs text-muted">來源：{previewPoi.source === "overpass" || previewPoi.id.startsWith("overpass:") ? "OpenStreetMap / Overpass" : "OpenStreetMap / Photon"} · {previewPoi.category ? CATEGORY_LABELS[previewPoi.category] || previewPoi.category : "類別待確認"} · 查核 {previewPoi.checkedAt?.slice(0, 10) || "待確認"} · 營業資訊待確認</p>
+          {osmSourceUrl(previewPoi.id) && <a href={osmSourceUrl(previewPoi.id)!} target="_blank" rel="noopener noreferrer" className="mt-2 flex min-h-11 items-center text-xs font-semibold text-primary underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">查看 OpenStreetMap 來源</a>}
+          <button type="button" onClick={() => { setPending({ placeId: previewPoi.id, lat: previewPoi.location.lat, lng: previewPoi.location.lng, name: previewPoi.name, address: previewPoi.address, resolvedFrom: previewPoi.source === "overpass" || previewPoi.id.startsWith("overpass:") ? "overpass" : "photon", checkedAt: previewPoi.checkedAt || new Date().toISOString(), category: previewPoi.category }); setPreviewPoi(null); }} className="mt-3 min-h-11 w-full rounded-xl bg-primary px-3 text-sm font-semibold text-white">加入行程</button>
+        </div>
+      )}
+      {!readOnly && selected && !previewPoi && (
         <MapPinInfoPanel
           pin={selected}
           onClose={() => setSelected(null)}

@@ -113,6 +113,8 @@ test.describe("嘉義情境行程編輯器", () => {
     await expect.poll(() => handles.allTextContents()).toEqual([
       expect.stringContaining("E2E排序乙"), expect.stringContaining("E2E排序甲"),
     ]);
+    await expect(page.getByTestId("reorder-advice")).toBeVisible();
+    await expect(page.getByTestId("reorder-advice")).toContainText("已保留你排好的順序");
 
     const cardA = page.getByTestId("activity-card").filter({ hasText: "E2E排序甲" });
     const orderAfterDrag = await page.evaluate(() => {

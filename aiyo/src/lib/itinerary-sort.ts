@@ -12,6 +12,7 @@ export type ItinerarySortOption =
 
 export type ItineraryListItem = {
   id: string;
+  revision?: number;
   title: string;
   destination: string;
   days: number;

@@ -95,16 +95,21 @@ export const TripProfileSchema = z.object({
 });
 
 export const TravelResearchToolRequestSchema = z.discriminatedUnion("type", [
-  z.object({
+  z.strictObject({ type: z.literal("get_current_trip") }),
+  z.strictObject({ type: z.literal("search_past_trips"), query: z.string().trim().max(80).optional() }),
+  z.strictObject({ type: z.literal("resolve_place"), query: z.string().trim().min(2).max(120), locationHint: z.string().trim().max(120).optional() }),
+  z.strictObject({ type: z.literal("search_nearby_places"), anchor: z.string().trim().min(2).max(80), category: z.enum(["restaurant", "cafe", "hotel", "attraction", "museum", "park", "convenience", "parking", "station"]), radius: z.number().int().min(100).max(5000).optional() }),
+  z.strictObject({ type: z.literal("get_route_matrix"), points: z.array(z.strictObject({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) })).min(2).max(6) }),
+  z.strictObject({
     type: z.literal("search_place"),
     query: z.string().trim().min(1).max(180),
     locationHint: z.string().trim().max(120).optional(),
   }),
-  z.object({
+  z.strictObject({
     type: z.literal("tavily_search"),
     query: z.string().trim().min(1).max(180),
   }),
-  z.object({
+  z.strictObject({
     type: z.literal("weather_forecast"),
     destination: z.string().trim().max(120).optional(),
     startDate: z.string().trim().max(20).optional(),

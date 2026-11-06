@@ -12,7 +12,7 @@ export interface ToastItem {
 
 interface ToastState {
   toasts: ToastItem[];
-  pushToast: (toast: Omit<ToastItem, "id">) => void;
+  pushToast: (toast: Omit<ToastItem, "id">) => string;
   dismissToast: (id: string) => void;
 }
 
@@ -43,6 +43,7 @@ export const useToastStore = create<ToastState>(() => ({
       default:
         sonnerToast(toast.title, options);
     }
+    return id;
   },
   dismissToast: (id) => {
     sonnerToast.dismiss(id);

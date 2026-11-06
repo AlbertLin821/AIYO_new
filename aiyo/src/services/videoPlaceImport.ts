@@ -248,6 +248,7 @@ export async function importVideoVerifiedPlacesToTrip(
     const tripState = useTripStore.getState();
     const savedTrip = await apiPut<PersistedTripPayload, PersistedTripPayload>("/api/trips/current", {
       tripId: tripState.tripId || "",
+      revision: tripState.revision,
       title: tripState.title,
       destination: tripState.destination,
       days: Math.max(1, reconciled.itinerary.length),

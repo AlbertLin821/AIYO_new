@@ -9,8 +9,10 @@ interface CollabState {
   inviteCode: string;
   shareLink: string;
   connectionStatus: "idle" | "connecting" | "connected" | "reconnecting" | "disconnected";
+  remoteRevisionConflict: { tripId: string; revision: number } | null;
   setCollaboration: (state: CollaborationPresenceState) => void;
   setConnectionStatus: (status: CollabState["connectionStatus"]) => void;
+  setRemoteRevisionConflict: (conflict: CollabState["remoteRevisionConflict"]) => void;
   addComment: (comment: StickyCommentData) => void;
   removeComment: (id: string) => void;
   updateMemberRole: (id: string, role: CollabMember["role"]) => void;
@@ -26,6 +28,7 @@ export const useCollabStore = create<CollabState>((set) => ({
   inviteCode: "",
   shareLink: "",
   connectionStatus: "idle",
+  remoteRevisionConflict: null,
   setCollaboration: (state) =>
     set({
       roomId: state.roomId,
@@ -36,6 +39,7 @@ export const useCollabStore = create<CollabState>((set) => ({
       shareLink: state.shareLink,
     }),
   setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
+  setRemoteRevisionConflict: (remoteRevisionConflict) => set({ remoteRevisionConflict }),
   addComment: (comment) => set((state) => ({ comments: [...state.comments, comment] })),
   removeComment: (id) => set((state) => ({ comments: state.comments.filter((comment) => comment.id !== id) })),
   updateMemberRole: (id, role) =>
@@ -52,5 +56,6 @@ export const useCollabStore = create<CollabState>((set) => ({
       inviteCode: "",
       shareLink: "",
       connectionStatus: "idle",
+      remoteRevisionConflict: null,
     }),
 }));

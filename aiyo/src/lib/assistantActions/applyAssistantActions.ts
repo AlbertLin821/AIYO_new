@@ -283,7 +283,7 @@ export async function applyAssistantActions(
   if (tripMutated) {
     reconcileMapWithTrip();
     if (options.persist !== false) {
-      await syncService.flushTripSyncNow({ force: true });
+      await syncService.flushTripSyncNow({ force: true, mutationSource: "ai" });
     }
   }
 

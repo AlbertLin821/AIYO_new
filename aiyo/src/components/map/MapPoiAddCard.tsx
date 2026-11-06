@@ -105,7 +105,7 @@ export default function MapPoiAddCard({
         <button
           type="button"
           onClick={dismiss}
-          className="rounded-lg p-1 text-muted hover:bg-muted/10 hover:text-foreground"
+          className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted hover:bg-muted/10 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           aria-label={t.map.poiAddCancel}
         >
           <X className="size-4" />
@@ -113,12 +113,12 @@ export default function MapPoiAddCard({
       </div>
 
       {loading ? (
-        <div className="mt-3 flex items-center gap-2 text-sm text-muted">
+        <div role="status" className="mt-3 flex items-center gap-2 text-sm text-muted">
           <Loader2 className="size-4 animate-spin" />
           {t.map.poiAddLoading}
         </div>
       ) : error ? (
-        <p className="mt-3 text-sm text-danger">{error}</p>
+        <p role="alert" className="mt-3 text-sm text-danger">{error}</p>
       ) : preview ? (
         <>
           <PlaceThumbnail
@@ -142,14 +142,14 @@ export default function MapPoiAddCard({
           ) : null}
 
           {isDuplicate ? (
-            <p className="mt-3 text-sm text-amber-700">{t.map.poiAddDuplicate}</p>
+            <p role="status" className="mt-3 text-sm text-amber-700">{t.map.poiAddDuplicate}</p>
           ) : (
             <div className="mt-3">
               <label className="text-xs font-medium text-muted">{t.map.poiAddDayLabel}</label>
               <select
                 value={dayNumber}
                 onChange={(event) => setDayNumber(Number(event.target.value))}
-                className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-foreground"
+                className="mt-1 min-h-11 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-foreground"
               >
                 {(dayOptions.length > 0 ? dayOptions : [defaultDayNumber]).map((day) => (
                   <option key={day} value={day}>
@@ -168,7 +168,7 @@ export default function MapPoiAddCard({
         <button
           type="button"
           onClick={dismiss}
-          className="rounded-xl border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/10"
+            className="min-h-11 rounded-xl border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/10"
         >
           {t.map.poiAddCancel}
         </button>
@@ -176,7 +176,7 @@ export default function MapPoiAddCard({
           type="button"
           disabled={loading || submitting || !preview || isDuplicate}
           onClick={() => void handleConfirm()}
-          className="rounded-xl bg-primary px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+          className="min-h-11 rounded-xl bg-primary px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
           {submitting ? t.map.poiAddSubmitting : t.map.poiAddConfirm}
         </button>

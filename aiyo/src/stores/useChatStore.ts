@@ -70,7 +70,7 @@ function dedupeChatMessagesBySignature(messages: ChatMessage[]): ChatMessage[] {
 }
 
 function isEphemeralMessage(message: ChatMessage): boolean {
-  return /^(chat_user_|user_|voice_user_)/.test(message.id);
+  return /^(chat_user_|user_|voice_user_|assistant_|ai_chat_|e2e_phase7_)/.test(message.id);
 }
 
 function hasStructuredChatPayload(message: ChatMessage): boolean {

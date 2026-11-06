@@ -108,7 +108,8 @@ export async function waitForAuthenticatedSession(page: Page, email?: string) {
   await expect
     .poll(
       async () => {
-        const response = await page.request.get("/api/auth/session");
+        const response = await page.request.get("/api/auth/session").catch(() => null);
+        if (!response) return null;
         if (!response.ok()) {
           return null;
         }

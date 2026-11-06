@@ -30,13 +30,14 @@ test("an old acknowledgement cannot replace edits made while saving; latest edit
     const payload = JSON.parse(String(init?.body)) as PersistedTripPayload;
     writes.push(payload);
     if (writes.length === 1) await pending;
-    return Response.json({ success: true, data: payload });
+    return Response.json({ success: true, data: { ...payload, revision: (payload.revision ?? 0) + 1 } });
   };
   const saving = syncService.flushTripSyncNow({ force: true });
   setTitle("renamed while saving");
   release();
   await saving;
   assert.deepEqual(writes.map((write) => write.itinerary[0].items[0].title), ["original", "renamed while saving"]);
+  assert.deepEqual(writes.map((write) => write.revision), [0, 1]);
   assert.equal(useTripStore.getState().itinerary[0].items[0].title, "renamed while saving");
 });
 

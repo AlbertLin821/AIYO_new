@@ -11,7 +11,8 @@ import { isPersonalMemoryRecallIntent } from "@/server/memory/personalMemoryReca
 import { retrieveRelevantMemoriesForUser } from "@/server/memory/memoryRetrieval";
 import { guardDestructiveChatMessage } from "@/server/ai/destructiveConfirmation";
 import { requireSessionUser } from "@/server/auth";
-import { resolveSessionTrip, saveChatMessage } from "@/server/data/appStateService";
+import { saveChatMessage } from "@/server/data/appStateService";
+import { resolveAuthorizedChatTripContext } from "@/server/ai/chatTripContext";
 import { chatWithTravelAssistant } from "@/server/services/travelPlannerService";
 import type { ChatContext, ChatMessage, ChatQuestionAnswer, TripProfile } from "@/types";
 
@@ -43,6 +44,7 @@ async function handleChatPost(request: Request) {
   try {
     const body = (await request.json()) as {
       message?: string;
+      tripId?: string;
       displayMessage?: string;
       messages?: ChatMessage[];
       context?: ChatContext;
@@ -65,11 +67,14 @@ async function handleChatPost(request: Request) {
     }
 
     const requestedProgressSessionId = body.progressSessionId?.trim() || undefined;
+    const requestedTripId = body.tripId?.trim() || undefined;
+    let requestedTripValidated = false;
     let persistedUserId: string | null = null;
     let persistedTripId: string | undefined;
     let memoryContext: string | undefined;
     let personalizedContext: AIContextBuildResult | null = null;
     let mem0Memories: string[] | undefined;
+    let authoritativeContext = body.context;
 
     try {
       const { userId } = await requireSessionUser();
@@ -80,8 +85,10 @@ async function handleChatPost(request: Request) {
         progressSessionId = requestedProgressSessionId;
       }
       persistedUserId = userId;
-      const trip = await resolveSessionTrip(userId);
-      persistedTripId = trip?.id;
+      const resolvedTrip = await resolveAuthorizedChatTripContext(userId, requestedTripId, body.context);
+      authoritativeContext = resolvedTrip.context;
+      persistedTripId = resolvedTrip.tripId;
+      requestedTripValidated = true;
       if (progressSessionId) {
         publishChatProgress(progressSessionId, { type: "status_step", phase: "understand", label: "讀取偏好與行程紀錄", status: "running" });
       }
@@ -108,7 +115,7 @@ async function handleChatPost(request: Request) {
           personalizedContext = await buildPersonalizedAIContext({
             userId,
             currentUserInput: userPersistContent,
-            chatContext: body.context,
+            chatContext: authoritativeContext,
             tripId: persistedTripId,
             memorySnippets: memories.map((memory) => ({
               content: memory.memory,
@@ -129,9 +136,18 @@ async function handleChatPost(request: Request) {
             .map((memory) => memory.memory?.trim() || "")
             .filter(Boolean);
         }
+        console.info("[chat-context]", {
+          tripId: persistedTripId || null,
+          itineraryItems: authoritativeContext?.itinerary?.reduce((count, day) => count + day.items.length, 0) || 0,
+          memoryCount: memories.length,
+          sources: personalizedContext?.debug.includedSources || [],
+        });
       }
     } catch (error) {
-      if (error instanceof Error && error.message === "forbidden") return NextResponse.json(createError("forbidden", "無法使用此對話進度。"), { status: 403 });
+      if (error instanceof Error && error.message === "forbidden") return NextResponse.json(createError("forbidden", "無法讀取這份行程。"), { status: 403 });
+      if (error instanceof Error && error.message === "not_found") return NextResponse.json(createError("not_found", "找不到這份行程。"), { status: 404 });
+      if (requestedTripId && !persistedUserId) return NextResponse.json(createError("unauthorized", "請先登入以讀取行程。"), { status: 401 });
+      if (persistedUserId && !requestedTripValidated) throw error;
       // Chat remains functional even if the user is not authenticated.
     }
 
@@ -146,7 +162,7 @@ async function handleChatPost(request: Request) {
       userId: persistedUserId,
       tripId: persistedTripId,
       message: effectiveMessage,
-      context: body.context,
+      context: authoritativeContext,
     });
     if (destructiveGuard.kind === "respond") {
       if (persistedUserId) {
@@ -168,7 +184,7 @@ async function handleChatPost(request: Request) {
     const response = await chatWithTravelAssistant({
       message: effectiveMessage,
       messages: body.messages,
-      context: body.context,
+      context: authoritativeContext,
       structuredTravelPlanning: body.structuredTravelPlanning,
       tripProfile: body.tripProfile,
       questionAnswers: body.questionAnswers,

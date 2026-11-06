@@ -1,0 +1,127 @@
+# Opt-in map services. Use with: docker compose -f docker-compose.maps.yml --profile maps up -d
+# Large regional data imports run on first start; do not enable in the app until verified.
+services:
+  searxng:
+    profiles: [search]
+    image: docker.io/searxng/searxng:latest
+    environment:
+      SEARXNG_BASE_URL: http://127.0.0.1:8888/
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-replace-with-a-long-random-secret}
+    volumes:
+      - ./docker/searxng/settings.yml:/etc/searxng/settings.yml:ro
+      - searxng_cache:/var/cache/searxng
+    ports:
+      - "127.0.0.1:8888:8080"
+    restart: unless-stopped
+
+  photon-asia:
+    profiles: [maps]
+    image: rtuszik/photon-docker:latest
+    environment:
+      REGION: asia
+      UPDATE_STRATEGY: SEQUENTIAL
+      UPDATE_INTERVAL: 720h
+      JAVA_PARAMS: -Xmx4g
+      ENABLE_METRICS: "TRUE"
+    volumes:
+      - photon_asia_data:/photon/data
+    ports:
+      - "127.0.0.1:2322:2322"
+    restart: unless-stopped
+
+  overpass-tw:
+    profiles: [maps]
+    image: wiktorn/overpass-api:0.7.62
+    environment:
+      OVERPASS_MODE: init
+      OVERPASS_META: "no"
+      OVERPASS_USE_AREAS: "false"
+      OVERPASS_PLANET_URL: https://download.geofabrik.de/asia/taiwan-latest.osm.pbf
+      OVERPASS_PLANET_PREPROCESS: "mv /db/planet.osm.bz2 /db/planet.osm.pbf && osmium cat -o /db/planet.osm.bz2 /db/planet.osm.pbf && rm /db/planet.osm.pbf"
+    volumes:
+      - overpass_tw_data:/db
+    ports:
+      - "127.0.0.1:12345:80"
+    restart: unless-stopped
+
+  overpass-jp:
+    profiles: [maps]
+    image: wiktorn/overpass-api:0.7.62
+    environment:
+      OVERPASS_MODE: init
+      OVERPASS_META: "no"
+      OVERPASS_USE_AREAS: "false"
+      OVERPASS_PLANET_URL: https://download.geofabrik.de/asia/japan-latest.osm.pbf
+      OVERPASS_PLANET_PREPROCESS: "mv /db/planet.osm.bz2 /db/planet.osm.pbf && osmium cat -o /db/planet.osm.bz2 /db/planet.osm.pbf && rm /db/planet.osm.pbf"
+    volumes:
+      - overpass_jp_data:/db
+    ports:
+      - "127.0.0.1:12346:80"
+    restart: unless-stopped
+
+  overpass-kr:
+    profiles: [maps]
+    image: wiktorn/overpass-api:0.7.62
+    environment:
+      OVERPASS_MODE: init
+      OVERPASS_META: "no"
+      OVERPASS_USE_AREAS: "false"
+      OVERPASS_PLANET_URL: https://download.geofabrik.de/asia/south-korea-latest.osm.pbf
+      OVERPASS_PLANET_PREPROCESS: "mv /db/planet.osm.bz2 /db/planet.osm.pbf && osmium cat -o /db/planet.osm.bz2 /db/planet.osm.pbf && rm /db/planet.osm.pbf"
+    volumes:
+      - overpass_kr_data:/db
+    ports:
+      - "127.0.0.1:12347:80"
+    restart: unless-stopped
+
+  osrm-tw:
+    profiles: [routing]
+    image: ghcr.io/project-osrm/osrm-backend:latest
+    command: osrm-routed --algorithm mld /data/taiwan-latest.osrm
+    volumes:
+      - ./map-data/tw:/data:ro
+    ports:
+      - "127.0.0.1:5001:5000"
+    restart: unless-stopped
+
+  osrm-jp:
+    profiles: [routing]
+    image: ghcr.io/project-osrm/osrm-backend:latest
+    command: osrm-routed --algorithm mld /data/japan-latest.osrm
+    volumes:
+      - ./map-data/jp:/data:ro
+    ports:
+      - "127.0.0.1:5002:5000"
+    restart: unless-stopped
+
+  osrm-kr:
+    profiles: [routing]
+    image: ghcr.io/project-osrm/osrm-backend:latest
+    command: osrm-routed --algorithm mld /data/south-korea-latest.osrm
+    volumes:
+      - ./map-data/kr:/data:ro
+    ports:
+      - "127.0.0.1:5003:5000"
+    restart: unless-stopped
+
+  tiles:
+    profiles: [tiles]
+    image: versatiles/versatiles:latest
+    command: serve --static frontend.br.tar.gz tw.versatiles jp.versatiles kr.versatiles
+    volumes:
+      - ./map-data/tiles:/data:ro
+    ports:
+      - "127.0.0.1:8088:8080"
+    restart: unless-stopped
+
+volumes:
+  searxng_cache:
+  photon_asia_data:
+  overpass_tw_data:
+  overpass_jp_data:
+  overpass_kr_data:
+
+networks:
+  default:
+    external: true
+    name: aiyo_new_backend

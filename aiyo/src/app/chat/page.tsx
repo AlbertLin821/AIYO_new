@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { m } from "@/lib/motion";
 import {
@@ -18,6 +18,7 @@ import {
   Square,
 } from "lucide-react";
 import ChatHistorySidebar from "@/components/chat/ChatHistorySidebar";
+import ItineraryChangePreview from "@/components/chat/ItineraryChangePreview";
 import ChatWorkflowRail from "@/components/chat/ChatWorkflowRail";
 import PlanningWaitGame from "@/components/chat/PlanningWaitGame";
 import PreferenceReusePanel from "@/components/chat/PreferenceReusePanel";
@@ -83,7 +84,7 @@ import {
   reviseTripPlan,
   sendChatMessage,
 } from "@/services/aiClient";
-import { createNewTrip, setActiveTrip } from "@/services/itineraryClient";
+import { adjustAgentPreviewPlace, adjustAgentPreviewTime, applyAgentPreview, cancelAgentPreview, createAgentPreview, createNewTrip, getLatestAgentMutation, getLatestAgentPreview, getLatestAiMutation, redoAgentMutation, setActiveTrip, undoAgentMutation, undoAiMutation, type AgentPreviewDto } from "@/services/itineraryClient";
 import { geocodeItineraryItemsMissingLocation } from "@/services/geocodeItineraryItems";
 import { hydrateItineraryTransportFields } from "@/services/itineraryTransport";
 import { reconcileTripMapState } from "@/services/mapSync";
@@ -479,8 +480,19 @@ function isConcreteItineraryMutationCommand(message: string): boolean {
 
 export default function ChatPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const { data: session, status } = useSession();
   const [input, setInput] = useState("");
+
+  useEffect(() => {
+    const draft = new URLSearchParams(window.location.search).get("draft")?.trim();
+    if (draft && draft.length <= 300) setInput((current) => current || draft);
+  }, []);
+  const [pendingAgentPreview, setPendingAgentPreview] = useState<{ tripId: string; data: AgentPreviewDto; idempotencyKey: string } | null>(null);
+  const [isApplyingAgentPreview, setIsApplyingAgentPreview] = useState(false);
+  const [isAdjustingAgentPreview, setIsAdjustingAgentPreview] = useState(false);
+  const [agentHistoryAction, setAgentHistoryAction] = useState<{ tripId: string; revision: number; mode: "undo" | "redo"; mutationId: string; idempotencyKey: string } | null>(null);
+  const [isUpdatingAgentHistory, setIsUpdatingAgentHistory] = useState(false);
   const [recommendedVideos, setRecommendedVideos] = useState<VideoRecommendation[]>([]);
   const [replacingVideoIndex, setReplacingVideoIndex] = useState<number | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<VideoRecommendation | null>(null);
@@ -508,6 +520,9 @@ export default function ChatPage() {
   });
 
   const [isStartingNewConversation, setIsStartingNewConversation] = useState(false);
+  const [isSwitchingConversationTrip, setIsSwitchingConversationTrip] = useState(false);
+  const [latestAiMutation, setLatestAiMutation] = useState<{ tripId: string; id: string; resultRevision: number } | null>(null);
+  const [isUndoingAiMutation, setIsUndoingAiMutation] = useState(false);
   const [contextPanelWidth, setContextPanelWidth] = useState(288);
   const [autoSummaryProgress, setAutoSummaryProgress] = useState<{ current: number; total: number } | null>(null);
   const [sourceDrawerSource, setSourceDrawerSource] = useState<SourceReference | null>(null);
@@ -551,6 +566,8 @@ export default function ChatPage() {
     clearProposedChangesForMessage,
   } = useChatStore();
   const tripStore = useTripStore();
+  const selectedMapPinId = useMapStore((state) => state.selectedPinId);
+  const selectedMapPin = useMapStore((state) => state.pins.find((pin) => pin.id === selectedMapPinId));
   const userStore = useUserStore();
   const pushToast = useToastStore((state) => state.pushToast);
   const summaryStatusByVideoKey = useVideoStore((state: VideoState) => state.summaryStatusByVideoKey);
@@ -559,6 +576,162 @@ export default function ChatPage() {
     (state: VideoState) => state.clearSummaryDiagnosticsForVideo,
   );
   const setIsSummarizing = useVideoStore((state: VideoState) => state.setIsSummarizing);
+
+  useEffect(() => {
+    const tripId = tripStore.tripId;
+    const revision = tripStore.revision;
+    if (!tripId || isSwitchingConversationTrip) {
+      setLatestAiMutation(null);
+      return;
+    }
+    let cancelled = false;
+    void getLatestAiMutation(tripId).then(({ mutation }) => {
+      if (!cancelled && useTripStore.getState().tripId === tripId && useTripStore.getState().revision === revision) {
+        setLatestAiMutation(mutation ? { tripId, id: mutation.id, resultRevision: mutation.resultRevision } : null);
+      }
+    }).catch(() => {
+      if (!cancelled) setLatestAiMutation(null);
+    });
+    return () => { cancelled = true; };
+  }, [tripStore.tripId, tripStore.revision, isSwitchingConversationTrip]);
+
+  useEffect(() => {
+    const tripId = tripStore.tripId;
+    const revision = tripStore.revision;
+    if (pathname !== "/chat" || !tripId || isSwitchingConversationTrip) return;
+    let cancelled = false;
+    void getLatestAgentMutation(tripId).then(({ action, revision: serverRevision }) => {
+      if (cancelled || useTripStore.getState().tripId !== tripId || useTripStore.getState().revision !== serverRevision || revision !== serverRevision) return;
+      setAgentHistoryAction((current) => action
+        ? current?.tripId === tripId && current.revision === serverRevision && current.mode === action.mode && current.mutationId === action.mutationId
+          ? current
+          : { tripId, revision: serverRevision, ...action, idempotencyKey: crypto.randomUUID() }
+        : current?.tripId === tripId && current.revision === serverRevision ? current : null);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [pathname, tripStore.tripId, tripStore.revision, isSwitchingConversationTrip]);
+
+  useEffect(() => {
+    const tripId = tripStore.tripId;
+    const revision = tripStore.revision;
+    if (pathname !== "/chat" || !tripId || isSwitchingConversationTrip) return;
+    let cancelled = false;
+    let checking = false;
+    const check = async () => {
+      if (checking || cancelled) return;
+      checking = true;
+      try {
+        const { preview } = await getLatestAgentPreview(tripId);
+        if (cancelled || useTripStore.getState().tripId !== tripId || useTripStore.getState().revision !== revision) return;
+        setPendingAgentPreview((current) => current?.tripId === tripId && current.data.baseRevision === revision ? current : preview ? { tripId, data: preview, idempotencyKey: crypto.randomUUID() } : null);
+        if (preview) {
+          syncService.setPendingAgentPreviewTrip(tripId);
+          clearInterval(interval);
+        }
+      } catch {
+        // Keep checking while the trip is open; a temporary lookup failure must not hide a saved preview.
+      } finally {
+        checking = false;
+      }
+    };
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") void check();
+    }, 5_000);
+    void check();
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [pathname, tripStore.tripId, tripStore.revision, isSwitchingConversationTrip]);
+
+  async function undoLatestAiChange() {
+    const mutation = latestAiMutation;
+    if (!mutation || isUndoingAiMutation || isSending) return;
+    setIsUndoingAiMutation(true);
+    try {
+      await undoAiMutation(mutation.tripId, mutation.id);
+      const snapshot = await setActiveTrip(mutation.tripId);
+      syncService.applyTripSwitch({ ...snapshot, selectConversation: false });
+      setLatestAiMutation(null);
+      setItinerarySyncState({ status: "synced", title: "已復原 AI 修改", detail: "行程已還原並儲存。" });
+      pushToast({ variant: "success", title: "已復原 AI 修改", description: "行程已還原到修改前的版本。" });
+    } catch (error) {
+      const conflict = error instanceof ApiRequestError && error.status === 409;
+      setLatestAiMutation(null);
+      pushToast({ variant: "warning", title: conflict ? "行程已有新修改" : "復原失敗", description: conflict ? "請重新載入行程，確認最新內容。" : error instanceof Error ? error.message : "請稍後再試。" });
+    } finally {
+      setIsUndoingAiMutation(false);
+    }
+  }
+
+  async function confirmAgentPreview() {
+    const pending = pendingAgentPreview;
+    if (!pending || isApplyingAgentPreview || isAdjustingAgentPreview || useTripStore.getState().tripId !== pending.tripId) return;
+    setIsApplyingAgentPreview(true);
+    try {
+      const applied = await applyAgentPreview(pending.tripId, pending.data.previewId, pending.data.baseRevision, pending.idempotencyKey);
+      syncService.setPendingAgentPreviewTrip(null);
+      setPendingAgentPreview(null);
+      setAgentHistoryAction({ tripId: pending.tripId, revision: applied.revision, mode: "undo", mutationId: applied.mutationId, idempotencyKey: crypto.randomUUID() });
+      setItinerarySyncState({ status: "synced", title: "已套用修改", detail: `已更新 ${pending.data.changes.length} 項行程。` });
+      pushToast({ variant: "success", title: "行程已更新", description: `已套用 ${pending.data.changes.length} 項修改。版本 ${applied.revision}。` });
+      try {
+        const snapshot = await setActiveTrip(pending.tripId);
+        syncService.applyTripSwitch({ ...snapshot, selectConversation: false });
+      } catch {
+        setItinerarySyncState({ status: "failed", title: "行程已更新，畫面同步失敗", detail: "請重新整理以載入最新行程。" });
+      }
+    } catch (error) {
+      const conflict = error instanceof ApiRequestError && error.status === 409;
+      if (conflict) {
+        setPendingAgentPreview(null);
+        syncService.setPendingAgentPreviewTrip(null);
+      }
+      pushToast({ variant: "error", title: conflict ? "行程已有新修改" : "套用失敗", description: conflict ? "請重新預覽最新行程。" : error instanceof Error ? error.message : "請稍後再試。" });
+    } finally {
+      setIsApplyingAgentPreview(false);
+    }
+  }
+
+  async function changeAgentPreviewTime(operationIndex: number, time: string) {
+    const pending = pendingAgentPreview;
+    if (!pending || isApplyingAgentPreview || isAdjustingAgentPreview || useTripStore.getState().tripId !== pending.tripId) return;
+    setIsAdjustingAgentPreview(true);
+    try {
+      const adjusted = await adjustAgentPreviewTime(pending.tripId, pending.data.previewId, operationIndex, time);
+      setPendingAgentPreview((current) => current?.data.previewId === pending.data.previewId ? { ...current, data: adjusted } : current);
+    } catch (error) {
+      pushToast({ variant: "warning", title: "調整時間失敗", description: error instanceof Error ? error.message : "請稍後再試。" });
+    } finally { setIsAdjustingAgentPreview(false); }
+  }
+
+  async function changeAgentPreviewPlace(operationIndex: number, query: string) {
+    const pending = pendingAgentPreview;
+    if (!pending || isApplyingAgentPreview || isAdjustingAgentPreview || useTripStore.getState().tripId !== pending.tripId) return;
+    setIsAdjustingAgentPreview(true);
+    try {
+      const adjusted = await adjustAgentPreviewPlace(pending.tripId, pending.data.previewId, operationIndex, query);
+      setPendingAgentPreview((current) => current?.data.previewId === pending.data.previewId ? { ...current, data: adjusted } : current);
+      pushToast({ variant: "success", title: "已替換預覽地點", description: "請確認差異後再套用。" });
+    } catch (error) {
+      pushToast({ variant: "warning", title: "替換地點失敗", description: error instanceof Error ? error.message : "請換個名稱再試。" });
+    } finally { setIsAdjustingAgentPreview(false); }
+  }
+
+  async function runAgentHistoryAction() {
+    const action = agentHistoryAction;
+    if (!action || isUpdatingAgentHistory || useTripStore.getState().tripId !== action.tripId) return;
+    setIsUpdatingAgentHistory(true);
+    try {
+      if (action.mode === "undo") await undoAgentMutation(action.tripId, action.mutationId, action.revision, action.idempotencyKey);
+      else await redoAgentMutation(action.tripId, action.mutationId, action.revision, action.idempotencyKey);
+      const snapshot = await setActiveTrip(action.tripId);
+      syncService.applyTripSwitch({ ...snapshot, selectConversation: false });
+      const latest = await getLatestAgentMutation(action.tripId);
+      setAgentHistoryAction(latest.action ? { tripId: action.tripId, revision: latest.revision, ...latest.action, idempotencyKey: crypto.randomUUID() } : null);
+      pushToast({ variant: "success", title: action.mode === "undo" ? "已復原修改" : "已重做修改", description: "行程與地圖已同步。" });
+    } catch (error) {
+      if (error instanceof ApiRequestError && (error.status === 409 || error.status === 404)) setAgentHistoryAction(null);
+      pushToast({ variant: "warning", title: "無法更新行程", description: error instanceof Error ? error.message : "請重新載入後再試。" });
+    } finally { setIsUpdatingAgentHistory(false); }
+  }
 
   useEffect(() => {
     return () => {
@@ -733,6 +906,7 @@ export default function ChatPage() {
     (conversation) => conversation.id === activeConversationId,
   );
   const activeConversationTripId = activeConversation?.tripId?.trim() || "";
+  const isInitialTripLoading = status === "authenticated" && !syncService.isHydrated();
   const hasActiveItineraryContext = Boolean(
     activeConversationId &&
       activeConversationTripId &&
@@ -812,6 +986,7 @@ export default function ChatPage() {
     contextTripResyncAttemptRef.current = tripStore.tripId;
     void setActiveTrip(tripStore.tripId)
       .then((snapshot) => {
+        if (useTripStore.getState().tripId !== snapshot.trip.tripId || useChatStore.getState().activeConversationId !== activeConversationId) return;
         syncService.applyTripSwitch({ ...snapshot, selectConversation: false });
         syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
       })
@@ -1145,22 +1320,27 @@ export default function ChatPage() {
   }
 
   async function selectConversationForChat(conversationId: string) {
+    if (isSwitchingConversationTrip || isSending) return;
     const conversation = conversations.find((item) => item.id === conversationId);
-    selectConversation(conversationId);
     const tripId = conversation?.tripId;
     if (!tripId || tripId === useTripStore.getState().tripId) {
+      selectConversation(conversationId);
       return;
     }
+    setIsSwitchingConversationTrip(true);
     try {
       const snapshot = await setActiveTrip(tripId);
-      syncService.applyTripSwitch(snapshot);
+      syncService.applyTripSwitch({ ...snapshot, selectConversation: false });
+      selectConversation(conversationId);
       syncService.startRealtime(snapshot.collaboration?.roomId ?? null);
     } catch {
       pushToast({
         variant: "warning",
         title: "無法切換對話行程",
-        description: "已切換對話，但目前仍使用原本的行程脈絡。",
+        description: "已返回原本的對話，請稍後再試。",
       });
+    } finally {
+      setIsSwitchingConversationTrip(false);
     }
   }
 
@@ -1672,7 +1852,7 @@ export default function ChatPage() {
     const hasQuestionAnswers = Boolean(options?.questionAnswers?.length);
     const message = (rawInput || input).trim();
     const userTextForRetry = hasQuestionAnswers ? "" : message;
-    if ((!message && !hasQuestionAnswers) || isSending || chatSendLockRef.current) {
+    if ((!message && !hasQuestionAnswers) || isSending || isInitialTripLoading || isSwitchingConversationTrip || (activeConversationTripId && activeConversationTripId !== useTripStore.getState().tripId) || chatSendLockRef.current) {
       return;
     }
 
@@ -1689,6 +1869,10 @@ export default function ChatPage() {
 
     try {
       await ensureExistingItineraryContextLoaded(message);
+      if (isItineraryMutationCommand(message)) {
+        await syncService.awaitPendingTripHydration();
+        await syncService.flushTripSyncNow();
+      }
     } catch (error) {
       chatSendLockRef.current = false;
       pushToast({
@@ -1696,6 +1880,36 @@ export default function ChatPage() {
         title: "無法載入目前行程",
         description: error instanceof Error ? error.message : "請稍後再試。",
       });
+      return;
+    }
+
+    const currentTrip = useTripStore.getState();
+    if (!hasQuestionAnswers && currentTrip.tripId && hasItineraryItems(currentTrip.itinerary) && isItineraryMutationCommand(message)) {
+      syncService.setPendingAgentPreviewTrip(currentTrip.tripId);
+      appendMessage(buildUserMessage(message));
+      setInput("");
+      setErrorMessage(null);
+      setIsSending(true);
+      setPendingAgentPreview(null);
+      try {
+        const selectedItemId = useMapStore.getState().pins.find((pin) => pin.id === useMapStore.getState().selectedPinId)?.linkedTripItemId;
+        const preview = await createAgentPreview(currentTrip.tripId, {
+          instruction: message, baseRevision: currentTrip.revision,
+          selectedEntityIds: selectedItemId ? [selectedItemId] : undefined,
+        });
+        if (useTripStore.getState().tripId !== currentTrip.tripId) return;
+        syncService.markLocalTripPayloadAsSynced();
+        syncService.setPendingAgentPreviewTrip(currentTrip.tripId);
+        setPendingAgentPreview({ tripId: currentTrip.tripId, data: preview, idempotencyKey: crypto.randomUUID() });
+      } catch (error) {
+        syncService.setPendingAgentPreviewTrip(null);
+        const description = error instanceof Error ? error.message : "目前無法產生修改預覽，請再試一次。";
+        setErrorMessage(description);
+        pushToast({ variant: "warning", title: "無法產生修改預覽", description });
+      } finally {
+        chatSendLockRef.current = false;
+        setIsSending(false);
+      }
       return;
     }
 
@@ -1820,12 +2034,14 @@ export default function ChatPage() {
         const response = await reviseTripPlan(
           {
             instruction: message,
+            tripId: useTripStore.getState().tripId || undefined,
             tripProfile: revisionProfile,
             context: {
               destination: revisionProfile.destination || planningSnapshot.destination,
               days: revisionProfile.duration_days || planningSnapshot.days,
               budget: planningSnapshot.budget,
               itinerary: useTripStore.getState().itinerary,
+              selectedPlaceId: useMapStore.getState().selectedPinId || undefined,
               tripStartDate: revisionProfile.travel_dates?.start || undefined,
               tripEndDate:
                 revisionProfile.travel_dates?.end || revisionProfile.travel_dates?.start || undefined,
@@ -1931,6 +2147,7 @@ export default function ChatPage() {
       const response = await sendChatMessage(
         {
           message,
+          tripId: useTripStore.getState().tripId || undefined,
           displayMessage: options?.displayMessage,
           messages: previousMessages.slice(-CHAT_HISTORY_WINDOW),
           context: {
@@ -1938,6 +2155,7 @@ export default function ChatPage() {
             days: confirmedDays,
             budget: planningSnapshot.budget,
             itinerary: useTripStore.getState().itinerary,
+            selectedPlaceId: useMapStore.getState().selectedPinId || undefined,
             tripStartDate: dateRange.tripStartDate,
             tripEndDate: dateRange.tripEndDate,
             preferences: {
@@ -2219,12 +2437,14 @@ export default function ChatPage() {
       const response = await reviseTripPlan(
         {
           instruction,
+          tripId: useTripStore.getState().tripId || undefined,
           tripProfile: revisionProfile,
           context: {
             destination: revisionProfile.destination || planningSnapshot.destination,
             days: revisionProfile.duration_days || planningSnapshot.days,
             budget: planningSnapshot.budget,
             itinerary: useTripStore.getState().itinerary,
+            selectedPlaceId: useMapStore.getState().selectedPinId || undefined,
             tripStartDate: revisionProfile.travel_dates?.start || undefined,
             tripEndDate:
               revisionProfile.travel_dates?.end || revisionProfile.travel_dates?.start || undefined,
@@ -2418,7 +2638,7 @@ export default function ChatPage() {
 
     if (appliedCount > 0) {
       try {
-        await syncService.flushTripSyncNow({ force: true });
+        await syncService.flushTripSyncNow({ force: true, mutationSource: "ai" });
         setItinerarySyncState({
           status: "synced",
           title: "已同步到目前行程",
@@ -2631,7 +2851,7 @@ export default function ChatPage() {
     useTripStore.getState().setItinerary(reconciled.itinerary);
     useMapStore.getState().setPins(reconciled.pins);
     syncService.markLocalTripPayloadAsSynced();
-    await syncService.flushTripSyncNow({ force: true });
+    await syncService.flushTripSyncNow({ force: true, mutationSource: "ai" });
     setItinerarySyncState({
       status: "synced",
       title: "已同步到目前行程",
@@ -2851,6 +3071,28 @@ export default function ChatPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
               <h1 className="font-semibold text-slate-900">{t.chat.pageTitle}</h1>
+              <p data-testid="chat-active-trip" role="status" className="max-w-full truncate rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                {isInitialTripLoading || isSwitchingConversationTrip || (activeConversationTripId && activeConversationTripId !== tripStore.tripId)
+                  ? "正在載入行程…"
+                  : tripStore.tripId
+                    ? `${tripStore.title || "未命名行程"}${tripStore.destination ? ` · ${tripStore.destination}` : ""} · ${itinerarySyncState.status === "failed" ? "同步失敗" : itinerarySyncState.status === "syncing" ? "儲存中" : itinerarySyncState.status === "synced" ? "已儲存" : "已載入"}`
+                    : "尚未選擇行程"}
+              </p>
+              {selectedMapPin && (
+                <button type="button" onClick={() => router.push("/map")} className="max-w-full truncate rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50" aria-label={`在地圖查看 ${selectedMapPin.name}`}>
+                  地圖選取：{selectedMapPin.name}
+                </button>
+              )}
+              {latestAiMutation?.tripId === tripStore.tripId && latestAiMutation.resultRevision === tripStore.revision && (
+                <button type="button" data-testid="chat-undo-ai-change" onClick={() => void undoLatestAiChange()} disabled={isUndoingAiMutation || isSending || isSwitchingConversationTrip} className="min-h-9 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50">
+                  {isUndoingAiMutation ? "復原中…" : "復原上次 AI 修改"}
+                </button>
+              )}
+              {agentHistoryAction?.tripId === tripStore.tripId && agentHistoryAction.revision === tripStore.revision && (
+                <button type="button" data-testid="chat-agent-history-action" onClick={() => void runAgentHistoryAction()} disabled={isUpdatingAgentHistory || isSending || isSwitchingConversationTrip} className="min-h-11 rounded-full border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50">
+                  {isUpdatingAgentHistory ? "更新中…" : agentHistoryAction.mode === "undo" ? "復原 AI 修改" : "重做 AI 修改"}
+                </button>
+              )}
             </div>
             <button
               type="button"
@@ -3076,6 +3318,26 @@ export default function ChatPage() {
             </m.div>
           ))}
 
+          {pendingAgentPreview?.tripId === tripStore.tripId && (
+            <div className="max-w-3xl" role="status">
+              <ItineraryChangePreview
+                preview={pendingAgentPreview.data}
+                busy={isApplyingAgentPreview || isAdjustingAgentPreview}
+                onApply={() => void confirmAgentPreview()}
+                onTimeChange={(operationIndex, time) => void changeAgentPreviewTime(operationIndex, time)}
+                onPlaceChange={(operationIndex, query) => void changeAgentPreviewPlace(operationIndex, query)}
+                onCancel={() => {
+                  const pending = pendingAgentPreview;
+                  setPendingAgentPreview(null);
+                  syncService.setPendingAgentPreviewTrip(null);
+                  if (pending) void cancelAgentPreview(pending.tripId, pending.data.previewId).catch(() => {
+                    pushToast({ variant: "warning", title: "取消預覽未同步", description: "重新整理後可能仍會看到這份預覽。" });
+                  });
+                }}
+              />
+            </div>
+          )}
+
           {isSending ? (
             <m.div
               initial={{ opacity: 0, y: 10 }}
@@ -3243,6 +3505,7 @@ export default function ChatPage() {
               }}
               placeholder={t.chat.placeholder}
               data-testid="chat-input"
+              disabled={isInitialTripLoading || isSwitchingConversationTrip || Boolean(activeConversationTripId && activeConversationTripId !== tripStore.tripId)}
               className="min-w-0 flex-1 bg-transparent py-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none sm:py-3"
             />
 
@@ -3275,7 +3538,7 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={() => void handleSend()}
-                disabled={!input.trim()}
+                disabled={!input.trim() || isInitialTripLoading || isSwitchingConversationTrip || Boolean(activeConversationTripId && activeConversationTripId !== tripStore.tripId)}
                 data-testid="chat-send-button"
                 className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-slate-900 text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-30 sm:size-12"
                 aria-label={t.chat.sendAria}

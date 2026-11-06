@@ -9,7 +9,7 @@ const MEMORY_RECALL_PATTERN =
   /(?:去過哪|去過哪些|去過什麼|去過甚麼|以前去|之前去|過去去|我去過|曾經去|旅行紀錄|旅遊紀錄|歷史行程|過往行程|我的記憶|記得我的|你記得|還記得|記得嗎|我是誰|我叫什麼|我的名字(?:是|叫)?什麼|我的偏好|偏好是什麼|偏好有哪些|你記住|記住我)/u;
 
 const ITINERARY_MUTATION_PATTERN =
-  /新增|加入|加上|刪除|刪掉|移除|取消|去掉|修改|調整|改成|換成|改到|提前|延後|移到|重排|重新規劃|幫我(?:安排|規劃|新增|加入|調整|修改|刪除|刪掉|移除|取消|去掉)|請(?:安排|規劃|新增|加入|調整|修改|刪除|刪掉|移除|取消|去掉)/u;
+  /新增|加入|加上|加(?:一個|一間|一處)|刪除|刪掉|移除|取消|去掉|修改|調整|改成|換成|改到|提前|延後|移到|重排|重新規劃|幫我(?:安排|規劃|新增|加入|調整|修改|刪除|刪掉|移除|取消|去掉)|請(?:安排|規劃|新增|加入|調整|修改|刪除|刪掉|移除|取消|去掉)/u;
 
 const FULL_ITINERARY_REVISION_PATTERN =
   /重新規劃|重排|整份|整個|全部|從頭|完整(?:安排|規劃)|(?:規劃|安排).{0,8}(?:新|完整|整份|全部)行程/u;
@@ -80,6 +80,9 @@ export function isConversationOnlyMessage(message: string): boolean {
 
 export function isItineraryMutationCommand(message: string): boolean {
   if (isPreferenceOverrideMessage(message)) {
+    return false;
+  }
+  if (/(?:規劃|安排|建立|做).{0,12}(?:一[份個下]|新|一下).{0,8}行程/u.test(message) && !/(?:目前|現有|這份|原本|原來|第\s*[\d一二三四五六七八九十]+\s*天)/u.test(message)) {
     return false;
   }
   return ITINERARY_MUTATION_PATTERN.test(message);

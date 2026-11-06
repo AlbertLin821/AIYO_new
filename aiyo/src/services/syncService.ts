@@ -12,7 +12,7 @@ import {
   resolveGeocodeQueryForItem,
 } from "@/services/geocodeItineraryItems";
 import { reconcileTripMapState } from "@/services/mapSync";
-import { apiDelete, apiGet, apiPost, apiPut } from "@/services/apiClient";
+import { ApiRequestError, apiDelete, apiGet, apiPost, apiPut } from "@/services/apiClient";
 import { getRemoteConversationId, useChatStore } from "@/stores/useChatStore";
 import { useCollabStore } from "@/stores/useCollabStore";
 import { useMapStore } from "@/stores/useMapStore";
@@ -53,6 +53,7 @@ async function withRetry<T>(operation: () => Promise<T>, attempts = 3): Promise<
       return await operation();
     } catch (error) {
       lastError = error;
+      if (error instanceof ApiRequestError && error.status === 409) throw error;
       await new Promise((resolve) => window.setTimeout(resolve, 400 * (attempt + 1)));
     }
   }
@@ -65,10 +66,13 @@ class SyncService {
   private hydrated = false;
   private realtimeErrorShown = false;
   private realtimeReconnectWarnTimer: number | null = null;
+  private realtimeRevisionRefresh: Promise<void> | null = null;
   private manuallyClosingRealtime = false;
   private isApplyingRemote = false;
   private isSyncing = false;
   private activeTripSync: Promise<boolean> | null = null;
+  private pendingTripHydration: Promise<void> | null = null;
+  private pendingAgentPreviewTripId: string | null = null;
   private syncSessionEpoch = 0;
   private lastSyncedPayloadKey: string | null = null;
   private lastLocationHydrationKey: string | null = null;
@@ -86,6 +90,8 @@ class SyncService {
   resetSessionState() {
     this.syncSessionEpoch += 1;
     this.activeTripSync = null;
+    this.pendingTripHydration = null;
+    this.pendingAgentPreviewTripId = null;
     this.debouncedTripSync.cancel();
     this.hydrated = false;
     this.lastSyncedPayloadKey = null;
@@ -96,12 +102,41 @@ class SyncService {
     this.isApplyingRemote = false;
   }
 
-  flushTripSyncNow(options?: { keepalive?: boolean; force?: boolean }) {
+  flushTripSyncNow(options?: { keepalive?: boolean; force?: boolean; mutationSource?: "ai" | "hydration" }) {
+    if (options?.keepalive && this.pendingAgentPreviewTripId === useTripStore.getState().tripId) return Promise.resolve();
     if ((!this.hydrated && !options?.force) || (this.isApplyingRemote && !options?.force)) {
       return Promise.resolve();
     }
     this.debouncedTripSync.cancel();
     return this.syncTripState("flush", options);
+  }
+
+  setPendingAgentPreviewTrip(tripId: string | null) {
+    this.pendingAgentPreviewTripId = tripId;
+  }
+
+  async awaitPendingTripHydration() {
+    await this.pendingTripHydration;
+  }
+
+  private schedulePostLoadHydration() {
+    const previous = this.pendingTripHydration;
+    const operation = (async () => {
+      await previous;
+      const trip = this.buildCurrentTripPayload();
+      if (trip.tripId && this.pendingAgentPreviewTripId === trip.tripId) return;
+      if (trip.tripId) {
+        const pending = await apiGet<{ preview: { baseRevision: number } | null }>(`/api/trips/${trip.tripId}/agent/preview/latest`).catch(() => null);
+        if (pending?.preview?.baseRevision === trip.revision) return;
+      }
+      const updated = await this.hydrateCurrentTripLocationsIfNeeded({ force: true });
+      if (trip.tripId && this.pendingAgentPreviewTripId === trip.tripId) return;
+      if (updated) await this.flushTripSyncNow({ force: true, mutationSource: "hydration" });
+    })().catch(() => {});
+    this.pendingTripHydration = operation;
+    void operation.finally(() => {
+      if (this.pendingTripHydration === operation) this.pendingTripHydration = null;
+    });
   }
 
   /** Mark current local trip payload as synced so realtime/bootstrap will not overwrite it. */
@@ -125,6 +160,10 @@ class SyncService {
     source: "bootstrap" | "realtime" | "server-ack",
   ) {
     const reconciled = reconcileTripMapState(trip.itinerary, trip.pins);
+    if (useTripStore.getState().tripId !== trip.tripId) {
+      useMapStore.getState().setPreviewPoi(null);
+      useMapStore.getState().setPendingPoi(null);
+    }
     const nextTrip: PersistedTripPayload = {
       ...trip,
       itinerary: reconciled.itinerary,
@@ -350,12 +389,12 @@ class SyncService {
 
     const reconciled = reconcileTripMapState(nextItinerary, useMapStore.getState().pins);
 
-    withSyncMutationSource("local-user-edit", () => {
+    withSyncMutationSource("bootstrap", () => {
       useTripStore.setState({
         itinerary: reconciled.itinerary,
         lastUpdatedAt: new Date().toISOString(),
       });
-      useMapStore.getState().setPins(reconciled.pins, "local-user-edit");
+      useMapStore.getState().setPins(reconciled.pins, "bootstrap");
     });
 
     return true;
@@ -386,9 +425,6 @@ class SyncService {
       const remoteKey = this.getPayloadKey(snapshot.trip);
       const localUpdatedAt = useTripStore.getState().lastUpdatedAt;
       const remoteUpdatedAt = snapshot.trip.updatedAt;
-      const localIsNewer =
-        Boolean(localUpdatedAt && remoteUpdatedAt) &&
-        Date.parse(localUpdatedAt || "") > Date.parse(remoteUpdatedAt || "");
       const localLooksDirty =
         this.hydrated &&
         localKey !== remoteKey &&
@@ -401,12 +437,15 @@ class SyncService {
 
       if (identicalRemoteSnapshot) {
         // Ignore no-op realtime snapshots so the map/chat state does not keep re-applying.
-      } else if (localLooksDirty && localIsNewer) {
+      } else if (localLooksDirty) {
         this.log("skip stale remote snapshot", {
           source,
           localUpdatedAt,
           remoteUpdatedAt,
         });
+        if ((snapshot.trip.revision ?? 0) > useTripStore.getState().revision) {
+          useCollabStore.getState().setRemoteRevisionConflict({ tripId: snapshot.trip.tripId, revision: snapshot.trip.revision ?? 0 });
+        }
       } else {
         const tripSnapshotSource = source === "realtime" ? "realtime" : "bootstrap";
         this.isApplyingRemote = true;
@@ -417,6 +456,7 @@ class SyncService {
             tripSnapshotSource,
           );
           this.lastSyncedPayloadKey = this.getPayloadKey(nextTrip);
+          useCollabStore.getState().setRemoteRevisionConflict(null);
           this.log("remote snapshot applied", { source, updatedAt: remoteUpdatedAt });
         } finally {
           this.isApplyingRemote = false;
@@ -428,6 +468,8 @@ class SyncService {
         const emptyTripSource = source === "realtime" ? "realtime" : "bootstrap";
         useTripStore.getState().resetTrip(emptyTripSource);
         useMapStore.getState().setPins([], "bootstrap");
+        useMapStore.getState().setPreviewPoi(null);
+        useMapStore.getState().setPendingPoi(null);
         this.lastSyncedPayloadKey = null;
       } finally {
         this.isApplyingRemote = false;
@@ -488,15 +530,7 @@ class SyncService {
     this.hydrated = true;
     persistActiveUserSnapshotNow();
     if (snapshot.trip) {
-      void this
-        .hydrateCurrentTripLocationsIfNeeded({ force: true })
-        .then((updated) => {
-          if (updated) {
-            return this.flushTripSyncNow({ force: true });
-          }
-          return undefined;
-        })
-        .catch(() => {});
+      this.schedulePostLoadHydration();
     }
   }
 
@@ -552,15 +586,7 @@ class SyncService {
 
     this.hydrated = true;
     persistActiveUserSnapshotNow();
-    void this
-      .hydrateCurrentTripLocationsIfNeeded({ force: true })
-      .then((updated) => {
-        if (updated) {
-          return this.flushTripSyncNow({ force: true });
-        }
-        return undefined;
-      })
-      .catch(() => {});
+    this.schedulePostLoadHydration();
   }
 
   startRealtime(roomId?: string | null) {
@@ -574,6 +600,7 @@ class SyncService {
     this.manuallyClosingRealtime = false;
 
     this.eventSource = new EventSource(`/api/realtime/stream?roomId=${roomId}`);
+    const eventSource = this.eventSource;
     this.eventSource.addEventListener("connected", () => {
       this.realtimeErrorShown = false;
       if (this.realtimeReconnectWarnTimer !== null) {
@@ -585,6 +612,23 @@ class SyncService {
     this.eventSource.addEventListener("snapshot", (event) => {
       const payload = JSON.parse((event as MessageEvent).data) as { data: BootstrapPayload };
       this.applyBootstrap(payload.data, { source: "realtime" });
+    });
+    this.eventSource.addEventListener("revision", (event) => {
+      const revision = JSON.parse((event as MessageEvent).data) as { tripId: string; revision: number };
+      const current = useTripStore.getState();
+      if (revision.tripId !== current.tripId || revision.revision <= current.revision || this.realtimeRevisionRefresh) return;
+      const localDirty = this.lastSyncedPayloadKey !== null && this.getPayloadKey(this.buildCurrentTripPayload()) !== this.lastSyncedPayloadKey;
+      if (localDirty) {
+        useCollabStore.getState().setRemoteRevisionConflict(revision);
+        return;
+      }
+      this.realtimeRevisionRefresh = this.loadBootstrap().then((snapshot) => {
+        if (this.eventSource === eventSource && snapshot.trip?.tripId === revision.tripId && useTripStore.getState().tripId === revision.tripId) {
+          this.applyBootstrap(snapshot, { source: "realtime" });
+        }
+      }).catch(() => {
+        useCollabStore.getState().setConnectionStatus("reconnecting");
+      }).finally(() => { this.realtimeRevisionRefresh = null; });
     });
     this.eventSource.onerror = () => {
       if (this.manuallyClosingRealtime) {
@@ -631,6 +675,7 @@ class SyncService {
       });
       return;
     }
+    this.pendingAgentPreviewTripId = null;
     this.log("schedule trip sync", { source });
     this.debouncedTripSync.schedule();
   }
@@ -640,8 +685,10 @@ class SyncService {
     const map = useMapStore.getState();
     return {
       tripId: trip.tripId || "",
+      revision: trip.revision,
       title: trip.title,
       destination: trip.destination,
+      startDate: trip.startDate,
       days: trip.days,
       budget: trip.budget,
       coverImageUrl: trip.coverImageUrl ?? null,
@@ -651,7 +698,7 @@ class SyncService {
     };
   }
 
-  async syncTripState(source = "manual", options?: { keepalive?: boolean; force?: boolean }) {
+  async syncTripState(source = "manual", options?: { keepalive?: boolean; force?: boolean; mutationSource?: "ai" | "hydration" }) {
     const epoch = this.syncSessionEpoch;
     // A force flush also joins the queue: concurrent PUTs can finish out of order.
     while (this.activeTripSync) {
@@ -673,7 +720,7 @@ class SyncService {
 
   private async persistTripState(
     source: string,
-    options: { keepalive?: boolean; force?: boolean } | undefined,
+    options: { keepalive?: boolean; force?: boolean; mutationSource?: "ai" | "hydration" } | undefined,
     epoch: number,
   ): Promise<boolean> {
     const previousTrip = useTripStore.getState();
@@ -701,7 +748,7 @@ class SyncService {
       const savedTrip = await withRetry(() =>
         apiPut<PersistedTripPayload, PersistedTripPayload>(
           "/api/trips/current",
-          payload,
+          options?.mutationSource ? { ...payload, mutationSource: options.mutationSource } : payload,
           options?.keepalive ? { keepalive: true } : undefined,
         ),
       );
@@ -717,8 +764,13 @@ class SyncService {
         if (!changedDuringSave) {
           useTripStore.getState().setRemoteTrip(savedTrip, previousTrip.budget, "server-ack");
           useMapStore.getState().setPins(savedTrip.pins, "server-ack");
-        } else if (!payload.tripId && savedTrip.tripId) {
-          withSyncMutationSource("server-ack", () => useTripStore.setState({ tripId: savedTrip.tripId }));
+        } else {
+          // Keep edits made during the request, but advance the acknowledged
+          // server revision before the queued save uses it.
+          withSyncMutationSource("server-ack", () => useTripStore.setState({
+            revision: savedTrip.revision,
+            ...(!payload.tripId && savedTrip.tripId ? { tripId: savedTrip.tripId } : {}),
+          }));
         }
         this.lastSyncedPayloadKey = this.getPayloadKey(savedTrip);
       } finally {

@@ -185,6 +185,8 @@ services:
         condition: service_healthy
       aiyo-new-redis:
         condition: service_healthy
+      aiyo-new-worker:
+        condition: service_started
       aiyo-new-mem0:
         condition: service_healthy
       open-webui:
@@ -242,6 +244,8 @@ services:
         condition: service_healthy
       aiyo-new-redis:
         condition: service_healthy
+      aiyo-new-worker:
+        condition: service_started
       aiyo-new-mem0:
         condition: service_healthy
       open-webui:

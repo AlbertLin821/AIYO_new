@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildNearbyOverpassQuery, isMapPoiCategory } from "@/server/maps/categories";
-import { MapMemoryCache, normalizedMapCacheKey } from "@/server/maps/cache";
+import { MapMemoryCache, mapMemoryCache, normalizedMapCacheKey } from "@/server/maps/cache";
+import { mapServiceConfig } from "@/server/maps/config";
+import { mapService } from "@/server/maps/service";
 import { normalizePhotonFeature } from "@/server/maps/providers/photon";
-import { normalizeOverpassElement } from "@/server/maps/providers/overpass";
+import { normalizeOverpassElement, overpassNearby } from "@/server/maps/providers/overpass";
 import { normalizeOsrmRoute } from "@/server/maps/providers/osrm";
 import { parsePoint, parsePoints } from "@/server/maps/validation";
 
@@ -34,6 +36,22 @@ test("normalizes OSRM GeoJSON route", () => {
   assert.equal(route?.durationSeconds, 300);
 });
 
+test("nearby POIs exclude placeholder names and out-of-radius centers, then sort by distance", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify({ elements: [
+    { type: "node", id: 1, lat: 25.04, lon: 121.56, tags: { name: "較遠餐廳" } },
+    { type: "node", id: 2, lat: 25.0301, lon: 121.56, tags: { name: "較近餐廳" } },
+    { type: "node", id: 3, lat: 25.03, lon: 121.56, tags: { name: "various" } },
+    { type: "way", id: 4, center: { lat: 25.1, lon: 121.56 }, tags: { name: "範圍外餐廳" } },
+  ] }), { status: 200 })) as typeof fetch;
+  try {
+    const results = await overpassNearby("http://local-overpass/api/interpreter", { lat: 25.03, lng: 121.56 }, { category: "restaurant", radius: 1500 });
+    assert.deepEqual(results.map((poi) => poi.name), ["較近餐廳", "較遠餐廳"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("cache normalizes keys, expires and bounds entries", () => {
   let now = 10; const cache = new MapMemoryCache(1, () => now);
   cache.set("a", 1, 10); assert.equal(cache.get<number>("a"), 1);
@@ -46,4 +64,31 @@ test("coordinate validation rejects invalid values and route counts", () => {
   assert.deepEqual(parsePoint(25, 121), { lat: 25, lng: 121 });
   assert.throws(() => parsePoint(91, 121));
   assert.throws(() => parsePoints([{ lat: 25, lng: 121 }]));
+});
+
+test("regional POI outage falls back to public endpoint only when enabled", async () => {
+  const oldFetch = globalThis.fetch;
+  const oldEndpoint = mapServiceConfig.regionalOverpass.TW;
+  const oldFallback = mapServiceConfig.allowPublicFallback;
+  mapServiceConfig.regionalOverpass.TW = "http://local-overpass/api/interpreter";
+  mapServiceConfig.allowPublicFallback = true;
+  mapMemoryCache.clear();
+  const urls: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    urls.push(url);
+    if (url.includes("local-overpass")) return new Response("unavailable", { status: 503 });
+    return new Response(JSON.stringify({ elements: [{ type: "node", id: 1, lat: 25.03, lon: 121.56, tags: { name: "餐廳" } }] }), { status: 200 });
+  }) as typeof fetch;
+  try {
+    const rows = await mapService.searchNearbyPoi({ lat: 25.03, lng: 121.56 }, { category: "restaurant", radius: 1000 });
+    assert.equal(rows.length, 1);
+    assert.equal(urls.length, 2);
+    assert.match(urls[1]!, /overpass-api\.de/);
+  } finally {
+    globalThis.fetch = oldFetch;
+    mapServiceConfig.regionalOverpass.TW = oldEndpoint;
+    mapServiceConfig.allowPublicFallback = oldFallback;
+    mapMemoryCache.clear();
+  }
 });

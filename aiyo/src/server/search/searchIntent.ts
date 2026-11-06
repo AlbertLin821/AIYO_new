@@ -44,7 +44,7 @@ function inferSearchNeed(text: string): SearchNeed {
   if (/官方|公告|官網|政府|交通局|旅遊局/u.test(text)) {
     return "official_source";
   }
-  if (/附近有沒有|附近|店家|仍營業|最新熱門|最新推薦|2026\s*最新|最新/u.test(text)) {
+  if (/仍營業|最新熱門|最新推薦|2026\s*最新|最新/u.test(text)) {
     return "fresh_info";
   }
   if (/地址|評價|店家資訊|place details|opening hours|local events/i.test(text)) {
@@ -68,7 +68,7 @@ function needReason(need: SearchNeed): string {
     case "official_source":
       return "使用者要求官方資訊或公告，需要查官方來源。";
     case "fresh_info":
-      return "使用者詢問最新、附近或仍營業資訊，需要外部資料。";
+      return "使用者詢問最新或仍營業資訊，需要外部資料。";
     case "place_details":
       return "使用者詢問特定地點細節，需要外部資料輔助。";
     case "general_web_research":

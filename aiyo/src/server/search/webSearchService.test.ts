@@ -3,6 +3,31 @@ import test from "node:test";
 import { serverConfig } from "@/server/config";
 import { runUnifiedWebSearch, sanitizeAiSearchProviders } from "@/server/search/webSearchService";
 
+test("local SearXNG is preferred and preserves paid providers as fallback", async () => {
+  const originalFetch = globalThis.fetch;
+  const old = { base: serverConfig.searxngBaseUrl, provider: serverConfig.webSearchProvider, serper: serverConfig.serperApiKey };
+  serverConfig.searxngBaseUrl = "http://127.0.0.1:8888";
+  serverConfig.webSearchProvider = "auto";
+  serverConfig.serperApiKey = "paid-fallback";
+  const urls: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    urls.push(String(input));
+    return new Response(JSON.stringify({ results: [{ title: "官方資訊", url: "https://example.gov.tw/notice", content: "開放時間" }] }), { status: 200 });
+  }) as typeof fetch;
+  try {
+    const result = await runUnifiedWebSearch({ query: "官方開放時間", limit: 3 });
+    assert.equal(result.backend, "searxng");
+    assert.equal(result.results.length, 1);
+    assert.equal(urls.length, 1);
+    assert.match(urls[0]!, /127\.0\.0\.1:8888\/search/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    serverConfig.searxngBaseUrl = old.base;
+    serverConfig.webSearchProvider = old.provider;
+    serverConfig.serperApiKey = old.serper;
+  }
+});
+
 test("sanitizeAiSearchProviders filters to serper and tavily only", () => {
   assert.deepEqual(sanitizeAiSearchProviders(["bing", "serper", "tavily"]), ["serper", "tavily"]);
   assert.deepEqual(sanitizeAiSearchProviders(["bing"]), ["serper", "tavily"]);

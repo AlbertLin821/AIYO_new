@@ -19,6 +19,7 @@ export type MapPoi = {
   address?: string;
   category?: MapPoiCategory;
   source: MapPoiSource;
+  checkedAt?: string;
   externalId?: string;
   legacyGooglePlaceId?: string;
   metadata?: {

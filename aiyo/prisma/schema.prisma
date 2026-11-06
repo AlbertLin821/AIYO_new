@@ -45,11 +45,13 @@ model Profile {
 
 model Trip {
   id          String        @id @default(cuid())
+  revision    Int           @default(0)
   userId      String
   folderId    String?
   title       String
   coverImageUrl String?
   destination String?
+  startDate   DateTime?     @db.Date
   days        Int
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
@@ -62,12 +64,53 @@ model Trip {
   room        CollaborationRoom?
   collaborators TripCollaborator[]
   publication TripPublication?
+  mutations TripMutation[]
+  agentPreviews AgentPreview[]
   videoInteractions VideoInteraction[]
   appliedVideoSummaries AppliedVideoSummary[]
 
   @@index([userId, updatedAt])
   @@index([folderId])
   @@map("trips")
+}
+
+model TripMutation {
+  id             String   @id @default(cuid())
+  tripId         String
+  actorId        String
+  baseRevision   Int
+  resultRevision Int
+  beforeSnapshot Json
+  afterSnapshot  Json?
+  operationsJson Json?
+  inverseJson   Json?
+  idempotencyKey String?
+  source         String
+  createdAt      DateTime @default(now())
+  undoneAt       DateTime?
+  trip           Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, resultRevision])
+  @@unique([tripId, idempotencyKey])
+  @@index([tripId, createdAt])
+  @@map("trip_mutations")
+}
+
+model AgentPreview {
+  id           String   @id @default(cuid())
+  tripId       String
+  actorId      String
+  baseRevision Int
+  proposalJson Json
+  expiresAt    DateTime
+  status       String   @default("pending")
+  createdAt    DateTime @default(now())
+  appliedMutationId String?
+  trip         Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, actorId, status])
+  @@index([expiresAt])
+  @@map("agent_previews")
 }
 
 model TripPublication {
@@ -156,6 +199,9 @@ model TripItem {
   longitude        Float?
   locationDesc     String?
   locationAddress  String?
+  placeProvider    String?
+  placeCheckedAt   DateTime?
+  placeCategory    String?
   placeId          String?
   photoUrl         String?
   thumbnail        String?
@@ -182,6 +228,9 @@ model MapPin {
   lng              Float
   description      String?
   address          String?
+  placeProvider    String?
+  placeCheckedAt   DateTime?
+  placeCategory    String?
   placeId          String?
   photoUrl         String?
   thumbnail        String?

@@ -18,6 +18,9 @@ if (enableMockMaps) {
 }
 
 const nextConfig: NextConfig = {
+  distDir: process.env.NODE_ENV === "development"
+    ? process.env.AIYO_DEV_BUILD_CONTEXT === "host-e2e" ? ".next-dev-host-e2e" : ".next-dev"
+    : ".next",
   serverExternalPackages: ["bullmq", "ioredis"],
   // Enable after removing route-level `export const dynamic = "force-dynamic"` conflicts.
   // cacheComponents: true,

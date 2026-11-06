@@ -20,6 +20,8 @@
 # next.js
 /public/maplibre/
 /.next/
+/.next-dev/
+/.next-dev-host-e2e/
 /out/
 
 # production
